@@ -86,6 +86,10 @@ public:
     /** Extra delay the block adds, in samples (0 for most). */
     virtual int getLatencySamples() const noexcept { return 0; }
 
+    /** True for blocks whose sound rings on after the input stops (delay,
+        reverb). Patch switching lets these ring out ("spill-over"). */
+    virtual bool hasTail() const noexcept { return false; }
+
     //== Files (message thread) ================================================
     /** Non-null if this block loads a file. */
     virtual const FileSlot* getFileSlot() const noexcept { return nullptr; }

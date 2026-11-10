@@ -4,6 +4,7 @@
 #include "session/PatchBuilder.h"
 
 #include "engine/blocks/CabIrBlock.h"
+#include "engine/blocks/DelayBlock.h"
 #include "engine/blocks/EqBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
@@ -18,6 +19,7 @@ const std::vector<BlockType>& getBlockTypes()
         { CabIrBlock::typeId,     "Cab (IR)" },
         { NoiseGateBlock::typeId, "Noise gate" },
         { EqBlock::typeId,        "EQ" },
+        { DelayBlock::typeId,     "Delay" },
     };
     return types;
 }
@@ -28,6 +30,7 @@ std::unique_ptr<Block> createBlock (const juce::String& typeId)
     if (typeId == CabIrBlock::typeId)     return std::make_unique<CabIrBlock>();
     if (typeId == NoiseGateBlock::typeId) return std::make_unique<NoiseGateBlock>();
     if (typeId == EqBlock::typeId)        return std::make_unique<EqBlock>();
+    if (typeId == DelayBlock::typeId)     return std::make_unique<DelayBlock>();
     return nullptr;
 }
 

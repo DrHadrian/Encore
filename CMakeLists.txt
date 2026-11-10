@@ -106,6 +106,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/PeakMeter.h
     Source/engine/blocks/CabIrBlock.cpp
     Source/engine/blocks/CabIrBlock.h
+    Source/engine/blocks/DelayBlock.cpp
+    Source/engine/blocks/DelayBlock.h
     Source/engine/blocks/EqBlock.cpp
     Source/engine/blocks/EqBlock.h
     Source/engine/blocks/NamAmpBlock.cpp
@@ -117,9 +119,9 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/core/Block.h
     Source/engine/core/Chain.cpp
     Source/engine/core/Chain.h
-    Source/engine/core/ChainHandover.cpp
-    Source/engine/core/ChainHandover.h
     Source/engine/core/LockFreeFifo.h
+    Source/engine/core/PatchPlayer.cpp
+    Source/engine/core/PatchPlayer.h
     Source/engine/core/Parameter.cpp
     Source/engine/core/Parameter.h
     Source/engine/core/Realtime.cpp
@@ -168,7 +170,9 @@ target_sources(Encore PRIVATE
     Source/ui/LevelMeter.cpp
     Source/ui/LevelMeter.h
     Source/ui/PatchList.cpp
-    Source/ui/PatchList.h)
+    Source/ui/PatchList.h
+    Source/ui/SetList.cpp
+    Source/ui/SetList.h)
 
 target_compile_definitions(Encore PRIVATE
     # Audio drivers. ASIO is the one we play through; WASAPI stays as a fallback
@@ -218,6 +222,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
         Tests/PatchBuilderTests.cpp
+        Tests/PatchPlayerTests.cpp
         Tests/ResamplerTests.cpp
         Tests/SessionTests.cpp
         Tests/TestSignals.h)

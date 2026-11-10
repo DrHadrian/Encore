@@ -197,3 +197,49 @@ every explicit save and at most every 5 minutes otherwise, and the newest 50
 are kept. Closing Encore saves unsaved edits. The JSON carries a schema
 version: older files will be migrated, and files from a newer Encore are refused
 with a clear message rather than half-loaded.
+
+## 0021 — Switching happens on the audio thread, between preloaded chains (milestone 5)
+
+Opening a show builds a chain for every patch (the first to play first). The
+engine's `PatchPlayer` owns them. The running order is published as an
+immutable table of cues pointing at chains, so "next" is an array index on the
+audio thread: no search, no allocation, no loading. Commands (next, previous,
+go to cue, play patch) go through a lock-free queue and take effect at the
+start of the next buffer. A busy screen never delays a switch, and MIDI
+(milestone 6) uses the same path. A cue whose patch isn't available keeps its
+place (cue numbers always match the screen) and simply doesn't change the sound.
+
+## 0022 — Crossfade the inputs, not the outputs (milestone 5)
+
+For 10 ms the old patch's input fades out while the new patch's fades in, and
+both outputs are summed. With two identical patches the result is exactly the
+input (a test checks this to 0.00001), so there is no gap and no click by
+construction. Each patch's own decay (amp, cab, delay) carries the sound
+across naturally, instead of an artificial output fade cutting it.
+
+## 0023 — Tails: ring out until silent, cheaply (milestone 5)
+
+The old patch keeps running on silence until it falls below −90 dBFS for
+100 ms (8 s at most). In "tails only" mode (the default), after 200 ms of
+settling it runs only from its first delay/reverb block on, so the amp and
+cab stop costing CPU. A patch that played for under 50 ms (stepping quickly
+through cues) doesn't ring out at all. Up to three patches can ring at once; a
+fourth stops the oldest, which is the quietest. Going back to a patch that's
+still ringing picks it up as it is, tail included, instead of starting a second
+copy.
+
+## 0024 — Freeing a patch only when the audio thread can't reach it (milestone 5)
+
+Removing or rebuilding a patch releases its old chain, but deletion waits until
+(a) the audio thread uses a running-order table published after the release
+(which can't contain it), and (b) the chain isn't playing or ringing out (the
+audio thread publishes those slots as atomics). Commands carry chain pointers,
+but the audio thread only acts on ones found in its current table (comparing
+pointers, never dereferencing), so a stale command is simply ignored.
+
+## 0025 — Keyboard focus belongs to the show (milestone 5)
+
+In the edit view, buttons, knobs and menus don't take keyboard focus. Space
+and the arrow keys therefore always step the set list, rather than nudging the
+last knob you touched or, worse, changing the guitar input selected in a combo
+box. The mouse works as usual. The performance view (milestone 7) adds a lock.

@@ -29,6 +29,24 @@ namespace
         return juce::String (1000.0 * samples / sampleRate, 1) + " ms";
     }
 
+    /** Keyboard focus stays with the main window, so Space and the arrow keys
+        always step the show. Otherwise a knob or the input menu clicked a
+        moment earlier would take the arrow keys (and change the guitar input
+        mid-show). The mouse still works on everything. */
+    void keepKeysForTheShow (juce::Component& parent)
+    {
+        for (auto* child : parent.getChildren())
+        {
+            if (dynamic_cast<juce::TextEditor*> (child) == nullptr)
+            {
+                child->setWantsKeyboardFocus (false);
+                child->setMouseClickGrabsKeyboardFocus (false);
+            }
+
+            keepKeysForTheShow (*child);
+        }
+    }
+
     juce::File defaultShowsFolder()
     {
         return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
@@ -158,6 +176,9 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     session = std::make_unique<ShowSession> (engine);
     session->addChangeListener (this);
 
+    setList = std::make_unique<SetList> (*session);
+    addAndMakeVisible (*setList);
+
     patchList = std::make_unique<PatchList> (*session);
     addAndMakeVisible (*patchList);
 
@@ -166,6 +187,7 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     addAndMakeVisible (*chainStrip);
 
     openInitialShow();
+    keepKeysForTheShow (*this);
 
     refreshInputChoices();
     refreshStatus();
@@ -183,6 +205,7 @@ MainComponent::~MainComponent()
     blockPanel = nullptr;
     chainStrip = nullptr;
     patchList = nullptr;
+    setList = nullptr;
 
     if (session != nullptr)
     {
@@ -318,9 +341,22 @@ void MainComponent::refreshShowStatus()
     else
         saveState.setText ("Saved " + session->getLastSaveTime().formatted ("%H:%M:%S"), juce::dontSendNotification);
 
-    const auto* patch = show.findPatch (session->getActivePatchId());
-    chainLabel.setText (patch != nullptr ? patch->name + (session->isBuilding() ? "   (loading...)" : "") : juce::String(),
-                        juce::dontSendNotification);
+    // "Cue 3 of 12: Solo  ->  Lead" when playing from the set list, else the patch name.
+    juce::String text;
+    const auto cues = session->getCues();
+    const auto cue = session->getCurrentCue();
+
+    if (juce::isPositiveAndBelow (cue, (int) cues.size()))
+        text << "Cue " << (cue + 1) << " of " << (int) cues.size()
+             << (cues[(size_t) cue]->name.isNotEmpty() ? ": " + cues[(size_t) cue]->name : juce::String()) << "   ->   ";
+
+    if (const auto* patch = show.findPatch (session->getActivePatchId()))
+        text << patch->name;
+
+    if (session->isBuilding())
+        text << "   (loading patches...)";
+
+    chainLabel.setText (text, juce::dontSendNotification);
 }
 
 void MainComponent::reportProblems()
@@ -367,6 +403,7 @@ void MainComponent::showSelectedBlock()
         blockPanel->onEdited = [this] { session->markEdited(); };
 
         addAndMakeVisible (*blockPanel);
+        keepKeysForTheShow (*blockPanel);
     }
 
     relayout();
@@ -385,6 +422,25 @@ void MainComponent::relayout()
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)
 {
+    // Step through the set list from the computer keyboard (the foot
+    // controller does the same from milestone 6).
+    const auto code = key.getKeyCode();
+
+    if (! key.getModifiers().isAnyModifierKeyDown())
+    {
+        if (code == juce::KeyPress::spaceKey || code == juce::KeyPress::rightKey || code == juce::KeyPress::downKey)
+        {
+            session->next();
+            return true;
+        }
+
+        if (code == juce::KeyPress::leftKey || code == juce::KeyPress::upKey)
+        {
+            session->previous();
+            return true;
+        }
+    }
+
     if (key == juce::KeyPress ('s', juce::ModifierKeys::commandModifier, 0))
     {
         session->save();
@@ -518,6 +574,7 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
 {
     if (source == session.get())
     {
+        setList->refresh();
         patchList->refresh();
         refreshShowStatus();
         reportProblems();
@@ -538,6 +595,12 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
 void MainComponent::timerCallback()
 {
     engine.collectGarbage();
+    session->syncWithAudio();   // cue or patch changed on the audio thread
+
+    // Take the keyboard back (e.g. after a dialog closed), unless a dialog is open.
+    if (frameCounter % 15 == 0 && isShowing() && ! hasKeyboardFocus (true)
+        && juce::Component::getCurrentlyModalComponent() == nullptr && juce::Process::isForegroundProcess())
+        grabKeyboardFocus();
 
     // A newly built chain arrived (patch selected, block added...).
     if (auto* chain = engine.getChain(); chain != chainStrip->getChain())
@@ -582,6 +645,13 @@ void MainComponent::timerCallback()
 
     if (engine.getClipCount() > 0)
         health << "   |   clips " << engine.getClipCount();
+
+    if (const auto ringing = engine.getPlayer().getNumRinging(); ringing > 0)
+        health << "   |   ringing out " << ringing;
+
+    if (const auto bytes = system::getProcessMemoryBytes(); bytes > 0)
+        health << "   |   memory " << (int) (bytes / (1024 * 1024)) << " MB of "
+               << juce::SystemStats::getMemorySizeInMegabytes() / 1024 << " GB";
 
     // Debug builds only: allocations on the audio thread (must stay 0).
     if (rt::isAllocationTripwireInstalled())
@@ -633,10 +703,13 @@ int MainComponent::layoutContent (int width, bool apply)
 
     // Body: patches left, chain + block right.
     const auto panelHeight = blockPanel != nullptr ? blockPanel->getPreferredHeight() : 200;
-    const auto bodyHeight = juce::jmax (420, 30 + 120 + gap + panelHeight + 30);
+    const auto bodyHeight = juce::jmax (560, 30 + 120 + gap + panelHeight + 30);
     auto body = area.removeFromTop (bodyHeight);
 
-    place (patchList.get(), body.removeFromLeft (sidebarWidth));
+    auto sidebar = body.removeFromLeft (sidebarWidth);
+    place (setList.get(), sidebar.removeFromTop (sidebar.getHeight() / 2 - gap / 2));
+    sidebar.removeFromTop (gap);
+    place (patchList.get(), sidebar);
     body.removeFromLeft (gap);
 
     place (&chainLabel, body.removeFromTop (30));

@@ -150,6 +150,61 @@ public:
             expectGreaterThan (folder.listBackups().size(), 0);
         }
 
+        beginTest ("A running order steps through patches; edits to it are saved");
+        {
+            juce::String cleanId, leadId;
+
+            {
+                ShowSession session (engine);
+                expect (session.openShow (showFolder).wasOk());
+                pumpUntil ([&] { return ! session.isBuilding(); });
+                playOneBlock (engine);
+
+                cleanId = session.getShow().patches[0].id;
+                leadId = session.getShow().patches[1].id;
+
+                session.addCue (cleanId, -1);   // 1: verse
+                session.addCue (leadId, 0);     // 2: solo
+                session.addCue (cleanId, 1);    // 3: outro
+                session.renameCue (1, "Solo");
+                expectEquals ((int) session.getCues().size(), 3);
+
+                session.goToCue (0);
+                playOneBlock (engine);
+                session.syncWithAudio();
+                expectEquals (session.getCurrentCue(), 0);
+                expect (session.getActivePatchId() == cleanId);
+
+                session.next();
+                playOneBlock (engine);
+                session.syncWithAudio();
+                expect (session.getActivePatchId() == leadId, "next cue plays the lead patch");
+
+                // Move the solo to the end: the position follows the playing cue.
+                session.moveCue (1, 1);
+                playOneBlock (engine);
+                session.syncWithAudio();
+                expectEquals (session.getCurrentCue(), 2);
+                expect (session.save().wasOk());
+            }
+
+            ShowSession reopened (engine);
+            expect (reopened.openShow (showFolder).wasOk());
+            const auto cues = reopened.getCues();
+            expectEquals ((int) cues.size(), 3);
+
+            if (cues.size() == 3)
+            {
+                expect (cues[2]->name == "Solo" && cues[2]->patchId == leadId);
+                expect (cues[0]->patchId == cleanId && cues[1]->patchId == cleanId);
+            }
+
+            pumpUntil ([&] { return ! reopened.isBuilding(); });
+            playOneBlock (engine);
+            reopened.syncWithAudio();
+            expectEquals (reopened.getCurrentCue(), 0, "a show with cues starts at the first cue");
+        }
+
         beginTest ("The last patch can't be deleted");
         {
             ShowSession session (engine);

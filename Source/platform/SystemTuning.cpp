@@ -14,7 +14,9 @@
  #endif
  #include <windows.h>
  #include <avrt.h>
+ #include <psapi.h>
  #pragma comment (lib, "avrt.lib")
+ #pragma comment (lib, "psapi.lib")
 
  // Older Windows SDKs lack the newest flag; the value is stable.
  #ifndef PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION
@@ -88,6 +90,25 @@ void ensureAudioThreadIsProAudio() noexcept
 bool isAudioThreadProAudio() noexcept
 {
     return anyThreadRegistered.load();
+}
+
+juce::int64 getProcessMemoryBytes()
+{
+   #if JUCE_WINDOWS
+    PROCESS_MEMORY_COUNTERS_EX counters {};
+
+    if (GetProcessMemoryInfo (GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*> (&counters), sizeof (counters)) != 0)
+        return (juce::int64) counters.PrivateUsage;
+   #elif JUCE_LINUX
+    // Resident pages, from /proc (good enough for development builds).
+    const auto statm = juce::File ("/proc/self/statm").loadFileAsString();
+    const auto pages = juce::StringArray::fromTokens (statm, " ", {});
+
+    if (pages.size() > 1)
+        return (juce::int64) pages[1].getLargeIntValue() * 4096;
+   #endif
+
+    return 0;
 }
 
 PowerSource getPowerSource()

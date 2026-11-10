@@ -13,6 +13,7 @@
 #include "ui/ChainStrip.h"
 #include "ui/LevelMeter.h"
 #include "ui/PatchList.h"
+#include "ui/SetList.h"
 
 namespace encore
 {
@@ -77,6 +78,7 @@ private:
     juce::Slider volume { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
 
     // Editing
+    std::unique_ptr<SetList> setList;
     std::unique_ptr<PatchList> patchList;
     std::unique_ptr<ChainStrip> chainStrip;
     std::unique_ptr<BlockPanel> blockPanel;
