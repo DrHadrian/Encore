@@ -15,8 +15,8 @@ namespace encore
     the main window). Double-click to rename; right-click to choose its patch,
     its same-patch behaviour, or to remove it.
 
-    This is the simple, flat version; the theatre cue list (acts, scenes, bar
-    marks, decimal numbers, cut cues) comes in milestone 8 on the same data. */
+    This is the compact sidebar version; the full cue list (acts, scenes, bar
+    marks, notes, cut cues) is CueListEditor, on the same data. */
 class SetList final : public juce::Component,
                       private juce::ListBoxModel
 {

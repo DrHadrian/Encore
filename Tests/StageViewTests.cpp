@@ -4,6 +4,7 @@
 #include "FakeDevice.h"
 #include "TestSignals.h"
 
+#include "ui/CueListEditor.h"
 #include "ui/StageView.h"
 
 namespace encore::test
@@ -125,6 +126,30 @@ public:
                 expectEquals (session.getCurrentCue(), 1);
                 view.update ({});
                 expect (hasContent (render (view, "stage-cue-2-default")));
+            }
+
+            beginTest ("The cue list shows sections, cut cues and the playing cue");
+            {
+                const auto act = session.insertSection ({}, "Act 1", "act");
+                const auto first = session.getCues().front()->id;
+                session.moveItem (session.getCues().back()->id, +1);   // into Act 1, which follows it
+                const auto cut = session.insertCue (first);
+                session.setItemName (cut, "Angel of Music");
+                session.setItemBarMark (cut, "bar 64");
+                session.setCut (cut, true);
+                session.setItemNote (first, "watch conductor, slow fade");
+                play (engine, session);
+
+                CueListEditor list (session);
+                list.setBounds (0, 0, 1100, 500);
+                list.refresh();
+                expect (hasContent (render (list, "cue-list")));
+
+                // Keys: Insert makes a cue and starts typing its name.
+                expect (list.handleKey (juce::KeyPress (juce::KeyPress::insertKey)));
+                expect (list.isTyping());
+                expectEquals (session.getSectionPath (1), juce::String ("Act 1"));
+                juce::ignoreUnused (act);
             }
 
             beginTest ("Edit mode, tuner overlay and lock draw");

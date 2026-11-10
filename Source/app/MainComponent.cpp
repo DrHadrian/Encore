@@ -82,6 +82,11 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     audioSettingsButton.onClick = [this] { openAudioSettings(); };
     addAndMakeVisible (audioSettingsButton);
 
+    cueListButton.setTooltip ("The cue list: acts, scenes, cues, bar marks, notes (F6)");
+    cueListButton.setClickingTogglesState (false);
+    cueListButton.onClick = [this] { setCueListVisible (! cueEditor->isVisible()); };
+    addAndMakeVisible (cueListButton);
+
     stageButton.setTooltip ("The performance screen (F5)");
     stageButton.onClick = [this] { setStageVisible (true); };
     addAndMakeVisible (stageButton);
@@ -222,6 +227,9 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
 
     openInitialShow();
 
+    cueEditor = std::make_unique<CueListEditor> (*session);
+    addChildComponent (*cueEditor);
+
     stageView = std::make_unique<StageView> (engine, *session);
     stageView->setOpaque (true);
     stageView->onLeave = [this] { setStageVisible (false); };
@@ -250,6 +258,7 @@ MainComponent::~MainComponent()
         delete dialog;
 
     stageView = nullptr;
+    cueEditor = nullptr;
     blockPanel = nullptr;
     chainStrip = nullptr;
     patchList = nullptr;
@@ -476,7 +485,7 @@ void MainComponent::showSelectedBlock()
 
         // Behind the stage view: the panel is rebuilt whenever the patch
         // changes, also while the stage view is showing.
-        const auto behindStage = stageView != nullptr ? getIndexOfChildComponent (stageView.get()) : -1;
+        const auto behindStage = cueEditor != nullptr ? getIndexOfChildComponent (cueEditor.get()) : -1;
         addAndMakeVisible (*blockPanel, behindStage);
         keepKeysForTheShow (*blockPanel);
     }
@@ -736,6 +745,82 @@ PreShowFacts MainComponent::gatherPreShowFacts()
     return f;
 }
 
+bool MainComponent::handleGoToKey (const juce::KeyPress& key)
+{
+    const auto now = juce::Time::getMillisecondCounter();
+
+    if (goToNumber.isNotEmpty() && now > goToUntil)
+        goToNumber.clear();   // forgotten: start over
+
+    const auto c = key.getTextCharacter();
+
+    if (c >= '0' && c <= '9' && ! key.getModifiers().isCommandDown() && ! key.getModifiers().isAltDown())
+    {
+        goToNumber << juce::String::charToString (c);
+        goToUntil = now + 5000;
+        showNotice ("Go to cue " + goToNumber + "_   (Enter to go, Esc to cancel)", 5);
+        return true;
+    }
+
+    if (goToNumber.isEmpty())
+        return false;
+
+    const auto code = key.getKeyCode();
+
+    if (code == juce::KeyPress::backspaceKey)
+    {
+        goToNumber = goToNumber.dropLastCharacters (1);
+        showNotice (goToNumber.isEmpty() ? juce::String() : "Go to cue " + goToNumber + "_", goToNumber.isEmpty() ? 0 : 5);
+        return true;
+    }
+
+    if (code == juce::KeyPress::escapeKey)
+    {
+        goToNumber.clear();
+        showNotice ({}, 0);
+        return true;
+    }
+
+    if (code == juce::KeyPress::returnKey)
+    {
+        const auto index = session->findCueByNumber (goToNumber);
+
+        if (index >= 0)
+        {
+            session->goToCue (index);
+            showNotice ({}, 0);
+            eventlog::write ("Go to cue " + goToNumber);
+        }
+        else
+        {
+            showNotice ("There's no cue " + goToNumber, 4);
+        }
+
+        goToNumber.clear();
+        return true;
+    }
+
+    return false;
+}
+
+void MainComponent::setCueListVisible (bool shouldShow)
+{
+    cueEditor->setVisible (shouldShow);
+    cueListButton.setToggleState (shouldShow, juce::dontSendNotification);
+
+    if (shouldShow)
+    {
+        cueEditor->refresh();
+        cueEditor->toFront (false);
+
+        if (stageView != nullptr && stageView->isVisible())
+            stageView->toFront (false);
+    }
+
+    resized();
+    grabKeyboardFocus();
+}
+
 void MainComponent::showStageSettingsMenu (juce::PopupMenu& menu)
 {
     const auto& stage = session->getStage();
@@ -819,11 +904,24 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    if (key.getKeyCode() == juce::KeyPress::F6Key && ! isShowingStage())
+    {
+        setCueListVisible (! cueEditor->isVisible());
+        return true;
+    }
+
     if (key.getKeyCode() == juce::KeyPress::escapeKey && engine.isTunerOpen())
     {
         engine.setTunerOpen (false);
         return true;
     }
+
+    // "Go to cue 42": type the number, then Enter.
+    if (handleGoToKey (key))
+        return true;
+
+    if (cueEditor->isVisible() && ! isShowingStage() && cueEditor->handleKey (key))
+        return true;
 
     // Step through the set list from the computer keyboard (the foot
     // controller does the same from milestone 6).
@@ -1043,6 +1141,9 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
     {
         applyMidiBindings();   // another show may carry its own
         setList->refresh();
+
+        if (cueEditor != nullptr && cueEditor->isVisible() && ! cueEditor->isTyping())
+            cueEditor->refresh();
         patchList->refresh();
         refreshShowStatus();
         reportProblems();
@@ -1227,6 +1328,8 @@ int MainComponent::layoutContent (int width, bool apply)
     place (&tunerButton, bar.removeFromRight (70).reduced (0, 4));
     bar.removeFromRight (8);
     place (&stageButton, bar.removeFromRight (70).reduced (0, 4));
+    bar.removeFromRight (8);
+    place (&cueListButton, bar.removeFromRight (70).reduced (0, 4));
     bar.removeFromRight (12);
     auto names = bar;
     place (&showName, names.removeFromTop (names.getHeight() / 2 + 2));
@@ -1239,6 +1342,9 @@ int MainComponent::layoutContent (int width, bool apply)
     const auto panelHeight = blockPanel != nullptr ? blockPanel->getPreferredHeight() : 200;
     const auto bodyHeight = juce::jmax (560, 30 + 120 + gap + panelHeight + 30);
     auto body = area.removeFromTop (bodyHeight);
+
+    // The cue list covers the patch editing area (sidebar, chain, block).
+    place (cueEditor.get(), body);
 
     auto sidebar = body.removeFromLeft (sidebarWidth);
     place (setList.get(), sidebar.removeFromTop (sidebar.getHeight() / 2 - gap / 2));

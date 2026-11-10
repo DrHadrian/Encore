@@ -93,6 +93,9 @@ public:
         {
             case StageWidgetType::currentCue:
                 title = cue != nullptr && cue->number.isNotEmpty() ? "CUE " + cue->number : juce::String ("CUE");
+
+                if (const auto path = owner.session.getSectionPath (index); path.isNotEmpty())
+                    title << "   " << path.toUpperCase();
                 main = cue != nullptr ? cue->name
                      : ! cues.empty() ? juce::String ("Ready")                                  // before the first cue
                      : (chain != nullptr ? chain->label : juce::String ("No cues"));
@@ -119,12 +122,35 @@ public:
 
             case StageWidgetType::setList:
             {
-                // A window of cues around the current one (it stays near the top).
-                const auto visible = juce::jmax (1, (int) ((float) (getHeight() - 12) / rowHeight()));
-                const auto first = juce::jlimit (0, juce::jmax (0, (int) cues.size() - visible), index - 1);
+                // A window of the running order around the current cue (it
+                // stays near the top), with act/scene headings; cut cues left out.
+                std::vector<Row> all;
 
-                for (int i = first; i < juce::jmin ((int) cues.size(), first + visible); ++i)
-                    rows.push_back ({ i, cueTitle (*cues[(size_t) i]), patchNameFor (show, *cues[(size_t) i]), i == index });
+                for (auto& r : owner.session.getRunningOrderRows())
+                {
+                    if (r.item->kind == RunItem::Kind::section)
+                        all.push_back ({ -1, r.item->name, {}, false });
+                    else if (r.cueIndex >= 0)
+                        all.push_back ({ r.cueIndex, cueTitle (*r.item), patchNameFor (show, *r.item), r.cueIndex == index });
+                }
+
+                int currentRow = 0;
+
+                for (int i = 0; i < (int) all.size(); ++i)
+                    if (all[(size_t) i].current)
+                        currentRow = i;
+
+                // Show the heading just above the current cue too.
+                auto first = juce::jmax (0, currentRow - 1);
+
+                if (first > 0 && all[(size_t) first - 1].index < 0)
+                    --first;
+
+                const auto visible = juce::jmax (1, (int) ((float) (getHeight() - 12) / rowHeight()));
+                first = juce::jlimit (0, juce::jmax (0, (int) all.size() - visible), first);
+
+                for (int i = first; i < juce::jmin ((int) all.size(), first + visible); ++i)
+                    rows.push_back (all[(size_t) i]);
                 break;
             }
 
@@ -275,6 +301,14 @@ public:
             {
                 auto r = area.removeFromTop (rowHeight);
 
+                if (row.index < 0)   // act/scene heading
+                {
+                    g.setColour (amber.withAlpha (0.8f));
+                    g.setFont (juce::FontOptions (juce::jmin (rowHeight * 0.5f, 30.0f * scale), juce::Font::bold));
+                    g.drawText (row.name.toUpperCase(), r, juce::Justification::bottomLeft, true);
+                    continue;
+                }
+
                 if (row.current)
                 {
                     g.setColour (accent.withAlpha (0.35f));
@@ -368,7 +402,7 @@ public:
         {
             const auto row = (int) ((float) (e.y - 6) / rowHeight());
 
-            if (juce::isPositiveAndBelow (row, (int) rows.size()))
+            if (juce::isPositiveAndBelow (row, (int) rows.size()) && rows[(size_t) row].index >= 0)
                 owner.session.goToCue (rows[(size_t) row].index);
         }
         else if (type == StageWidgetType::stomps)

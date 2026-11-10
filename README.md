@@ -13,11 +13,12 @@ musical.
 
 ## Status
 
-Milestone 9: crash recovery, audio interface reconnect, a guard against
-invalid audio, a pre-show check, logs and a soak test; a stage view you lay
-out yourself, tuner, panic and lock; foot controllers and expression pedals
-over MIDI; gapless patch switching with tails; shows saved to disk; NAM amps,
-cab IRs, gate, EQ, delay, safety limiter. Theatre cue lists come next.
+Milestone 8: theatre cue lists (acts and scenes, automatic numbering, cut
+cues, bar marks and notes, fast typing, go to a cue by number); crash
+recovery, interface reconnect, pre-show check; a stage view you lay out
+yourself, tuner, panic and lock; foot controllers and expression pedals over
+MIDI; gapless patch switching with tails; NAM amps, cab IRs, gate, EQ, delay.
+The Logic-style look (design v3) comes next.
 
 | Milestone | What you can test |
 | --- | --- |
@@ -29,8 +30,8 @@ cab IRs, gate, EQ, delay, safety limiter. Theatre cue lists come next.
 | **5 – Patch switching** ✅ | Gapless switches with tail spillover |
 | **6 – MIDI** ✅ | Foot controller, expression pedals, MIDI out |
 | **7 – Performance view and tuner** ✅ | Stage view with layout editor, tuner, lock, panic |
-| 8 – Theatre cue lists | Acts/scenes/cues, insert, renumber, cut, go to |
-| **9 – Robustness** | Crash recovery, reconnect, pre-show check, soak test |
+| **8 – Theatre cue lists** | Acts/scenes/cues, insert, renumber, cut, go to |
+| **9 – Robustness** ✅ | Crash recovery, reconnect, pre-show check, soak test |
 | 10 – VST3 hosting | Plugins with crash guard |
 | 11 – Routing | FOH/IEM buses, per-cue input/output |
 | 12 – Plugin sandbox | Risky plugins in their own process |
@@ -93,6 +94,32 @@ effect. For shows also:
   expense (the status line warns you);
 - set Windows' power mode to **Best performance**;
 - use 64 samples or more, so there is headroom for spikes.
+
+## Testing milestone 8 with your guitar
+
+1. **Cue list**: click **Cues** in the top bar (or **F6**). The whole running
+   order as a table: number, cue, bar, note, patch, MIDI. **Cues** again goes
+   back to the patches.
+2. **Type a show in**: select a row and press **Insert** (or Ctrl+Enter, or
+   **+ Cue**). Type the name, **Tab** to the bar mark, **Tab** to the note,
+   **Enter**: the next cue is created and ready for its name. Keep going;
+   **Enter** on an empty name stops. New cues play the patch of the cue
+   before them; click the patch cell (or double-click) to change it.
+3. **Acts and scenes**: **+ Section** (Ctrl+Shift+Enter) adds one after the
+   selection; right-click it for *Kind* (act, scene, song...). Cues move in
+   and out of sections with **Up/Down** (Ctrl+Up/Down): at a section's edge a
+   cue steps out, next to a section it steps in.
+4. **Numbers are automatic**: insert a cue between 4 and 5 and everything
+   after renumbers. **Cut** a cue: it stays (struck through, *cut*), the show
+   skips it, the numbers close up. **Restore** brings it back.
+5. **Go to a cue**: anywhere (edit view, cue list, stage view), type the
+   number and press **Enter** (e.g. `4 2 Enter`). Esc cancels. In the cue
+   list, **G** or double-clicking the number plays the selected cue.
+6. **Rehearsal**: delete (asks first; a section's cues stay), move, cut and
+   insert while the show is playing: the playing cue stays the playing cue
+   and *next* continues from it.
+7. **Stage view**: the current cue shows its act/scene, and the set list
+   widget shows the act and scene headings.
 
 ## Testing milestone 9 with your guitar
 
