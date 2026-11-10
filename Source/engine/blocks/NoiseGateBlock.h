@@ -14,6 +14,10 @@ namespace encore
     Opens when the level rises above the threshold and closes only after it
     falls 6 dB below it (hysteresis), so a note decaying around the threshold
     doesn't chatter. All channels share one detector.
+
+    "Detect: guitar" makes it listen to the clean guitar input while cutting
+    the signal where it sits. Placed after a high-gain amp, that silences the
+    amp's hiss with the clean signal's clear note endings.
 */
 class NoiseGateBlock final : public Block
 {
@@ -27,12 +31,14 @@ public:
 
 private:
     void prepareBlock (const ProcessSpec&) override;
-    void processBlock (float* const* channels, int numChannels, int numSamples) noexcept override;
+    void processBlock (float* const* channels, int numChannels, int numSamples,
+                       const ProcessContext&) noexcept override;
     void resetBlock() noexcept override;
 
     Parameter& threshold;
     Parameter& release;
     Parameter& range;
+    Parameter& detectGuitar;
 
     double sampleRate = 48000.0;
     float envelope = 0.0f;

@@ -4,6 +4,7 @@
 #include "app/MainComponent.h"
 
 #include "engine/blocks/EqBlock.h"
+#include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
 #include "engine/core/Realtime.h"
 
@@ -130,7 +131,11 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     refreshInputChoices();
     refreshStatus();
 
-    setSize (1000, 760);
+    // Now that the device is running, reload the amp from last time (in the
+    // background; it fades in when ready).
+    restoreLastFiles();
+
+    setSize (1100, 860);
     startTimerHz (30);
 }
 
@@ -145,13 +150,25 @@ MainComponent::~MainComponent()
 //==============================================================================
 void MainComponent::buildDefaultChain()
 {
-    // Milestone 1 test rig: gate then EQ. Patches (milestone 4) replace this.
+    // Test rig until patches arrive (milestone 4): amp, then a gate that
+    // listens to the clean guitar (so it cuts amp hiss), then EQ.
+    // The cab IR block slots in after the amp in milestone 3.
     auto chain = std::make_unique<Chain>();
+    chain->addBlock (std::make_unique<NamAmpBlock>());
     chain->addBlock (std::make_unique<NoiseGateBlock>());
     chain->addBlock (std::make_unique<EqBlock>());
     engine.setChain (std::move (chain));
 
     rebuildBlockPanels();
+}
+
+void MainComponent::restoreLastFiles()
+{
+    for (auto& panel : blockPanels)
+        if (auto* block = panelBlocks[panel.get()])
+            if (block->getFileSlot() != nullptr)
+                if (const auto file = settings.getLastFile (block->getTypeId()); file.existsAsFile())
+                    panel->loadFile (file);
 }
 
 void MainComponent::rebuildBlockPanels()
@@ -162,6 +179,8 @@ void MainComponent::rebuildBlockPanels()
     if (shownChain == nullptr)
         return;
 
+    panelBlocks.clear();
+
     for (auto& block : shownChain->getBlocks())
     {
         auto panel = std::make_unique<BlockPanel> (*block);
@@ -169,11 +188,30 @@ void MainComponent::rebuildBlockPanels()
         if (auto* gate = dynamic_cast<NoiseGateBlock*> (block.get()))
             panel->setStatusLight ("open", [gate] { return gate->isOpen(); });
 
+        auto* blockPtr = block.get();
+        panel->getBrowseFolder = [this] { return settings.getLastBrowseFolder(); };
+        panel->onFileLoaded = [this, blockPtr] (const juce::File& file)
+        {
+            settings.setLastFile (blockPtr->getTypeId(), file);
+            settings.setLastBrowseFolder (file.getParentDirectory());
+            refreshStatus();   // latency may have changed
+        };
+
         addAndMakeVisible (*panel);
+        panelBlocks[panel.get()] = blockPtr;
         blockPanels.push_back (std::move (panel));
     }
 
-    resized();
+    relayout();
+}
+
+void MainComponent::relayout()
+{
+    // Inside a scrolling viewport: tell it our height may have changed.
+    if (auto* viewport = findParentComponentOfClass<juce::Viewport>())
+        viewport->resized();
+    else
+        resized();
 }
 
 //==============================================================================
@@ -255,10 +293,14 @@ void MainComponent::refreshStatus()
     // converters), so the sum is the time from string to speaker.
     const auto inLatency = device->getInputLatencyInSamples();
     const auto outLatency = device->getOutputLatencyInSamples();
-    latencyStatus.setText ("Latency: in " + formatMs (inLatency, rate)
-                               + " + out " + formatMs (outLatency, rate)
-                               + " = " + formatMs (inLatency + outLatency, rate) + " round trip",
-                           juce::dontSendNotification);
+    const auto chainLatency = shownChain != nullptr ? shownChain->getLatencySamples() : 0;
+    auto latency = "Latency: in " + formatMs (inLatency, rate) + " + out " + formatMs (outLatency, rate);
+
+    if (chainLatency > 0)
+        latency << " + chain " << formatMs (chainLatency, rate);
+
+    latency << " = " << formatMs (inLatency + outLatency + chainLatency, rate) << " round trip";
+    latencyStatus.setText (latency, juce::dontSendNotification);
 
     if (typeName != "ASIO")
         warning.setText ("Not using ASIO: expect higher latency. Pick an ASIO driver in Audio settings for the stage.",
@@ -331,49 +373,76 @@ void MainComponent::paint (juce::Graphics& g)
 
 void MainComponent::resized()
 {
-    auto area = getLocalBounds().reduced (24);
+    layoutContent (getWidth(), true);
+}
+
+int MainComponent::getRequiredHeight (int width)
+{
+    return layoutContent (width, false);
+}
+
+int MainComponent::layoutContent (int width, bool apply)
+{
+    constexpr int margin = 24, gap = 16;
+    auto area = juce::Rectangle<int> (0, 0, width, 100000).reduced (margin);
+    const auto place = [apply] (juce::Component& c, juce::Rectangle<int> r) { if (apply) c.setBounds (r); };
 
     auto top = area.removeFromTop (44);
-    audioSettingsButton.setBounds (top.removeFromRight (180).reduced (0, 4));
-    title.setBounds (top);
+    place (audioSettingsButton, top.removeFromRight (180).reduced (0, 4));
+    place (title, top);
 
     area.removeFromTop (12);
-    deviceStatus.setBounds (area.removeFromTop (26));
-    latencyStatus.setBounds (area.removeFromTop (26));
-    warning.setBounds (area.removeFromTop (26));
+    place (deviceStatus, area.removeFromTop (26));
+    place (latencyStatus, area.removeFromTop (26));
+    place (warning, area.removeFromTop (26));
 
     area.removeFromTop (12);
     auto inputRow = area.removeFromTop (36);
-    inputLabel.setBounds (inputRow.removeFromLeft (140));
-    inputChoice.setBounds (inputRow.removeFromLeft (320).reduced (0, 2));
+    place (inputLabel, inputRow.removeFromLeft (140));
+    place (inputChoice, inputRow.removeFromLeft (320).reduced (0, 2));
 
     area.removeFromTop (20);
-    inputMeter.setBounds (area.removeFromTop (34));
+    place (inputMeter, area.removeFromTop (34));
     area.removeFromTop (10);
-    outputMeter.setBounds (area.removeFromTop (34));
-
-    area.removeFromTop (20);
-    chainLabel.setBounds (area.removeFromTop (26));
-    area.removeFromTop (6);
-    auto chainRow = area.removeFromTop (190);
-
-    for (auto& panel : blockPanels)
-    {
-        panel->setBounds (chainRow.removeFromLeft (panel->getPreferredWidth()));
-        chainRow.removeFromLeft (16);
-    }
+    place (outputMeter, area.removeFromTop (34));
 
     area.removeFromTop (20);
     auto volumeRow = area.removeFromTop (64);
-    muteButton.setBounds (volumeRow.removeFromRight (160));
+    place (muteButton, volumeRow.removeFromRight (160));
     volumeRow.removeFromRight (16);
-    volumeLabel.setBounds (volumeRow.removeFromLeft (140));
-    volume.setBounds (volumeRow);
+    place (volumeLabel, volumeRow.removeFromLeft (140));
+    place (volume, volumeRow);
 
-    area.removeFromTop (20);
+    area.removeFromTop (16);
     auto healthRow = area.removeFromTop (32);
-    resetCountersButton.setBounds (healthRow.removeFromRight (160));
-    healthStatus.setBounds (healthRow);
+    place (resetCountersButton, healthRow.removeFromRight (160));
+    place (healthStatus, healthRow);
+
+    // The chain: panels left to right, wrapping onto new rows as needed.
+    area.removeFromTop (20);
+    place (chainLabel, area.removeFromTop (26));
+    area.removeFromTop (6);
+
+    int x = area.getX(), y = area.getY(), rowHeight = 0;
+
+    for (auto& panel : blockPanels)
+    {
+        const auto w = juce::jmin (panel->getPreferredWidth(), area.getWidth());
+        const auto h = panel->getPreferredHeight();
+
+        if (x > area.getX() && x + w > area.getRight())
+        {
+            x = area.getX();
+            y += rowHeight + gap;
+            rowHeight = 0;
+        }
+
+        place (*panel, { x, y, w, h });
+        x += w + gap;
+        rowHeight = juce::jmax (rowHeight, h);
+    }
+
+    return y + rowHeight + margin;
 }
 
 } // namespace encore

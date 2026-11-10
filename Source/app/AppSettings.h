@@ -28,6 +28,15 @@ public:
     float getMasterGainDecibels() const;
     void setMasterGainDecibels (float dB);
 
+    /** Last file loaded into a block type (e.g. the amp), reloaded at start-up
+        until shows and patches (milestone 4) remember this properly. */
+    juce::File getLastFile (const juce::String& blockTypeId) const;
+    void setLastFile (const juce::String& blockTypeId, const juce::File& file);
+
+    /** Where file choosers open. */
+    juce::File getLastBrowseFolder() const;
+    void setLastBrowseFolder (const juce::File& folder);
+
     /** Writes to disk now (also happens automatically on change). */
     void save();
 

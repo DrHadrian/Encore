@@ -13,14 +13,14 @@ musical.
 
 ## Status
 
-Milestone 1: real-time engine core with a noise gate, EQ and safety limiter.
+Milestone 2: NAM amp captures, plus noise gate, EQ and safety limiter.
 Not usable on stage yet.
 
 | Milestone | What you can test |
 | --- | --- |
 | **0 – Toolchain and passthrough** ✅ | Dry guitar through ASIO, latency display, meters, CPU/dropout counters, master volume and mute |
 | **1 – Real-time core** ✅ | Gate and EQ blocks, click-free toggles and sweeps, safety limiter |
-| 2 – NAM amp block | Play through .nam captures |
+| **2 – NAM amp block** ✅ | Play through .nam captures, swap amps while playing |
 | 3 – Cab IR block | Amp + cab |
 | 4 – Data model and saving | Patches and shows saved to a self-contained folder |
 | 5 – Patch switching | Gapless switches with tail spillover |
@@ -42,8 +42,8 @@ workload (it includes CMake and Ninja), and **Git**.
 1. *File → Open → Folder…* and pick the `encore` folder.
 2. Visual Studio reads `CMakePresets.json`. Choose **Debug (x64)** while
    developing, or **Release (x64)** to play (Debug builds are much slower).
-3. The first configure downloads JUCE (pinned version, a few minutes). Later
-   configures reuse it.
+3. The first configure downloads JUCE, NeuralAmpModelerCore and Eigen (pinned
+   versions, a few minutes). Later configures reuse them.
 4. Pick **Encore.exe** as the startup item and press F5.
 
 ### From a terminal
@@ -65,14 +65,46 @@ Every push is also built on GitHub Actions and the tests are run there; the buil
 ### Tests
 
 `EncoreTests` checks the engine without any audio hardware: filter responses,
-gate and limiter behaviour, click-free bypass, the chain handover, and that
-processing never allocates memory. In Visual Studio use *Test → Run CTests for
+gate and limiter behaviour, click-free bypass, the chain handover, sample-rate
+conversion, loading and playing real NAM captures, and that processing (and
+swapping amps) never allocates memory. In Visual Studio use *Test → Run CTests for
 Encore*, or from a terminal:
 
 ```powershell
 cmake --build --preset debug --target EncoreTests
 ctest --preset debug
 ```
+
+## Testing milestone 2 with your guitar
+
+You need a few `.nam` captures, e.g. from [TONE3000](https://www.tone3000.com)
+(free; pick *NAM* captures of an amp, not "full rig" ones if you'll add a cab IR
+in milestone 3). Most are amp-only, so they'll sound harsh until the cab block
+arrives. That's expected.
+
+1. **Load**: in the *Amp* panel click **Load amp...** and pick a `.nam` file.
+   The panel shows its name, its sample rate, and how much CPU it measured on
+   your computer. It fades in when ready; Encore reloads it at the next start.
+2. **Swap while playing**: hold a chord and load a different capture. It
+   should crossfade in 30 ms: no gap, no click, no dropout.
+3. **Gain staging**: set **Input** so the amp breaks up the way you like.
+   **Level match** (on by default) brings captures to a similar loudness if the
+   file records it; the panel says "no level data" when it doesn't.
+4. **Tone**: **Bass/Mid/Treble** after the amp. Sweep them while playing; no
+   zipper noise.
+5. **Gate after the amp**: the gate now sits after the amp with **Detect
+   guitar** on, so it hears your clean guitar but cuts the amp's hiss. Turn up a
+   high-gain capture, stop playing, raise **Threshold** until the hiss stops.
+   Then try **Detect guitar** off to hear the difference.
+6. **Sample rates**: if your interface runs at 44.1 kHz, captures (usually
+   48 kHz) are converted on the fly. The panel says "(converted)" and the
+   latency line shows "+ chain 0.9 ms" or so. Run your interface at 48 kHz to
+   avoid that.
+7. **CPU**: watch the amp's CPU % and overall CPU at 64 and 128 samples.
+   Standard captures are the heaviest; "lite"/"feather" ones are lighter.
+   Overruns must stay at 0.
+8. **Debug build**: `RT violations` must stay 0 while loading and swapping
+   amps. (NAM is optimised even in Debug builds, so you can play there.)
 
 ## Testing milestone 1 with your guitar
 
@@ -119,9 +151,10 @@ Source/
   Main.cpp            app start-up, main window
   app/                windows, settings (per-machine, in %APPDATA%\Encore)
   engine/             everything that runs on or talks to the audio thread
-    core/             Block, Chain, Parameter, lock-free queues, real-time checks
-    blocks/           the built-in blocks (gate, EQ; NAM and IR next)
-    dsp/              allocation-free DSP building blocks (filters, limiter)
+    core/             Block, Chain, Parameter, handovers, lock-free queues, real-time checks
+    blocks/           the built-in blocks (amp, gate, EQ; cab IR next)
+    dsp/              allocation-free DSP (filters, limiter, sample-rate conversion)
+    nam/              loading and running Neural Amp Modeler captures
   ui/                 reusable widgets
 Tests/                engine unit tests (run in CI)
 docs/DECISIONS.md     short log of important design decisions
@@ -132,6 +165,9 @@ docs/DECISIONS.md     short log of important design decisions
 Encore is free software under the **GNU Affero General Public License v3**
 (see [LICENSE.md](LICENSE.md)). It uses JUCE under its AGPLv3 option, the
 Steinberg ASIO SDK headers bundled with JUCE (GPLv3 option, compatible with
-AGPLv3), and, from milestone 2, NeuralAmpModelerCore (MIT).
+AGPLv3), [NeuralAmpModelerCore](https://github.com/sdatkinson/NeuralAmpModelerCore)
+(MIT), [Eigen](https://eigen.tuxfamily.org) (MPL 2.0) and
+[nlohmann/json](https://github.com/nlohmann/json) (MIT). All are downloaded at
+configure time at pinned versions.
 
 ASIO is a trademark of Steinberg Media Technologies GmbH.

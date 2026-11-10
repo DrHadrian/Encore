@@ -3,91 +3,44 @@
 
 #include "engine/core/ChainHandover.h"
 
-#include <algorithm>
-
 namespace encore
 {
-
-ChainHandover::ChainHandover() = default;
-
-ChainHandover::~ChainHandover()
-{
-    // The audio callback must be removed before this is destroyed.
-}
 
 void ChainHandover::publish (std::unique_ptr<Chain> chain)
 {
     jassert (chain != nullptr);
 
-    const juce::ScopedLock sl (ownedLock);
+    {
+        const juce::ScopedLock sl (specLock);
 
-    if (spec.isValid())
-        chain->prepare (spec);
+        if (spec.isValid())
+            chain->prepare (spec);
+    }
 
-    auto* raw = chain.get();
-    owned.push_back (std::move (chain));
-    latest = raw;
-
-    // The queue holds 16 pending swaps; the audio thread drains it every
-    // few milliseconds, so filling it would need a stalled audio thread.
-    const auto queued = incoming.push (raw);
-    jassert (queued);
-    juce::ignoreUnused (queued);
+    handover.publish (std::move (chain));
 }
 
 void ChainHandover::collectGarbage()
 {
-    Chain* dead = nullptr;
+    handover.collectGarbage();
 
-    while (retired.pop (dead))
-    {
-        const juce::ScopedLock sl (ownedLock);
-
-        owned.erase (std::remove_if (owned.begin(), owned.end(),
-                                     [dead] (const auto& c) { return c.get() == dead; }),
-                     owned.end());
-    }
-}
-
-Chain* ChainHandover::getLatest() const noexcept
-{
-    const juce::ScopedLock sl (ownedLock);
-    return latest;
+    // Blocks (e.g. amp models) have their own handovers; their garbage is
+    // message-thread work too.
+    handover.forEachOwned ([] (Chain& c) { c.collectGarbage(); });
 }
 
 void ChainHandover::prepareAll (const ProcessSpec& newSpec)
 {
-    const juce::ScopedLock sl (ownedLock);
+    const juce::ScopedLock sl (specLock);
     spec = newSpec;
-
-    for (auto& c : owned)
-        c->prepare (spec);
-}
-
-int ChainHandover::getNumOwnedChains() const
-{
-    const juce::ScopedLock sl (ownedLock);
-    return (int) owned.size();
+    handover.forEachOwned ([&] (Chain& c) { c.prepare (spec); });
 }
 
 Chain* ChainHandover::acquireActive() noexcept
 {
-    // Hand back anything a full graveyard couldn't take last time.
-    while (retireBacklogSize > 0 && retired.push (retireBacklog[(size_t) retireBacklogSize - 1]))
-        --retireBacklogSize;
-
-    Chain* next = nullptr;
-
-    while (incoming.pop (next))
+    while (auto* next = handover.takeNext())
     {
-        if (active != nullptr && ! retired.push (active))
-        {
-            jassert (retireBacklogSize < queueSize);
-
-            if (retireBacklogSize < queueSize)
-                retireBacklog[(size_t) retireBacklogSize++] = active;
-        }
-
+        handover.retire (active);
         active = next;
     }
 
