@@ -8,6 +8,7 @@
 
 #include "engine/PeakMeter.h"
 #include "engine/core/PatchPlayer.h"
+#include "engine/midi/MidiRouter.h"
 #include "engine/dsp/SafetyLimiter.h"
 
 namespace encore
@@ -38,6 +39,9 @@ public:
     /** Shortcut for a single chain (tests, simple setups): adopts it, makes it
         the only playable chain and plays it. Releases the previous one. */
     Chain* setChain (std::unique_ptr<Chain> chain);
+
+    /** Foot controller and pedal input, and cue MIDI out. */
+    MidiRouter& getMidiRouter() noexcept { return midi; }
 
     /** The chain the audio thread is playing (what the UI shows). */
     Chain* getChain() const noexcept { return player.getActiveChain(); }
@@ -95,6 +99,7 @@ private:
     std::atomic<int> guitarInput { 0 };
 
     PatchPlayer player;
+    MidiRouter midi;
     Chain* singleChain = nullptr;   // the chain set by setChain(), if used
 
     // Audio-thread-only state, (re)allocated only in audioDeviceAboutToStart().

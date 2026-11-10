@@ -37,6 +37,8 @@ private:
 
     void rename (int row);
     void showCueMenu (int row);
+    void editProgramChange (int row);
+    void editMidiOut (int row);
 
     ShowSession& session;
     juce::Label header { {}, "Set list" };

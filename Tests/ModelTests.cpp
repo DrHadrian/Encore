@@ -22,6 +22,11 @@ inline ShowModel makeRichShow()
     show.patches[1].mainLane().blocks[0].params["input"] = 6.5f;
     show.patches[1].mainLane().blocks[0].file = "models/lead amp.nam";
     show.patches[1].mainLane().blocks[2].enabled = false;
+    show.patches[1].mainLane().blocks[2].stomp = 3;
+    show.patches[1].mainLane().blocks[0].expression["input"] = { 2, -6.0f, 12.0f };
+    show.ownMidiMappings = true;
+    show.midiBindings = makeDefaultMidiBindings();
+    show.midiBindings.push_back ({ MidiAction::stomp, 3, { MidiTrigger::Kind::note, 10, 36 } });
 
     auto act = RunItem::makeSection ("Act 1", "act");
 
@@ -31,6 +36,7 @@ inline ShowModel makeRichShow()
     cue.patchId = show.patches[1].id;
     cue.samePatch = SamePatchBehaviour::reset;
     cue.programChange = 7;
+    cue.midiOut = { { MidiOutMessage::Kind::programChange, 1, 5, 0 }, { MidiOutMessage::Kind::controlChange, 2, 20, 127 } };
     act.children.push_back (cue);
 
     RunItem cutCue = cue;
@@ -207,7 +213,41 @@ public:
     }
 };
 
+class MidiMappingTests final : public juce::UnitTest
+{
+public:
+    MidiMappingTests() : juce::UnitTest ("MIDI mapping text and format", "Encore") {}
+
+    void runTest() override
+    {
+        beginTest ("Cue MIDI out: text round trip, and clear errors");
+        std::vector<MidiOutMessage> parsed;
+        juce::String error;
+        expect (parseMidiOut ("PC 1 5\n cc 2 20 127 \n\n", parsed, error), error);
+        expectEquals ((int) parsed.size(), 2);
+        expect (parsed[1].kind == MidiOutMessage::Kind::controlChange && parsed[1].value == 127);
+
+        std::vector<MidiOutMessage> again;
+        expect (parseMidiOut (formatMidiOut (parsed), again, error) && again == parsed);
+
+        expect (! parseMidiOut ("PC 17 5", parsed, error), "channel out of range");
+        expect (error.contains ("PC 17 5"));
+        expect (! parseMidiOut ("hello", parsed, error));
+
+        beginTest ("Bindings survive JSON; unknown actions from newer versions are skipped");
+        const auto defaults = makeDefaultMidiBindings();
+        expect (bindingsFromVar (bindingsToVar (defaults)) == defaults);
+
+        juce::var parsedJson;
+        juce::JSON::parse (R"([{ "action": "teleport", "kind": "cc", "number": 3 }, { "action": "mute", "kind": "note", "number": 60 }])", parsedJson);
+        const auto read = bindingsFromVar (parsedJson);
+        expectEquals ((int) read.size(), 1);
+        expect (read[0].action == MidiAction::mute && read[0].trigger.kind == MidiTrigger::Kind::note);
+    }
+};
+
 static ShowJsonTests showJsonTests;
+static MidiMappingTests midiMappingTests;
 static ShowFolderTests showFolderTests;
 
 } // namespace encore::test

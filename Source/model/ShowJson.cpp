@@ -89,6 +89,25 @@ namespace
         if (b.file.isNotEmpty())
             set (o, "file", b.file);
 
+        if (b.stomp > 0)
+            set (o, "stomp", b.stomp);
+
+        if (! b.expression.empty())
+        {
+            auto expression = object();
+
+            for (auto& [paramId, e] : b.expression)
+            {
+                auto assignment = object();
+                set (assignment, "pedal", e.pedal);
+                set (assignment, "min", e.min);
+                set (assignment, "max", e.max);
+                set (expression, juce::Identifier (paramId), assignment);
+            }
+
+            set (o, "expression", expression);
+        }
+
         return o;
     }
 
@@ -99,6 +118,13 @@ namespace
         b.type = str (o, "type");
         b.enabled = flag (o, "enabled", true);
         b.file = str (o, "file");
+        b.stomp = juce::jlimit (0, maxStomps, integer (o, "stomp", 0));
+
+        if (auto* expression = get (o, "expression").getDynamicObject())
+            for (auto& e : expression->getProperties())
+                b.expression[e.name.toString()] = { juce::jlimit (1, maxExpressionPedals, (int) e.value.getProperty ("pedal", 1)),
+                                                    (float) (double) e.value.getProperty ("min", 0.0),
+                                                    (float) (double) e.value.getProperty ("max", 1.0) };
 
         if (auto* params = get (o, "params").getDynamicObject())
             for (auto& p : params->getProperties())
@@ -136,6 +162,23 @@ namespace
             if (item.uniquePatch)          set (o, "uniquePatch", patchToVar (*item.uniquePatch));
             set (o, "samePatch", toString (item.samePatch));
             if (item.programChange >= 0)   set (o, "programChange", item.programChange);
+
+            if (! item.midiOut.empty())
+            {
+                juce::Array<juce::var> out;
+
+                for (auto& m : item.midiOut)
+                {
+                    auto message = object();
+                    set (message, "kind", m.kind == MidiOutMessage::Kind::programChange ? "pc" : "cc");
+                    set (message, "channel", m.channel);
+                    set (message, "number", m.number);
+                    set (message, "value", m.value);
+                    out.add (message);
+                }
+
+                set (o, "midiOut", out);
+            }
         }
 
         return o;
@@ -166,6 +209,16 @@ namespace
 
             item.samePatch = str (o, "samePatch") == "reset" ? SamePatchBehaviour::reset : SamePatchBehaviour::keep;
             item.programChange = integer (o, "programChange", -1);
+
+            forEachIn (o, "midiOut", [&] (const juce::var& m)
+            {
+                MidiOutMessage message;
+                message.kind = str (m, "kind") == "cc" ? MidiOutMessage::Kind::controlChange : MidiOutMessage::Kind::programChange;
+                message.channel = juce::jlimit (1, 16, integer (m, "channel", 1));
+                message.number = juce::jlimit (0, 127, integer (m, "number", 0));
+                message.value = juce::jlimit (0, 127, integer (m, "value", 0));
+                item.midiOut.push_back (message);
+            });
         }
 
         return item;
@@ -246,6 +299,11 @@ juce::String toJson (const ShowModel& show)
     set (root, "patches", patches);
     set (root, "runningOrder", runItemToVar (show.runningOrder));
 
+    auto midi = object();
+    set (midi, "ownMappings", show.ownMidiMappings);
+    set (midi, "bindings", bindingsToVar (show.midiBindings));
+    set (root, "midi", midi);
+
     // Full precision, so values survive a save/load round trip exactly.
     return juce::JSON::toString (root, juce::JSON::FormatOptions{}.withSpacing (juce::JSON::Spacing::multiLine));
 }
@@ -289,6 +347,12 @@ std::optional<ShowModel> fromJson (const juce::String& text, juce::String& error
         show.runningOrder = runItemFromVar (order);
 
     show.runningOrder.kind = RunItem::Kind::section;   // the root is always a section
+
+    if (const auto midi = get (root, "midi"); midi.isObject())
+    {
+        show.ownMidiMappings = flag (midi, "ownMappings", false);
+        show.midiBindings = bindingsFromVar (get (midi, "bindings"));
+    }
     return show;
 }
 

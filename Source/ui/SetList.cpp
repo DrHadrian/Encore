@@ -109,7 +109,9 @@ void SetList::paintListBoxItem (int row, juce::Graphics& g, int width, int heigh
     g.setFont (juce::FontOptions (13.0f));
     g.setColour (patch != nullptr ? juce::Colours::white.withAlpha (0.5f) : juce::Colour (0xfff0b429));
     const auto patchText = patch != nullptr ? patch->name : juce::String ("(patch missing)");
-    g.drawText (patchText, area.removeFromRight (juce::jmin (110, width / 3)), juce::Justification::centredRight, true);
+    const auto midiText = juce::String (cue.programChange >= 0 ? "PC " + juce::String (cue.programChange) + "  " : "")
+                        + (cue.midiOut.empty() ? "" : "OUT  ");
+    g.drawText (midiText + patchText, area.removeFromRight (juce::jmin (110, width / 3)), juce::Justification::centredRight, true);
 
     g.setColour (juce::Colours::white.withAlpha (playing ? 1.0f : 0.85f));
     g.setFont (juce::FontOptions (16.0f, playing ? juce::Font::bold : juce::Font::plain));
@@ -161,6 +163,75 @@ void SetList::rename (int row)
     }), true);
 }
 
+void SetList::editProgramChange (int row)
+{
+    const auto cues = session.getCues();
+
+    if (! juce::isPositiveAndBelow (row, (int) cues.size()))
+        return;
+
+    const auto current = cues[(size_t) row]->programChange;
+    auto* window = new juce::AlertWindow ("Recall with a program change",
+                                          "The program number (0-127) your controller sends to jump straight to this cue. "
+                                          "Leave empty for none.",
+                                          juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor ("program", current >= 0 ? juce::String (current) : juce::String());
+    window->getTextEditor ("program")->setInputRestrictions (3, "0123456789");
+    window->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<SetList> safeThis (this);
+    window->enterModalState (true, juce::ModalCallbackFunction::create ([safeThis, window, row] (int result)
+    {
+        if (safeThis == nullptr || result != 1)
+            return;
+
+        const auto text = window->getTextEditorContents ("program").trim();
+        safeThis->session.setCueProgramChange (row, text.isEmpty() ? -1 : juce::jlimit (0, 127, text.getIntValue()));
+    }), true);
+}
+
+void SetList::editMidiOut (int row)
+{
+    const auto cues = session.getCues();
+
+    if (! juce::isPositiveAndBelow (row, (int) cues.size()))
+        return;
+
+    auto* window = new juce::AlertWindow ("MIDI out when this cue starts",
+                                          "One message per line, sent to the MIDI output chosen in MIDI settings:\n"
+                                          "  PC <channel> <program>        e.g.  PC 1 5\n"
+                                          "  CC <channel> <number> <value>  e.g.  CC 1 20 127",
+                                          juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor ("midi", formatMidiOut (cues[(size_t) row]->midiOut));
+
+    auto* editor = window->getTextEditor ("midi");
+    editor->setMultiLine (true);
+    editor->setReturnKeyStartsNewLine (true);
+    editor->setSize (editor->getWidth(), 110);
+    window->addButton ("OK", 1);
+    window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<SetList> safeThis (this);
+    window->enterModalState (true, juce::ModalCallbackFunction::create ([safeThis, window, row] (int result)
+    {
+        if (safeThis == nullptr || result != 1)
+            return;
+
+        std::vector<MidiOutMessage> messages;
+        juce::String error;
+
+        if (parseMidiOut (window->getTextEditorContents ("midi"), messages, error))
+        {
+            safeThis->session.setCueMidiOut (row, std::move (messages));
+            return;
+        }
+
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                "MIDI out not changed", error, {}, safeThis.getComponent());
+    }), true);
+}
+
 void SetList::showCueMenu (int row)
 {
     const auto cues = session.getCues();
@@ -196,6 +267,9 @@ void SetList::showCueMenu (int row)
     menu.addItem ("Rename...", [safeThis, row] { if (safeThis != nullptr) safeThis->rename (row); });
     menu.addSubMenu ("Patch", patches);
     menu.addSubMenu ("If the previous cue uses the same patch", samePatch);
+    menu.addSeparator();
+    menu.addItem ("Recall with a program change...", [safeThis, row] { if (safeThis != nullptr) safeThis->editProgramChange (row); });
+    menu.addItem ("MIDI out when this cue starts...", [safeThis, row] { if (safeThis != nullptr) safeThis->editMidiOut (row); });
     menu.addSeparator();
     menu.addItem ("Remove", [safeThis, row] { if (safeThis != nullptr) safeThis->session.removeCue (row); });
 

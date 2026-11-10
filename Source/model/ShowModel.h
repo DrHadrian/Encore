@@ -5,6 +5,8 @@
 
 #include <juce_core/juce_core.h>
 #include <map>
+
+#include "model/MidiMapping.h"
 #include <optional>
 #include <vector>
 
@@ -34,6 +36,8 @@ struct BlockModel
     bool enabled = true;
     std::map<juce::String, float> params;    // parameter id -> value, in real units
     juce::String file;                       // show-relative ("models/x.nam") or absolute until collected
+    int stomp = 0;                           // which stomp switch toggles it (1..8), 0 = none
+    std::map<juce::String, ExpressionAssignment> expression;   // parameter id -> pedal and range
 
     bool operator== (const BlockModel&) const = default;
 };
@@ -91,6 +95,7 @@ struct RunItem
     std::optional<PatchModel> uniquePatch;   // ...or this cue's own ("make unique")
     SamePatchBehaviour samePatch = SamePatchBehaviour::keep;
     int programChange = -1;                  // optional direct recall, -1 = none
+    std::vector<MidiOutMessage> midiOut;     // sent to other gear when the cue starts
 
     static RunItem makeSection (const juce::String& name, const juce::String& sectionKind);
     static RunItem makeCue (const juce::String& number, const juce::String& name, const juce::String& patchId);
@@ -109,6 +114,9 @@ struct ShowModel
     ShowTemplate showTemplate = ShowTemplate::band;
     std::vector<PatchModel> patches;
     RunItem runningOrder = RunItem::makeSection ({}, {});   // the root section
+
+    bool ownMidiMappings = false;            // use these instead of the computer's mappings
+    std::vector<MidiBinding> midiBindings;
 
     PatchModel* findPatch (const juce::String& patchId);
     const PatchModel* findPatch (const juce::String& patchId) const;

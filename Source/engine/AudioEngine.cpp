@@ -29,6 +29,7 @@ Chain* AudioEngine::setChain (std::unique_ptr<Chain> chain)
 void AudioEngine::collectGarbage()
 {
     player.collectGarbage();
+    midi.collectGarbage();
 }
 
 void AudioEngine::setMasterGainDecibels (float dB) noexcept
@@ -94,6 +95,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputCha
 
     if (numOutputChannels <= 0 || numSamples <= 0)
         return;
+
+    // Foot controller first: a switch pressed now takes effect in this buffer.
+    midi.process (player, muted);
 
     const auto inputIndex = guitarInput.load (std::memory_order_relaxed);
     const float* input = (inputIndex < numInputChannels) ? inputChannelData[inputIndex] : nullptr;

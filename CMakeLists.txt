@@ -127,6 +127,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/core/Realtime.cpp
     Source/engine/core/Realtime.h
     Source/engine/core/RealtimeHandover.h
+    Source/engine/midi/MidiRouter.cpp
+    Source/engine/midi/MidiRouter.h
     Source/engine/dsp/Biquad.h
     Source/engine/dsp/SafetyLimiter.cpp
     Source/engine/dsp/SafetyLimiter.h
@@ -134,6 +136,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/dsp/StreamResampler.h
     Source/engine/nam/NamModel.cpp
     Source/engine/nam/NamModel.h
+    Source/model/MidiMapping.cpp
+    Source/model/MidiMapping.h
     Source/model/ShowFolder.cpp
     Source/model/ShowFolder.h
     Source/model/ShowJson.cpp
@@ -169,6 +173,8 @@ target_sources(Encore PRIVATE
     Source/ui/ChainStrip.h
     Source/ui/LevelMeter.cpp
     Source/ui/LevelMeter.h
+    Source/ui/MidiSettings.cpp
+    Source/ui/MidiSettings.h
     Source/ui/PatchList.cpp
     Source/ui/PatchList.h
     Source/ui/SetList.cpp
@@ -179,6 +185,7 @@ target_compile_definitions(Encore PRIVATE
     # for laptops without an ASIO driver. JUCE ships the ASIO header itself.
     JUCE_ASIO=1
     JUCE_WASAPI=1
+    JUCE_USE_WINRT_MIDI=1          # Bluetooth MIDI pedals (Windows 10+)
     JUCE_DIRECTSOUND=0
     # Features we don't use: keep the binary lean and avoid network code.
     JUCE_WEB_BROWSER=0
@@ -219,6 +226,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/CabTests.cpp
         Tests/DspTests.cpp
         Tests/EngineCoreTests.cpp
+        Tests/MidiTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
         Tests/PatchBuilderTests.cpp

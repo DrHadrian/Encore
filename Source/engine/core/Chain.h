@@ -85,6 +85,21 @@ public:
     /** Audio thread: return to the saved state (ramped, no clicks). Atomics only. */
     void restoreSnapshot() noexcept;
 
+    //== Foot controls =========================================================
+    /** Before the chain plays: let expression pedal `pedal` (1..4) move a
+        parameter between min (heel) and max (toe). */
+    void addExpressionTarget (int pedal, Parameter& parameter, float min, float max);
+
+    /** Audio thread: a pedal moved (0..1). Atomics only. */
+    void applyExpression (int pedal, float position) noexcept;
+
+    /** True if pedal `pedal` moves anything in this patch. */
+    bool usesExpression (int pedal) const noexcept;
+
+    /** Audio thread: toggles every block assigned to stomp `number`. Returns
+        true if there was one. Atomics only (the block's bypass ramp makes it click-free). */
+    bool toggleStomp (int number) noexcept;
+
     /** Free-form label for the UI and debugging (usually the patch name). */
     juce::String label;
 
@@ -95,6 +110,9 @@ private:
     std::atomic<TailMode> tailMode { TailMode::tailsOnly };
     std::atomic<float> fadeIn { (float) defaultFadeInSeconds }, ringOut { (float) defaultRingOutSeconds };
     int firstTailBlock = -1;
+
+    struct ExpressionTarget { int pedal; Parameter* parameter; float min, max; };
+    std::vector<ExpressionTarget> expressionTargets;   // fixed once the chain plays
 
     // Saved state, as atomics so the audio thread can restore it while the
     // message thread updates it. Sized when the chain is prepared.

@@ -149,6 +149,11 @@ PatchModel* ShowSession::findPatchForKey (const juce::String& key)
     return show.findPatch (key);
 }
 
+const PatchModel* ShowSession::findPatchForKey (const juce::String& key) const
+{
+    return const_cast<ShowSession*> (this)->findPatchForKey (key);
+}
+
 void ShowSession::buildAll()
 {
     // Everything the show can play: library patches and cues' own patches.
@@ -289,15 +294,19 @@ void ShowSession::installChain (const juce::String& key, std::unique_ptr<Chain> 
 void ShowSession::publishRunningOrder()
 {
     std::vector<PatchPlayer::Cue> cues;
+    std::vector<std::vector<MidiOutMessage>> midiOut;
 
     for (auto* cue : getCues())
     {
         const auto it = chains.find (keyForCue (*cue));
         cues.push_back ({ it != chains.end() ? it->second : nullptr,
-                          cue->samePatch == SamePatchBehaviour::reset });
+                          cue->samePatch == SamePatchBehaviour::reset,
+                          cue->programChange });
+        midiOut.push_back (cue->midiOut);
     }
 
     player.publish (std::move (cues));
+    engine.getMidiRouter().setCueMidiOut (std::move (midiOut));
 }
 
 void ShowSession::syncWithAudio()
@@ -574,6 +583,78 @@ void ShowSession::markEdited()
     changed (false);
 }
 
+void ShowSession::setBlockStomp (int blockIndex, int stomp)
+{
+    auto* patch = findPatchForKey (activePatchId);
+
+    if (patch == nullptr || ! juce::isPositiveAndBelow (blockIndex, (int) patch->mainLane().blocks.size()))
+        return;
+
+    stomp = juce::jlimit (0, maxStomps, stomp);
+    patch->mainLane().blocks[(size_t) blockIndex].stomp = stomp;
+
+    // Live at once, no rebuild: the stomp number is an atomic on the block.
+    if (const auto it = chains.find (activePatchId); it != chains.end()
+        && juce::isPositiveAndBelow (blockIndex, (int) it->second->getBlocks().size()))
+        it->second->getBlocks()[(size_t) blockIndex]->setStomp (stomp);
+
+    changed (true);
+}
+
+int ShowSession::getBlockStomp (int blockIndex) const
+{
+    const auto* patch = findPatchForKey (activePatchId);
+    return patch != nullptr && juce::isPositiveAndBelow (blockIndex, (int) patch->mainLane().blocks.size())
+               ? patch->mainLane().blocks[(size_t) blockIndex].stomp : 0;
+}
+
+void ShowSession::setExpression (int blockIndex, const juce::String& paramId, int pedal)
+{
+    captureAll();
+    auto* patch = findPatchForKey (activePatchId);
+
+    if (patch == nullptr || ! juce::isPositiveAndBelow (blockIndex, (int) patch->mainLane().blocks.size()))
+        return;
+
+    auto& block = patch->mainLane().blocks[(size_t) blockIndex];
+
+    if (pedal <= 0)
+    {
+        block.expression.erase (paramId);
+    }
+    else
+    {
+        // Full range of the knob: heel = minimum, toe = maximum.
+        ExpressionAssignment assignment;
+        assignment.pedal = juce::jlimit (1, maxExpressionPedals, pedal);
+
+        if (const auto it = chains.find (activePatchId); it != chains.end()
+            && juce::isPositiveAndBelow (blockIndex, (int) it->second->getBlocks().size()))
+            if (auto* p = it->second->getBlocks()[(size_t) blockIndex]->findParameter (paramId))
+            {
+                assignment.min = p->getSpec().range.start;
+                assignment.max = p->getSpec().range.end;
+            }
+
+        block.expression[paramId] = assignment;
+    }
+
+    changed (true);
+    rebuildPatch (activePatchId);
+}
+
+int ShowSession::getExpressionPedal (int blockIndex, const juce::String& paramId) const
+{
+    const auto* patch = findPatchForKey (activePatchId);
+
+    if (patch == nullptr || ! juce::isPositiveAndBelow (blockIndex, (int) patch->mainLane().blocks.size()))
+        return 0;
+
+    const auto& expression = patch->mainLane().blocks[(size_t) blockIndex].expression;
+    const auto it = expression.find (paramId);
+    return it != expression.end() ? it->second.pedal : 0;
+}
+
 //==============================================================================
 std::vector<const RunItem*> ShowSession::getCues() const
 {
@@ -712,6 +793,42 @@ void ShowSession::setCueSamePatch (int index, SamePatchBehaviour behaviour)
         publishRunningOrder();
         changed (true);
     }
+}
+
+void ShowSession::setCueProgramChange (int index, int program)
+{
+    if (auto* cue = cueAt (index))
+    {
+        cue->programChange = juce::jlimit (-1, 127, program);
+        publishRunningOrder();
+        changed (true);
+    }
+}
+
+void ShowSession::setCueMidiOut (int index, std::vector<MidiOutMessage> messages)
+{
+    if (auto* cue = cueAt (index))
+    {
+        cue->midiOut = std::move (messages);
+        publishRunningOrder();
+        changed (true);
+    }
+}
+
+void ShowSession::setOwnMidiMappings (bool own, const std::vector<MidiBinding>& startingPoint)
+{
+    show.ownMidiMappings = own;
+
+    if (own && show.midiBindings.empty())
+        show.midiBindings = startingPoint;
+
+    changed (true);
+}
+
+void ShowSession::setShowMidiBindings (std::vector<MidiBinding> bindings)
+{
+    show.midiBindings = std::move (bindings);
+    changed (true);
 }
 
 //==============================================================================
