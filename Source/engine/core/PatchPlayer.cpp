@@ -243,7 +243,7 @@ void PatchPlayer::switchTo (Chain* target, bool resetIfSame) noexcept
     // The patch we leave starts ringing out.
     if (active.chain != nullptr)
     {
-        auto* freeSlot = std::find_if (ringing.begin(), ringing.end(), [] (const Slot& s) { return s.chain == nullptr; });
+        auto freeSlot = std::find_if (ringing.begin(), ringing.end(), [] (const Slot& s) { return s.chain == nullptr; });
 
         if (freeSlot == ringing.end())
         {

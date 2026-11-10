@@ -223,8 +223,8 @@ The old patch keeps running on silence until it falls below −90 dBFS for
 100 ms (8 s at most). In "tails only" mode (the default), after 200 ms of
 settling it runs only from its first delay/reverb block on, so the amp and
 cab stop costing CPU. A patch that played for under 50 ms (stepping quickly
-through cues) doesn't ring out at all. Up to four patches can ring at once; a
-fifth stops the oldest, which is the quietest. Going back to a patch that's
+through cues) doesn't ring out at all. Up to three patches can ring at once; a
+fourth stops the oldest, which is the quietest. Going back to a patch that's
 still ringing picks it up as it is, tail included, instead of starting a second
 copy.
 
