@@ -75,6 +75,18 @@ cmake --build --preset debug --target EncoreTests
 ctest --preset debug
 ```
 
+## Live performance settings (Windows)
+
+At start-up Encore opts out of Windows power throttling, raises its priority,
+puts its audio thread in Windows' *Pro Audio* scheduling class and keeps the
+computer and screen awake. The status line under the latency shows what took
+effect. For shows also:
+
+- **plug in the charger**: on battery Windows saves power at the audio's
+  expense (the status line warns you);
+- set Windows' power mode to **Best performance**;
+- use 64 samples or more, so there is headroom for spikes.
+
 ## Testing milestone 2 with your guitar
 
 You need a few `.nam` captures, e.g. from [TONE3000](https://www.tone3000.com)

@@ -145,6 +145,8 @@ target_sources(Encore PRIVATE
     Source/app/MainComponent.h
     Source/engine/AudioEngine.cpp
     Source/engine/AudioEngine.h
+    Source/platform/SystemTuning.cpp
+    Source/platform/SystemTuning.h
     Source/ui/BlockPanel.cpp
     Source/ui/BlockPanel.h
     Source/ui/LevelMeter.cpp

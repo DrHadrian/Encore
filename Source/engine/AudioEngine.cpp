@@ -3,6 +3,7 @@
 
 #include "engine/AudioEngine.h"
 #include "engine/core/Realtime.h"
+#include "platform/SystemTuning.h"
 
 namespace encore
 {
@@ -77,6 +78,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputCha
                                                     const juce::AudioIODeviceCallbackContext&)
 {
     // AUDIO THREAD: no allocation, no locks, no I/O, no logging below this line.
+    system::ensureAudioThreadIsProAudio();   // first call per thread only; then a flag check
     const rt::ScopedRealtimeSection realtime;
     const juce::ScopedNoDenormals noDenormals;
     const juce::AudioProcessLoadMeasurer::ScopedTimer timer (loadMeasurer, numSamples);

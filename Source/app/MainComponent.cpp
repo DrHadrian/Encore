@@ -33,6 +33,9 @@ namespace
 //==============================================================================
 MainComponent::MainComponent (AppSettings& s) : settings (s)
 {
+    // What DAWs do so Windows never slows the audio down (see SystemTuning.h).
+    tuning = system::applyLiveProcessSettings();
+
     title.setText ("Encore", juce::dontSendNotification);
     title.setFont (juce::FontOptions (28.0f, juce::Font::bold));
     title.setColour (juce::Label::textColourId, juce::Colours::white);
@@ -43,6 +46,9 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
         styleStatus (*label, 16.0f);
         addAndMakeVisible (label);
     }
+
+    styleStatus (systemStatus, 14.0f);
+    addAndMakeVisible (systemStatus);
 
     styleStatus (warning, 15.0f);
     warning.setColour (juce::Label::textColourId, juce::Colour (0xfff0b429));
@@ -130,6 +136,7 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
 
     refreshInputChoices();
     refreshStatus();
+    refreshSystemStatus();
 
     // Now that the device is running, reload the amp from last time (in the
     // background; it fades in when ready).
@@ -268,6 +275,29 @@ void MainComponent::refreshInputChoices()
     inputChoice.setSelectedId (wanted + 1, juce::sendNotificationSync);
 }
 
+void MainComponent::refreshSystemStatus()
+{
+   #if JUCE_WINDOWS
+    juce::StringArray parts;
+    parts.add (tuning.highPriority ? "high priority" : "normal priority (couldn't raise)");
+    parts.add (tuning.powerThrottlingDisabled ? "power throttling off" : "power throttling ON (couldn't disable)");
+    parts.add (system::isAudioThreadProAudio() ? "Pro Audio audio thread" : "audio thread not yet registered");
+
+    auto text = "Windows: " + parts.joinIntoString (", ");
+    auto problem = ! tuning.highPriority || ! tuning.powerThrottlingDisabled;
+
+    if (system::getPowerSource() == system::PowerSource::battery)
+    {
+        text << "   |   ON BATTERY: plug in for shows";
+        problem = true;
+    }
+
+    systemStatus.setText (text, juce::dontSendNotification);
+    systemStatus.setColour (juce::Label::textColourId,
+                            problem ? juce::Colour (0xfff0b429) : juce::Colours::white.withAlpha (0.55f));
+   #endif
+}
+
 void MainComponent::refreshStatus()
 {
     auto* device = deviceManager.getCurrentAudioDevice();
@@ -340,6 +370,9 @@ void MainComponent::timerCallback()
     if (++frameCounter % 10 != 0)
         return;
 
+    if (frameCounter % 60 == 0)   // power source etc. every 2 s
+        refreshSystemStatus();
+
     juce::String health;
     health << "CPU " << juce::String (engine.getCpuLoad() * 100.0, 0) << " %"
            << "   |   overruns " << engine.getOverrunCount();
@@ -394,6 +427,7 @@ int MainComponent::layoutContent (int width, bool apply)
     area.removeFromTop (12);
     place (deviceStatus, area.removeFromTop (26));
     place (latencyStatus, area.removeFromTop (26));
+    place (systemStatus, area.removeFromTop (22));
     place (warning, area.removeFromTop (26));
 
     area.removeFromTop (12);
