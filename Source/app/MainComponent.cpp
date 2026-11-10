@@ -374,11 +374,13 @@ void MainComponent::showSelectedBlock()
 
 void MainComponent::relayout()
 {
-    // Inside a scrolling viewport: tell it our height may have changed.
+    // Inside a scrolling viewport: let it adjust our height first...
     if (auto* viewport = findParentComponentOfClass<juce::Viewport>())
         viewport->resized();
-    else
-        resized();
+
+    // ...then always lay out: if our size didn't change, JUCE won't call
+    // resized() by itself, and a newly added panel would stay at zero size.
+    resized();
 }
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)
@@ -564,7 +566,7 @@ void MainComponent::timerCallback()
         refreshSystemStatus();
 
     juce::String health;
-    health << "CPU " << juce::String (engine.getCpuLoad() * 100.0, 0) << " %"
+    health << "CPU " << juce::roundToInt (engine.getCpuLoad() * 100.0) << " %"
            << "   |   overruns " << engine.getOverrunCount();
 
     if (auto* device = deviceManager.getCurrentAudioDevice())
