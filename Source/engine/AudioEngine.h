@@ -38,6 +38,9 @@ public:
     /** The chain the UI should show and edit. */
     Chain* getChain() const noexcept { return chains.getLatest(); }
 
+    /** The device's current sample rate and buffer size (invalid while stopped). */
+    ProcessSpec getCurrentSpec() const noexcept { return { currentSampleRate.load(), currentBlockSize.load() }; }
+
     /** Frees chains the audio thread has finished with. Call from a UI timer. */
     void collectGarbage() { chains.collectGarbage(); }
 

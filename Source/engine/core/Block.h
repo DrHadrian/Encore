@@ -65,6 +65,15 @@ public:
     const juce::String& getTypeId() const noexcept { return typeId; }
     const juce::String& getName() const noexcept   { return name; }
 
+    /** The ID of the saved block this was built from (message thread). */
+    const juce::String& getModelId() const noexcept         { return modelId; }
+    void setModelId (const juce::String& id)                 { modelId = id; }
+
+    /** The file path the saved patch asked for, kept even if loading failed
+        (e.g. a USB stick not plugged in), so saving never drops it. */
+    const juce::String& getRequestedFile() const noexcept   { return requestedFile; }
+    void setRequestedFile (const juce::String& path)         { requestedFile = path; }
+
     void setEnabled (bool shouldBeEnabled) noexcept { enabled.store (shouldBeEnabled, std::memory_order_relaxed); }
     bool isEnabled() const noexcept                  { return enabled.load (std::memory_order_relaxed); }
 
@@ -121,6 +130,7 @@ protected:
 
 private:
     const juce::String typeId, name;
+    juce::String modelId, requestedFile;
     std::vector<std::unique_ptr<Parameter>> parameters;
 
     std::atomic<bool> enabled { true };

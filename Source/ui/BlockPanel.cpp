@@ -49,6 +49,9 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
         block.setEnabled (power.getToggleState());
         power.setButtonText (power.getToggleState() ? "ON" : "OFF");
         repaint();
+
+        if (onEdited != nullptr)
+            onEdited();
     };
     addAndMakeVisible (power);
 
@@ -89,10 +92,13 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
             b.setButtonText (b.getToggleState() ? "ON" : "OFF");
             b.setColour (juce::TextButton::buttonOnColourId, accent.withAlpha (0.8f));
             b.setColour (juce::TextButton::buttonColourId, offColour);
-            b.onClick = [param, &b]
+            b.onClick = [this, param, &b]
             {
                 param->setValue (b.getToggleState() ? 1.0f : 0.0f);
                 b.setButtonText (b.getToggleState() ? "ON" : "OFF");
+
+                if (onEdited != nullptr)
+                    onEdited();
             };
             addAndMakeVisible (b);
         }
@@ -109,7 +115,13 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
             s.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
             s.textFromValueFunction = [param] (double v) { return param->toText ((float) v); };
             s.valueFromTextFunction = [] (const juce::String& text) { return text.getDoubleValue(); };
-            s.onValueChange = [param, &s] { param->setValue ((float) s.getValue()); };
+            s.onValueChange = [this, param, &s]
+            {
+                param->setValue ((float) s.getValue());
+
+                if (onEdited != nullptr)
+                    onEdited();
+            };
             s.updateText();
             addAndMakeVisible (s);
         }
@@ -174,6 +186,9 @@ void BlockPanel::loadFile (const juce::File& file)
 
         if (self->onFileLoaded != nullptr)
             self->onFileLoaded (file);
+
+        if (self->onEdited != nullptr)
+            self->onEdited();
     });
 }
 

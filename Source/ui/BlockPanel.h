@@ -29,6 +29,9 @@ public:
     /** Optional activity light (e.g. "gate open"). */
     void setStatusLight (juce::String label, std::function<bool()> isLit);
 
+    /** Called after any change made in this panel (knob, switch, on/off, file). */
+    std::function<void()> onEdited;
+
     /** Where the file chooser opens, and what to do after a successful load. */
     std::function<juce::File()> getBrowseFolder;
     std::function<void (const juce::File&)> onFileLoaded;

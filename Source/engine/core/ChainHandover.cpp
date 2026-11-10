@@ -13,7 +13,7 @@ void ChainHandover::publish (std::unique_ptr<Chain> chain)
     {
         const juce::ScopedLock sl (specLock);
 
-        if (spec.isValid())
+        if (spec.isValid() && ! (chain->getSpec() == spec))
             chain->prepare (spec);
     }
 

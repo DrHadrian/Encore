@@ -58,8 +58,12 @@ public:
     int getLatencySamples() const noexcept override { return 0; }
 
     //== Message thread ========================================================
-    /** Hands an IR to the audio thread. Used by loadFileAsync(), tests and the show loader. */
+    /** Hands an IR to the audio thread. Used by loadFileAsync() and tests. */
     void installImpulseResponse (std::unique_ptr<ImpulseResponse> ir);
+
+    /** For a block that isn't playing yet (a chain being built): loads the IR
+        straight into the engine, so it's fully ready after prepare(). */
+    void loadBeforePlaying (std::unique_ptr<ImpulseResponse> ir);
 
 private:
     void prepareBlock (const ProcessSpec&) override;
@@ -67,6 +71,7 @@ private:
                        const ProcessContext&) noexcept override;
     void resetBlock() noexcept override;
     void updateFilters (int numSamples) noexcept;
+    void describe (const ImpulseResponse& ir);
 
     const FileSlot fileSlot { "Load cab IR...", "*.wav;*.aif;*.aiff;*.flac" };
 

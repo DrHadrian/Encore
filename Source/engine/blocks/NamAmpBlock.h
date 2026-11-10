@@ -44,6 +44,10 @@ public:
         Used by loadFileAsync(), and directly by tests and the show loader. */
     void installModel (std::unique_ptr<NamModel> model);
 
+    /** For a block that isn't playing yet (a chain being built): the model is
+        active from the first sample, with no fade-in from the dry guitar. */
+    void installBeforePlaying (std::unique_ptr<NamModel> model);
+
     /** The model the UI should describe (newest installed), or null. */
     const NamModel* getLatestModel() const noexcept { return models.getLatest(); }
 

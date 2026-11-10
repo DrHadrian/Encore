@@ -99,6 +99,8 @@ endif()
 add_library(EncoreEngine INTERFACE)
 
 target_sources(EncoreEngine INTERFACE
+    Source/engine/AudioEngine.cpp
+    Source/engine/AudioEngine.h
     Source/engine/PeakMeter.h
     Source/engine/blocks/CabIrBlock.cpp
     Source/engine/blocks/CabIrBlock.h
@@ -127,7 +129,19 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/dsp/StreamResampler.cpp
     Source/engine/dsp/StreamResampler.h
     Source/engine/nam/NamModel.cpp
-    Source/engine/nam/NamModel.h)
+    Source/engine/nam/NamModel.h
+    Source/model/ShowFolder.cpp
+    Source/model/ShowFolder.h
+    Source/model/ShowJson.cpp
+    Source/model/ShowJson.h
+    Source/model/ShowModel.cpp
+    Source/model/ShowModel.h
+    Source/platform/SystemTuning.cpp
+    Source/platform/SystemTuning.h
+    Source/session/PatchBuilder.cpp
+    Source/session/PatchBuilder.h
+    Source/session/ShowSession.cpp
+    Source/session/ShowSession.h)
 
 target_include_directories(EncoreEngine INTERFACE Source)
 
@@ -145,14 +159,14 @@ target_sources(Encore PRIVATE
     Source/app/AppSettings.h
     Source/app/MainComponent.cpp
     Source/app/MainComponent.h
-    Source/engine/AudioEngine.cpp
-    Source/engine/AudioEngine.h
-    Source/platform/SystemTuning.cpp
-    Source/platform/SystemTuning.h
     Source/ui/BlockPanel.cpp
     Source/ui/BlockPanel.h
+    Source/ui/ChainStrip.cpp
+    Source/ui/ChainStrip.h
     Source/ui/LevelMeter.cpp
-    Source/ui/LevelMeter.h)
+    Source/ui/LevelMeter.h
+    Source/ui/PatchList.cpp
+    Source/ui/PatchList.h)
 
 target_compile_definitions(Encore PRIVATE
     # Audio drivers. ASIO is the one we play through; WASAPI stays as a fallback
@@ -199,14 +213,20 @@ if(ENCORE_BUILD_TESTS)
         Tests/CabTests.cpp
         Tests/DspTests.cpp
         Tests/EngineCoreTests.cpp
+        Tests/ModelTests.cpp
         Tests/NamTests.cpp
+        Tests/PatchBuilderTests.cpp
         Tests/ResamplerTests.cpp
+        Tests/SessionTests.cpp
         Tests/TestSignals.h)
 
     target_compile_definitions(EncoreTests PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_UNIT_TESTS=1
+        JUCE_MODAL_LOOPS_PERMITTED=1     # tests pump the message loop themselves
+        JUCE_ALSA=0                      # no audio hardware needed (or headers, on Linux CI)
+        JUCE_JACK=0
         # Real captures shipped with NeuralAmpModelerCore, used as test fixtures.
         ENCORE_NAM_EXAMPLE_MODELS="${nam_SOURCE_DIR}/example_models")
 
@@ -215,6 +235,7 @@ if(ENCORE_BUILD_TESTS)
             EncoreEngine
             nam_core
             juce::juce_audio_basics
+            juce::juce_audio_devices
             juce::juce_audio_formats
             juce::juce_dsp
             juce::juce_events

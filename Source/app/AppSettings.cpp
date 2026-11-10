@@ -13,6 +13,7 @@ namespace keys
     static constexpr auto masterGain  = "masterGainDb";
     static constexpr auto lastFile    = "lastFile_";
     static constexpr auto browseDir   = "lastBrowseFolder";
+    static constexpr auto lastShow    = "lastShowFolder";
 }
 
 AppSettings::AppSettings()
@@ -75,6 +76,17 @@ juce::File AppSettings::getLastFile (const juce::String& blockTypeId) const
 void AppSettings::setLastFile (const juce::String& blockTypeId, const juce::File& f)
 {
     file().setValue (keys::lastFile + blockTypeId, f.getFullPathName());
+}
+
+juce::File AppSettings::getLastShowFolder() const
+{
+    const auto path = file().getValue (keys::lastShow);
+    return path.isEmpty() ? juce::File() : juce::File (path);
+}
+
+void AppSettings::setLastShowFolder (const juce::File& folder)
+{
+    file().setValue (keys::lastShow, folder.getFullPathName());
 }
 
 juce::File AppSettings::getLastBrowseFolder() const

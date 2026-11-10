@@ -100,16 +100,36 @@ void CabIrBlock::loadFileAsync (const juce::File& file, std::function<void (juce
     });
 }
 
+void CabIrBlock::describe (const ImpulseResponse& ir)
+{
+    loadedFile = ir.file;
+    loadedInfo = juce::String (ir.sampleRate / 1000.0, 1) + " kHz, "
+               + juce::String (juce::roundToInt (ir.lengthSeconds * 1000.0)) + " ms"
+               + (ir.wasShortened ? " (shortened to 1 s)" : "");
+}
+
 void CabIrBlock::installImpulseResponse (std::unique_ptr<ImpulseResponse> ir)
 {
     jassert (ir != nullptr && ir->samples.getNumSamples() > 0);
-
-    loadedFile = ir->file;
-    loadedInfo = juce::String (ir->sampleRate / 1000.0, 1) + " kHz, "
-               + juce::String (juce::roundToInt (ir->lengthSeconds * 1000.0)) + " ms"
-               + (ir->wasShortened ? " (shortened to 1 s)" : "");
-
+    describe (*ir);
     irs.publish (std::move (ir));
+}
+
+void CabIrBlock::loadBeforePlaying (std::unique_ptr<ImpulseResponse> ir)
+{
+    jassert (ir != nullptr && ir->samples.getNumSamples() > 0);
+    describe (*ir);
+
+    // Not playing yet, so no other thread is using the engine: load directly.
+    // prepare() then finishes the load synchronously.
+    convolution.loadImpulseResponse (std::move (ir->samples), ir->sampleRate,
+                                     juce::dsp::Convolution::Stereo::no,
+                                     juce::dsp::Convolution::Trim::yes,
+                                     juce::dsp::Convolution::Normalise::yes);
+    hasImpulseResponse = true;
+
+    if (getPreparedSpec().isValid())
+        prepare (getPreparedSpec());
 }
 
 //==============================================================================

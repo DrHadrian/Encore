@@ -4,21 +4,22 @@
 #pragma once
 
 #include <juce_audio_utils/juce_audio_utils.h>
-#include <map>
 
 #include "app/AppSettings.h"
-#include "platform/SystemTuning.h"
 #include "engine/AudioEngine.h"
+#include "platform/SystemTuning.h"
+#include "session/ShowSession.h"
 #include "ui/BlockPanel.h"
+#include "ui/ChainStrip.h"
 #include "ui/LevelMeter.h"
+#include "ui/PatchList.h"
 
 namespace encore
 {
 
-/** Development window: device setup, guitar input, meters, latency, the
-    current chain's blocks, CPU/dropout counters and the master volume/mute.
-    The real performance and edit views replace this in later milestones; the
-    engine underneath stays.
+/** The edit view: the show's patches on the left, the selected patch's chain
+    and the selected block's controls on the right, audio status at the bottom.
+    The stage (performance) view comes in milestone 7; the engine underneath stays.
 */
 class MainComponent final : public juce::Component,
                             private juce::ChangeListener,
@@ -30,18 +31,29 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    bool keyPressed (const juce::KeyPress&) override;
 
     /** Height needed to show everything at this width (for the scrolling window). */
     int getRequiredHeight (int width);
 
 private:
+    // Audio
     void openAudioSettings();
     void refreshInputChoices();
     void refreshStatus();
     void refreshSystemStatus();
-    void buildDefaultChain();
-    void rebuildBlockPanels();
-    void restoreLastFiles();
+
+    // Show
+    void openInitialShow();
+    void showMenu();
+    void askForNewShow();
+    void chooseShowToOpen();
+    void chooseFolderForCopy();
+    void refreshShowStatus();
+    void reportProblems();
+
+    // Chain view
+    void showSelectedBlock();
     void relayout();
     int layoutContent (int width, bool apply);
 
@@ -50,25 +62,36 @@ private:
 
     AppSettings& settings;
 
-    // Order matters: the engine must outlive the device manager that calls it.
+    // Order matters: the engine must outlive the device manager that calls it,
+    // and the session (which saves on close) must go before both.
     AudioEngine engine;
     juce::AudioDeviceManager deviceManager;
-
-    juce::Label title, deviceStatus, latencyStatus, healthStatus, warning, systemStatus;
+    std::unique_ptr<ShowSession> session;
     system::TuningReport tuning;
+
+    // Top bar
+    juce::Label title, showName, saveState;
+    juce::TextButton showButton { "Show" };
     juce::TextButton audioSettingsButton { "Audio settings..." };
     juce::TextButton muteButton { "MUTED" };
-    juce::TextButton resetCountersButton { "Reset counters" };
+    juce::Slider volume { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
+
+    // Editing
+    std::unique_ptr<PatchList> patchList;
+    std::unique_ptr<ChainStrip> chainStrip;
+    std::unique_ptr<BlockPanel> blockPanel;
+    juce::Label chainLabel, problemsLabel;
+    Chain* shownChain = nullptr;
+    int shownBlockIndex = -1;
+
+    // Audio status
+    juce::Label deviceStatus, latencyStatus, healthStatus, warning, systemStatus;
     juce::Label inputLabel { {}, "Guitar input" };
     juce::ComboBox inputChoice;
-    juce::Label volumeLabel { {}, "Master volume" };
-    juce::Slider volume { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
+    juce::TextButton resetCountersButton { "Reset counters" };
     LevelMeter inputMeter { "Input" }, outputMeter { "Output" };
-    juce::Label chainLabel { {}, "Chain" };
-    std::vector<std::unique_ptr<BlockPanel>> blockPanels;
-    std::map<BlockPanel*, Block*> panelBlocks;
-    Chain* shownChain = nullptr;
 
+    std::unique_ptr<juce::FileChooser> chooser;
     int frameCounter = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
