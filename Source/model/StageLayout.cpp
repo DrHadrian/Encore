@@ -102,9 +102,9 @@ StageLayout makeDefaultStageLayout()
         widget (StageWidgetType::cueNote,     0,  7, 16, 2),
         widget (StageWidgetType::nextCue,     0,  9, 16, 3),
         widget (StageWidgetType::setList,    16,  5,  8, 11),
-        widget (StageWidgetType::stomps,      0, 12, 11, 4),
-        widget (StageWidgetType::pedals,     11, 12,  3, 4),
-        widget (StageWidgetType::meters,     14, 12,  2, 4),
+        widget (StageWidgetType::stomps,      0, 12, 10, 4),
+        widget (StageWidgetType::pedals,     10, 12,  3, 4),
+        widget (StageWidgetType::meters,     13, 12,  3, 4),
     };
     return layout;
 }

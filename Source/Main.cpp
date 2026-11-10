@@ -20,6 +20,14 @@ public:
         setViewedComponent (content.get(), false);
         setScrollBarsShown (true, false);
         setScrollBarThickness (12);
+
+        content->onViewChanged = [this]
+        {
+            // The stage view fills the window exactly; the edit view scrolls.
+            setScrollBarsShown (! content->isShowingStage(), false);
+            setViewPosition (0, 0);
+            resized();
+        };
     }
 
     void resized() override

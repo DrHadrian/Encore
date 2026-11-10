@@ -181,6 +181,10 @@ target_sources(Encore PRIVATE
     Source/ui/LevelMeter.h
     Source/ui/MidiSettings.cpp
     Source/ui/MidiSettings.h
+    Source/ui/StageView.cpp
+    Source/ui/StageView.h
+    Source/ui/TunerDisplay.cpp
+    Source/ui/TunerDisplay.h
     Source/ui/PatchList.cpp
     Source/ui/PatchList.h
     Source/ui/SetList.cpp
@@ -236,6 +240,10 @@ if(ENCORE_BUILD_TESTS)
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
         Tests/StageTests.cpp
+        Tests/StageViewTests.cpp
+        # Screens tested off-screen (rendered into images, no window).
+        Source/ui/StageView.cpp
+        Source/ui/TunerDisplay.cpp
         Tests/PatchBuilderTests.cpp
         Tests/PatchPlayerTests.cpp
         Tests/ResamplerTests.cpp
@@ -261,6 +269,7 @@ if(ENCORE_BUILD_TESTS)
             juce::juce_audio_formats
             juce::juce_dsp
             juce::juce_events
+            juce::juce_gui_basics
             juce::juce_core
         PUBLIC
             juce::juce_recommended_config_flags
