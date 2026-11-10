@@ -149,3 +149,20 @@ and timers. Encore now does what DAWs do:
   driver already did it);
 - keeps the system and display awake while running.
 The status line shows what took effect, and warns when running on battery.
+
+## 0018 — Cab IRs: JUCE's convolution, fed from the audio thread (milestone 3)
+
+`juce::dsp::Convolution` gives zero latency (uniform partitioned), resamples
+the IR to the device rate on its own background thread, and crossfades to a new
+IR over 50 ms. Its load call is wait-free and, given a moved buffer, doesn't
+allocate. JUCE asks that loads aren't interleaved with processing from another
+thread, so Encore reads the file on a background thread (mono mix-down, capped
+at 1 s) and hands the buffer to the audio thread through a
+`RealtimeHandover`. The audio thread passes it to the engine between blocks,
+and the emptied holder goes back for deletion. A test swaps IRs while
+processing and asserts zero audio-thread allocations. All cab blocks share one
+convolution loader thread, because patches will preload many of them.
+
+IRs are normalised to unit energy at −18 dB (JUCE's option, which matches
+NAM's IR loader), so IRs from different makers land at similar volumes; a
+Level knob trims the rest.

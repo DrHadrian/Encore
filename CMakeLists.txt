@@ -100,6 +100,8 @@ add_library(EncoreEngine INTERFACE)
 
 target_sources(EncoreEngine INTERFACE
     Source/engine/PeakMeter.h
+    Source/engine/blocks/CabIrBlock.cpp
+    Source/engine/blocks/CabIrBlock.h
     Source/engine/blocks/EqBlock.cpp
     Source/engine/blocks/EqBlock.h
     Source/engine/blocks/NamAmpBlock.cpp
@@ -170,6 +172,8 @@ target_link_libraries(Encore
         nam_core
         juce::juce_audio_utils
         juce::juce_audio_devices
+        juce::juce_audio_formats
+        juce::juce_dsp
         juce::juce_audio_basics
         juce::juce_gui_basics
     PUBLIC
@@ -192,6 +196,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/TestMain.cpp
         Tests/AllocationCounter.cpp
         Tests/AllocationCounter.h
+        Tests/CabTests.cpp
         Tests/DspTests.cpp
         Tests/EngineCoreTests.cpp
         Tests/NamTests.cpp
@@ -210,6 +215,8 @@ if(ENCORE_BUILD_TESTS)
             EncoreEngine
             nam_core
             juce::juce_audio_basics
+            juce::juce_audio_formats
+            juce::juce_dsp
             juce::juce_events
             juce::juce_core
         PUBLIC

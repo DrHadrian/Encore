@@ -3,6 +3,7 @@
 
 #include "app/MainComponent.h"
 
+#include "engine/blocks/CabIrBlock.h"
 #include "engine/blocks/EqBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
@@ -138,8 +139,8 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     refreshStatus();
     refreshSystemStatus();
 
-    // Now that the device is running, reload the amp from last time (in the
-    // background; it fades in when ready).
+    // Now that the device is running, reload the amp and cab from last time
+    // (in the background; they fade in when ready).
     restoreLastFiles();
 
     setSize (1100, 860);
@@ -157,11 +158,11 @@ MainComponent::~MainComponent()
 //==============================================================================
 void MainComponent::buildDefaultChain()
 {
-    // Test rig until patches arrive (milestone 4): amp, then a gate that
-    // listens to the clean guitar (so it cuts amp hiss), then EQ.
-    // The cab IR block slots in after the amp in milestone 3.
+    // Test rig until patches arrive (milestone 4): amp and cab, then a gate
+    // that listens to the clean guitar (so it cuts amp hiss), then EQ.
     auto chain = std::make_unique<Chain>();
     chain->addBlock (std::make_unique<NamAmpBlock>());
+    chain->addBlock (std::make_unique<CabIrBlock>());
     chain->addBlock (std::make_unique<NoiseGateBlock>());
     chain->addBlock (std::make_unique<EqBlock>());
     engine.setChain (std::move (chain));
