@@ -35,7 +35,7 @@ namespace
                 __debugbreak();   // look at the call stack: something allocated on the audio thread
         }
 
-        return TRUE;   // never block the allocation itself
+        return 1;   // non-zero: let the allocation proceed (never block it)
     }
    #endif
 }
