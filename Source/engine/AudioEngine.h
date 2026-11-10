@@ -7,6 +7,7 @@
 #include <atomic>
 
 #include "engine/PeakMeter.h"
+#include "engine/Tuner.h"
 #include "engine/core/PatchPlayer.h"
 #include "engine/midi/MidiRouter.h"
 #include "engine/dsp/SafetyLimiter.h"
@@ -17,7 +18,8 @@ namespace encore
 /** The real-time heart of Encore.
 
     Signal path: guitar input -> patch player (active patch + patches ringing
-    out) -> master gain/mute -> safety limiter -> every active output.
+    out) -> master gain/mute/tuner mute -> panic fade -> safety limiter ->
+    every active output. The tuner listens to the raw input.
 
     Threading contract (applies to every engine class):
       - audioDeviceIOCallbackWithContext() runs on the audio thread. It never
@@ -57,6 +59,32 @@ public:
     void setMuted (bool shouldBeMuted) noexcept;
     bool isMuted() const noexcept { return muted.load (std::memory_order_relaxed); }
 
+    //== Tuner and panic (any thread) ==========================================
+    Tuner& getTuner() noexcept { return tuner; }
+    void setTunerOpen (bool shouldBeOpen) noexcept { tuner.setActive (shouldBeOpen); }
+    bool isTunerOpen() const noexcept              { return tuner.isActive(); }
+
+    /** Whether an open tuner silences the output (the default) or lets it play. */
+    void setTunerMutes (bool shouldMute) noexcept  { tunerMutes.store (shouldMute, std::memory_order_relaxed); }
+    bool getTunerMutes() const noexcept            { return tunerMutes.load (std::memory_order_relaxed); }
+
+    enum class PanicMode
+    {
+        recover,   // silence, clear every tail, then come back on the same cue by itself
+        latch      // silence until panic is pressed again
+    };
+
+    enum class PanicState { none, silencing, silent, returning };
+
+    /** Panic: fades the output out in a few ms, drops everything ringing and
+        clears the patch's delays. In latch mode a second press brings it back. */
+    void panic() noexcept { panicRequests.fetch_add (1, std::memory_order_relaxed); }
+    void setPanicMode (PanicMode mode) noexcept { panicMode.store (mode, std::memory_order_relaxed); }
+    PanicMode getPanicMode() const noexcept     { return panicMode.load (std::memory_order_relaxed); }
+    PanicState getPanicState() const noexcept   { return panicState.load (std::memory_order_relaxed); }
+
+    static constexpr double panicFadeSeconds = 0.005, panicHoldSeconds = 0.3, panicReturnSeconds = 0.5;
+
     /** Which of the device's *active* input channels carries the guitar (0-based). */
     void setGuitarInputChannel (int activeChannelIndex) noexcept;
     int getGuitarInputChannel() const noexcept { return guitarInput.load (std::memory_order_relaxed); }
@@ -93,6 +121,8 @@ private:
     static void clearOutputs (float* const* outputs, int numOutputs, int numSamples) noexcept;
     void renderChunk (const float* input, float* const* outputs, int numOutputs,
                       int offset, int numSamples) noexcept;
+    void handlePanicAndTunerRequests() noexcept;
+    void advancePanic (int numSamples) noexcept;
 
     std::atomic<float> masterGainDb { -12.0f };
     std::atomic<bool> muted { true };              // always start muted: safest on a stage
@@ -100,6 +130,17 @@ private:
 
     PatchPlayer player;
     MidiRouter midi;
+    Tuner tuner;
+
+    std::atomic<bool> tunerMutes { true };
+    std::atomic<int> panicRequests { 0 };
+    std::atomic<PanicMode> panicMode { PanicMode::recover };
+    std::atomic<PanicState> panicState { PanicState::none };
+
+    // Audio-thread-only panic state.
+    float panicGain = 1.0f, panicStep = 0.0f;
+    bool panicMoving = false;
+    int panicHeld = 0, seenPanicRequests = 0, seenMidiPanics = 0, seenMidiTuners = 0;
     Chain* singleChain = nullptr;   // the chain set by setChain(), if used
 
     // Audio-thread-only state, (re)allocated only in audioDeviceAboutToStart().

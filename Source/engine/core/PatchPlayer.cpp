@@ -377,6 +377,22 @@ void PatchPlayer::renderSlot (Slot& slot, const float* input, float* out, int nu
     }
 }
 
+void PatchPlayer::panicNow() noexcept
+{
+    for (auto& slot : ringing)
+    {
+        if (slot.chain != nullptr)
+            slot.chain->reset();
+
+        slot = {};
+    }
+
+    if (active.chain != nullptr)
+        active.chain->reset();
+
+    publishSlotsForUi();
+}
+
 void PatchPlayer::adoptLatestTable() noexcept
 {
     while (auto* newer = tables.takeNext())

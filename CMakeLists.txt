@@ -104,6 +104,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/AudioEngine.cpp
     Source/engine/AudioEngine.h
     Source/engine/PeakMeter.h
+    Source/engine/Tuner.cpp
+    Source/engine/Tuner.h
     Source/engine/blocks/CabIrBlock.cpp
     Source/engine/blocks/CabIrBlock.h
     Source/engine/blocks/DelayBlock.cpp
@@ -130,6 +132,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/midi/MidiRouter.cpp
     Source/engine/midi/MidiRouter.h
     Source/engine/dsp/Biquad.h
+    Source/engine/dsp/PitchDetector.cpp
+    Source/engine/dsp/PitchDetector.h
     Source/engine/dsp/SafetyLimiter.cpp
     Source/engine/dsp/SafetyLimiter.h
     Source/engine/dsp/StreamResampler.cpp
@@ -229,6 +233,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/MidiTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
+        Tests/StageTests.cpp
         Tests/PatchBuilderTests.cpp
         Tests/PatchPlayerTests.cpp
         Tests/ResamplerTests.cpp
