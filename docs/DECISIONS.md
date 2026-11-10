@@ -369,4 +369,4 @@ full-chain tail patch) while randomly stepping cues, toggling stomps, moving
 pedals, panicking, opening the tuner, rebuilding patches and injecting
 invalid input, checking every buffer: finite, never above full scale, no
 audio-thread allocations, ringing bounded, every replaced patch freed. CI
-runs 30 minutes of audio per change; ENCORE_SOAK_SECONDS sets longer runs.
+runs 10 minutes of audio per change; ENCORE_SOAK_SECONDS sets longer runs.

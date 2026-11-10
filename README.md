@@ -113,7 +113,7 @@ effect. For shows also:
    recoveries); a crash also leaves *crash-<time>.txt* with details for me.
 5. **Soak test** (optional, no guitar): set `ENCORE_SOAK_SECONDS=14400` and
    run `EncoreTests` for a 4-hour run of random cues, stomps, pedals, panic
-   and edits. CI runs 30 minutes on every change.
+   and edits. CI runs 10 minutes on every change.
 
 ## Testing milestone 7 with your guitar
 
