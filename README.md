@@ -13,15 +13,15 @@ musical.
 
 ## Status
 
-Milestone 2: NAM amp captures, plus noise gate, EQ and safety limiter.
-Not usable on stage yet.
+Milestone 3: NAM amp captures and cab IRs, plus noise gate, EQ and safety
+limiter. Not usable on stage yet.
 
 | Milestone | What you can test |
 | --- | --- |
 | **0 – Toolchain and passthrough** ✅ | Dry guitar through ASIO, latency display, meters, CPU/dropout counters, master volume and mute |
 | **1 – Real-time core** ✅ | Gate and EQ blocks, click-free toggles and sweeps, safety limiter |
 | **2 – NAM amp block** ✅ | Play through .nam captures, swap amps while playing |
-| 3 – Cab IR block | Amp + cab |
+| **3 – Cab IR block** ✅ | Amp + cab, swap IRs while playing |
 | 4 – Data model and saving | Patches and shows saved to a self-contained folder |
 | 5 – Patch switching | Gapless switches with tail spillover |
 | 6 – MIDI | Foot controller, expression pedals, MIDI out |
@@ -66,8 +66,8 @@ Every push is also built on GitHub Actions and the tests are run there; the buil
 
 `EncoreTests` checks the engine without any audio hardware: filter responses,
 gate and limiter behaviour, click-free bypass, the chain handover, sample-rate
-conversion, loading and playing real NAM captures, and that processing (and
-swapping amps) never allocates memory. In Visual Studio use *Test → Run CTests for
+conversion, loading and playing real NAM captures, cab IRs with zero latency,
+and that processing (and swapping amps or IRs) never allocates memory. In Visual Studio use *Test → Run CTests for
 Encore*, or from a terminal:
 
 ```powershell
@@ -86,6 +86,29 @@ effect. For shows also:
   expense (the status line warns you);
 - set Windows' power mode to **Best performance**;
 - use 64 samples or more, so there is headroom for spikes.
+
+## Testing milestone 3 with your guitar
+
+You need a cabinet impulse response (`.wav`). Free ones are easy to find
+(e.g. on TONE3000, or from IR makers' free packs). The default chain is now
+**Amp → Cab → Gate → EQ**.
+
+1. **Load**: in the *Cab* panel click **Load cab IR...**. With an amp-only
+   capture loaded, the harsh fizz should turn into a normal guitar tone. The
+   panel shows the IR's sample rate and length. Encore reloads it next start.
+2. **Swap while playing**: hold a chord and load another IR. It crossfades in
+   about 50 ms with no gap or click. Any sample rate works; it's converted
+   automatically when it loads.
+3. **Latency**: the latency line must not change when you load an IR. The
+   cab adds zero latency.
+4. **Tone**: **Low cut** (around 80 Hz) tightens the low end, **High cut**
+   (around 6–8 kHz) removes fizz. **Mix** blends the cab with the raw amp,
+   **Level** makes up volume. IRs are level-normalised when loaded (NAM's
+   convention), so most land at similar volumes.
+5. **CPU**: the cab's CPU % should be small next to the amp's. IRs longer than
+   1 s are shortened (the panel says so); cab IRs are usually 20–500 ms.
+6. **Full-rig captures** (amp + cab already in the capture): switch the *Cab*
+   block **OFF**.
 
 ## Testing milestone 2 with your guitar
 
@@ -164,7 +187,7 @@ Source/
   app/                windows, settings (per-machine, in %APPDATA%\Encore)
   engine/             everything that runs on or talks to the audio thread
     core/             Block, Chain, Parameter, handovers, lock-free queues, real-time checks
-    blocks/           the built-in blocks (amp, gate, EQ; cab IR next)
+    blocks/           the built-in blocks (amp, cab, gate, EQ)
     dsp/              allocation-free DSP (filters, limiter, sample-rate conversion)
     nam/              loading and running Neural Amp Modeler captures
   ui/                 reusable widgets
