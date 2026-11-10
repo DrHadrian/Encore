@@ -35,6 +35,9 @@ public:
     void prepare (const ProcessSpec& spec);
     const ProcessSpec& getSpec() const noexcept { return preparedSpec; }
 
+    /** Message thread: lets blocks free what the audio thread released. */
+    void collectGarbage();
+
     /** Audio thread. numSamples <= spec.maxBlockSize. */
     void process (float* const* channels, int numChannels, int numSamples) noexcept;
     void reset() noexcept;
@@ -44,6 +47,7 @@ public:
 private:
     std::vector<std::unique_ptr<Block>> blocks;
     ProcessSpec preparedSpec;
+    juce::AudioBuffer<float> chainInput;   // copy of the dry input, for keyed blocks
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Chain)
 };

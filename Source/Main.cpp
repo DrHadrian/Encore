@@ -10,6 +10,29 @@
 namespace encore
 {
 
+/** Scrolls the main component vertically when the window is shorter than its content. */
+class ScrollingContent final : public juce::Viewport
+{
+public:
+    explicit ScrollingContent (AppSettings& settings)
+        : content (std::make_unique<MainComponent> (settings))
+    {
+        setViewedComponent (content.get(), false);
+        setScrollBarsShown (true, false);
+        setScrollBarThickness (12);
+    }
+
+    void resized() override
+    {
+        Viewport::resized();
+        const auto width = getMaximumVisibleWidth();
+        content->setSize (width, juce::jmax (getMaximumVisibleHeight(), content->getRequiredHeight (width)));
+    }
+
+private:
+    std::unique_ptr<MainComponent> content;
+};
+
 class MainWindow final : public juce::DocumentWindow
 {
 public:
@@ -17,10 +40,13 @@ public:
         : DocumentWindow (name, juce::Colour (0xff121417), DocumentWindow::allButtons)
     {
         setUsingNativeTitleBar (true);
-        setContentOwned (new MainComponent (settings), true);
+        setContentOwned (new ScrollingContent (settings), false);
         setResizable (true, true);
-        setResizeLimits (640, 480, 4096, 4096);
-        centreWithSize (getWidth(), getHeight());
+        setResizeLimits (640, 480, 8192, 8192);
+
+        // Fit the screen we open on (laptops are often 768 px tall).
+        auto screen = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()->userBounds.toNearestInt();
+        centreWithSize (juce::jmin (1100, screen.getWidth() - 40), juce::jmin (900, screen.getHeight() - 40));
         setVisible (true);
     }
 

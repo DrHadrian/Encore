@@ -6,15 +6,16 @@ on:
 
 jobs:
   windows:
+    name: Windows Release (app + tests)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache JUCE download
+      - name: Cache downloaded dependencies
         uses: actions/cache@v4
         with:
           path: build/_deps
-          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          key: deps-release-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
 
       - name: Configure
         run: cmake -S . -B build -A x64
@@ -31,3 +32,24 @@ jobs:
           name: Encore-windows-x64
           path: build/Encore_artefacts/Release/Encore.exe
           if-no-files-found: error
+
+  windows-debug-tests:
+    name: Windows Debug (tests)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache downloaded dependencies
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: deps-debug-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configure
+        run: cmake -S . -B build -A x64
+
+      - name: Build tests (Debug)
+        run: cmake --build build --config Debug --target EncoreTests --parallel
+
+      - name: Run engine tests
+        run: ctest --test-dir build -C Debug --output-on-failure

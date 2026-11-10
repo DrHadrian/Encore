@@ -91,7 +91,8 @@ void EqBlock::updateCoefficients() noexcept
     coefficientsValid = true;
 }
 
-void EqBlock::processBlock (float* const* channels, int numChannels, int numSamples) noexcept
+void EqBlock::processBlock (float* const* channels, int numChannels, int numSamples,
+                            const ProcessContext&) noexcept
 {
     for (int offset = 0; offset < numSamples;)
     {

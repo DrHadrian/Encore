@@ -23,7 +23,8 @@ public:
 
 private:
     void prepareBlock (const ProcessSpec&) override;
-    void processBlock (float* const* channels, int numChannels, int numSamples) noexcept override;
+    void processBlock (float* const* channels, int numChannels, int numSamples,
+                       const ProcessContext&) noexcept override;
     void resetBlock() noexcept override;
 
     void updateCoefficients() noexcept;

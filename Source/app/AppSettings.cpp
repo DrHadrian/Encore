@@ -11,6 +11,8 @@ namespace keys
     static constexpr auto audioDevice = "audioDeviceState";
     static constexpr auto guitarInput = "guitarInputChannel";
     static constexpr auto masterGain  = "masterGainDb";
+    static constexpr auto lastFile    = "lastFile_";
+    static constexpr auto browseDir   = "lastBrowseFolder";
 }
 
 AppSettings::AppSettings()
@@ -62,6 +64,28 @@ float AppSettings::getMasterGainDecibels() const
 void AppSettings::setMasterGainDecibels (float dB)
 {
     file().setValue (keys::masterGain, (double) dB);
+}
+
+juce::File AppSettings::getLastFile (const juce::String& blockTypeId) const
+{
+    const auto path = file().getValue (keys::lastFile + blockTypeId);
+    return path.isEmpty() ? juce::File() : juce::File (path);
+}
+
+void AppSettings::setLastFile (const juce::String& blockTypeId, const juce::File& f)
+{
+    file().setValue (keys::lastFile + blockTypeId, f.getFullPathName());
+}
+
+juce::File AppSettings::getLastBrowseFolder() const
+{
+    const juce::File folder (file().getValue (keys::browseDir));
+    return folder.isDirectory() ? folder : juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+}
+
+void AppSettings::setLastBrowseFolder (const juce::File& folder)
+{
+    file().setValue (keys::browseDir, folder.getFullPathName());
 }
 
 void AppSettings::save()

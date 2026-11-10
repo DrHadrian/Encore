@@ -90,3 +90,47 @@ inside the audio callback is counted and breaks into the debugger. The test
 executable replaces global `operator new/delete` to do the same on any
 platform, and a test drives gate and EQ through sweeps, bypass toggles and a
 chain swap while asserting zero allocations.
+
+## 0013 — NAM built from source, as an object library (milestone 2)
+
+NeuralAmpModelerCore v0.6.0 and the exact Eigen commit it pins are fetched as
+sources only, and `nam_core` compiles them directly. It is an OBJECT library
+because NAM registers each architecture (WaveNet, LSTM...) from static
+initialisers, which a linker silently drops from a static library: models
+would fail with "No config parser registered". NAM processes floats directly
+(`NAM_SAMPLE_FLOAT`), so no conversion buffers are needed.
+
+NAM is compiled optimised even in Debug builds, with Eigen's internal asserts
+off: an unoptimised network can't keep up with real time, and playing through
+a Debug build is how the allocation tripwire gets exercised. MSVC's `/RTC1`
+run-time checks are incompatible with optimisation, so they are off
+project-wide; the tripwire and the tests cover what matters for real-time code.
+
+## 0014 — Captures run at their own sample rate (milestone 2)
+
+A capture trained at 48 kHz played at 44.1 kHz is a different (wrong) amp, so
+models that can't adapt run inside a `RateBridge`: windowed-sinc conversion to
+the model's rate and back (32 taps, Kaiser window, cutoff lowered when going
+down, so nothing aliases). Each call returns exactly as many samples as it got,
+with a fixed delay. The delay is measured at prepare time, not estimated, and
+reported as block latency (≈ 0.9 ms at 44.1 kHz). The UI says when a model is
+converted, so running the interface at 48 kHz avoids it.
+
+## 0015 — Amp changes crossfade on the audio thread (milestone 2)
+
+A model is loaded, built, prewarmed and benchmarked on a background thread,
+installed on the message thread, and handed to the audio thread through the
+same handover as chains (now a generic `RealtimeHandover<T>`). The audio thread
+runs old and new model side by side for 30 ms and crossfades linearly. Two amps
+fed the same guitar are strongly correlated, so a linear fade keeps the level
+steady where equal-power would bump it by up to 3 dB. Each block owns its own
+model instances, because networks have internal state.
+
+## 0016 — The gate listens to the clean guitar by default (milestone 2)
+
+Every chain keeps a copy of its dry input and passes it to blocks in a
+`ProcessContext`. The gate's "Detect guitar" option uses it as the detector
+while cutting the signal where the gate sits. The default chain places the gate
+after the amp with this on: it removes the amp's amplified hiss using the clean
+signal's clear note endings, the classic "gate after the amp, keyed from the
+guitar" setup.

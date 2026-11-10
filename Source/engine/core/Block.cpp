@@ -38,6 +38,7 @@ void Block::prepare (const ProcessSpec& spec)
 {
     jassert (spec.isValid());
 
+    preparedSpec = spec;
     secondsPerSample = 1.0 / spec.sampleRate;
     dryCopy.setSize (maxChannels, spec.maxBlockSize, false, true, false);
 
@@ -60,7 +61,8 @@ void Block::reset() noexcept
     resetBlock();
 }
 
-void Block::process (float* const* channels, int numChannels, int numSamples) noexcept
+void Block::process (float* const* channels, int numChannels, int numSamples,
+                     const ProcessContext& context) noexcept
 {
     jassert (numChannels <= maxChannels && numSamples <= dryCopy.getNumSamples());
 
@@ -93,7 +95,7 @@ void Block::process (float* const* channels, int numChannels, int numSamples) no
         for (int ch = 0; ch < numChannels; ++ch)
             dryCopy.copyFrom (ch, 0, channels[ch], numSamples);
 
-        processBlock (channels, numChannels, numSamples);
+        processBlock (channels, numChannels, numSamples, context);
 
         // Crossfade: out = dry + (wet - dry) * amount.
         for (int i = 0; i < numSamples; ++i)
@@ -109,7 +111,7 @@ void Block::process (float* const* channels, int numChannels, int numSamples) no
     }
     else
     {
-        processBlock (channels, numChannels, numSamples);
+        processBlock (channels, numChannels, numSamples, context);
     }
 
     const auto elapsed = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - start);

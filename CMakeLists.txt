@@ -32,6 +32,65 @@ else()
     FetchContent_MakeAvailable(juce)
 endif()
 
+# NeuralAmpModelerCore (MIT) and the Eigen commit it pins (MPL2).
+# Only the sources are fetched (SOURCE_SUBDIR points nowhere), so neither
+# project's own build runs; nam_core below compiles exactly what we need.
+# Offline or local copies: -DFETCHCONTENT_SOURCE_DIR_NAM=... / _EIGEN=...
+include(FetchContent)
+
+FetchContent_Declare(nam
+    GIT_REPOSITORY https://github.com/sdatkinson/NeuralAmpModelerCore.git
+    GIT_TAG        v0.6.0
+    GIT_SHALLOW    TRUE
+    GIT_SUBMODULES ""
+    SOURCE_SUBDIR  do-not-build)
+
+FetchContent_Declare(eigen
+    URL https://gitlab.com/libeigen/eigen/-/archive/bc3b39870ecb690a623a3f49149a358b95c5781d/eigen-bc3b39870ecb690a623a3f49149a358b95c5781d.tar.gz
+    SOURCE_SUBDIR do-not-build
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+
+FetchContent_MakeAvailable(nam eigen)
+
+file(GLOB NAM_CORE_SOURCES CONFIGURE_DEPENDS
+    "${nam_SOURCE_DIR}/NAM/*.cpp"
+    "${nam_SOURCE_DIR}/NAM/*/*.cpp")
+
+# An OBJECT library, not STATIC: NAM registers each architecture (WaveNet,
+# LSTM...) from a static initialiser, which a linker drops from a static
+# library because nothing references it. Object files are always linked.
+# Link it directly into each executable (objects don't pass through INTERFACE libraries).
+add_library(nam_core OBJECT ${NAM_CORE_SOURCES})
+target_compile_features(nam_core PUBLIC cxx_std_20)
+target_include_directories(nam_core PUBLIC
+    "${nam_SOURCE_DIR}"                              # for #include "NAM/dsp.h"
+    "${nam_SOURCE_DIR}/Dependencies/nlohmann")       # NAM's headers include "json.hpp"
+target_include_directories(nam_core SYSTEM PUBLIC "${eigen_SOURCE_DIR}")
+target_compile_definitions(nam_core
+    PUBLIC
+        NAM_SAMPLE_FLOAT                             # process float directly, no conversion
+    PRIVATE
+        NAM_ENABLE_A2_FAST
+        EIGEN_NO_DEBUG                               # Eigen's asserts make Debug unplayable
+        $<$<PLATFORM_ID:Windows>:NOMINMAX WIN32_LEAN_AND_MEAN>)
+
+# Neural nets are unusable without optimisation, so NAM is optimised even in
+# Debug builds. That lets you play through a Debug build, where the real-time
+# allocation tripwire is active. (/RTC1 is incompatible with /O2; see below.)
+if(MSVC)
+    target_compile_options(nam_core PRIVATE /bigobj /W0 $<$<CONFIG:Debug>:/O2 /Ob2>)
+else()
+    target_compile_options(nam_core PRIVATE -w $<$<CONFIG:Debug>:-O2>)
+endif()
+
+if(MSVC)
+    # MSVC's run-time checks (/RTC1, on by default in Debug) forbid optimised
+    # code. Drop them project-wide; the allocation tripwire and the tests catch
+    # what matters for real-time code.
+    string(REPLACE "/RTC1" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+    string(REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+endif()
+
 # ------------------------------------------------------------------------------
 # Engine sources, shared by the app and the tests.
 # An INTERFACE library: each target compiles them with its own JUCE modules,
@@ -43,8 +102,11 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/PeakMeter.h
     Source/engine/blocks/EqBlock.cpp
     Source/engine/blocks/EqBlock.h
+    Source/engine/blocks/NamAmpBlock.cpp
+    Source/engine/blocks/NamAmpBlock.h
     Source/engine/blocks/NoiseGateBlock.cpp
     Source/engine/blocks/NoiseGateBlock.h
+    Source/engine/core/BackgroundJobs.h
     Source/engine/core/Block.cpp
     Source/engine/core/Block.h
     Source/engine/core/Chain.cpp
@@ -56,9 +118,14 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/core/Parameter.h
     Source/engine/core/Realtime.cpp
     Source/engine/core/Realtime.h
+    Source/engine/core/RealtimeHandover.h
     Source/engine/dsp/Biquad.h
     Source/engine/dsp/SafetyLimiter.cpp
-    Source/engine/dsp/SafetyLimiter.h)
+    Source/engine/dsp/SafetyLimiter.h
+    Source/engine/dsp/StreamResampler.cpp
+    Source/engine/dsp/StreamResampler.h
+    Source/engine/nam/NamModel.cpp
+    Source/engine/nam/NamModel.h)
 
 target_include_directories(EncoreEngine INTERFACE Source)
 
@@ -98,6 +165,7 @@ target_compile_definitions(Encore PRIVATE
 target_link_libraries(Encore
     PRIVATE
         EncoreEngine
+        nam_core
         juce::juce_audio_utils
         juce::juce_audio_devices
         juce::juce_audio_basics
@@ -124,17 +192,23 @@ if(ENCORE_BUILD_TESTS)
         Tests/AllocationCounter.h
         Tests/DspTests.cpp
         Tests/EngineCoreTests.cpp
+        Tests/NamTests.cpp
+        Tests/ResamplerTests.cpp
         Tests/TestSignals.h)
 
     target_compile_definitions(EncoreTests PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
-        JUCE_UNIT_TESTS=1)
+        JUCE_UNIT_TESTS=1
+        # Real captures shipped with NeuralAmpModelerCore, used as test fixtures.
+        ENCORE_NAM_EXAMPLE_MODELS="${nam_SOURCE_DIR}/example_models")
 
     target_link_libraries(EncoreTests
         PRIVATE
             EncoreEngine
+            nam_core
             juce::juce_audio_basics
+            juce::juce_events
             juce::juce_core
         PUBLIC
             juce::juce_recommended_config_flags

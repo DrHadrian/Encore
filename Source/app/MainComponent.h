@@ -4,6 +4,7 @@
 #pragma once
 
 #include <juce_audio_utils/juce_audio_utils.h>
+#include <map>
 
 #include "app/AppSettings.h"
 #include "engine/AudioEngine.h"
@@ -29,12 +30,18 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    /** Height needed to show everything at this width (for the scrolling window). */
+    int getRequiredHeight (int width);
+
 private:
     void openAudioSettings();
     void refreshInputChoices();
     void refreshStatus();
     void buildDefaultChain();
     void rebuildBlockPanels();
+    void restoreLastFiles();
+    void relayout();
+    int layoutContent (int width, bool apply);
 
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void timerCallback() override;
@@ -56,6 +63,7 @@ private:
     LevelMeter inputMeter { "Input" }, outputMeter { "Output" };
     juce::Label chainLabel { {}, "Chain" };
     std::vector<std::unique_ptr<BlockPanel>> blockPanels;
+    std::map<BlockPanel*, Block*> panelBlocks;
     Chain* shownChain = nullptr;
 
     int frameCounter = 0;

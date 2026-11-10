@@ -5,6 +5,7 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -23,6 +24,21 @@ struct ProcessSpec
     {
         return juce::exactlyEqual (sampleRate, other.sampleRate) && maxBlockSize == other.maxBlockSize;
     }
+};
+
+/** What a chain tells each block about the current callback, beyond its own input. */
+struct ProcessContext
+{
+    /** The chain's input (the dry guitar) for this block of samples, mono.
+        Lets e.g. a gate after the amp listen to the clean signal. May be null. */
+    const float* chainInput = nullptr;
+};
+
+/** A block that loads a file (NAM model, cab IR...) shows a "Load" button for it. */
+struct FileSlot
+{
+    juce::String buttonText;    // "Load model..."
+    juce::String wildcard;      // "*.nam"
 };
 
 /** One processing unit in a chain: gate, EQ, and later NAM amp, cab IR, VST3...
@@ -61,19 +77,46 @@ public:
     /** Extra delay the block adds, in samples (0 for most). */
     virtual int getLatencySamples() const noexcept { return 0; }
 
+    //== Files (message thread) ================================================
+    /** Non-null if this block loads a file. */
+    virtual const FileSlot* getFileSlot() const noexcept { return nullptr; }
+
+    /** Loads in the background and swaps in without a gap; calls onDone on the
+        message thread with an empty string on success, or an error message. */
+    virtual void loadFileAsync (const juce::File&, std::function<void (juce::String error)> onDone)
+    {
+        if (onDone != nullptr)
+            onDone ("This block doesn't load files");
+    }
+
+    /** The file currently in use, if any. */
+    virtual juce::File getLoadedFile() const { return {}; }
+
+    /** One line about the loaded file for the UI ("48 kHz, ~9 % CPU"). */
+    virtual juce::String getLoadedFileInfo() const { return {}; }
+
+    //== Message thread ========================================================
+    /** Frees anything the audio thread has finished with (e.g. a replaced model). */
+    virtual void collectGarbage() {}
+
     //== Off the audio thread, while not playing ===============================
     void prepare (const ProcessSpec& spec);
 
+    /** The spec of the last prepare() (invalid before the first). Message thread. */
+    const ProcessSpec& getPreparedSpec() const noexcept { return preparedSpec; }
+
     //== Audio thread ==========================================================
     /** Processes numChannels channels in place. numSamples <= spec.maxBlockSize. */
-    void process (float* const* channels, int numChannels, int numSamples) noexcept;
+    void process (float* const* channels, int numChannels, int numSamples,
+                  const ProcessContext& context = {}) noexcept;
     void reset() noexcept;
 
 protected:
     Parameter& addParameter (Parameter::Spec spec);
 
     virtual void prepareBlock (const ProcessSpec& spec) = 0;
-    virtual void processBlock (float* const* channels, int numChannels, int numSamples) noexcept = 0;
+    virtual void processBlock (float* const* channels, int numChannels, int numSamples,
+                               const ProcessContext& context) noexcept = 0;
     virtual void resetBlock() noexcept = 0;
 
 private:
@@ -87,7 +130,9 @@ private:
 
     std::atomic<double> cpuLoad { 0.0 };
     double secondsPerSample = 0.0;
+    ProcessSpec preparedSpec;
 
+    JUCE_DECLARE_WEAK_REFERENCEABLE (Block)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Block)
 };
 

@@ -29,15 +29,28 @@ Block* Chain::findBlock (const juce::String& typeId) const noexcept
 void Chain::prepare (const ProcessSpec& spec)
 {
     preparedSpec = spec;
+    chainInput.setSize (1, spec.maxBlockSize, false, true, false);
 
     for (auto& b : blocks)
         b->prepare (spec);
 }
 
-void Chain::process (float* const* channels, int numChannels, int numSamples) noexcept
+void Chain::collectGarbage()
 {
     for (auto& b : blocks)
-        b->process (channels, numChannels, numSamples);
+        b->collectGarbage();
+}
+
+void Chain::process (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    jassert (numSamples <= chainInput.getNumSamples());
+
+    // Keep the dry guitar for blocks that listen to it (e.g. a gate after the amp).
+    chainInput.copyFrom (0, 0, channels[0], numSamples);
+    const ProcessContext context { chainInput.getReadPointer (0) };
+
+    for (auto& b : blocks)
+        b->process (channels, numChannels, numSamples, context);
 }
 
 void Chain::reset() noexcept
