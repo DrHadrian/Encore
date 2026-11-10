@@ -107,6 +107,10 @@ public:
 
     void resetCounters() noexcept;
 
+    /** Counts audio callbacks: if it stops moving while a device is open, the
+        driver has stalled or the interface was unplugged. */
+    juce::uint32 getCallbackCount() const noexcept { return callbacks.load (std::memory_order_relaxed); }
+
     //== juce::AudioIODeviceCallback ===========================================
     void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
                                            int numInputChannels,
@@ -156,6 +160,7 @@ private:
     std::atomic<double> currentSampleRate { 0.0 };
     std::atomic<int> currentBlockSize { 0 };
     std::atomic<int> clipCount { 0 };
+    std::atomic<juce::uint32> callbacks { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)
 };

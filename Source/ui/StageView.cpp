@@ -186,6 +186,15 @@ public:
 
             case StageWidgetType::health:
                 title = "SYSTEM";
+
+                if (snapshot.audioProblem.isNotEmpty())
+                {
+                    main = "AUDIO LOST";
+                    sub = "reconnecting...";
+                    warning = true;
+                    break;
+                }
+
                 main = "CPU " + juce::String (juce::roundToInt (snapshot.cpu * 100.0)) + " %";
                 sub = owner.recentOverrun ? "DROPOUT!" : (snapshot.onBattery ? "ON BATTERY" : "OK");
                 warning = owner.recentOverrun || snapshot.onBattery || snapshot.cpu > 0.8;
@@ -754,6 +763,11 @@ StageView::StageView (AudioEngine& e, ShowSession& s) : engine (e), session (s)
     hint.setFont (juce::FontOptions (13.0f));
     addAndMakeVisible (hint);
 
+    noticeLabel.setColour (juce::Label::textColourId, amber);
+    noticeLabel.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+    noticeLabel.setInterceptsMouseClicks (false, false);
+    addAndMakeVisible (noticeLabel);
+
     noFocus (tunerOverlay);
     tunerOverlay.setOpaque (true);
     tunerOverlay.onClick = [this] { if (! locked) engine.setTunerOpen (false); };
@@ -877,6 +891,15 @@ void StageView::update (const StageSnapshot& snapshot)
 
     if (locked)
         lockStripButton.setButtonText ("LOCKED: " + unlockProgressText());
+
+    // Along the top: a lost interface first, then any notice.
+    const auto text = snapshot.audioProblem.isNotEmpty() ? snapshot.audioProblem : snapshot.notice;
+
+    if (text != noticeLabel.getText())
+    {
+        noticeLabel.setText (text, juce::dontSendNotification);
+        noticeLabel.setColour (juce::Label::textColourId, snapshot.audioProblem.isNotEmpty() ? panicRed.brighter (0.3f) : amber);
+    }
 }
 
 void StageView::setLocked (bool shouldLock)
@@ -951,6 +974,7 @@ void StageView::setEditingLayout (bool shouldEdit)
         b->setVisible (editing);
 
     hint.setVisible (editing);
+    noticeLabel.setVisible (! editing);
     editViewButton.setVisible (! locked && ! editing);
     editLayoutButton.setVisible (! locked && ! editing);
     lockStripButton.setVisible (! editing);
@@ -1115,6 +1139,7 @@ void StageView::resized()
     }
     else
     {
+        noticeLabel.setBounds (strip.removeFromLeft (strip.getWidth() / 2));
         lockStripButton.setBounds (strip.removeFromRight (locked ? 220 : 70));
         strip.removeFromRight (gap);
         editLayoutButton.setBounds (strip.removeFromRight (100));

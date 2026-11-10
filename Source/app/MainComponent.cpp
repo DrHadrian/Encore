@@ -2,6 +2,7 @@
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
 #include "app/MainComponent.h"
+#include "app/EventLog.h"
 
 #include "engine/blocks/NoiseGateBlock.h"
 #include "engine/core/Realtime.h"
@@ -177,6 +178,10 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     // Prefer ASIO on first run because it gives the lowest, most stable latency.
     auto savedState = settings.getAudioDeviceState();
     auto error = deviceManager.initialise (2, 2, savedState.get(), true);
+    eventlog::write ("Audio: " + (error.isEmpty() ? deviceManager.getCurrentAudioDeviceType() + " / "
+                                                        + (deviceManager.getCurrentAudioDevice() != nullptr
+                                                               ? deviceManager.getCurrentAudioDevice()->getName() : juce::String ("none"))
+                                                  : "problem: " + error));
 
     if (savedState == nullptr)
         for (auto* type : deviceManager.getAvailableDeviceTypes())
@@ -196,6 +201,10 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     // inputs that were enabled last time, and ones plugged back in).
     deviceManager.addMidiInputDeviceCallback ({}, &engine.getMidiRouter());
     deviceManager.addChangeListener (this);
+
+    // Did the last run end cleanly? If not, go back to where it was.
+    recovery = std::make_unique<RecoveryFile> (settings.getFolder().getChildFile ("recovery.json"));
+    uncleanExit = recovery->readUncleanExit();
 
     // The show: with the device running, patches build for the right rate.
     session = std::make_unique<ShowSession> (engine);
@@ -218,6 +227,7 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     stageView->onLeave = [this] { setStageVisible (false); };
     addChildComponent (*stageView);
 
+    recoverAfterUncleanExit();
     applyMidiBindings();
     applyMidiOutput();
     keepKeysForTheShow (*this);
@@ -236,7 +246,7 @@ MainComponent::~MainComponent()
     stopTimer();
 
     // Settings windows hold references to the engine, devices and session.
-    for (auto* dialog : { audioDialog.getComponent(), midiDialog.getComponent() })
+    for (auto* dialog : { audioDialog.getComponent(), midiDialog.getComponent(), checkDialog.getComponent() })
         delete dialog;
 
     stageView = nullptr;
@@ -256,12 +266,16 @@ MainComponent::~MainComponent()
     engine.getMidiRouter().setOutput (nullptr);
     deviceManager.removeAudioCallback (&engine);
     settings.save();
+
+    recovery->markCleanExit();
 }
 
 //==============================================================================
 void MainComponent::openInitialShow()
 {
-    const auto last = settings.getLastShowFolder();
+    // After a crash, the show that was playing (even if another was opened since).
+    const auto last = uncleanExit && uncleanExit->showFolder.isNotEmpty() ? juce::File (uncleanExit->showFolder)
+                                                                          : settings.getLastShowFolder();
 
     if (last != juce::File() && last.isDirectory() && session->openShow (last).wasOk())
         return;
@@ -292,6 +306,10 @@ void MainComponent::showMenu()
     menu.addSeparator();
     menu.addItem ("Show folder in Explorer", session->getFolder().isValid(), false,
                   [this] { session->getFolder().getShowFile().revealToUser(); });
+    menu.addItem ("Pre-show check... (F9)", [this] { openPreShowCheck(); });
+    menu.addItem ("Open log folder", [] { eventlog::getLogsFolder().startAsProcess(); });
+    menu.addSeparator();
+
     juce::PopupMenu stage;
     showStageSettingsMenu (stage);
     menu.addSubMenu ("Stage settings (this show)", stage);
@@ -477,6 +495,247 @@ void MainComponent::relayout()
     resized();
 }
 
+//==============================================================================
+void MainComponent::recoverAfterUncleanExit()
+{
+    if (! uncleanExit)
+        return;
+
+    const auto now = juce::Time::getCurrentTime();
+    const auto goLive = RecoveryFile::shouldGoLiveAutomatically (*uncleanExit, now);
+
+    recoveriesInARow = uncleanExit->lastRecovery.toMilliseconds() > 0 && now - uncleanExit->lastRecovery < juce::RelativeTime::minutes (10)
+                           ? uncleanExit->recoveriesInARow + 1 : 1;
+    lastRecovery = now;
+
+    const auto cues = session->getCues();
+    juce::String where;
+
+    if (juce::isPositiveAndBelow (uncleanExit->cue, (int) cues.size()))
+    {
+        session->goToCue (uncleanExit->cue);
+        const auto& cue = *cues[(size_t) uncleanExit->cue];
+        where = " at cue " + (cue.number.isNotEmpty() ? cue.number + " " : juce::String()) + cue.name;
+    }
+
+    engine.setMuted (! goLive);
+
+    if (uncleanExit->stageView)
+        setStageVisible (true);
+
+    eventlog::write ("Recovered after an unclean exit" + where + (goLive ? ", live" : ", muted (repeated crashes)"));
+    showNotice ("Encore restarted after an unexpected exit - back" + where
+                    + (goLive ? juce::String() : juce::String (". MUTED: it happened again soon after, check before unmuting.")),
+                30);
+}
+
+void MainComponent::updateRecoveryFile()
+{
+    RecoveryFile::State state;
+    state.showFolder = session->getFolder().isValid() ? session->getFolder().getFolder().getFullPathName() : juce::String();
+    state.cue = session->getCurrentCue();
+    state.live = ! engine.isMuted();
+    state.stageView = isShowingStage();
+    state.recoveriesInARow = recoveriesInARow;
+    state.lastRecovery = lastRecovery;
+    recovery->update (state);   // only writes when something changed
+}
+
+void MainComponent::showNotice (const juce::String& text, int seconds)
+{
+    notice = text;
+    noticeUntil = juce::Time::getMillisecondCounter() + (juce::uint32) seconds * 1000u;
+    warning.setText (text, juce::dontSendNotification);
+}
+
+void MainComponent::watchAudioDevice()
+{
+    const auto now = juce::Time::getMillisecondCounter();
+    const auto count = engine.getCallbackCount();
+    auto* device = deviceManager.getCurrentAudioDevice();
+
+    // Changing settings in the dialog may close the device on purpose.
+    const auto dialogOpen = audioDialog != nullptr;
+
+    if (audioDialogWasOpen && ! dialogOpen)
+        haveGoodSetup = device != nullptr && device->isOpen();
+
+    audioDialogWasOpen = dialogOpen;
+
+    if (count != lastCallbackCount)
+    {
+        lastCallbackCount = count;
+        lastCallbackTime = now;
+
+        if (deviceLost)
+        {
+            deviceLost = false;
+            eventlog::write ("Audio interface back after " + juce::String (reconnectAttempts) + " attempt(s)");
+            showNotice ("Audio interface reconnected", 10);
+            refreshStatus();
+        }
+
+        // Remember what works, to reopen exactly that.
+        if (now - lastGoodSetupTime > 2000)
+        {
+            lastGoodSetupTime = now;
+            lastGoodSetup = deviceManager.getAudioDeviceSetup();
+            lastGoodType = deviceManager.getCurrentAudioDeviceType();
+            haveGoodSetup = true;
+        }
+
+        return;
+    }
+
+    if (! haveGoodSetup || dialogOpen)
+        return;
+
+    const auto stalled = device != nullptr && device->isOpen() && now - lastCallbackTime > 500;
+    const auto gone = device == nullptr || ! device->isOpen();
+
+    if (! deviceLost && (stalled || gone))
+    {
+        deviceLost = true;
+        reconnectAttempts = 0;
+        nextReconnectAttempt = now + 200;
+        eventlog::write (juce::String ("Audio interface ") + (stalled ? "stopped responding" : "disappeared") + ": "
+                         + lastGoodType + " / " + lastGoodSetup.outputDeviceName);
+
+        if (device != nullptr)
+            deviceManager.closeAudioDevice();
+
+        refreshStatus();
+    }
+
+    if (deviceLost && now >= nextReconnectAttempt)
+    {
+        nextReconnectAttempt = now + 1000;
+        reconnectAudioDevice();
+    }
+}
+
+void MainComponent::reconnectAudioDevice()
+{
+    ++reconnectAttempts;
+
+    if (deviceManager.getCurrentAudioDeviceType() != lastGoodType)
+        deviceManager.setCurrentAudioDeviceType (lastGoodType, true);
+
+    if (auto* type = deviceManager.getCurrentDeviceTypeObject())
+    {
+        type->scanForDevices();
+
+        // Only try when the interface is actually back (opening a missing
+        // ASIO driver can take a while).
+        if (! type->getDeviceNames (false).contains (lastGoodSetup.outputDeviceName))
+            return;
+    }
+
+    const auto error = deviceManager.setAudioDeviceSetup (lastGoodSetup, true);
+
+    if (error.isNotEmpty() && (reconnectAttempts == 1 || reconnectAttempts % 30 == 0))
+        eventlog::write ("Reconnect attempt " + juce::String (reconnectAttempts) + ": " + error);
+}
+
+void MainComponent::openPreShowCheck()
+{
+    if (checkDialog != nullptr)
+    {
+        checkDialog->toFront (true);
+        return;
+    }
+
+    auto content = std::make_unique<PreShowCheckView> ([this] { return gatherPreShowFacts(); },
+                                                       [this] (PreShowCheckResult::Fix f) { applyFix (f); });
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned (content.release());
+    options.dialogTitle = "Pre-show check";
+    options.dialogBackgroundColour = background;
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar = true;
+    options.resizable = true;
+    checkDialog = options.launchAsync();
+}
+
+void MainComponent::applyFix (PreShowCheckResult::Fix fix)
+{
+    using Fix = PreShowCheckResult::Fix;
+
+    // The dialogs open on top of the check window; it stays open behind.
+    switch (fix)
+    {
+        case Fix::audioSettings:  openAudioSettings(); break;
+        case Fix::midiSettings:   openMidiSettings(); break;
+        case Fix::save:           session->save(); reportProblems(); break;
+        case Fix::resetCounters:  engine.resetCounters(); break;
+        case Fix::unmute:         engine.setMuted (false); break;
+        case Fix::none:           break;
+    }
+}
+
+PreShowFacts MainComponent::gatherPreShowFacts()
+{
+    PreShowFacts f;
+    auto* device = deviceManager.getCurrentAudioDevice();
+
+    f.reconnecting = deviceLost;
+    f.deviceOpen = device != nullptr && device->isOpen();
+    f.deviceType = deviceManager.getCurrentAudioDeviceType();
+    f.deviceName = deviceLost ? lastGoodSetup.outputDeviceName : (device != nullptr ? device->getName() : juce::String());
+
+    if (f.deviceOpen)
+    {
+        f.bufferSize = device->getCurrentBufferSizeSamples();
+        f.sampleRate = device->getCurrentSampleRate();
+        f.latencyMs = f.sampleRate > 0.0 ? (device->getInputLatencyInSamples() + device->getOutputLatencyInSamples() + f.bufferSize)
+                                               * 1000.0 / f.sampleRate
+                                         : 0.0;
+        f.driverDropouts = device->getXRunCount();
+    }
+
+    f.callbacksRunning = juce::Time::getMillisecondCounter() - lastCallbackTime < 500;
+    f.cpuLoad = engine.getCpuLoad();
+    f.overruns = engine.getOverrunCount();
+    f.badBuffers = engine.getPlayer().getBadOutputCount() + engine.getPlayer().getBadInputCount();
+    f.muted = engine.isMuted();
+
+   #if JUCE_WINDOWS
+    const auto power = system::getPowerSource();
+    f.onBattery = power == system::PowerSource::battery;
+    f.powerUnknown = power == system::PowerSource::unknown;
+    f.highPriority = tuning.highPriority;
+    f.throttlingOff = tuning.powerThrottlingDisabled;
+   #else
+    f.powerUnknown = true;
+   #endif
+
+    const auto& folder = session->getFolder();
+    f.showHasFolder = folder.isValid();
+    f.showSaved = ! session->hasUnsavedChanges();
+    f.freeDiskBytes = folder.isValid() ? folder.getFolder().getBytesFreeOnVolume() : -1;
+    f.numCues = (int) session->getCues().size();
+    f.missingFiles = findMissingFiles (session->getShow(), folder);
+    f.cuesWithoutPatch = findCuesWithoutPatch (session->getShow());
+
+    // MIDI inputs the user enabled (remembered even while unplugged) vs. present.
+    if (const auto state = deviceManager.createStateXml())
+        for (auto* input : state->getChildWithTagNameIterator ("MIDIINPUT"))
+            f.midiInputsEnabled.addIfNotAlreadyThere (input->getStringAttribute ("name"));
+
+    for (const auto& input : juce::MidiInput::getAvailableDevices())
+        f.midiInputsConnected.add (input.name);
+
+    for (const auto& binding : appliedBindings)
+        f.hasNextCueMapping = f.hasNextCueMapping || binding.action == MidiAction::nextCue;
+
+    for (const auto* cue : session->getCues())
+        f.cuesSendMidi = f.cuesSendMidi || ! cue->midiOut.empty();
+
+    f.midiOutputConnected = midiOutputPresent;
+    return f;
+}
+
 void MainComponent::showStageSettingsMenu (juce::PopupMenu& menu)
 {
     const auto& stage = session->getStage();
@@ -535,6 +794,12 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
     // Locked: the keyboard changes nothing (unlock by holding the lock).
     if (isShowingStage() && stageView->isLocked())
         return true;
+
+    if (key.getKeyCode() == juce::KeyPress::F9Key)
+    {
+        openPreShowCheck();
+        return true;
+    }
 
     if (key.getKeyCode() == juce::KeyPress::F5Key)
     {
@@ -722,6 +987,17 @@ void MainComponent::refreshStatus()
 {
     auto* device = deviceManager.getCurrentAudioDevice();
 
+    if (deviceLost)
+    {
+        deviceStatus.setText ("AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName
+                                  + "... (staying on the cue; check the cable)", juce::dontSendNotification);
+        deviceStatus.setColour (juce::Label::textColourId, mutedRed.brighter (0.3f));
+        latencyStatus.setText ({}, juce::dontSendNotification);
+        return;
+    }
+
+    deviceStatus.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.75f));
+
     if (device == nullptr || ! device->isOpen())
     {
         deviceStatus.setText ("No audio device open", juce::dontSendNotification);
@@ -786,6 +1062,7 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
 
 void MainComponent::timerCallback()
 {
+    watchAudioDevice();
     engine.collectGarbage();
     session->syncWithAudio();   // cue or patch changed on the audio thread
 
@@ -828,6 +1105,12 @@ void MainComponent::timerCallback()
     inputMeter.setPeak (snapshot.inputPeak);
     outputMeter.setPeak (snapshot.outputPeak);
 
+    if (deviceLost)
+        snapshot.audioProblem = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + "...";
+
+    if (juce::Time::getMillisecondCounter() < noticeUntil)
+        snapshot.notice = notice;
+
     const auto tunerOpen = engine.isTunerOpen();
 
     if (tunerOpen)
@@ -859,6 +1142,8 @@ void MainComponent::timerCallback()
         return;
 
     refreshShowStatus();
+
+    updateRecoveryFile();
 
     if (frameCounter % 60 == 0)   // power source, MIDI output reconnects etc. every 2 s
     {

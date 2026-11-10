@@ -21,6 +21,8 @@ struct StageSnapshot
     int overruns = 0;
     bool onBattery = false;
     Tuner::Reading tuner;
+    juce::String audioProblem;   // e.g. "Audio interface lost - reconnecting"
+    juce::String notice;         // shown along the top for a while (e.g. after a crash recovery)
 };
 
 /** The performance screen: widgets placed on a 24 x 16 grid by the show's
@@ -86,7 +88,7 @@ private:
 
     juce::TextButton editViewButton { "Edit view" }, editLayoutButton { "Edit layout" }, lockStripButton { "Lock" };
     juce::TextButton layoutsButton, addWidgetButton { "+ Widget" }, doneButton { "Done" };
-    juce::Label hint;
+    juce::Label hint, noticeLabel;
 
     StageSnapshot last;
     int lastOverruns = 0;

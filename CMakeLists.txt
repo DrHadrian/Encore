@@ -153,6 +153,10 @@ target_sources(EncoreEngine INTERFACE
     Source/platform/SystemTuning.cpp
     Source/platform/SystemTuning.h
     Source/session/PatchBuilder.cpp
+    Source/session/PreShowCheck.cpp
+    Source/session/PreShowCheck.h
+    Source/session/RecoveryFile.cpp
+    Source/session/RecoveryFile.h
     Source/session/PatchBuilder.h
     Source/session/ShowSession.cpp
     Source/session/ShowSession.h)
@@ -170,6 +174,8 @@ juce_add_gui_app(Encore
 target_sources(Encore PRIVATE
     Source/Main.cpp
     Source/app/AppSettings.cpp
+    Source/app/EventLog.cpp
+    Source/app/EventLog.h
     Source/app/AppSettings.h
     Source/app/MainComponent.cpp
     Source/app/MainComponent.h
@@ -181,6 +187,8 @@ target_sources(Encore PRIVATE
     Source/ui/LevelMeter.h
     Source/ui/MidiSettings.cpp
     Source/ui/MidiSettings.h
+    Source/ui/PreShowCheckView.cpp
+    Source/ui/PreShowCheckView.h
     Source/ui/StageView.cpp
     Source/ui/StageView.h
     Source/ui/TunerDisplay.cpp
@@ -239,6 +247,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/MidiTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
+        Tests/RobustnessTests.cpp
         Tests/StageTests.cpp
         Tests/StageViewTests.cpp
         # Screens tested off-screen (rendered into images, no window).
