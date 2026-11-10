@@ -124,8 +124,29 @@ public:
     void setOwnMidiMappings (bool own, const std::vector<MidiBinding>& startingPoint);
     void setShowMidiBindings (std::vector<MidiBinding> bindings);
 
+    //== Stage view ============================================================
+    /** The layouts (at least the built-in default) and tuner/panic settings. */
+    const StageSettings& getStage() const noexcept { return show.stage; }
+
+    /** The layout for a cue: its own, else the show's default, else built-in. */
+    const StageLayout& getLayoutForCue (int index) const;
+
+    /** Adds a layout (a copy of `copyFrom`, or the default) and returns its id. */
+    juce::String addLayout (const juce::String& name, const juce::String& copyFromId);
+    void renameLayout (const juce::String& id, const juce::String& name);
+    bool deleteLayout (const juce::String& id);   // false for the last one
+    void setDefaultLayout (const juce::String& id);
+    void setLayoutWidgets (const juce::String& id, std::vector<StageWidget> widgets);
+    void setCueLayout (int index, const juce::String& layoutId);   // empty = default
+
+    void setTunerMutes (bool mutes);
+    void setReferencePitch (float hz);
+    void setPanicBehaviour (PanicBehaviour);
+
 private:
     void timerCallback() override;
+    void applyStageSettings();
+    void ensureLayouts();
     void changed (bool showContentChanged);
     void adoptShow (ShowModel newShow, const ShowFolder& newFolder);
     juce::Result writeToDisk (bool keepBackup);

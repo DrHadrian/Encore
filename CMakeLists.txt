@@ -147,6 +147,8 @@ target_sources(EncoreEngine INTERFACE
     Source/model/ShowJson.cpp
     Source/model/ShowJson.h
     Source/model/ShowModel.cpp
+    Source/model/StageLayout.cpp
+    Source/model/StageLayout.h
     Source/model/ShowModel.h
     Source/platform/SystemTuning.cpp
     Source/platform/SystemTuning.h

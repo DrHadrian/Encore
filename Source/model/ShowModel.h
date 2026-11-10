@@ -7,6 +7,7 @@
 #include <map>
 
 #include "model/MidiMapping.h"
+#include "model/StageLayout.h"
 #include <optional>
 #include <vector>
 
@@ -96,6 +97,7 @@ struct RunItem
     SamePatchBehaviour samePatch = SamePatchBehaviour::keep;
     int programChange = -1;                  // optional direct recall, -1 = none
     std::vector<MidiOutMessage> midiOut;     // sent to other gear when the cue starts
+    juce::String layoutId;                   // stage layout for this cue, empty = the show's default
 
     static RunItem makeSection (const juce::String& name, const juce::String& sectionKind);
     static RunItem makeCue (const juce::String& number, const juce::String& name, const juce::String& patchId);
@@ -117,6 +119,8 @@ struct ShowModel
 
     bool ownMidiMappings = false;            // use these instead of the computer's mappings
     std::vector<MidiBinding> midiBindings;
+
+    StageSettings stage;
 
     PatchModel* findPatch (const juce::String& patchId);
     const PatchModel* findPatch (const juce::String& patchId) const;

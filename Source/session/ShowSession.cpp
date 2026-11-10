@@ -128,8 +128,143 @@ void ShowSession::adoptShow (ShowModel newShow, const ShowFolder& newFolder)
     activePatchId = ! cues.empty() ? keyForCue (*cues.front())
                                    : (show.patches.empty() ? juce::String() : show.patches.front().id);
 
+    applyStageSettings();
     buildAll();
     sendChangeMessage();
+}
+
+//==============================================================================
+void ShowSession::applyStageSettings()
+{
+    engine.setTunerMutes (show.stage.tunerMutes);
+    engine.getTuner().setReferencePitch (show.stage.referencePitch);
+    engine.setPanicMode (show.stage.panic == PanicBehaviour::latch ? AudioEngine::PanicMode::latch
+                                                                   : AudioEngine::PanicMode::recover);
+}
+
+void ShowSession::ensureLayouts()
+{
+    // Shows start with the built-in layout; it becomes the show's own once edited.
+    if (show.stage.layouts.empty())
+    {
+        show.stage.layouts.push_back (makeDefaultStageLayout());
+        show.stage.defaultLayoutId = show.stage.layouts.front().id;
+    }
+}
+
+const StageLayout& ShowSession::getLayoutForCue (int index) const
+{
+    static const auto builtIn = makeDefaultStageLayout();
+    const auto cues = getCues();
+    const auto own = juce::isPositiveAndBelow (index, (int) cues.size()) ? cues[(size_t) index]->layoutId : juce::String();
+
+    if (const auto* layout = show.stage.findLayout (own))
+        return *layout;
+
+    return builtIn;
+}
+
+juce::String ShowSession::addLayout (const juce::String& name, const juce::String& copyFromId)
+{
+    ensureLayouts();
+
+    StageLayout layout;
+
+    if (const auto* source = show.stage.findLayout (copyFromId))
+        layout = *source;
+    else
+        layout = makeDefaultStageLayout();
+
+    layout.id = juce::Uuid().toString();
+    layout.name = name.isNotEmpty() ? name : juce::String ("Layout");
+    show.stage.layouts.push_back (layout);
+    changed (true);
+    return layout.id;
+}
+
+void ShowSession::renameLayout (const juce::String& id, const juce::String& name)
+{
+    ensureLayouts();
+
+    for (auto& layout : show.stage.layouts)
+        if (layout.id == id && name.isNotEmpty())
+            layout.name = name;
+
+    changed (true);
+}
+
+bool ShowSession::deleteLayout (const juce::String& id)
+{
+    ensureLayouts();
+    auto& layouts = show.stage.layouts;
+
+    if (layouts.size() <= 1)
+        return false;
+
+    layouts.erase (std::remove_if (layouts.begin(), layouts.end(), [&] (const StageLayout& l) { return l.id == id; }),
+                   layouts.end());
+
+    if (show.stage.defaultLayoutId == id)
+        show.stage.defaultLayoutId = layouts.front().id;
+
+    // Cues that used it fall back to the default (their id no longer matches).
+    changed (true);
+    return true;
+}
+
+void ShowSession::setDefaultLayout (const juce::String& id)
+{
+    ensureLayouts();
+    show.stage.defaultLayoutId = id;
+    changed (true);
+}
+
+void ShowSession::setLayoutWidgets (const juce::String& id, std::vector<StageWidget> widgets)
+{
+    ensureLayouts();
+
+    for (auto& w : widgets)
+        w = clampToGrid (w);
+
+    for (auto& layout : show.stage.layouts)
+    {
+        if (layout.id == id && layout.widgets != widgets)
+        {
+            layout.widgets = std::move (widgets);
+            changed (true);
+            return;
+        }
+    }
+}
+
+void ShowSession::setCueLayout (int index, const juce::String& layoutId)
+{
+    if (auto* cue = cueAt (index))
+    {
+        cue->layoutId = layoutId;
+        changed (true);
+    }
+}
+
+void ShowSession::setTunerMutes (bool mutes)
+{
+    show.stage.tunerMutes = mutes;
+    applyStageSettings();
+    changed (true);
+}
+
+void ShowSession::setReferencePitch (float hz)
+{
+    show.stage.referencePitch = juce::jlimit (415.0f, 466.0f, hz);
+    applyStageSettings();
+    changed (true);
+}
+
+void ShowSession::setPanicBehaviour (PanicBehaviour behaviour)
+{
+    show.stage.panic = behaviour;
+    applyStageSettings();
+    changed (true);
 }
 
 //==============================================================================
