@@ -84,6 +84,10 @@ public:
             player.prepareAll (spec);
             auto* a = player.adopt (gainChain (0.0f, "A"));
             auto* b = player.adopt (gainChain (0.0f, "B"));
+
+            // Equal fade-out and fade-in times: the two inputs always sum to one.
+            a->setSwitchFades (0.01, 0.01);
+            b->setSwitchFades (0.01, 0.01);
             player.publish ({ { a }, { b } });
             player.goToCue (0);
 
@@ -107,6 +111,34 @@ public:
             expectEquals (player.getCurrentCue(), 1);
         }
 
+        beginTest ("The old patch rings out for its ring-out time; the new one fades in over its fade-in time");
+        {
+            PatchPlayer player;
+            player.prepareAll (spec);
+            auto* loud = player.adopt (gainChain (0.0f, "Loud"));
+            auto* quiet = player.adopt (gainChain (-80.0f, "Almost silent"));
+            loud->setSwitchFades (0.02, 0.15);
+            quiet->setSwitchFades (0.02, 0.15);
+            player.publish ({ { loud }, { quiet }, { loud } });
+            player.goToCue (0);
+
+            const auto blocksPerMs = sampleRate / 1000.0 / blockSize;
+            const auto switchBlock = 40;
+            const auto at = [&] (double msAfterSwitch) { return (int) ((switchBlock + msAfterSwitch * blocksPerMs) * blockSize); };
+
+            // Loud -> quiet: what we hear is the loud patch ringing out.
+            const auto input = sine (440.0, 0.5f, at (400.0));
+            const auto output = run (player, input, [&] (int block) { if (block == switchBlock) player.next(); });
+            const auto inputRms = rms (input, at (70.0), at (80.0));
+            expectWithinAbsoluteError (rms (output, at (70.0), at (80.0)) / inputRms, 0.5f, 0.06f, "half-way through a 150 ms ring-out");
+            expectLessThan (rms (output, at (160.0), at (200.0)) / inputRms, 0.01f, "gone after 150 ms");
+
+            // Quiet -> loud: comes in over 20 ms.
+            const auto output2 = run (player, input, [&] (int block) { if (block == switchBlock) player.next(); });
+            expectWithinAbsoluteError (rms (output2, at (9.0), at (11.0)) / inputRms, 0.5f, 0.08f, "half-way through a 20 ms fade-in");
+            expectWithinAbsoluteError (rms (output2, at (30.0), at (60.0)) / inputRms, 1.0f, 0.02f, "fully in after 20 ms");
+        }
+
         beginTest ("Switching to a quieter patch glides, with no jump");
         {
             PatchPlayer player;
@@ -118,12 +150,16 @@ public:
 
             const auto output = run (player, sine (110.0, 0.5f, 9600), [&] (int block) { if (block == 30) player.next(); });
 
-            // A 110 Hz sine at 0.5 changes by at most ~0.0072 per sample; a click would be far more.
+            // A smooth 110 Hz sine changes by at most 2*pi*110/48000 x its peak per
+            // sample. (The patches overlap briefly, so the peak can rise a little;
+            // a click would jump far more than this.)
             float maxStep = 0.0f;
             for (size_t i = 1; i < output.size(); ++i)
                 maxStep = juce::jmax (maxStep, std::abs (output[i] - output[i - 1]));
 
-            expectLessThan (maxStep, 0.0075f);
+            const auto smoothLimit = (float) (2.0 * juce::MathConstants<double>::pi * 110.0 / sampleRate)
+                                     * peak (output, 0, (int) output.size()) * 1.05f;
+            expectLessThan (maxStep, smoothLimit);
         }
 
         beginTest ("Delay repeats ring out after switching away (tails only)");

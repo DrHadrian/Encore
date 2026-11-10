@@ -107,9 +107,13 @@ effect. For shows also:
 5. **Tails**: play a phrase on *Clean* (with the delay) and switch to *Lead*
    mid-repeat: the repeats keep ringing out under the lead sound. The status line
    shows "ringing out 1" until they've faded.
-6. **Spill-over modes**: right-click a patch → *When switching away from it*:
-   *Delay and reverb ring out* (default, lighter on CPU) or *The whole patch
-   rings out* (the amp and cab keep sounding too, until silent).
+6. **Switch feel**, per patch (right-click it in *Patches*):
+   - *Fade in when switched to*: how quickly it comes in (default 20 ms).
+   - *Amp ring-out when switched away*: how long it keeps getting your guitar
+     while fading, so its amp and cab overlap the next patch (default 150 ms;
+     longer for smooth, shorter for snappy changes).
+   - *Then let ring out*: *Delay and reverb ring out* (default, lighter on CPU)
+     or *The whole patch rings out* (amp and cab too, until silent).
 7. **Same patch twice**: make two cues in a row with the same patch. Right-click
    the second → *If the previous cue uses the same patch* → *Reset to its saved
    settings*: tweak a knob on the first, step on, and the knob snaps back. With

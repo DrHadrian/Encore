@@ -57,6 +57,8 @@ struct PatchModel
     juce::String name;
     juce::uint32 colour = 0xff4f9dff;
     Spillover spillover = Spillover::tails;
+    float fadeInMs = 20.0f;                  // switching to this patch: how quickly it comes in
+    float ringOutMs = 150.0f;                // switching away: how long its amp keeps getting the guitar
     std::vector<LaneModel> lanes { LaneModel{} };
 
     LaneModel& mainLane()             { if (lanes.empty()) lanes.emplace_back(); return lanes.front(); }

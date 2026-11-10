@@ -114,10 +114,29 @@ void PatchList::showPatchMenu (int row)
         if (safeThis != nullptr) safeThis->session.setSpillover (id, Spillover::fullChain);
     });
 
+    // Switch feel: how quickly it comes in, how long its amp overlaps the next patch.
+    const auto fadeIn = patch.fadeInMs, ringOut = patch.ringOutMs;
+    juce::PopupMenu fadeInMenu, ringOutMenu;
+
+    for (auto ms : { 5.0f, 10.0f, 20.0f, 50.0f, 100.0f })
+        fadeInMenu.addItem (juce::String ((int) ms) + " ms", true, juce::approximatelyEqual (ms, fadeIn), [safeThis, id, ms, ringOut]
+        {
+            if (safeThis != nullptr) safeThis->session.setSwitchFades (id, ms, ringOut);
+        });
+
+    for (auto ms : { 10.0f, 50.0f, 150.0f, 300.0f, 500.0f, 1000.0f })
+        ringOutMenu.addItem (juce::String ((int) ms) + " ms", true, juce::approximatelyEqual (ms, ringOut), [safeThis, id, ms, fadeIn]
+        {
+            if (safeThis != nullptr) safeThis->session.setSwitchFades (id, fadeIn, ms);
+        });
+
     juce::PopupMenu menu;
     menu.addItem ("Rename...", [safeThis, row] { if (safeThis != nullptr) safeThis->rename (row); });
     menu.addItem ("Duplicate", [safeThis, id] { if (safeThis != nullptr) safeThis->session.duplicatePatch (id); });
-    menu.addSubMenu ("When switching away from it", spill);
+    menu.addSeparator();
+    menu.addSubMenu ("Fade in when switched to (" + juce::String ((int) fadeIn) + " ms)", fadeInMenu);
+    menu.addSubMenu ("Amp ring-out when switched away (" + juce::String ((int) ringOut) + " ms)", ringOutMenu);
+    menu.addSubMenu ("Then let ring out", spill);
     menu.addSeparator();
     menu.addItem ("Delete...", patches.size() > 1, false, [safeThis] { if (safeThis != nullptr) safeThis->confirmDelete(); });
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this));

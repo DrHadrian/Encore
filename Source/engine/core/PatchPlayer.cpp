@@ -136,7 +136,6 @@ void PatchPlayer::prepareAll (const ProcessSpec& newSpec)
     mix.assign ((size_t) spec.maxBlockSize, 0.0f);
 
     sampleRate = spec.sampleRate;
-    fadeStep = (float) (1.0 / juce::jmax (1.0, switchFadeSeconds * sampleRate));
     settleSamples = (int) (tailSettleSeconds * sampleRate);
     timeoutSamples = (int) (tailTimeoutSeconds * sampleRate);
     silenceHoldSamples = (int) (silenceHoldSeconds * sampleRate);
@@ -149,6 +148,11 @@ int PatchPlayer::getNumOwnedChains() const
 }
 
 //==============================================================================
+float PatchPlayer::stepFor (float seconds) const noexcept
+{
+    return (float) (1.0 / juce::jmax (1.0, seconds * sampleRate));
+}
+
 bool PatchPlayer::tableContains (const Chain* chain) const noexcept
 {
     if (table == nullptr || chain == nullptr)
@@ -236,6 +240,7 @@ void PatchPlayer::switchTo (Chain* target, bool resetIfSame) noexcept
     }
 
     incoming.inputTarget = 1.0f;
+    incoming.inputStep = stepFor (target->getFadeInSeconds());
     incoming.outputGain = 1.0f;
     incoming.cutting = false;
     incoming.age = incoming.silentFor = 0;
@@ -257,6 +262,7 @@ void PatchPlayer::switchTo (Chain* target, bool resetIfSame) noexcept
 
         *freeSlot = active;
         freeSlot->inputTarget = 0.0f;
+        freeSlot->inputStep = stepFor (active.chain->getRingOutSeconds());
         freeSlot->age = 0;
         freeSlot->silentFor = 0;
     }
@@ -292,14 +298,15 @@ void PatchPlayer::renderSlot (Slot& slot, const float* input, float* out, int nu
     }
     else
     {
-        // Input crossfade: the leaving patch's input fades out while the new
-        // one's fades in. Each chain's own decay then carries the sound across.
+        // Input crossfade: the leaving patch's input fades out (its ring-out
+        // time) while the new one's fades in (its fade-in time). Each chain's
+        // own decay then carries the sound across.
         for (int i = 0; i < numSamples; ++i)
         {
             if (slot.inputGain < slot.inputTarget)
-                slot.inputGain = juce::jmin (slot.inputTarget, slot.inputGain + fadeStep);
+                slot.inputGain = juce::jmin (slot.inputTarget, slot.inputGain + slot.inputStep);
             else if (slot.inputGain > slot.inputTarget)
-                slot.inputGain = juce::jmax (slot.inputTarget, slot.inputGain - fadeStep);
+                slot.inputGain = juce::jmax (slot.inputTarget, slot.inputGain - slot.inputStep);
 
             buffer[i] = input[i] * slot.inputGain;
         }

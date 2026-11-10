@@ -17,6 +17,8 @@ inline ShowModel makeRichShow()
     show.patches.push_back (duplicatePatch (show.patches[0], "Lead"));
     show.patches[1].spillover = Spillover::fullChain;
     show.patches[1].colour = 0xffe5484d;
+    show.patches[1].fadeInMs = 5.0f;
+    show.patches[1].ringOutMs = 500.0f;
     show.patches[1].mainLane().blocks[0].params["input"] = 6.5f;
     show.patches[1].mainLane().blocks[0].file = "models/lead amp.nam";
     show.patches[1].mainLane().blocks[2].enabled = false;

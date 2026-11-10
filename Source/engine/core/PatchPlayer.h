@@ -32,8 +32,10 @@ namespace encore
 
     Audio thread: process() renders the active patch plus up to three patches
     still ringing out, and handles switching:
-      - for 10 ms the old patch's input fades out while the new one's fades in;
-        the outputs are summed, so there is no gap and no click;
+      - the new patch's input fades in (20 ms by default) while the old one's
+        fades out (150 ms by default, so its amp and cab overlap the new sound);
+        the outputs are summed, so there is no gap and no click. Both times
+        are set per patch (Chain::setSwitchFades);
       - the old patch then keeps running on silence until it falls below
         -90 dBFS (or 8 s pass). In "tails only" mode, after 200 ms of settling
         it runs only from its first delay/reverb block on, so the amp and cab
@@ -49,7 +51,6 @@ public:
     };
 
     static constexpr int maxFading = 3;
-    static constexpr double switchFadeSeconds = 0.01;
     static constexpr double tailSettleSeconds = 0.2;
     static constexpr double tailTimeoutSeconds = 8.0;
     static constexpr float silenceThreshold = 3.0e-5f;   // about -90 dBFS
@@ -117,6 +118,7 @@ private:
         Chain* chain = nullptr;
         float inputGain = 0.0f;         // current input level into the chain
         float inputTarget = 0.0f;       // 1 = active, 0 = ringing out
+        float inputStep = 1.0f;         // per-sample change towards the target
         float outputGain = 1.0f;        // ramps to 0 when a ringing patch is cut short
         bool cutting = false;
         int activeFor = 0;              // samples it played as the active patch
@@ -128,6 +130,7 @@ private:
     void applyCommand (const Command&) noexcept;
     void switchTo (Chain* target, bool resetIfSame) noexcept;
     bool tableContains (const Chain*) const noexcept;
+    float stepFor (float seconds) const noexcept;
     void renderSlot (Slot&, const float* input, float* out, int numSamples, bool ringing) noexcept;
     void publishSlotsForUi() noexcept;
 
@@ -149,7 +152,6 @@ private:
     int cueIndex = -1;
     std::vector<float> inputCopy, slotBuffer, mix;
     double sampleRate = 48000.0;
-    float fadeStep = 1.0f;
     int settleSamples = 0, timeoutSamples = 0, silenceHoldSamples = 0;
 
     // Shared: what the audio thread uses, so freeing and the UI stay correct.
