@@ -243,3 +243,15 @@ In the edit view, buttons, knobs and menus don't take keyboard focus. Space
 and the arrow keys therefore always step the set list, rather than nudging the
 last knob you touched or, worse, changing the guitar input selected in a combo
 box. The mouse works as usual. The performance view (milestone 7) adds a lock.
+
+## 0026 — Switch fades are per patch, and asymmetric by default (after milestone 5)
+
+Testing showed equal 10 ms fades made the leaving amp and cab stop too
+abruptly. Each patch now has a fade-in time (20 ms by default: how quickly it
+comes in) and an amp ring-out time (150 ms by default: how long it keeps
+getting the guitar while fading out). For those 150 ms the old and new amps
+overlap, like letting a chord ring into the next sound, instead of the old
+one being cut. With equal times the crossfade is still mathematically
+seamless (the test sets both to 10 ms). With the defaults the level can rise
+briefly during the overlap; that's the intended "ring", not a click (a test
+checks the output never jumps faster than a smooth sine at its peak).

@@ -76,6 +76,7 @@ public:
     void renamePatch (const juce::String& patchId, const juce::String& newName);
     bool deletePatch (const juce::String& patchId);   // refuses to delete the last one
     void setSpillover (const juce::String& patchId, Spillover mode);
+    void setSwitchFades (const juce::String& patchId, float fadeInMs, float ringOutMs);
 
     /** How many cues use a patch. */
     int countCuesUsing (const juce::String& patchId) const;

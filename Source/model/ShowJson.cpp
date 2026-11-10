@@ -180,6 +180,8 @@ juce::var patchToVar (const PatchModel& patch)
     set (o, "name", patch.name);
     set (o, "colour", juce::String::toHexString ((int) patch.colour));
     set (o, "spillover", toString (patch.spillover));
+    set (o, "fadeInMs", patch.fadeInMs);
+    set (o, "ringOutMs", patch.ringOutMs);
 
     juce::Array<juce::var> lanes;
 
@@ -208,6 +210,9 @@ PatchModel patchFromVar (const juce::var& o)
     patch.name = str (o, "name", "Untitled");
     patch.colour = (juce::uint32) str (o, "colour", "ff4f9dff").getHexValue32();
     patch.spillover = str (o, "spillover") == "fullChain" ? Spillover::fullChain : Spillover::tails;
+
+    if (const auto v = get (o, "fadeInMs"); ! v.isVoid())   patch.fadeInMs = (float) (double) v;
+    if (const auto v = get (o, "ringOutMs"); ! v.isVoid())  patch.ringOutMs = (float) (double) v;
     patch.lanes.clear();
 
     forEachIn (o, "lanes", [&] (const juce::var& l)

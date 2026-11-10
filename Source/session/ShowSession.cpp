@@ -184,6 +184,7 @@ void ShowSession::buildAll()
             auto chain = buildChain (patch, folderCopy, spec, buildProblems);
             chain->label = patch.name;
             chain->setTailMode (toTailMode (patch.spillover));
+            chain->setSwitchFades (patch.fadeInMs * 0.001, patch.ringOutMs * 0.001);
             chain->saveSnapshot();
 
             auto holder = std::make_shared<std::unique_ptr<Chain>> (std::move (chain));
@@ -239,6 +240,7 @@ void ShowSession::rebuildPatch (const juce::String& key)
         auto chain = buildChain (patchCopy, folderCopy, spec, buildProblems);
         chain->label = patchCopy.name;
         chain->setTailMode (toTailMode (patchCopy.spillover));
+        chain->setSwitchFades (patchCopy.fadeInMs * 0.001, patchCopy.ringOutMs * 0.001);
         chain->saveSnapshot();
         auto holder = std::make_shared<std::unique_ptr<Chain>> (std::move (chain));
 
@@ -496,6 +498,20 @@ void ShowSession::setSpillover (const juce::String& patchId, Spillover mode)
 
         if (const auto it = chains.find (patchId); it != chains.end())
             it->second->setTailMode (toTailMode (mode));
+
+        changed (true);
+    }
+}
+
+void ShowSession::setSwitchFades (const juce::String& patchId, float fadeInMs, float ringOutMs)
+{
+    if (auto* patch = findPatchForKey (patchId))
+    {
+        patch->fadeInMs = fadeInMs;
+        patch->ringOutMs = ringOutMs;
+
+        if (const auto it = chains.find (patchId); it != chains.end())
+            it->second->setSwitchFades (fadeInMs * 0.001, ringOutMs * 0.001);
 
         changed (true);
     }

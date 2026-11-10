@@ -56,6 +56,22 @@ public:
     void setTailMode (TailMode mode) noexcept { tailMode.store (mode, std::memory_order_relaxed); }
     TailMode getTailMode() const noexcept     { return tailMode.load (std::memory_order_relaxed); }
 
+    /** How a switch to and from this patch sounds (any thread).
+        fadeIn: how quickly its input comes up when switched to.
+        ringOut: how long it keeps getting the guitar (fading) when switched
+        away from, so its amp and cab overlap the next patch instead of stopping. */
+    void setSwitchFades (double fadeInSeconds, double ringOutSeconds) noexcept
+    {
+        fadeIn.store ((float) juce::jmax (0.001, fadeInSeconds), std::memory_order_relaxed);
+        ringOut.store ((float) juce::jmax (0.001, ringOutSeconds), std::memory_order_relaxed);
+    }
+
+    float getFadeInSeconds() const noexcept  { return fadeIn.load (std::memory_order_relaxed); }
+    float getRingOutSeconds() const noexcept { return ringOut.load (std::memory_order_relaxed); }
+
+    static constexpr double defaultFadeInSeconds = 0.02;
+    static constexpr double defaultRingOutSeconds = 0.15;
+
     /** Index of the first block with a tail, or -1 (computed by prepare()). */
     int getFirstTailBlock() const noexcept { return firstTailBlock; }
 
@@ -77,6 +93,7 @@ private:
     ProcessSpec preparedSpec;
     juce::AudioBuffer<float> chainInput;   // copy of the dry input, for keyed blocks
     std::atomic<TailMode> tailMode { TailMode::tailsOnly };
+    std::atomic<float> fadeIn { (float) defaultFadeInSeconds }, ringOut { (float) defaultRingOutSeconds };
     int firstTailBlock = -1;
 
     // Saved state, as atomics so the audio thread can restore it while the
