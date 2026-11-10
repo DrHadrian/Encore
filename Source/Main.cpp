@@ -5,6 +5,7 @@
 
 #include "app/AppSettings.h"
 #include "app/MainComponent.h"
+#include "engine/core/Realtime.h"
 
 namespace encore
 {
@@ -44,6 +45,9 @@ public:
 
     void initialise (const juce::String&) override
     {
+        // Debug builds: count any allocation made on the audio thread.
+        rt::installAllocationTripwire();
+
         settings = std::make_unique<AppSettings>();
         mainWindow = std::make_unique<MainWindow> (getApplicationName(), *settings);
     }

@@ -7,14 +7,16 @@
 
 #include "app/AppSettings.h"
 #include "engine/AudioEngine.h"
+#include "ui/BlockPanel.h"
 #include "ui/LevelMeter.h"
 
 namespace encore
 {
 
-/** Milestone 0 window: device setup, guitar input choice, meters, latency,
-    CPU/dropout counters and the master volume/mute. The real performance and
-    edit views replace this in later milestones; the engine underneath stays.
+/** Development window: device setup, guitar input, meters, latency, the
+    current chain's blocks, CPU/dropout counters and the master volume/mute.
+    The real performance and edit views replace this in later milestones; the
+    engine underneath stays.
 */
 class MainComponent final : public juce::Component,
                             private juce::ChangeListener,
@@ -31,6 +33,8 @@ private:
     void openAudioSettings();
     void refreshInputChoices();
     void refreshStatus();
+    void buildDefaultChain();
+    void rebuildBlockPanels();
 
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void timerCallback() override;
@@ -50,6 +54,9 @@ private:
     juce::Label volumeLabel { {}, "Master volume" };
     juce::Slider volume { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
     LevelMeter inputMeter { "Input" }, outputMeter { "Output" };
+    juce::Label chainLabel { {}, "Chain" };
+    std::vector<std::unique_ptr<BlockPanel>> blockPanels;
+    Chain* shownChain = nullptr;
 
     int frameCounter = 0;
 
