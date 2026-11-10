@@ -12,6 +12,7 @@
 #include "ui/BlockPanel.h"
 #include "ui/ChainStrip.h"
 #include "ui/LevelMeter.h"
+#include "ui/MidiSettings.h"
 #include "ui/PatchList.h"
 #include "ui/SetList.h"
 
@@ -44,6 +45,11 @@ private:
     void refreshStatus();
     void refreshSystemStatus();
 
+    // MIDI
+    void openMidiSettings();
+    void applyMidiBindings();
+    void applyMidiOutput();
+
     // Show
     void openInitialShow();
     void showMenu();
@@ -74,6 +80,7 @@ private:
     juce::Label title, showName, saveState;
     juce::TextButton showButton { "Show" };
     juce::TextButton audioSettingsButton { "Audio settings..." };
+    juce::TextButton midiSettingsButton { "MIDI..." };
     juce::TextButton muteButton { "MUTED" };
     juce::Slider volume { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
 
@@ -92,6 +99,14 @@ private:
     juce::ComboBox inputChoice;
     juce::TextButton resetCountersButton { "Reset counters" };
     LevelMeter inputMeter { "Input" }, outputMeter { "Output" };
+
+    // Open settings windows (closed before the things they edit go away).
+    juce::Component::SafePointer<juce::DialogWindow> audioDialog, midiDialog;
+
+    // MIDI state last given to the router.
+    std::vector<MidiBinding> appliedBindings;
+    juce::String openMidiOutput;
+    bool midiOutputPresent = false;
 
     std::unique_ptr<juce::FileChooser> chooser;
     int frameCounter = 0;

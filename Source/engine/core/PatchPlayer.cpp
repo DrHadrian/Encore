@@ -148,6 +148,18 @@ int PatchPlayer::getNumOwnedChains() const
 }
 
 //==============================================================================
+int PatchPlayer::findCueForProgram (int program) const noexcept
+{
+    if (table == nullptr)
+        return -1;
+
+    for (int i = 0; i < (int) table->cues.size(); ++i)
+        if (table->cues[(size_t) i].programChange == program)
+            return i;
+
+    return program < (int) table->cues.size() ? program : -1;
+}
+
 float PatchPlayer::stepFor (float seconds) const noexcept
 {
     return (float) (1.0 / juce::jmax (1.0, seconds * sampleRate));
@@ -365,15 +377,20 @@ void PatchPlayer::renderSlot (Slot& slot, const float* input, float* out, int nu
     }
 }
 
-void PatchPlayer::process (float* io, int numSamples) noexcept
+void PatchPlayer::adoptLatestTable() noexcept
 {
-    // Newest running order first, then commands, which refer to it.
     while (auto* newer = tables.takeNext())
     {
         tables.retire (table);
         table = newer;
         audioGeneration.store (table->generation);
     }
+}
+
+void PatchPlayer::process (float* io, int numSamples) noexcept
+{
+    // Newest running order first, then commands, which refer to it.
+    adoptLatestTable();
 
     Command command;
 

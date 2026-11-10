@@ -88,6 +88,43 @@ void Chain::restoreSnapshot() noexcept
     }
 }
 
+void Chain::addExpressionTarget (int pedal, Parameter& parameter, float min, float max)
+{
+    expressionTargets.push_back ({ pedal, &parameter, min, max });
+}
+
+void Chain::applyExpression (int pedal, float position) noexcept
+{
+    for (auto& t : expressionTargets)
+        if (t.pedal == pedal)
+            t.parameter->setValue (t.min + (t.max - t.min) * position);   // ramped by the parameter
+}
+
+bool Chain::usesExpression (int pedal) const noexcept
+{
+    for (auto& t : expressionTargets)
+        if (t.pedal == pedal)
+            return true;
+
+    return false;
+}
+
+bool Chain::toggleStomp (int number) noexcept
+{
+    bool found = false;
+
+    for (auto& b : blocks)
+    {
+        if (b->getStomp() == number)
+        {
+            b->setEnabled (! b->isEnabled());
+            found = true;
+        }
+    }
+
+    return found;
+}
+
 void Chain::collectGarbage()
 {
     for (auto& b : blocks)

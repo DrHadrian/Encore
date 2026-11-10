@@ -77,6 +77,10 @@ public:
     void setEnabled (bool shouldBeEnabled) noexcept { enabled.store (shouldBeEnabled, std::memory_order_relaxed); }
     bool isEnabled() const noexcept                  { return enabled.load (std::memory_order_relaxed); }
 
+    /** Which stomp switch (1..8) toggles this block, 0 = none. Any thread. */
+    void setStomp (int number) noexcept { stomp.store (number, std::memory_order_relaxed); }
+    int getStomp() const noexcept       { return stomp.load (std::memory_order_relaxed); }
+
     const std::vector<std::unique_ptr<Parameter>>& getParameters() const noexcept { return parameters; }
     Parameter* findParameter (const juce::String& id) const noexcept;
 
@@ -138,6 +142,7 @@ private:
     std::vector<std::unique_ptr<Parameter>> parameters;
 
     std::atomic<bool> enabled { true };
+    std::atomic<int> stomp { 0 };
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> wetAmount { 1.0f };
     bool sleeping = false;                 // fully bypassed: processBlock is skipped entirely
     juce::AudioBuffer<float> dryCopy;      // preallocated for bypass crossfades

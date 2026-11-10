@@ -51,10 +51,15 @@ std::unique_ptr<Chain> buildChain (const PatchModel& patch, const ShowFolder& fo
 
         block->setModelId (model.id);
         block->setEnabled (model.enabled);
+        block->setStomp (model.stomp);
 
         for (const auto& [paramId, value] : model.params)
             if (auto* p = block->findParameter (paramId))
                 p->setValue (value);
+
+        for (const auto& [paramId, assignment] : model.expression)
+            if (auto* p = block->findParameter (paramId))
+                chain->addExpressionTarget (assignment.pedal, *p, assignment.min, assignment.max);
 
         if (model.file.isNotEmpty())
         {
@@ -90,15 +95,39 @@ void captureChain (const Chain& chain, PatchModel& patch, const ShowFolder& fold
 {
     std::vector<BlockModel> blocks;
 
+    auto findPrevious = [&patch] (const juce::String& id) -> const BlockModel*
+    {
+        for (auto& b : patch.mainLane().blocks)
+            if (b.id == id)
+                return &b;
+
+        return nullptr;
+    };
+
     for (const auto& block : chain.getBlocks())
     {
         BlockModel model;
         model.id = block->getModelId().isNotEmpty() ? block->getModelId() : newId();
         model.type = block->getTypeId();
         model.enabled = block->isEnabled();
+        model.stomp = block->getStomp();
+
+        const auto* previous = findPrevious (model.id);
+
+        if (previous != nullptr)
+            model.expression = previous->expression;   // not represented live: carry it over
 
         for (const auto& p : block->getParameters())
-            model.params[p->getSpec().id] = p->getValue();
+        {
+            const auto& id = p->getSpec().id;
+
+            // A knob on an expression pedal is wherever the pedal happens to be:
+            // keep its saved value instead.
+            if (previous != nullptr && model.expression.count (id) > 0 && previous->params.count (id) > 0)
+                model.params[id] = previous->params.at (id);
+            else
+                model.params[id] = p->getValue();
+        }
 
         if (const auto file = block->getLoadedFile(); file != juce::File())
             model.file = folder.isValid() && file.isAChildOf (folder.getFolder())

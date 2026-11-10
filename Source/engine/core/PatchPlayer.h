@@ -48,6 +48,7 @@ public:
     {
         Chain* chain = nullptr;          // null: the cue keeps its place but changes nothing
         bool resetIfSamePatch = false;   // same patch as the previous cue: reset to saved settings
+        int programChange = -1;          // recall by MIDI program change, -1 = by position
     };
 
     static constexpr int maxFading = 3;
@@ -97,6 +98,23 @@ public:
     //== Audio thread ==========================================================
     /** Mono, in place: the guitar in, the patches' mix out. numSamples <= prepared block size. */
     void process (float* io, int numSamples) noexcept;
+
+    /** Audio thread: take the newest running order now (process() does this
+        too). Lets MIDI act on the current table before the player renders. */
+    void adoptLatestTable() noexcept;
+
+    /** Audio thread (MIDI): act right away, without the command queue. */
+    void nextNow() noexcept                 { applyCommand ({ Command::Type::next, nullptr, 0 }); }
+    void previousNow() noexcept             { applyCommand ({ Command::Type::previous, nullptr, 0 }); }
+    void goToCueNow (int index) noexcept    { applyCommand ({ Command::Type::goTo, nullptr, index }); }
+
+    /** Audio thread: the cue to recall for a program change: the one marked
+        with that number, else the cue at that position (PC 0 = first cue). */
+    int findCueForProgram (int program) const noexcept;
+
+    /** Audio thread: what is playing right now. */
+    Chain* getActiveChainNow() const noexcept { return active.chain; }
+    int getCueIndexNow() const noexcept       { return cueIndex; }
 
 private:
     struct Table

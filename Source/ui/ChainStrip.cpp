@@ -35,7 +35,7 @@ void ChainStrip::refresh()
 
     if (chain != nullptr)
         for (auto& b : chain->getBlocks())
-            state << (b->isEnabled() ? "1" : "0") << b->getLoadedFile().getFileName() << "|";
+            state << (b->isEnabled() ? "1" : "0") << b->getStomp() << b->getLoadedFile().getFileName() << "|";
 
     if (state != lastState)
     {
@@ -111,7 +111,14 @@ void ChainStrip::paint (juce::Graphics& g)
 
         g.setColour (block.isEnabled() ? onColour : offColour);
         g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
-        g.drawText (block.isEnabled() ? "ON" : "OFF", text.removeFromBottom (16), juce::Justification::bottomLeft);
+        auto bottom = text.removeFromBottom (16);
+        g.drawText (block.isEnabled() ? "ON" : "OFF", bottom, juce::Justification::bottomLeft);
+
+        if (const auto stomp = block.getStomp(); stomp > 0)
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.75f));
+            g.drawText ("STOMP " + juce::String (stomp), bottom, juce::Justification::bottomRight);
+        }
     }
 
     // "+" to add a block at the end.
@@ -186,6 +193,19 @@ void ChainStrip::showBlockMenu (int index)
     {
         if (safeThis != nullptr) { safeThis->selected = index + 1; safeThis->session.moveBlock (index, index + 1); }
     });
+    menu.addSeparator();
+
+    // Which footswitch turns this block on and off (in this patch).
+    juce::PopupMenu stomps;
+    const auto current = session.getBlockStomp (index);
+
+    for (int n = 0; n <= maxStomps; ++n)
+        stomps.addItem (n == 0 ? juce::String ("None") : "Stomp " + juce::String (n), true, n == current, [safeThis, index, n]
+        {
+            if (safeThis != nullptr) { safeThis->session.setBlockStomp (index, n); safeThis->repaint(); }
+        });
+
+    menu.addSubMenu ("Stomp switch", stomps);
     menu.addSeparator();
     menu.addSubMenu ("Insert before", blockTypeMenu (index));
     menu.addSubMenu ("Insert after", blockTypeMenu (index + 1));

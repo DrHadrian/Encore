@@ -123,7 +123,12 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
                     onEdited();
             };
             s.updateText();
+            s.setTooltip ("Right-click to assign an expression pedal");
             addAndMakeVisible (s);
+
+            auto& menu = knobMenus.emplace_back (std::make_unique<KnobMenu> (*this, *control));
+            s.addMouseListener (menu.get(), false);
+            control->label.addMouseListener (menu.get(), false);
         }
 
         controls.push_back (std::move (control));
@@ -132,7 +137,40 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
     refresh();
 }
 
-BlockPanel::~BlockPanel() = default;
+BlockPanel::~BlockPanel()
+{
+    for (auto& menu : knobMenus)
+    {
+        menu->control.slider.removeMouseListener (menu.get());
+        menu->control.label.removeMouseListener (menu.get());
+    }
+}
+
+void BlockPanel::KnobMenu::mouseDown (const juce::MouseEvent& e)
+{
+    if (! e.mods.isPopupMenu() || panel.onExpressionChosen == nullptr)
+        return;
+
+    const auto id = control.parameter.getSpec().id;
+    const auto current = panel.getExpressionPedal != nullptr ? panel.getExpressionPedal (id) : 0;
+    juce::Component::SafePointer<BlockPanel> safe (&panel);
+
+    juce::PopupMenu pedals;
+
+    for (int n = 0; n <= maxExpressionPedals; ++n)
+        pedals.addItem (n == 0 ? juce::String ("None") : "Expression " + juce::String (n), true, n == current,
+                        [safe, id, n]
+        {
+            // Rebuilds the patch (and this panel): call after the menu is gone.
+            if (safe != nullptr && safe->onExpressionChosen != nullptr)
+                safe->onExpressionChosen (id, n);
+        });
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader (control.parameter.getSpec().name);
+    menu.addSubMenu ("Expression pedal (heel = min, toe = max)", pedals);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&control.slider));
+}
 
 void BlockPanel::setStatusLight (juce::String label, std::function<bool()> isLit)
 {
@@ -220,6 +258,21 @@ void BlockPanel::refresh()
 {
     for (auto& c : controls)
     {
+        // "Gain  EXP 1" when a pedal moves this knob.
+        if (! c->isSwitch && getExpressionPedal != nullptr)
+        {
+            const auto pedal = getExpressionPedal (c->parameter.getSpec().id);
+
+            if (pedal != c->shownPedal)
+            {
+                c->shownPedal = pedal;
+                const auto& name = c->parameter.getSpec().name;
+                c->label.setText (pedal > 0 ? name + "  EXP " + juce::String (pedal) : name, juce::dontSendNotification);
+                c->label.setColour (juce::Label::textColourId,
+                                    pedal > 0 ? accent : juce::Colours::white.withAlpha (0.8f));
+            }
+        }
+
         const auto value = c->parameter.getValue();
 
         if (c->isSwitch)

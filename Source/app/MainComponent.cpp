@@ -81,6 +81,10 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     audioSettingsButton.onClick = [this] { openAudioSettings(); };
     addAndMakeVisible (audioSettingsButton);
 
+    midiSettingsButton.onClick = [this] { openMidiSettings(); };
+    midiSettingsButton.setTooltip ("Foot controller, expression pedals, MIDI learn and MIDI out");
+    addAndMakeVisible (midiSettingsButton);
+
     volume.setRange (-60.0, 12.0, 0.1);
     volume.setTextValueSuffix (" dB");
     volume.setDoubleClickReturnValue (true, 0.0);
@@ -170,6 +174,10 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
 
     engine.setGuitarInputChannel (settings.getGuitarInputChannel());
     deviceManager.addAudioCallback (&engine);
+
+    // MIDI: every enabled input feeds the router (the device manager reopens
+    // inputs that were enabled last time, and ones plugged back in).
+    deviceManager.addMidiInputDeviceCallback ({}, &engine.getMidiRouter());
     deviceManager.addChangeListener (this);
 
     // The show: with the device running, patches build for the right rate.
@@ -187,6 +195,8 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     addAndMakeVisible (*chainStrip);
 
     openInitialShow();
+    applyMidiBindings();
+    applyMidiOutput();
     keepKeysForTheShow (*this);
 
     refreshInputChoices();
@@ -202,6 +212,10 @@ MainComponent::~MainComponent()
 {
     stopTimer();
 
+    // Settings windows hold references to the engine, devices and session.
+    for (auto* dialog : { audioDialog.getComponent(), midiDialog.getComponent() })
+        delete dialog;
+
     blockPanel = nullptr;
     chainStrip = nullptr;
     patchList = nullptr;
@@ -214,6 +228,8 @@ MainComponent::~MainComponent()
     }
 
     deviceManager.removeChangeListener (this);
+    deviceManager.removeMidiInputDeviceCallback ({}, &engine.getMidiRouter());
+    engine.getMidiRouter().setOutput (nullptr);
     deviceManager.removeAudioCallback (&engine);
     settings.save();
 }
@@ -401,6 +417,16 @@ void MainComponent::showSelectedBlock()
             refreshStatus();   // latency may have changed
         };
         blockPanel->onEdited = [this] { session->markEdited(); };
+        blockPanel->getExpressionPedal = [this, index] (const juce::String& id) { return session->getExpressionPedal (index, id); };
+        blockPanel->onExpressionChosen = [this, index] (const juce::String& id, int pedal)
+        {
+            // Rebuilds the patch, which replaces this panel: do it after the menu callback.
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this), index, id, pedal]
+            {
+                if (safe != nullptr)
+                    safe->session->setExpression (index, id, pedal);
+            });
+        };
 
         addAndMakeVisible (*blockPanel);
         keepKeysForTheShow (*blockPanel);
@@ -471,7 +497,60 @@ void MainComponent::openAudioSettings()
     options.escapeKeyTriggersCloseButton = true;
     options.useNativeTitleBar = true;
     options.resizable = true;
-    options.launchAsync();
+    audioDialog = options.launchAsync();
+}
+
+void MainComponent::openMidiSettings()
+{
+    if (midiDialog != nullptr)
+    {
+        midiDialog->toFront (true);
+        return;
+    }
+
+    auto content = std::make_unique<MidiSettings> (deviceManager, engine.getMidiRouter(), settings, *session,
+                                                   [this] { applyMidiBindings(); },
+                                                   [this] { applyMidiOutput(); });
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned (content.release());
+    options.dialogTitle = "MIDI settings";
+    options.dialogBackgroundColour = background;
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar = true;
+    options.resizable = true;
+    midiDialog = options.launchAsync();
+}
+
+void MainComponent::applyMidiBindings()
+{
+    // The show's own mappings if it has them, else this computer's.
+    const auto& show = session->getShow();
+    auto bindings = show.ownMidiMappings ? show.midiBindings : settings.getMidiBindings();
+
+    if (bindings != appliedBindings)
+    {
+        appliedBindings = bindings;
+        engine.getMidiRouter().setBindings (bindings);
+    }
+}
+
+void MainComponent::applyMidiOutput()
+{
+    // Open the chosen output if it's plugged in; close it if it went away.
+    // Called when the choice changes and every 2 s (USB/Bluetooth reconnects).
+    const auto wanted = settings.getMidiOutput();
+    bool present = false;
+
+    for (const auto& device : juce::MidiOutput::getAvailableDevices())
+        present = present || device.identifier == wanted;
+
+    if (wanted == openMidiOutput && present == midiOutputPresent)
+        return;
+
+    openMidiOutput = wanted;
+    midiOutputPresent = present;
+    engine.getMidiRouter().setOutput (present && wanted.isNotEmpty() ? juce::MidiOutput::openDevice (wanted) : nullptr);
 }
 
 void MainComponent::refreshInputChoices()
@@ -574,6 +653,7 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
 {
     if (source == session.get())
     {
+        applyMidiBindings();   // another show may carry its own
         setList->refresh();
         patchList->refresh();
         refreshShowStatus();
@@ -616,6 +696,13 @@ void MainComponent::timerCallback()
     if (blockPanel != nullptr)
         blockPanel->refresh();
 
+    // A footswitch can mute too: the button follows the engine.
+    if (const auto isMuted = engine.isMuted(); muteButton.getToggleState() != isMuted)
+    {
+        muteButton.setToggleState (isMuted, juce::dontSendNotification);
+        muteButton.setButtonText (isMuted ? "MUTED" : "LIVE");
+    }
+
     inputMeter.setPeak (engine.getInputMeter().take());
     outputMeter.setPeak (engine.getOutputMeter().take());
 
@@ -625,8 +712,11 @@ void MainComponent::timerCallback()
 
     refreshShowStatus();
 
-    if (frameCounter % 60 == 0)   // power source etc. every 2 s
+    if (frameCounter % 60 == 0)   // power source, MIDI output reconnects etc. every 2 s
+    {
         refreshSystemStatus();
+        applyMidiOutput();
+    }
 
     juce::String health;
     health << "CPU " << juce::roundToInt (engine.getCpuLoad() * 100.0) << " %"
@@ -693,6 +783,8 @@ int MainComponent::layoutContent (int width, bool apply)
     place (&volume, bar.removeFromRight (200));
     bar.removeFromRight (8);
     place (&audioSettingsButton, bar.removeFromRight (150).reduced (0, 4));
+    bar.removeFromRight (8);
+    place (&midiSettingsButton, bar.removeFromRight (80).reduced (0, 4));
     bar.removeFromRight (12);
     auto names = bar;
     place (&showName, names.removeFromTop (names.getHeight() / 2 + 2));

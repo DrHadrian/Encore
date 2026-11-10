@@ -14,6 +14,8 @@ namespace keys
     static constexpr auto lastFile    = "lastFile_";
     static constexpr auto browseDir   = "lastBrowseFolder";
     static constexpr auto lastShow    = "lastShowFolder";
+    static constexpr auto midiMap     = "midiBindings";
+    static constexpr auto midiOut     = "midiOutput";
 }
 
 AppSettings::AppSettings()
@@ -77,6 +79,24 @@ void AppSettings::setLastFile (const juce::String& blockTypeId, const juce::File
 {
     file().setValue (keys::lastFile + blockTypeId, f.getFullPathName());
 }
+
+std::vector<MidiBinding> AppSettings::getMidiBindings() const
+{
+    const auto text = file().getValue (keys::midiMap);
+
+    if (text.isEmpty())
+        return makeDefaultMidiBindings();
+
+    return bindingsFromVar (juce::JSON::parse (text));
+}
+
+void AppSettings::setMidiBindings (const std::vector<MidiBinding>& bindings)
+{
+    file().setValue (keys::midiMap, juce::JSON::toString (bindingsToVar (bindings), true));
+}
+
+juce::String AppSettings::getMidiOutput() const               { return file().getValue (keys::midiOut); }
+void AppSettings::setMidiOutput (const juce::String& id)      { file().setValue (keys::midiOut, id); }
 
 juce::File AppSettings::getLastShowFolder() const
 {

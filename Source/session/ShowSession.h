@@ -89,6 +89,15 @@ public:
     /** Call when a knob, switch or file changed in the live chain. */
     void markEdited();
 
+    /** Which stomp switch (1..8, 0 = none) toggles a block of the active patch. Instant. */
+    void setBlockStomp (int blockIndex, int stomp);
+    int getBlockStomp (int blockIndex) const;
+
+    /** Puts a knob of the active patch on an expression pedal (1..4) over its
+        full range, or takes it off (0). Rebuilds the patch (gapless). */
+    void setExpression (int blockIndex, const juce::String& paramId, int pedal);
+    int getExpressionPedal (int blockIndex, const juce::String& paramId) const;
+
     //== Running order =========================================================
     /** The cues in playing order (sections flattened, cut cues left out). */
     std::vector<const RunItem*> getCues() const;
@@ -107,6 +116,13 @@ public:
     void renameCue (int index, const juce::String& name);
     void setCuePatch (int index, const juce::String& patchId);
     void setCueSamePatch (int index, SamePatchBehaviour behaviour);
+    void setCueProgramChange (int index, int program);   // -1 = none
+    void setCueMidiOut (int index, std::vector<MidiOutMessage> messages);
+
+    //== MIDI mappings =========================================================
+    /** Whether the show uses its own mappings instead of the computer's. */
+    void setOwnMidiMappings (bool own, const std::vector<MidiBinding>& startingPoint);
+    void setShowMidiBindings (std::vector<MidiBinding> bindings);
 
 private:
     void timerCallback() override;
@@ -121,6 +137,7 @@ private:
     void captureAll();
 
     PatchModel* findPatchForKey (const juce::String& key);
+    const PatchModel* findPatchForKey (const juce::String& key) const;
     static juce::String keyForCue (const RunItem& cue);
     RunItem* cueAt (int index);
     bool locateCue (int index, std::vector<RunItem>*& siblings, int& position);

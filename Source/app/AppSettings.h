@@ -5,6 +5,8 @@
 
 #include <juce_data_structures/juce_data_structures.h>
 
+#include "model/MidiMapping.h"
+
 namespace encore
 {
 
@@ -36,6 +38,14 @@ public:
     /** The show open when Encore last closed. */
     juce::File getLastShowFolder() const;
     void setLastShowFolder (const juce::File& folder);
+
+    /** This computer's MIDI mappings (defaults until changed). */
+    std::vector<MidiBinding> getMidiBindings() const;
+    void setMidiBindings (const std::vector<MidiBinding>& bindings);
+
+    /** The MIDI output cue messages go to (device identifier, empty = none). */
+    juce::String getMidiOutput() const;
+    void setMidiOutput (const juce::String& identifier);
 
     /** Where file choosers open. */
     juce::File getLastBrowseFolder() const;

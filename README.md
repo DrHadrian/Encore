@@ -13,9 +13,10 @@ musical.
 
 ## Status
 
-Milestone 5: gapless patch switching with delay tails ringing out, a set list
-stepped from the keyboard, every patch preloaded; shows saved to disk; NAM amps,
-cab IRs, gate, EQ, delay, safety limiter. Foot controller (MIDI) comes next.
+Milestone 6: foot controllers and expression pedals over MIDI (USB, DIN
+interfaces, Bluetooth), MIDI learn, stomp switches, program change recall and
+MIDI out per cue; gapless patch switching with tails; shows saved to disk; NAM
+amps, cab IRs, gate, EQ, delay, safety limiter. The stage view comes next.
 
 | Milestone | What you can test |
 | --- | --- |
@@ -24,8 +25,8 @@ cab IRs, gate, EQ, delay, safety limiter. Foot controller (MIDI) comes next.
 | **2 – NAM amp block** ✅ | Play through .nam captures, swap amps while playing |
 | **3 – Cab IR block** ✅ | Amp + cab, swap IRs while playing |
 | **4 – Data model and saving** ✅ | Patches and shows saved to a self-contained folder, edit view |
-| 5 – Patch switching | Gapless switches with tail spillover |
-| 6 – MIDI | Foot controller, expression pedals, MIDI out |
+| **5 – Patch switching** ✅ | Gapless switches with tail spillover |
+| **6 – MIDI** | Foot controller, expression pedals, MIDI out |
 | 7 – Performance view and tuner | Stage view, lock, panic |
 | 8 – Theatre cue lists | Acts/scenes/cues, insert, renumber, cut, go to |
 | 9 – Robustness | Crash recovery, reconnect, pre-show check, soak test |
@@ -91,6 +92,45 @@ effect. For shows also:
   expense (the status line warns you);
 - set Windows' power mode to **Best performance**;
 - use 64 samples or more, so there is headroom for spikes.
+
+## Testing milestone 6 with your guitar
+
+A USB MIDI keyboard works as a stand-in foot controller: its sustain pedal is a
+footswitch and its mod wheel an expression pedal.
+
+1. **Connect**: plug in the keyboard, click **MIDI...** and tick it under
+   *Listen to*. Press keys: *Last received* shows each message. Encore remembers
+   the device and reopens it when you plug it back in.
+2. **Next cue**: the default mappings are *sustain pedal (CC 64) = next cue*,
+   *CC 11 = expression 1*, *mod wheel (CC 1) = expression 2* and *program
+   change = recall*. Press the sustain pedal: the set list steps on, once per
+   press, however long you hold it. This works with Encore in the background
+   and while a menu is open (MIDI is handled on the audio thread).
+3. **MIDI learn**: **+ Add mapping** → *Previous cue*, then press a key (or a
+   footswitch): it's learned. Click **Learn** on any row to change its control,
+   click the action to change what it does, **x** to remove it.
+4. **Stomps**: right-click the delay tile → *Stomp switch* → *Stomp 1* (the tile
+   shows STOMP 1). Map a key to *Stomp switch* → *Stomp 1*. Pressing it toggles
+   the delay without clicks; another patch can put *Stomp 1* on something else.
+5. **Expression**: right-click the amp's *Gain* knob (or any knob) →
+   *Expression pedal* → *Expression 2*. The label shows EXP 2. Move the mod
+   wheel: the knob follows (heel = minimum, toe = maximum). Switch patches with
+   the wheel half-way: the new patch picks the position up at once. The knob's
+   saved value is kept when the pedal moves it.
+6. **Program change recall**: right-click a cue → *Recall with a program
+   change...* → e.g. 5. A program change 5 from the controller jumps straight
+   to that cue (the cue shows *PC 5*).
+7. **MIDI out**: choose an output in **MIDI...** (or none), then right-click a
+   cue → *MIDI out when this cue starts...*: e.g. `PC 1 5` or `CC 1 20 127`
+   (one per line). They are sent whenever that cue starts, by footswitch,
+   keyboard or click. With a synth or a MIDI monitor on that output you can see
+   them arrive.
+8. **Mute**: map a key to *Mute*: the **MUTED/LIVE** button follows it.
+9. **Per show or per computer**: mappings belong to this computer. Tick *This
+   show has its own mappings* to make the show folder carry them (it starts
+   from a copy of this computer's).
+10. **Hammer it**: step through cues as fast as the pedal goes while playing:
+    no clicks, overruns stay 0.
 
 ## Testing milestone 5 with your guitar
 
@@ -258,7 +298,8 @@ Source/
     blocks/           the built-in blocks (amp, cab, gate, EQ, delay)
     dsp/              allocation-free DSP (filters, limiter, sample-rate conversion)
     nam/              loading and running Neural Amp Modeler captures
-  ui/                 edit view pieces: patch list, chain strip, block panel, meters
+    midi/             foot controller and pedal input, MIDI out
+  ui/                 edit view pieces: set list, patch list, chain strip, block panel, MIDI settings
   platform/           Windows-specific tuning
 Tests/                engine unit tests (run in CI)
 docs/DECISIONS.md     short log of important design decisions

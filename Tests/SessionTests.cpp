@@ -48,8 +48,19 @@ public:
         const auto end = juce::Time::getMillisecondCounter() + (juce::uint32) timeoutMs;
 
         while (! done() && juce::Time::getMillisecondCounter() < end)
+        {
             juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+
+            // Like the app: the audio thread takes new tables, the UI timer frees old ones.
+            if (pumpedEngine != nullptr)
+            {
+                playOneBlock (*pumpedEngine);
+                pumpedEngine->collectGarbage();
+            }
+        }
     }
+
+    static inline AudioEngine* pumpedEngine = nullptr;
 
     /** One audio callback, so the engine picks up its newest chain. */
     static void playOneBlock (AudioEngine& engine)
@@ -72,6 +83,7 @@ public:
         FakeDevice device;
         AudioEngine engine;
         engine.audioDeviceAboutToStart (&device);
+        pumpedEngine = &engine;
 
         beginTest ("A new show starts with a playable patch");
         {
@@ -205,6 +217,44 @@ public:
             expectEquals (reopened.getCurrentCue(), 0, "a show with cues starts at the first cue");
         }
 
+        beginTest ("Stomp and expression assignments, and cue MIDI, are saved");
+        {
+            {
+                ShowSession session (engine);
+                expect (session.openShow (showFolder).wasOk());
+                pumpUntil ([&] { return ! session.isBuilding(); });
+                session.goToCue (0);
+                playOneBlock (engine);
+                session.syncWithAudio();
+
+                session.setBlockStomp (2, 4);
+                expectEquals (engine.getChain()->getBlocks()[2]->getStomp(), 4, "live at once");
+
+                session.setExpression (3, "treble", 2);
+                session.setCueProgramChange (0, 12);
+                session.setCueMidiOut (0, { { MidiOutMessage::Kind::controlChange, 1, 7, 100 } });
+                pumpUntil ([&] { return ! session.isBuilding(); });
+                playOneBlock (engine);
+                expect (session.save().wasOk());
+            }
+
+            ShowSession reopened (engine);
+            expect (reopened.openShow (showFolder).wasOk());
+            const auto cues = reopened.getCues();
+            const auto* patch = reopened.getShow().findPatch (cues[0]->patchId);
+            expect (patch != nullptr);
+
+            if (patch != nullptr)
+            {
+                expectEquals (patch->mainLane().blocks[2].stomp, 4);
+                expect (patch->mainLane().blocks[3].expression.count ("treble") == 1);
+            }
+
+            expectEquals (cues[0]->programChange, 12);
+            expectEquals ((int) cues[0]->midiOut.size(), 1);
+            pumpUntil ([&] { return ! reopened.isBuilding(); });
+        }
+
         beginTest ("The last patch can't be deleted");
         {
             ShowSession session (engine);
@@ -218,6 +268,7 @@ public:
             pumpUntil ([&] { return ! session.isBuilding(); });
         }
 
+        pumpedEngine = nullptr;
         engine.audioDeviceStopped();
         engine.collectGarbage();
         temp.deleteRecursively();

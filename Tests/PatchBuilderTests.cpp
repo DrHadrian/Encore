@@ -109,6 +109,32 @@ public:
             expect (c[1].file == "irs/cab.wav", "files in the show stay relative");
         }
 
+        beginTest ("Stomps and expression pedals are built, and a pedal never overwrites the saved knob");
+        {
+            auto withPedals = patch;
+            withPedals.mainLane().blocks[3].stomp = 2;
+            withPedals.mainLane().blocks[3].expression["bass"] = { 1, -12.0f, 12.0f };
+            withPedals.mainLane().blocks[3].params["bass"] = 3.0f;   // the saved knob value
+
+            juce::StringArray problems;
+            auto chain = buildChain (withPedals, folder, spec, problems);
+            expectEquals (chain->getBlocks()[3]->getStomp(), 2);
+            expect (chain->usesExpression (1));
+
+            chain->applyExpression (1, 1.0f);   // toe down: bass to +12
+            expectEquals (chain->getBlocks()[3]->findParameter ("bass")->getValue(), 12.0f);
+            expect (chain->toggleStomp (2));
+            expect (! chain->getBlocks()[3]->isEnabled());
+
+            auto captured = withPedals;
+            captureChain (*chain, captured, folder);
+            const auto& eq = captured.mainLane().blocks[3];
+            expectEquals (eq.params.at ("bass"), 3.0f, "the pedal position isn't saved as the knob");
+            expectEquals (eq.stomp, 2);
+            expect (! eq.enabled, "the stomp state is saved");
+            expect (eq.expression.count ("bass") == 1, "the assignment survives capture");
+        }
+
         beginTest ("A missing file or unknown block is reported, nothing is lost");
         {
             auto broken = patch;

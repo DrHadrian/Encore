@@ -255,3 +255,46 @@ one being cut. With equal times the crossfade is still mathematically
 seamless (the test sets both to 10 ms). With the defaults the level can rise
 briefly during the overlap; that's the intended "ring", not a click (a test
 checks the output never jumps faster than a smooth sine at its peak).
+
+## 0027 — MIDI is handled on the audio thread (milestone 6)
+
+MIDI drivers call Encore on their own threads (several at once with several
+devices). Those threads only push the 3-byte message into a lock-free queue
+(they take turns among themselves on a spin lock; the audio thread never waits
+on it). At the start of each audio buffer the audio thread reads the queue and
+acts at once: next cue, stomp, expression, mute. A footswitch therefore works
+within one buffer (under 2 ms at 64 samples), whatever the screen is doing,
+and even with Encore in the background or a menu open. Mappings reach the audio
+thread as immutable tables, like the running order.
+
+## 0028 — Physical controls → named controls → per-patch assignments (milestone 6)
+
+Mappings turn MIDI into named controls: *Next cue*, *Stomp 3*, *Expression 1*.
+Mappings belong to the computer (the controller is plugged into it), unless a
+show asks to carry its own. Each patch then says which blocks *Stomp 3*
+switches and which knobs *Expression 1* moves (with a min and max). So changing
+the controller means relearning a few mappings, not editing every patch, and a
+show folder still works on another computer with another controller.
+
+## 0029 — Footswitches act once per press (milestone 6)
+
+A CC counts as a press when it goes from below 64 to 64 or more; a note-on or
+a program change is always a press. Holding a switch or a controller resending
+its value never steps twice; latching and momentary switches both work. While
+MIDI learn is listening, messages are shown but trigger nothing, so learning
+the next-cue switch doesn't also step the show.
+
+## 0030 — Pedals keep their position across patches (milestone 6)
+
+The last value of each expression pedal is remembered. A patch switched to
+gets the pedal's current position straight away, so a volume or wah pedal
+doesn't jump when the next sound comes in. A pedal writes the live value only:
+the knob's saved value stays what you set, and capturing a patch never saves
+wherever the pedal happened to be.
+
+## 0031 — MIDI out from its own thread (milestone 6)
+
+Sending MIDI can block in the driver, so the audio thread only records which
+cue started (a lock-free queue), and a background thread sends that cue's
+messages to the chosen output. Output devices that disappear are closed, and
+reopened when they return (checked every 2 s).

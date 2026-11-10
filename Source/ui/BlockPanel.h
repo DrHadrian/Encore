@@ -7,6 +7,7 @@
 #include <functional>
 
 #include "engine/core/Block.h"
+#include "model/MidiMapping.h"
 
 namespace encore
 {
@@ -36,6 +37,11 @@ public:
     std::function<juce::File()> getBrowseFolder;
     std::function<void (const juce::File&)> onFileLoaded;
 
+    /** Expression pedals: which pedal moves a knob (0 = none), and what to do
+        when one is chosen from the knob's right-click menu. */
+    std::function<int (const juce::String& paramId)> getExpressionPedal;
+    std::function<void (const juce::String& paramId, int pedal)> onExpressionChosen;
+
     /** Loads a file into the block as if picked in the chooser. */
     void loadFile (const juce::File& file);
 
@@ -58,6 +64,17 @@ private:
         juce::Slider slider { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow };
         juce::TextButton switchButton;
         juce::Label label;
+        int shownPedal = -1;
+    };
+
+    /** Right-click on a knob or its name: the expression pedal menu. */
+    struct KnobMenu final : public juce::MouseListener
+    {
+        KnobMenu (BlockPanel& p, Control& c) : panel (p), control (c) {}
+        void mouseDown (const juce::MouseEvent& e) override;
+
+        BlockPanel& panel;
+        Control& control;
     };
 
     void chooseFile();
@@ -67,6 +84,7 @@ private:
     juce::Label title, cpu;
     juce::TextButton power { "ON" };
     std::vector<std::unique_ptr<Control>> controls;
+    std::vector<std::unique_ptr<KnobMenu>> knobMenus;
 
     // File row (only for blocks with a FileSlot).
     juce::TextButton loadButton;
