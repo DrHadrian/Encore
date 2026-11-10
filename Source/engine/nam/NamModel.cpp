@@ -3,8 +3,15 @@
 
 #include "engine/nam/NamModel.h"
 
+// NAM's headers aren't written for /W4: silence them here (and only here),
+// in case the compiler doesn't honour SYSTEM include directories.
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4100 4244 4267 4305 4456 4457 4458 4459 4996)
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wconversion", "-Wsign-conversion", "-Wshadow", "-Wunused-parameter",
+                                     "-Wfloat-conversion", "-Wimplicit-float-conversion", "-Wshorten-64-to-32")
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+JUCE_END_IGNORE_WARNINGS_MSVC
 
 #include <algorithm>
 #include <filesystem>

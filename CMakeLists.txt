@@ -62,7 +62,9 @@ file(GLOB NAM_CORE_SOURCES CONFIGURE_DEPENDS
 # Link it directly into each executable (objects don't pass through INTERFACE libraries).
 add_library(nam_core OBJECT ${NAM_CORE_SOURCES})
 target_compile_features(nam_core PUBLIC cxx_std_20)
-target_include_directories(nam_core PUBLIC
+# SYSTEM: third-party headers. Compilers don't report warnings from them in
+# our files (MSVC via /external:I), so Encore's own warnings stay visible.
+target_include_directories(nam_core SYSTEM PUBLIC
     "${nam_SOURCE_DIR}"                              # for #include "NAM/dsp.h"
     "${nam_SOURCE_DIR}/Dependencies/nlohmann")       # NAM's headers include "json.hpp"
 target_include_directories(nam_core SYSTEM PUBLIC "${eigen_SOURCE_DIR}")
