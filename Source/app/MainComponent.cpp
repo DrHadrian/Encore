@@ -456,7 +456,10 @@ void MainComponent::showSelectedBlock()
             });
         };
 
-        addAndMakeVisible (*blockPanel);
+        // Behind the stage view: the panel is rebuilt whenever the patch
+        // changes, also while the stage view is showing.
+        const auto behindStage = stageView != nullptr ? getIndexOfChildComponent (stageView.get()) : -1;
+        addAndMakeVisible (*blockPanel, behindStage);
         keepKeysForTheShow (*blockPanel);
     }
 
