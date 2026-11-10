@@ -1,0 +1,290 @@
+// Encore — live guitar rig host
+// Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
+
+#include "model/ShowJson.h"
+
+namespace encore::json
+{
+
+namespace
+{
+    using Obj = juce::DynamicObject;
+
+    juce::var object() { return juce::var (new Obj()); }
+
+    void set (juce::var& o, const juce::Identifier& key, const juce::var& value)
+    {
+        o.getDynamicObject()->setProperty (key, value);
+    }
+
+    juce::var get (const juce::var& o, const char* key)
+    {
+        return o.getProperty (juce::Identifier (key), {});
+    }
+
+    juce::String str (const juce::var& o, const char* key, const juce::String& fallback = {})
+    {
+        const auto v = get (o, key);
+        return v.isVoid() ? fallback : v.toString();
+    }
+
+    bool flag (const juce::var& o, const char* key, bool fallback)
+    {
+        const auto v = get (o, key);
+        return v.isVoid() ? fallback : (bool) v;
+    }
+
+    int integer (const juce::var& o, const char* key, int fallback)
+    {
+        const auto v = get (o, key);
+        return v.isVoid() ? fallback : (int) v;
+    }
+
+    template <typename Fn>
+    void forEachIn (const juce::var& o, const char* key, Fn&& fn)
+    {
+        if (auto* array = get (o, key).getArray())
+            for (auto& item : *array)
+                fn (item);
+    }
+
+    //==========================================================================
+    const char* toString (Spillover s)          { return s == Spillover::fullChain ? "fullChain" : "tails"; }
+    const char* toString (SamePatchBehaviour b) { return b == SamePatchBehaviour::reset ? "reset" : "keep"; }
+
+    const char* toString (ShowTemplate t)
+    {
+        switch (t)
+        {
+            case ShowTemplate::musical: return "musical";
+            case ShowTemplate::worship: return "worship";
+            case ShowTemplate::solo:    return "solo";
+            case ShowTemplate::band:    break;
+        }
+        return "band";
+    }
+
+    ShowTemplate templateFrom (const juce::String& s)
+    {
+        if (s == "musical") return ShowTemplate::musical;
+        if (s == "worship") return ShowTemplate::worship;
+        if (s == "solo")    return ShowTemplate::solo;
+        return ShowTemplate::band;
+    }
+
+    //==========================================================================
+    juce::var blockToVar (const BlockModel& b)
+    {
+        auto o = object();
+        set (o, "id", b.id);
+        set (o, "type", b.type);
+        set (o, "enabled", b.enabled);
+
+        auto params = object();
+        for (auto& [key, value] : b.params)
+            set (params, juce::Identifier (key), value);
+
+        set (o, "params", params);
+
+        if (b.file.isNotEmpty())
+            set (o, "file", b.file);
+
+        return o;
+    }
+
+    BlockModel blockFromVar (const juce::var& o)
+    {
+        BlockModel b;
+        b.id = str (o, "id", newId());
+        b.type = str (o, "type");
+        b.enabled = flag (o, "enabled", true);
+        b.file = str (o, "file");
+
+        if (auto* params = get (o, "params").getDynamicObject())
+            for (auto& p : params->getProperties())
+                b.params[p.name.toString()] = (float) (double) p.value;
+
+        return b;
+    }
+
+    juce::var runItemToVar (const RunItem& item)
+    {
+        auto o = object();
+        set (o, "kind", item.kind == RunItem::Kind::section ? "section" : "cue");
+        set (o, "id", item.id);
+
+        if (item.name.isNotEmpty()) set (o, "name", item.name);
+        if (item.note.isNotEmpty()) set (o, "note", item.note);
+        if (item.cut)               set (o, "cut", true);
+
+        if (item.kind == RunItem::Kind::section)
+        {
+            if (item.sectionKind.isNotEmpty())
+                set (o, "sectionKind", item.sectionKind);
+
+            juce::Array<juce::var> children;
+            for (auto& child : item.children)
+                children.add (runItemToVar (child));
+
+            set (o, "children", children);
+        }
+        else
+        {
+            set (o, "number", item.number);
+            if (item.barMark.isNotEmpty()) set (o, "barMark", item.barMark);
+            if (item.patchId.isNotEmpty()) set (o, "patch", item.patchId);
+            if (item.uniquePatch)          set (o, "uniquePatch", patchToVar (*item.uniquePatch));
+            set (o, "samePatch", toString (item.samePatch));
+            if (item.programChange >= 0)   set (o, "programChange", item.programChange);
+        }
+
+        return o;
+    }
+
+    RunItem runItemFromVar (const juce::var& o)
+    {
+        RunItem item;
+        item.kind = str (o, "kind") == "section" ? RunItem::Kind::section : RunItem::Kind::cue;
+        item.id = str (o, "id", newId());
+        item.name = str (o, "name");
+        item.note = str (o, "note");
+        item.cut = flag (o, "cut", false);
+
+        if (item.kind == RunItem::Kind::section)
+        {
+            item.sectionKind = str (o, "sectionKind");
+            forEachIn (o, "children", [&] (const juce::var& c) { item.children.push_back (runItemFromVar (c)); });
+        }
+        else
+        {
+            item.number = str (o, "number");
+            item.barMark = str (o, "barMark");
+            item.patchId = str (o, "patch");
+
+            if (const auto unique = get (o, "uniquePatch"); unique.isObject())
+                item.uniquePatch = patchFromVar (unique);
+
+            item.samePatch = str (o, "samePatch") == "reset" ? SamePatchBehaviour::reset : SamePatchBehaviour::keep;
+            item.programChange = integer (o, "programChange", -1);
+        }
+
+        return item;
+    }
+}
+
+//==============================================================================
+juce::var patchToVar (const PatchModel& patch)
+{
+    auto o = object();
+    set (o, "id", patch.id);
+    set (o, "name", patch.name);
+    set (o, "colour", juce::String::toHexString ((int) patch.colour));
+    set (o, "spillover", toString (patch.spillover));
+
+    juce::Array<juce::var> lanes;
+
+    for (auto& lane : patch.lanes)
+    {
+        auto l = object();
+        if (lane.input.isNotEmpty())  set (l, "input", lane.input);
+        if (lane.output.isNotEmpty()) set (l, "output", lane.output);
+
+        juce::Array<juce::var> blocks;
+        for (auto& b : lane.blocks)
+            blocks.add (blockToVar (b));
+
+        set (l, "blocks", blocks);
+        lanes.add (l);
+    }
+
+    set (o, "lanes", lanes);
+    return o;
+}
+
+PatchModel patchFromVar (const juce::var& o)
+{
+    PatchModel patch;
+    patch.id = str (o, "id", newId());
+    patch.name = str (o, "name", "Untitled");
+    patch.colour = (juce::uint32) str (o, "colour", "ff4f9dff").getHexValue32();
+    patch.spillover = str (o, "spillover") == "fullChain" ? Spillover::fullChain : Spillover::tails;
+    patch.lanes.clear();
+
+    forEachIn (o, "lanes", [&] (const juce::var& l)
+    {
+        LaneModel lane;
+        lane.input = str (l, "input");
+        lane.output = str (l, "output");
+        forEachIn (l, "blocks", [&] (const juce::var& b) { lane.blocks.push_back (blockFromVar (b)); });
+        patch.lanes.push_back (std::move (lane));
+    });
+
+    if (patch.lanes.empty())
+        patch.lanes.emplace_back();
+
+    return patch;
+}
+
+juce::String toJson (const ShowModel& show)
+{
+    auto root = object();
+    set (root, "format", "encore-show");
+    set (root, "schemaVersion", ShowModel::currentSchemaVersion);
+    set (root, "id", show.id);
+    set (root, "name", show.name);
+    set (root, "template", toString (show.showTemplate));
+
+    juce::Array<juce::var> patches;
+    for (auto& p : show.patches)
+        patches.add (patchToVar (p));
+
+    set (root, "patches", patches);
+    set (root, "runningOrder", runItemToVar (show.runningOrder));
+
+    // Full precision, so values survive a save/load round trip exactly.
+    return juce::JSON::toString (root, juce::JSON::FormatOptions{}.withSpacing (juce::JSON::Spacing::multiLine));
+}
+
+std::optional<ShowModel> fromJson (const juce::String& text, juce::String& error)
+{
+    error.clear();
+    juce::var root;
+    const auto result = juce::JSON::parse (text, root);
+
+    if (result.failed() || ! root.isObject())
+    {
+        error = "The show file is damaged (" + result.getErrorMessage() + ")";
+        return std::nullopt;
+    }
+
+    if (str (root, "format") != "encore-show")
+    {
+        error = "This isn't an Encore show file";
+        return std::nullopt;
+    }
+
+    const auto version = integer (root, "schemaVersion", 0);
+
+    if (version > ShowModel::currentSchemaVersion)
+    {
+        error = "This show was saved by a newer version of Encore. Update Encore to open it.";
+        return std::nullopt;
+    }
+
+    // Migrations from older schema versions go here, one step at a time.
+
+    ShowModel show;
+    show.id = str (root, "id", newId());
+    show.name = str (root, "name", "Untitled show");
+    show.showTemplate = templateFrom (str (root, "template"));
+
+    forEachIn (root, "patches", [&] (const juce::var& p) { show.patches.push_back (patchFromVar (p)); });
+
+    if (const auto order = get (root, "runningOrder"); order.isObject())
+        show.runningOrder = runItemFromVar (order);
+
+    show.runningOrder.kind = RunItem::Kind::section;   // the root is always a section
+    return show;
+}
+
+} // namespace encore::json

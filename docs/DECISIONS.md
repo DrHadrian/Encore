@@ -166,3 +166,34 @@ convolution loader thread, because patches will preload many of them.
 IRs are normalised to unit energy at −18 dB (JUCE's option, which matches
 NAM's IR loader), so IRs from different makers land at similar volumes; a
 Level knob trims the rest.
+
+## 0019 — The show model is plain values; the live chain is built from it (milestone 4)
+
+`ShowModel` (patches, lanes, blocks, and a tree of sections and cues) is plain
+data with value semantics: easy to copy, compare and test, with no audio
+objects inside. Selecting a patch copies it to a background thread, where
+`buildChain()` creates the blocks and loads every amp model and cab IR
+*before* the chain ever plays. Models are installed directly instead of faded
+in, and IRs are fully prepared. Then the finished chain goes through the
+handover. Knob changes go straight to the live blocks (atomics, as before),
+and `captureChain()` copies them back into the model when saving, switching
+patch or editing the chain structure. A build generation counter drops results
+that a newer build has overtaken.
+
+## 0020 — Saving: self-contained folders, atomic writes, autosave (milestone 4)
+
+A show is a folder (`Name.encore/`) with `show.json` plus copies of every
+model and IR it uses (`models/`, `irs/`), stored as show-relative paths.
+Files picked from elsewhere are copied in on the next save: identical files are
+shared, and different files with the same name get numbered names. The folder
+can be copied anywhere. A file that is missing when a patch loads keeps its
+path in the show (the block just passes the signal through), so a missing USB
+stick never deletes references.
+
+`show.json` is written to a hidden temporary file, flushed, and swapped in. A
+crash mid-save leaves the old or the new file, never a broken one. Edits
+autosave 2 s after the last change. The previous version goes to `backups/` on
+every explicit save and at most every 5 minutes otherwise, and the newest 50
+are kept. Closing Encore saves unsaved edits. The JSON carries a schema
+version: older files will be migrated, and files from a newer Encore are refused
+with a clear message rather than half-loaded.

@@ -3,9 +3,6 @@
 
 #include "app/MainComponent.h"
 
-#include "engine/blocks/CabIrBlock.h"
-#include "engine/blocks/EqBlock.h"
-#include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
 #include "engine/core/Realtime.h"
 
@@ -15,19 +12,27 @@ namespace encore
 namespace
 {
     const auto background = juce::Colour (0xff121417);
+    const auto barColour  = juce::Colour (0xff181b20);
     const auto mutedRed   = juce::Colour (0xffc62f35);
     const auto liveGreen  = juce::Colour (0xff2e9e5b);
+    const auto amber      = juce::Colour (0xfff0b429);
 
-    void styleStatus (juce::Label& label, float size)
+    void styleLabel (juce::Label& label, float size, float alpha = 0.85f)
     {
         label.setFont (juce::FontOptions (size));
-        label.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.85f));
+        label.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (alpha));
         label.setJustificationType (juce::Justification::centredLeft);
     }
 
     juce::String formatMs (int samples, double sampleRate)
     {
         return juce::String (1000.0 * samples / sampleRate, 1) + " ms";
+    }
+
+    juce::File defaultShowsFolder()
+    {
+        return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                   .getChildFile ("Encore").getChildFile ("Shows");
     }
 }
 
@@ -37,51 +42,32 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     // What DAWs do so Windows never slows the audio down (see SystemTuning.h).
     tuning = system::applyLiveProcessSettings();
 
+    setWantsKeyboardFocus (true);
+
+    // Top bar
     title.setText ("Encore", juce::dontSendNotification);
-    title.setFont (juce::FontOptions (28.0f, juce::Font::bold));
+    title.setFont (juce::FontOptions (26.0f, juce::Font::bold));
     title.setColour (juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible (title);
 
-    for (auto* label : { &deviceStatus, &latencyStatus, &healthStatus })
-    {
-        styleStatus (*label, 16.0f);
-        addAndMakeVisible (label);
-    }
+    showName.setFont (juce::FontOptions (18.0f, juce::Font::bold));
+    showName.setColour (juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible (showName);
 
-    styleStatus (systemStatus, 14.0f);
-    addAndMakeVisible (systemStatus);
+    styleLabel (saveState, 14.0f, 0.6f);
+    addAndMakeVisible (saveState);
 
-    styleStatus (warning, 15.0f);
-    warning.setColour (juce::Label::textColourId, juce::Colour (0xfff0b429));
-    addAndMakeVisible (warning);
-
-    for (auto* label : { &inputLabel, &volumeLabel })
-    {
-        styleStatus (*label, 16.0f);
-        addAndMakeVisible (label);
-    }
+    showButton.onClick = [this] { showMenu(); };
+    addAndMakeVisible (showButton);
 
     audioSettingsButton.onClick = [this] { openAudioSettings(); };
     addAndMakeVisible (audioSettingsButton);
 
-    resetCountersButton.onClick = [this] { engine.resetCounters(); };
-    addAndMakeVisible (resetCountersButton);
-
-    inputChoice.onChange = [this]
-    {
-        const auto index = inputChoice.getSelectedId() - 1;   // ids are 1-based
-
-        if (index >= 0)
-        {
-            engine.setGuitarInputChannel (index);
-            settings.setGuitarInputChannel (index);
-        }
-    };
-    addAndMakeVisible (inputChoice);
-
     volume.setRange (-60.0, 12.0, 0.1);
     volume.setTextValueSuffix (" dB");
     volume.setDoubleClickReturnValue (true, 0.0);
+    volume.setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 22);
+    volume.setTooltip ("Master volume");
     volume.setValue (settings.getMasterGainDecibels(), juce::dontSendNotification);
     engine.setMasterGainDecibels ((float) volume.getValue());
     volume.onValueChange = [this]
@@ -105,15 +91,48 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     muteButton.setColour (juce::TextButton::buttonColourId, liveGreen);
     addAndMakeVisible (muteButton);
 
+    // Audio status
+    for (auto* label : { &deviceStatus, &latencyStatus, &healthStatus })
+    {
+        styleLabel (*label, 14.0f, 0.75f);
+        addAndMakeVisible (label);
+    }
+
+    styleLabel (systemStatus, 13.0f, 0.55f);
+    addAndMakeVisible (systemStatus);
+
+    styleLabel (warning, 14.0f);
+    warning.setColour (juce::Label::textColourId, amber);
+    addAndMakeVisible (warning);
+
+    styleLabel (inputLabel, 14.0f);
+    addAndMakeVisible (inputLabel);
+
+    inputChoice.onChange = [this]
+    {
+        const auto index = inputChoice.getSelectedId() - 1;   // ids are 1-based
+
+        if (index >= 0)
+        {
+            engine.setGuitarInputChannel (index);
+            settings.setGuitarInputChannel (index);
+        }
+    };
+    addAndMakeVisible (inputChoice);
+
+    resetCountersButton.onClick = [this] { engine.resetCounters(); };
+    addAndMakeVisible (resetCountersButton);
+
     addAndMakeVisible (inputMeter);
     addAndMakeVisible (outputMeter);
 
-    styleStatus (chainLabel, 16.0f);
+    styleLabel (chainLabel, 17.0f, 1.0f);
+    chainLabel.setFont (juce::FontOptions (17.0f, juce::Font::bold));
     addAndMakeVisible (chainLabel);
 
-    // The chain is handed to the engine before audio starts, so the device
-    // prepares it along with everything else.
-    buildDefaultChain();
+    styleLabel (problemsLabel, 14.0f);
+    problemsLabel.setColour (juce::Label::textColourId, amber);
+    addAndMakeVisible (problemsLabel);
 
     // Open the audio device: the saved one if possible, else a sensible default.
     // Prefer ASIO on first run because it gives the lowest, most stable latency.
@@ -135,13 +154,23 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     deviceManager.addAudioCallback (&engine);
     deviceManager.addChangeListener (this);
 
+    // The show: with the device running, patches build for the right rate.
+    session = std::make_unique<ShowSession> (engine);
+    session->addChangeListener (this);
+
+    patchList = std::make_unique<PatchList> (*session);
+    addAndMakeVisible (*patchList);
+
+    chainStrip = std::make_unique<ChainStrip> (*session);
+    chainStrip->onSelectionChanged = [this] (int) { showSelectedBlock(); };
+    addAndMakeVisible (*chainStrip);
+
+    openInitialShow();
+
     refreshInputChoices();
     refreshStatus();
     refreshSystemStatus();
-
-    // Now that the device is running, reload the amp and cab from last time
-    // (in the background; they fade in when ready).
-    restoreLastFiles();
+    refreshShowStatus();
 
     setSize (1100, 860);
     startTimerHz (30);
@@ -150,64 +179,194 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
 MainComponent::~MainComponent()
 {
     stopTimer();
+
+    blockPanel = nullptr;
+    chainStrip = nullptr;
+    patchList = nullptr;
+
+    if (session != nullptr)
+    {
+        session->removeChangeListener (this);
+        session = nullptr;   // saves unsaved edits
+    }
+
     deviceManager.removeChangeListener (this);
     deviceManager.removeAudioCallback (&engine);
     settings.save();
 }
 
 //==============================================================================
-void MainComponent::buildDefaultChain()
+void MainComponent::openInitialShow()
 {
-    // Test rig until patches arrive (milestone 4): amp and cab, then a gate
-    // that listens to the clean guitar (so it cuts amp hiss), then EQ.
-    auto chain = std::make_unique<Chain>();
-    chain->addBlock (std::make_unique<NamAmpBlock>());
-    chain->addBlock (std::make_unique<CabIrBlock>());
-    chain->addBlock (std::make_unique<NoiseGateBlock>());
-    chain->addBlock (std::make_unique<EqBlock>());
-    engine.setChain (std::move (chain));
+    const auto last = settings.getLastShowFolder();
 
-    rebuildBlockPanels();
-}
-
-void MainComponent::restoreLastFiles()
-{
-    for (auto& panel : blockPanels)
-        if (auto* block = panelBlocks[panel.get()])
-            if (block->getFileSlot() != nullptr)
-                if (const auto file = settings.getLastFile (block->getTypeId()); file.existsAsFile())
-                    panel->loadFile (file);
-}
-
-void MainComponent::rebuildBlockPanels()
-{
-    blockPanels.clear();
-    shownChain = engine.getChain();
-
-    if (shownChain == nullptr)
+    if (last != juce::File() && last.isDirectory() && session->openShow (last).wasOk())
         return;
 
-    panelBlocks.clear();
+    // First start (or the last show is gone): make a show in Documents\Encore\Shows,
+    // starting from the amp and cab used last, if any.
+    const auto folder = ShowFolder::suggestFolder (defaultShowsFolder(), "My Show");
+    std::map<juce::String, juce::File> starters;
 
-    for (auto& block : shownChain->getBlocks())
+    for (auto type : { "nam", "cab" })
+        if (const auto f = settings.getLastFile (type); f.existsAsFile())
+            starters[type] = f;
+
+    if (const auto r = session->newShow (folder, "My Show", starters); r.failed())
+        warning.setText ("Couldn't create a show: " + r.getErrorMessage(), juce::dontSendNotification);
+    else
+        settings.setLastShowFolder (folder);
+}
+
+void MainComponent::showMenu()
+{
+    juce::PopupMenu menu;
+    menu.addItem ("New show...", [this] { askForNewShow(); });
+    menu.addItem ("Open show...", [this] { chooseShowToOpen(); });
+    menu.addSeparator();
+    menu.addItem ("Save now (Ctrl+S)", [this] { session->save(); reportProblems(); });
+    menu.addItem ("Save a copy to... (USB stick, backup)", [this] { chooseFolderForCopy(); });
+    menu.addSeparator();
+    menu.addItem ("Show folder in Explorer", session->getFolder().isValid(), false,
+                  [this] { session->getFolder().getShowFile().revealToUser(); });
+    menu.addItem ("Open backups folder", session->getFolder().isValid(), false,
+                  [this] { session->getFolder().getBackupsFolder().startAsProcess(); });
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&showButton));
+}
+
+void MainComponent::askForNewShow()
+{
+    auto* window = new juce::AlertWindow ("New show", "Name of the show (band, production, set...):",
+                                          juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor ("name", "New show");
+    window->addButton ("Create", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<MainComponent> safeThis (this);
+    window->enterModalState (true, juce::ModalCallbackFunction::create ([safeThis, window] (int result)
     {
-        auto panel = std::make_unique<BlockPanel> (*block);
+        if (safeThis == nullptr || result != 1)
+            return;
 
-        if (auto* gate = dynamic_cast<NoiseGateBlock*> (block.get()))
-            panel->setStatusLight ("open", [gate] { return gate->isOpen(); });
+        const auto name = window->getTextEditorContents ("name").trim();
+        const auto folder = ShowFolder::suggestFolder (defaultShowsFolder(), name);
 
-        auto* blockPtr = block.get();
-        panel->getBrowseFolder = [this] { return settings.getLastBrowseFolder(); };
-        panel->onFileLoaded = [this, blockPtr] (const juce::File& file)
+        if (const auto r = safeThis->session->newShow (folder, name); r.failed())
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Couldn't create the show", r.getErrorMessage());
+        else
+            safeThis->settings.setLastShowFolder (folder);
+    }), true);
+}
+
+void MainComponent::chooseShowToOpen()
+{
+    chooser = std::make_unique<juce::FileChooser> ("Open a show (its .encore folder or show.json)",
+                                                   defaultShowsFolder(), "*.encore;show.json");
+    juce::Component::SafePointer<MainComponent> safeThis (this);
+
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles
+                              | juce::FileBrowserComponent::canSelectDirectories,
+                          [safeThis] (const juce::FileChooser& fc)
+                          {
+                              const auto picked = fc.getResult();
+
+                              if (safeThis == nullptr || picked == juce::File())
+                                  return;
+
+                              if (const auto r = safeThis->session->openShow (picked); r.failed())
+                                  juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                                          "Couldn't open the show", r.getErrorMessage());
+                              else
+                                  safeThis->settings.setLastShowFolder (safeThis->session->getFolder().getFolder());
+                          });
+}
+
+void MainComponent::chooseFolderForCopy()
+{
+    chooser = std::make_unique<juce::FileChooser> ("Copy the show into...",
+                                                   juce::File::getSpecialLocation (juce::File::userHomeDirectory));
+    juce::Component::SafePointer<MainComponent> safeThis (this);
+
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                          [safeThis] (const juce::FileChooser& fc)
+                          {
+                              const auto parent = fc.getResult();
+
+                              if (safeThis == nullptr || ! parent.isDirectory())
+                                  return;
+
+                              juce::File copy;
+                              const auto r = safeThis->session->saveCopyTo (parent, copy);
+                              juce::AlertWindow::showMessageBoxAsync (
+                                  r.wasOk() ? juce::MessageBoxIconType::InfoIcon : juce::MessageBoxIconType::WarningIcon,
+                                  r.wasOk() ? "Show copied" : "Couldn't copy the show",
+                                  r.wasOk() ? "The complete show is in\n" + copy.getFullPathName()
+                                                + "\n\nOpen it on any computer with Show > Open show."
+                                            : r.getErrorMessage());
+                          });
+}
+
+void MainComponent::refreshShowStatus()
+{
+    const auto& show = session->getShow();
+    showName.setText (show.name, juce::dontSendNotification);
+    showName.setTooltip (session->getFolder().getFolder().getFullPathName());
+
+    if (session->hasUnsavedChanges())
+        saveState.setText ("Unsaved changes (autosaves)", juce::dontSendNotification);
+    else
+        saveState.setText ("Saved " + session->getLastSaveTime().formatted ("%H:%M:%S"), juce::dontSendNotification);
+
+    const auto* patch = show.findPatch (session->getActivePatchId());
+    chainLabel.setText (patch != nullptr ? patch->name + (session->isBuilding() ? "   (loading...)" : "") : juce::String(),
+                        juce::dontSendNotification);
+}
+
+void MainComponent::reportProblems()
+{
+    const auto problems = session->takeProblems();
+
+    if (! problems.isEmpty())
+    {
+        problemsLabel.setText (problems[problems.size() - 1]
+                                   + (problems.size() > 1 ? "  (+" + juce::String (problems.size() - 1) + " more)" : juce::String()),
+                               juce::dontSendNotification);
+        problemsLabel.setTooltip (problems.joinIntoString ("\n"));
+    }
+}
+
+//==============================================================================
+void MainComponent::showSelectedBlock()
+{
+    const auto index = chainStrip->getSelectedIndex();
+    auto* chain = engine.getChain();
+
+    if (chain == shownChain && index == shownBlockIndex && blockPanel != nullptr)
+        return;
+
+    shownChain = chain;
+    shownBlockIndex = index;
+    blockPanel = nullptr;
+
+    if (chain != nullptr && juce::isPositiveAndBelow (index, (int) chain->getBlocks().size()))
+    {
+        auto& block = *chain->getBlocks()[(size_t) index];
+        blockPanel = std::make_unique<BlockPanel> (block);
+
+        if (auto* gate = dynamic_cast<NoiseGateBlock*> (&block))
+            blockPanel->setStatusLight ("open", [gate] { return gate->isOpen(); });
+
+        blockPanel->getBrowseFolder = [this] { return settings.getLastBrowseFolder(); };
+        blockPanel->onFileLoaded = [this, &block] (const juce::File& file)
         {
-            settings.setLastFile (blockPtr->getTypeId(), file);
+            settings.setLastFile (block.getTypeId(), file);
             settings.setLastBrowseFolder (file.getParentDirectory());
             refreshStatus();   // latency may have changed
         };
+        blockPanel->onEdited = [this] { session->markEdited(); };
 
-        addAndMakeVisible (*panel);
-        panelBlocks[panel.get()] = blockPtr;
-        blockPanels.push_back (std::move (panel));
+        addAndMakeVisible (*blockPanel);
     }
 
     relayout();
@@ -215,11 +374,25 @@ void MainComponent::rebuildBlockPanels()
 
 void MainComponent::relayout()
 {
-    // Inside a scrolling viewport: tell it our height may have changed.
+    // Inside a scrolling viewport: let it adjust our height first...
     if (auto* viewport = findParentComponentOfClass<juce::Viewport>())
         viewport->resized();
-    else
-        resized();
+
+    // ...then always lay out: if our size didn't change, JUCE won't call
+    // resized() by itself, and a newly added panel would stay at zero size.
+    resized();
+}
+
+bool MainComponent::keyPressed (const juce::KeyPress& key)
+{
+    if (key == juce::KeyPress ('s', juce::ModifierKeys::commandModifier, 0))
+    {
+        session->save();
+        reportProblems();
+        return true;
+    }
+
+    return false;
 }
 
 //==============================================================================
@@ -294,8 +467,7 @@ void MainComponent::refreshSystemStatus()
     }
 
     systemStatus.setText (text, juce::dontSendNotification);
-    systemStatus.setColour (juce::Label::textColourId,
-                            problem ? juce::Colour (0xfff0b429) : juce::Colours::white.withAlpha (0.55f));
+    systemStatus.setColour (juce::Label::textColourId, problem ? amber : juce::Colours::white.withAlpha (0.55f));
    #endif
 }
 
@@ -324,7 +496,8 @@ void MainComponent::refreshStatus()
     // converters), so the sum is the time from string to speaker.
     const auto inLatency = device->getInputLatencyInSamples();
     const auto outLatency = device->getOutputLatencyInSamples();
-    const auto chainLatency = shownChain != nullptr ? shownChain->getLatencySamples() : 0;
+    auto* chain = engine.getChain();
+    const auto chainLatency = chain != nullptr ? chain->getLatencySamples() : 0;
     auto latency = "Latency: in " + formatMs (inLatency, rate) + " + out " + formatMs (outLatency, rate);
 
     if (chainLatency > 0)
@@ -341,8 +514,16 @@ void MainComponent::refreshStatus()
 }
 
 //==============================================================================
-void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*)
+void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
 {
+    if (source == session.get())
+    {
+        patchList->refresh();
+        refreshShowStatus();
+        reportProblems();
+        return;
+    }
+
     // The device, rate, buffer or channels changed: remember them for next launch.
     if (auto state = deviceManager.createStateXml())
         settings.setAudioDeviceState (state.get());
@@ -358,24 +539,34 @@ void MainComponent::timerCallback()
 {
     engine.collectGarbage();
 
-    if (engine.getChain() != shownChain)
-        rebuildBlockPanels();
+    // A newly built chain arrived (patch selected, block added...).
+    if (auto* chain = engine.getChain(); chain != chainStrip->getChain())
+    {
+        chainStrip->setChain (chain);
+        showSelectedBlock();
+        refreshStatus();
+        refreshShowStatus();
+    }
+
+    chainStrip->refresh();
+
+    if (blockPanel != nullptr)
+        blockPanel->refresh();
 
     inputMeter.setPeak (engine.getInputMeter().take());
     outputMeter.setPeak (engine.getOutputMeter().take());
-
-    for (auto& panel : blockPanels)
-        panel->refresh();
 
     // Text changes ~3x a second so numbers stay readable.
     if (++frameCounter % 10 != 0)
         return;
 
+    refreshShowStatus();
+
     if (frameCounter % 60 == 0)   // power source etc. every 2 s
         refreshSystemStatus();
 
     juce::String health;
-    health << "CPU " << juce::String (engine.getCpuLoad() * 100.0, 0) << " %"
+    health << "CPU " << juce::roundToInt (engine.getCpuLoad() * 100.0) << " %"
            << "   |   overruns " << engine.getOverrunCount();
 
     if (auto* device = deviceManager.getCurrentAudioDevice())
@@ -403,6 +594,8 @@ void MainComponent::timerCallback()
 void MainComponent::paint (juce::Graphics& g)
 {
     g.fillAll (background);
+    g.setColour (barColour);
+    g.fillRect (getLocalBounds().removeFromTop (64));
 }
 
 void MainComponent::resized()
@@ -417,67 +610,63 @@ int MainComponent::getRequiredHeight (int width)
 
 int MainComponent::layoutContent (int width, bool apply)
 {
-    constexpr int margin = 24, gap = 16;
-    auto area = juce::Rectangle<int> (0, 0, width, 100000).reduced (margin);
-    const auto place = [apply] (juce::Component& c, juce::Rectangle<int> r) { if (apply) c.setBounds (r); };
+    constexpr int margin = 16, gap = 16, sidebarWidth = 250;
+    const auto place = [apply] (juce::Component* c, juce::Rectangle<int> r) { if (apply && c != nullptr) c->setBounds (r); };
 
-    auto top = area.removeFromTop (44);
-    place (audioSettingsButton, top.removeFromRight (180).reduced (0, 4));
-    place (title, top);
+    // Top bar
+    auto bar = juce::Rectangle<int> (0, 0, width, 64).reduced (margin, 10);
+    place (&title, bar.removeFromLeft (110));
+    place (&showButton, bar.removeFromLeft (70).reduced (0, 4));
+    bar.removeFromLeft (12);
+    place (&muteButton, bar.removeFromRight (110).reduced (0, 2));
+    bar.removeFromRight (8);
+    place (&volume, bar.removeFromRight (200));
+    bar.removeFromRight (8);
+    place (&audioSettingsButton, bar.removeFromRight (150).reduced (0, 4));
+    bar.removeFromRight (12);
+    auto names = bar;
+    place (&showName, names.removeFromTop (names.getHeight() / 2 + 2));
+    place (&saveState, names);
 
-    area.removeFromTop (12);
-    place (deviceStatus, area.removeFromTop (26));
-    place (latencyStatus, area.removeFromTop (26));
-    place (systemStatus, area.removeFromTop (22));
-    place (warning, area.removeFromTop (26));
+    auto area = juce::Rectangle<int> (0, 64, width, 100000).reduced (margin, 0);
+    area.removeFromTop (margin);
 
-    area.removeFromTop (12);
-    auto inputRow = area.removeFromTop (36);
-    place (inputLabel, inputRow.removeFromLeft (140));
-    place (inputChoice, inputRow.removeFromLeft (320).reduced (0, 2));
+    // Body: patches left, chain + block right.
+    const auto panelHeight = blockPanel != nullptr ? blockPanel->getPreferredHeight() : 200;
+    const auto bodyHeight = juce::jmax (420, 30 + 120 + gap + panelHeight + 30);
+    auto body = area.removeFromTop (bodyHeight);
 
-    area.removeFromTop (20);
-    place (inputMeter, area.removeFromTop (34));
-    area.removeFromTop (10);
-    place (outputMeter, area.removeFromTop (34));
+    place (patchList.get(), body.removeFromLeft (sidebarWidth));
+    body.removeFromLeft (gap);
 
-    area.removeFromTop (20);
-    auto volumeRow = area.removeFromTop (64);
-    place (muteButton, volumeRow.removeFromRight (160));
-    volumeRow.removeFromRight (16);
-    place (volumeLabel, volumeRow.removeFromLeft (140));
-    place (volume, volumeRow);
+    place (&chainLabel, body.removeFromTop (30));
+    place (chainStrip.get(), body.removeFromTop (120));
+    body.removeFromTop (gap);
 
-    area.removeFromTop (16);
-    auto healthRow = area.removeFromTop (32);
-    place (resetCountersButton, healthRow.removeFromRight (160));
-    place (healthStatus, healthRow);
+    if (blockPanel != nullptr)
+        place (blockPanel.get(), body.removeFromTop (panelHeight)
+                                     .withWidth (juce::jmin (body.getWidth(), blockPanel->getPreferredWidth())));
 
-    // The chain: panels left to right, wrapping onto new rows as needed.
-    area.removeFromTop (20);
-    place (chainLabel, area.removeFromTop (26));
+    place (&problemsLabel, body.removeFromBottom (26));
+
+    // Audio: input, meters, status lines.
+    area.removeFromTop (gap);
+    auto inputRow = area.removeFromTop (32);
+    place (&inputLabel, inputRow.removeFromLeft (110));
+    place (&inputChoice, inputRow.removeFromLeft (300).reduced (0, 2));
+    inputRow.removeFromLeft (gap);
+    place (&resetCountersButton, inputRow.removeFromRight (140).reduced (0, 2));
+
+    area.removeFromTop (8);
+    place (&inputMeter, area.removeFromTop (28));
     area.removeFromTop (6);
+    place (&outputMeter, area.removeFromTop (28));
+    area.removeFromTop (8);
 
-    int x = area.getX(), y = area.getY(), rowHeight = 0;
+    for (auto* label : { &healthStatus, &deviceStatus, &latencyStatus, &systemStatus, &warning })
+        place (label, area.removeFromTop (22));
 
-    for (auto& panel : blockPanels)
-    {
-        const auto w = juce::jmin (panel->getPreferredWidth(), area.getWidth());
-        const auto h = panel->getPreferredHeight();
-
-        if (x > area.getX() && x + w > area.getRight())
-        {
-            x = area.getX();
-            y += rowHeight + gap;
-            rowHeight = 0;
-        }
-
-        place (*panel, { x, y, w, h });
-        x += w + gap;
-        rowHeight = juce::jmax (rowHeight, h);
-    }
-
-    return y + rowHeight + margin;
+    return area.getY() + margin;
 }
 
 } // namespace encore

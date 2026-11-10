@@ -33,6 +33,10 @@ public:
     juce::File getLastFile (const juce::String& blockTypeId) const;
     void setLastFile (const juce::String& blockTypeId, const juce::File& file);
 
+    /** The show open when Encore last closed. */
+    juce::File getLastShowFolder() const;
+    void setLastShowFolder (const juce::File& folder);
+
     /** Where file choosers open. */
     juce::File getLastBrowseFolder() const;
     void setLastBrowseFolder (const juce::File& folder);

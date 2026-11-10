@@ -13,8 +13,9 @@ musical.
 
 ## Status
 
-Milestone 3: NAM amp captures and cab IRs, plus noise gate, EQ and safety
-limiter. Not usable on stage yet.
+Milestone 4: shows and patches saved to disk, edited in a real edit view;
+NAM amps, cab IRs, gate, EQ, safety limiter. Not usable on stage yet (patch
+switching and MIDI come next).
 
 | Milestone | What you can test |
 | --- | --- |
@@ -22,7 +23,7 @@ limiter. Not usable on stage yet.
 | **1 – Real-time core** ✅ | Gate and EQ blocks, click-free toggles and sweeps, safety limiter |
 | **2 – NAM amp block** ✅ | Play through .nam captures, swap amps while playing |
 | **3 – Cab IR block** ✅ | Amp + cab, swap IRs while playing |
-| 4 – Data model and saving | Patches and shows saved to a self-contained folder |
+| **4 – Data model and saving** ✅ | Patches and shows saved to a self-contained folder, edit view |
 | 5 – Patch switching | Gapless switches with tail spillover |
 | 6 – MIDI | Foot controller, expression pedals, MIDI out |
 | 7 – Performance view and tuner | Stage view, lock, panic |
@@ -67,6 +68,8 @@ Every push is also built on GitHub Actions and the tests are run there; the buil
 `EncoreTests` checks the engine without any audio hardware: filter responses,
 gate and limiter behaviour, click-free bypass, the chain handover, sample-rate
 conversion, loading and playing real NAM captures, cab IRs with zero latency,
+the show file format and folders (round trips, backups, portability), building
+patches into chains and capturing edits back, the session (edit, save, reopen),
 and that processing (and swapping amps or IRs) never allocates memory. In Visual Studio use *Test → Run CTests for
 Encore*, or from a terminal:
 
@@ -86,6 +89,34 @@ effect. For shows also:
   expense (the status line warns you);
 - set Windows' power mode to **Best performance**;
 - use 64 samples or more, so there is headroom for spikes.
+
+## Testing milestone 4 with your guitar
+
+Encore now opens a **show**. On first start it creates *My Show* in
+`Documents\Encore\Shows` with one patch, *Clean*, using the amp and cab you
+loaded last.
+
+1. **Edit view**: patches on the left; the selected patch's chain as tiles;
+   the selected block's controls below. Click a tile to edit it.
+2. **Build two patches**: click **+ New** (it starts from your current amp and
+   cab) and name it *Lead* (double-click to rename). Give it a different amp or
+   more gain. Click between *Clean* and *Lead* to hear both. (Switching isn't
+   gapless yet: that's milestone 5.)
+3. **Edit the chain**: the **+** tile adds a block at the end. Right-click a
+   tile to move it, insert before/after, or remove it.
+4. **Saving**: there's nothing to remember. Changes autosave 2 s after you
+   stop editing (top bar: *Unsaved changes* → *Saved 14:02:11*). **Ctrl+S**
+   saves immediately. Closing Encore saves too.
+5. **Reopen**: close and start Encore. The same show, patches and settings come
+   back.
+6. **Portable**: *Show → Save a copy to...* and pick a USB stick (or any
+   folder). Open that copy with *Show → Open show...*: models and IRs are
+   inside it, so it works on any computer even if the originals are deleted.
+7. **Backups**: *Show → Open backups folder*. Every explicit save, and the
+   first autosave every 5 minutes, keeps the previous `show.json` (the newest
+   50 are kept). To restore one, copy it over `show.json` while Encore is closed.
+8. **More shows**: *Show → New show...* creates another (e.g. one per band or
+   production); *Show → Open show...* switches between them.
 
 ## Testing milestone 3 with your guitar
 
@@ -184,13 +215,16 @@ Set up audio as in milestone 0 below, then:
 ```
 Source/
   Main.cpp            app start-up, main window
-  app/                windows, settings (per-machine, in %APPDATA%\Encore)
+  app/                the main window, per-machine settings (%APPDATA%\Encore)
+  model/              the show on disk: data model, JSON format, show folders
+  session/            the open show: building patches into chains, editing, autosave
   engine/             everything that runs on or talks to the audio thread
     core/             Block, Chain, Parameter, handovers, lock-free queues, real-time checks
     blocks/           the built-in blocks (amp, cab, gate, EQ)
     dsp/              allocation-free DSP (filters, limiter, sample-rate conversion)
     nam/              loading and running Neural Amp Modeler captures
-  ui/                 reusable widgets
+  ui/                 edit view pieces: patch list, chain strip, block panel, meters
+  platform/           Windows-specific tuning
 Tests/                engine unit tests (run in CI)
 docs/DECISIONS.md     short log of important design decisions
 ```

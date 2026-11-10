@@ -71,6 +71,21 @@ void NamAmpBlock::installModel (std::unique_ptr<NamModel> model)
     models.publish (std::move (model));
 }
 
+void NamAmpBlock::installBeforePlaying (std::unique_ptr<NamModel> model)
+{
+    jassert (model != nullptr && current == nullptr && ! fading);
+
+    const auto& spec = getPreparedSpec();
+
+    if (spec.isValid() && ! (model->getSpec() == spec))
+        model->prepare (spec);
+
+    // Nothing is processing this block yet, so taking the model straight off
+    // the queue here (instead of on the audio thread) is safe.
+    models.publish (std::move (model));
+    current = models.takeNext();
+}
+
 juce::File NamAmpBlock::getLoadedFile() const
 {
     if (auto* m = models.getLatest())
