@@ -163,6 +163,8 @@ namespace
             set (o, "samePatch", toString (item.samePatch));
             if (item.programChange >= 0)   set (o, "programChange", item.programChange);
 
+            if (item.layoutId.isNotEmpty()) set (o, "layout", item.layoutId);
+
             if (! item.midiOut.empty())
             {
                 juce::Array<juce::var> out;
@@ -209,6 +211,7 @@ namespace
 
             item.samePatch = str (o, "samePatch") == "reset" ? SamePatchBehaviour::reset : SamePatchBehaviour::keep;
             item.programChange = integer (o, "programChange", -1);
+            item.layoutId = str (o, "layout");
 
             forEachIn (o, "midiOut", [&] (const juce::var& m)
             {
@@ -303,6 +306,7 @@ juce::String toJson (const ShowModel& show)
     set (midi, "ownMappings", show.ownMidiMappings);
     set (midi, "bindings", bindingsToVar (show.midiBindings));
     set (root, "midi", midi);
+    set (root, "stage", stageToVar (show.stage));
 
     // Full precision, so values survive a save/load round trip exactly.
     return juce::JSON::toString (root, juce::JSON::FormatOptions{}.withSpacing (juce::JSON::Spacing::multiLine));
@@ -353,6 +357,8 @@ std::optional<ShowModel> fromJson (const juce::String& text, juce::String& error
         show.ownMidiMappings = flag (midi, "ownMappings", false);
         show.midiBindings = bindingsFromVar (get (midi, "bindings"));
     }
+
+    show.stage = stageFromVar (get (root, "stage"));
     return show;
 }
 

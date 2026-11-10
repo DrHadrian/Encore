@@ -298,3 +298,38 @@ Sending MIDI can block in the driver, so the audio thread only records which
 cue started (a lock-free queue), and a background thread sends that cue's
 messages to the chosen output. Output devices that disappear are closed, and
 reopened when they return (checked every 2 s).
+
+## 0032 — The tuner listens on the audio thread, thinks on the UI thread (milestone 7)
+
+While the tuner is open, the audio thread low-passes and decimates the raw
+input to about 12 kHz into a ring of atomics: a few operations per sample, no
+locks. The screen reads the newest ~110 ms 20-30 times a second and runs YIN
+pitch detection there. YIN copes with the strong second harmonic of low
+strings (it doesn't jump an octave). High notes are measured over several
+periods at once, so they read within a cent too. Closed, the tuner costs
+nothing.
+
+## 0033 — Panic fades first, then clears (milestone 7)
+
+Panic ramps the output to silence in 5 ms (a click-free cut), and only then,
+with nothing audible, drops every ringing patch and clears the playing
+patch's delay lines and filters. Then, by the show's setting, it either
+comes back by itself (0.3 s silent, 0.5 s fade in, same cue) or waits for a
+second press. Panic works even when the screen is locked: it's the emergency
+stop.
+
+## 0034 — Stage layouts are widgets on a 24 x 16 grid (milestone 7)
+
+The stage view is entirely made of widgets the user places, so one show can
+work on a laptop, a big monitor or a touch screen. Positions are grid cells,
+not pixels, so a layout scales to any window. Layouts belong to the show
+(named, one default, any cue can pick another), because what you need to
+see differs between gigs, not between computers. Shows without layouts get
+the built-in one, which becomes the show's own as soon as it's edited.
+Unknown widget types from newer versions are skipped when loading.
+
+## 0035 — Lock blocks the screen, not the feet (milestone 7)
+
+Locked, mouse clicks and keys change nothing (no accidental cue jumps from a
+bumped laptop or a cable on the trackpad); footswitches, pedals and panic
+keep working. Unlocking takes a deliberate one-second hold.

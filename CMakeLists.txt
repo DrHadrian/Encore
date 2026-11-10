@@ -104,6 +104,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/AudioEngine.cpp
     Source/engine/AudioEngine.h
     Source/engine/PeakMeter.h
+    Source/engine/Tuner.cpp
+    Source/engine/Tuner.h
     Source/engine/blocks/CabIrBlock.cpp
     Source/engine/blocks/CabIrBlock.h
     Source/engine/blocks/DelayBlock.cpp
@@ -130,6 +132,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/midi/MidiRouter.cpp
     Source/engine/midi/MidiRouter.h
     Source/engine/dsp/Biquad.h
+    Source/engine/dsp/PitchDetector.cpp
+    Source/engine/dsp/PitchDetector.h
     Source/engine/dsp/SafetyLimiter.cpp
     Source/engine/dsp/SafetyLimiter.h
     Source/engine/dsp/StreamResampler.cpp
@@ -143,6 +147,8 @@ target_sources(EncoreEngine INTERFACE
     Source/model/ShowJson.cpp
     Source/model/ShowJson.h
     Source/model/ShowModel.cpp
+    Source/model/StageLayout.cpp
+    Source/model/StageLayout.h
     Source/model/ShowModel.h
     Source/platform/SystemTuning.cpp
     Source/platform/SystemTuning.h
@@ -175,6 +181,10 @@ target_sources(Encore PRIVATE
     Source/ui/LevelMeter.h
     Source/ui/MidiSettings.cpp
     Source/ui/MidiSettings.h
+    Source/ui/StageView.cpp
+    Source/ui/StageView.h
+    Source/ui/TunerDisplay.cpp
+    Source/ui/TunerDisplay.h
     Source/ui/PatchList.cpp
     Source/ui/PatchList.h
     Source/ui/SetList.cpp
@@ -229,6 +239,11 @@ if(ENCORE_BUILD_TESTS)
         Tests/MidiTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
+        Tests/StageTests.cpp
+        Tests/StageViewTests.cpp
+        # Screens tested off-screen (rendered into images, no window).
+        Source/ui/StageView.cpp
+        Source/ui/TunerDisplay.cpp
         Tests/PatchBuilderTests.cpp
         Tests/PatchPlayerTests.cpp
         Tests/ResamplerTests.cpp
@@ -254,6 +269,7 @@ if(ENCORE_BUILD_TESTS)
             juce::juce_audio_formats
             juce::juce_dsp
             juce::juce_events
+            juce::juce_gui_basics
             juce::juce_core
         PUBLIC
             juce::juce_recommended_config_flags

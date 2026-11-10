@@ -13,10 +13,10 @@ musical.
 
 ## Status
 
-Milestone 6: foot controllers and expression pedals over MIDI (USB, DIN
-interfaces, Bluetooth), MIDI learn, stomp switches, program change recall and
-MIDI out per cue; gapless patch switching with tails; shows saved to disk; NAM
-amps, cab IRs, gate, EQ, delay, safety limiter. The stage view comes next.
+Milestone 7: a stage view you lay out yourself (named layouts, per-cue
+layouts), tuner, panic and lock; foot controllers and expression pedals over
+MIDI; gapless patch switching with tails; shows saved to disk; NAM amps, cab
+IRs, gate, EQ, delay, safety limiter. Theatre cue lists come next.
 
 | Milestone | What you can test |
 | --- | --- |
@@ -26,8 +26,8 @@ amps, cab IRs, gate, EQ, delay, safety limiter. The stage view comes next.
 | **3 – Cab IR block** ✅ | Amp + cab, swap IRs while playing |
 | **4 – Data model and saving** ✅ | Patches and shows saved to a self-contained folder, edit view |
 | **5 – Patch switching** ✅ | Gapless switches with tail spillover |
-| **6 – MIDI** | Foot controller, expression pedals, MIDI out |
-| 7 – Performance view and tuner | Stage view, lock, panic |
+| **6 – MIDI** ✅ | Foot controller, expression pedals, MIDI out |
+| **7 – Performance view and tuner** | Stage view with layout editor, tuner, lock, panic |
 | 8 – Theatre cue lists | Acts/scenes/cues, insert, renumber, cut, go to |
 | 9 – Robustness | Crash recovery, reconnect, pre-show check, soak test |
 | 10 – VST3 hosting | Plugins with crash guard |
@@ -92,6 +92,38 @@ effect. For shows also:
   expense (the status line warns you);
 - set Windows' power mode to **Best performance**;
 - use 64 samples or more, so there is headroom for spikes.
+
+## Testing milestone 7 with your guitar
+
+1. **Stage view**: press **F5** (or **Stage** in the top bar). The default
+   layout shows the cue big, the next cue, the patch, the set list, stomps,
+   pedals, meters, clock, system health, lock and panic. Step with the
+   footswitch or Space: everything follows. **F11** toggles full screen;
+   **Edit view** (top right) or F5 goes back.
+2. **Tuner**: press **T**, click **Tuner**, or map a footswitch to *Tuner*
+   in **MIDI...**. Without a tuner widget in the layout it covers the screen.
+   Play each string: the note turns green within about 2 cents. The output is
+   muted while tuning (Show → *Stage settings* → *Tuner mutes the output* to
+   change that; *Concert pitch* for A = 442 etc.). Close with T, Esc or a click.
+3. **Panic**: click **PANIC** (top bar or the stage widget) or map a footswitch.
+   With a long delay ringing: the sound stops within 5 ms and the repeats are
+   gone. By default it comes back by itself after about a second, on the same
+   cue. Show → *Stage settings* → *Panic* → *Silence until panic is pressed
+   again* makes it stay silent until the next press.
+4. **Lock**: click **Lock** (top right) or the lock widget, or Ctrl+L. Clicks
+   and keys do nothing now (except panic); the footswitch still steps cues.
+   Hold the lock for a second to unlock.
+5. **Edit the layout**: **Edit layout** (top right). Drag widgets to move them,
+   drag their right or bottom edge (or the corner) to resize; they snap to a
+   24 x 16 grid. Right-click: text size, duplicate, bring to front, remove.
+   **+ Widget** or double-click empty space adds one (try *Text* for a
+   reminder, *Tuner* for a tuner that's always visible, big *Next* and *Back*
+   buttons for a touch screen). Changes save with the show.
+6. **Several layouts**: in edit mode, **Layout: ...** → *New layout (copy of
+   this one)*, e.g. *Big monitor*. *Use as the show's default*, or step to a
+   cue and choose *Use for cue ... only*: the screen switches layout when that
+   cue comes up.
+7. **Laptop and small screens**: resize the window; widgets scale with it.
 
 ## Testing milestone 6 with your guitar
 
@@ -299,7 +331,7 @@ Source/
     dsp/              allocation-free DSP (filters, limiter, sample-rate conversion)
     nam/              loading and running Neural Amp Modeler captures
     midi/             foot controller and pedal input, MIDI out
-  ui/                 edit view pieces: set list, patch list, chain strip, block panel, MIDI settings
+  ui/                 edit view pieces, MIDI settings, stage view and layout editor, tuner display
   platform/           Windows-specific tuning
 Tests/                engine unit tests (run in CI)
 docs/DECISIONS.md     short log of important design decisions

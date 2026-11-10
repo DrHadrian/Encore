@@ -15,13 +15,15 @@
 #include "ui/MidiSettings.h"
 #include "ui/PatchList.h"
 #include "ui/SetList.h"
+#include "ui/StageView.h"
+#include "ui/TunerDisplay.h"
 
 namespace encore
 {
 
 /** The edit view: the show's patches on the left, the selected patch's chain
     and the selected block's controls on the right, audio status at the bottom.
-    The stage (performance) view comes in milestone 7; the engine underneath stays.
+    F5 (or "Stage") switches to the stage view, which covers the window.
 */
 class MainComponent final : public juce::Component,
                             private juce::ChangeListener,
@@ -37,6 +39,11 @@ public:
 
     /** Height needed to show everything at this width (for the scrolling window). */
     int getRequiredHeight (int width);
+
+    /** The stage view fills the window instead of scrolling: the window
+        re-lays out when it's switched. */
+    std::function<void()> onViewChanged;
+    bool isShowingStage() const noexcept { return stageView != nullptr && stageView->isVisible(); }
 
 private:
     // Audio
@@ -58,6 +65,10 @@ private:
     void chooseFolderForCopy();
     void refreshShowStatus();
     void reportProblems();
+
+    // Stage
+    void setStageVisible (bool);
+    void showStageSettingsMenu (juce::PopupMenu&);
 
     // Chain view
     void showSelectedBlock();
@@ -81,6 +92,10 @@ private:
     juce::TextButton showButton { "Show" };
     juce::TextButton audioSettingsButton { "Audio settings..." };
     juce::TextButton midiSettingsButton { "MIDI..." };
+    juce::TextButton stageButton { "Stage" }, tunerButton { "Tuner" }, panicButton { "PANIC" };
+
+    std::unique_ptr<StageView> stageView;
+    TunerDisplay editTuner;
     juce::TextButton muteButton { "MUTED" };
     juce::Slider volume { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
 

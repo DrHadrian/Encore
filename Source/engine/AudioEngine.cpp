@@ -67,6 +67,7 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     work.setSize (Block::maxChannels, blockSize, false, true, false);
     player.prepareAll ({ sampleRate, blockSize });
     limiter.prepare (sampleRate);
+    tuner.prepare (sampleRate);
 
     // Start the ramp from silence so a (re)started device never pops.
     gain.reset (sampleRate, gainRampSeconds);
@@ -98,6 +99,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputCha
 
     // Foot controller first: a switch pressed now takes effect in this buffer.
     midi.process (player, muted);
+    handlePanicAndTunerRequests();
 
     const auto inputIndex = guitarInput.load (std::memory_order_relaxed);
     const float* input = (inputIndex < numInputChannels) ? inputChannelData[inputIndex] : nullptr;
@@ -111,8 +113,10 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputCha
     // Input meter: the raw guitar signal, before anything else.
     const auto inputRange = juce::FloatVectorOperations::findMinAndMax (input, numSamples);
     inputMeter.push (juce::jmax (inputRange.getEnd(), -inputRange.getStart()));
+    tuner.push (input, numSamples);   // no-op while the tuner is closed
 
-    const auto target = muted.load (std::memory_order_relaxed)
+    const auto tunerSilences = tuner.isActive() && tunerMutes.load (std::memory_order_relaxed);
+    const auto target = muted.load (std::memory_order_relaxed) || tunerSilences
                             ? 0.0f
                             : juce::Decibels::decibelsToGain (masterGainDb.load (std::memory_order_relaxed));
     gain.setTargetValue (target);
@@ -137,14 +141,21 @@ void AudioEngine::renderChunk (const float* input, float* const* outputs, int nu
     // The active patch, plus any patches still ringing out (mono).
     player.process (channels[0], numSamples);
 
-    // Master gain, ramped.
+    // Master gain (with mute and tuner), ramped, times the panic fade.
     for (int i = 0; i < numSamples; ++i)
     {
-        const auto g = gain.getNextValue();
+        auto g = gain.getNextValue();
+
+        if (panicMoving)
+            panicGain = juce::jlimit (0.0f, 1.0f, panicGain + panicStep);
+
+        g *= panicGain;
 
         for (int ch = 0; ch < numChannels; ++ch)
             channels[ch][i] *= g;
     }
+
+    advancePanic (numSamples);
 
     limiter.process (channels, numChannels, numSamples);
 
@@ -179,6 +190,83 @@ void AudioEngine::renderChunk (const float* input, float* const* outputs, int nu
 
     if (clipped)
         clipCount.fetch_add (1, std::memory_order_relaxed);
+}
+
+//==============================================================================
+void AudioEngine::handlePanicAndTunerRequests() noexcept
+{
+    // Footswitches for the tuner toggle it, once per press.
+    const auto tunerPresses = midi.getTunerPresses();
+
+    if (((tunerPresses - seenMidiTuners) & 1) != 0)
+        tuner.setActive (! tuner.isActive());
+
+    seenMidiTuners = tunerPresses;
+
+    // Panic presses, from the screen or a footswitch.
+    const auto requests = panicRequests.load (std::memory_order_relaxed);
+    const auto midiPanics = midi.getPanicPresses();
+
+    if (requests == seenPanicRequests && midiPanics == seenMidiPanics)
+        return;
+
+    seenPanicRequests = requests;
+    seenMidiPanics = midiPanics;
+
+    const auto sampleRate = juce::jmax (1.0, currentSampleRate.load (std::memory_order_relaxed));
+    const auto state = panicState.load (std::memory_order_relaxed);
+
+    if (state == PanicState::silent && panicMode.load (std::memory_order_relaxed) == PanicMode::latch)
+    {
+        // Second press: come back.
+        panicStep = (float) (1.0 / (panicReturnSeconds * sampleRate));
+        panicMoving = true;
+        panicState.store (PanicState::returning, std::memory_order_relaxed);
+        return;
+    }
+
+    if (state == PanicState::none || state == PanicState::returning)
+    {
+        panicStep = -(float) (1.0 / (panicFadeSeconds * sampleRate));
+        panicMoving = true;
+        panicState.store (PanicState::silencing, std::memory_order_relaxed);
+    }
+    else if (state == PanicState::silent)
+    {
+        panicHeld = 0;   // recover mode, pressed again: stay silent a little longer
+    }
+}
+
+void AudioEngine::advancePanic (int numSamples) noexcept
+{
+    const auto state = panicState.load (std::memory_order_relaxed);
+
+    if (state == PanicState::silencing && panicGain <= 0.0f)
+    {
+        // Out is silent: now it's safe to cut every tail and clear the delays.
+        player.panicNow();
+        panicStep = 0.0f;
+        panicMoving = false;
+        panicHeld = 0;
+        panicState.store (PanicState::silent, std::memory_order_relaxed);
+    }
+    else if (state == PanicState::silent && panicMode.load (std::memory_order_relaxed) == PanicMode::recover)
+    {
+        panicHeld += numSamples;
+
+        if (panicHeld >= (int) (panicHoldSeconds * juce::jmax (1.0, currentSampleRate.load (std::memory_order_relaxed))))
+        {
+            panicStep = (float) (1.0 / (panicReturnSeconds * currentSampleRate.load (std::memory_order_relaxed)));
+            panicMoving = true;
+            panicState.store (PanicState::returning, std::memory_order_relaxed);
+        }
+    }
+    else if (state == PanicState::returning && panicGain >= 1.0f)
+    {
+        panicStep = 0.0f;
+        panicMoving = false;
+        panicState.store (PanicState::none, std::memory_order_relaxed);
+    }
 }
 
 void AudioEngine::clearOutputs (float* const* outputs, int numOutputs, int numSamples) noexcept

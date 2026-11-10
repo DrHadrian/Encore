@@ -81,6 +81,23 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     audioSettingsButton.onClick = [this] { openAudioSettings(); };
     addAndMakeVisible (audioSettingsButton);
 
+    stageButton.setTooltip ("The performance screen (F5)");
+    stageButton.onClick = [this] { setStageVisible (true); };
+    addAndMakeVisible (stageButton);
+
+    tunerButton.setTooltip ("Tuner (T)");
+    tunerButton.setClickingTogglesState (false);
+    tunerButton.onClick = [this] { engine.setTunerOpen (! engine.isTunerOpen()); };
+    addAndMakeVisible (tunerButton);
+
+    panicButton.setTooltip ("Silence everything at once and clear all tails (see Show > Stage settings)");
+    panicButton.setColour (juce::TextButton::buttonColourId, mutedRed.darker (0.5f));
+    panicButton.onClick = [this] { engine.panic(); };
+    addAndMakeVisible (panicButton);
+
+    editTuner.onClick = [this] { engine.setTunerOpen (false); };
+    addChildComponent (editTuner);
+
     midiSettingsButton.onClick = [this] { openMidiSettings(); };
     midiSettingsButton.setTooltip ("Foot controller, expression pedals, MIDI learn and MIDI out");
     addAndMakeVisible (midiSettingsButton);
@@ -195,6 +212,12 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     addAndMakeVisible (*chainStrip);
 
     openInitialShow();
+
+    stageView = std::make_unique<StageView> (engine, *session);
+    stageView->setOpaque (true);
+    stageView->onLeave = [this] { setStageVisible (false); };
+    addChildComponent (*stageView);
+
     applyMidiBindings();
     applyMidiOutput();
     keepKeysForTheShow (*this);
@@ -216,6 +239,7 @@ MainComponent::~MainComponent()
     for (auto* dialog : { audioDialog.getComponent(), midiDialog.getComponent() })
         delete dialog;
 
+    stageView = nullptr;
     blockPanel = nullptr;
     chainStrip = nullptr;
     patchList = nullptr;
@@ -268,6 +292,10 @@ void MainComponent::showMenu()
     menu.addSeparator();
     menu.addItem ("Show folder in Explorer", session->getFolder().isValid(), false,
                   [this] { session->getFolder().getShowFile().revealToUser(); });
+    juce::PopupMenu stage;
+    showStageSettingsMenu (stage);
+    menu.addSubMenu ("Stage settings (this show)", stage);
+    menu.addSeparator();
     menu.addItem ("Open backups folder", session->getFolder().isValid(), false,
                   [this] { session->getFolder().getBackupsFolder().startAsProcess(); });
 
@@ -428,7 +456,10 @@ void MainComponent::showSelectedBlock()
             });
         };
 
-        addAndMakeVisible (*blockPanel);
+        // Behind the stage view: the panel is rebuilt whenever the patch
+        // changes, also while the stage view is showing.
+        const auto behindStage = stageView != nullptr ? getIndexOfChildComponent (stageView.get()) : -1;
+        addAndMakeVisible (*blockPanel, behindStage);
         keepKeysForTheShow (*blockPanel);
     }
 
@@ -446,8 +477,89 @@ void MainComponent::relayout()
     resized();
 }
 
+void MainComponent::showStageSettingsMenu (juce::PopupMenu& menu)
+{
+    const auto& stage = session->getStage();
+
+    menu.addItem ("Tuner mutes the output", true, stage.tunerMutes, [this, mutes = stage.tunerMutes] { session->setTunerMutes (! mutes); });
+
+    juce::PopupMenu pitch;
+
+    for (const auto hz : { 415.0f, 430.0f, 432.0f, 438.0f, 439.0f, 440.0f, 441.0f, 442.0f, 443.0f, 444.0f, 445.0f, 446.0f })
+        pitch.addItem ("A = " + juce::String (hz, 0) + " Hz", true, std::abs (stage.referencePitch - hz) < 0.01f,
+                       [this, hz] { session->setReferencePitch (hz); });
+
+    menu.addSubMenu ("Concert pitch", pitch);
+
+    juce::PopupMenu panic;
+    panic.addItem ("Silence, clear tails, then come back by itself", true, stage.panic == PanicBehaviour::recover,
+                   [this] { session->setPanicBehaviour (PanicBehaviour::recover); });
+    panic.addItem ("Silence until panic is pressed again", true, stage.panic == PanicBehaviour::latch,
+                   [this] { session->setPanicBehaviour (PanicBehaviour::latch); });
+    menu.addSubMenu ("Panic", panic);
+}
+
+void MainComponent::setStageVisible (bool shouldShow)
+{
+    if (stageView == nullptr || shouldShow == stageView->isVisible())
+        return;
+
+    if (! shouldShow)
+    {
+        stageView->setEditingLayout (false);
+        stageView->setLocked (false);
+    }
+
+    stageView->setVisible (shouldShow);
+
+    if (shouldShow)
+        stageView->toFront (false);
+
+    if (onViewChanged != nullptr)
+        onViewChanged();   // the window resizes us: full window for the stage
+
+    resized();
+    grabKeyboardFocus();
+}
+
 bool MainComponent::keyPressed (const juce::KeyPress& key)
 {
+    if (key.getKeyCode() == juce::KeyPress::F11Key)
+    {
+        if (auto* window = findParentComponentOfClass<juce::ResizableWindow>())
+            window->setFullScreen (! window->isFullScreen());
+
+        return true;
+    }
+
+    // Locked: the keyboard changes nothing (unlock by holding the lock).
+    if (isShowingStage() && stageView->isLocked())
+        return true;
+
+    if (key.getKeyCode() == juce::KeyPress::F5Key)
+    {
+        setStageVisible (! isShowingStage());
+        return true;
+    }
+
+    if (key == juce::KeyPress ('t') || key == juce::KeyPress ('T'))
+    {
+        engine.setTunerOpen (! engine.isTunerOpen());
+        return true;
+    }
+
+    if (key == juce::KeyPress ('l', juce::ModifierKeys::commandModifier, 0) && isShowingStage())
+    {
+        stageView->setLocked (true);
+        return true;
+    }
+
+    if (key.getKeyCode() == juce::KeyPress::escapeKey && engine.isTunerOpen())
+    {
+        engine.setTunerOpen (false);
+        return true;
+    }
+
     // Step through the set list from the computer keyboard (the foot
     // controller does the same from milestone 6).
     const auto code = key.getKeyCode();
@@ -703,8 +815,44 @@ void MainComponent::timerCallback()
         muteButton.setButtonText (isMuted ? "MUTED" : "LIVE");
     }
 
-    inputMeter.setPeak (engine.getInputMeter().take());
-    outputMeter.setPeak (engine.getOutputMeter().take());
+    // Meters are taken once and shared by both views.
+    StageSnapshot snapshot;
+    snapshot.inputPeak = engine.getInputMeter().take();
+    snapshot.outputPeak = engine.getOutputMeter().take();
+    snapshot.cpu = engine.getCpuLoad();
+    snapshot.overruns = engine.getOverrunCount();
+   #if JUCE_WINDOWS
+    snapshot.onBattery = system::getPowerSource() == system::PowerSource::battery;
+   #endif
+
+    inputMeter.setPeak (snapshot.inputPeak);
+    outputMeter.setPeak (snapshot.outputPeak);
+
+    const auto tunerOpen = engine.isTunerOpen();
+
+    if (tunerOpen)
+        snapshot.tuner = engine.getTuner().analyse();
+
+    tunerButton.setToggleState (tunerOpen, juce::dontSendNotification);
+    tunerButton.setColour (juce::TextButton::buttonOnColourId, amber.darker (0.4f));
+    panicButton.setButtonText (engine.getPanicState() == AudioEngine::PanicState::none ? "PANIC" : "SILENT");
+
+    if (isShowingStage())
+    {
+        stageView->update (snapshot);
+        editTuner.setVisible (false);
+    }
+    else
+    {
+        if (tunerOpen != editTuner.isVisible())
+        {
+            editTuner.setVisible (tunerOpen);
+            editTuner.toFront (false);
+        }
+
+        if (tunerOpen)
+            editTuner.setReading (snapshot.tuner, engine.getTunerMutes(), engine.getTuner().getReferencePitch());
+    }
 
     // Text changes ~3x a second so numbers stay readable.
     if (++frameCounter % 10 != 0)
@@ -761,11 +909,14 @@ void MainComponent::paint (juce::Graphics& g)
 void MainComponent::resized()
 {
     layoutContent (getWidth(), true);
+
+    if (stageView != nullptr)
+        stageView->setBounds (getLocalBounds());
 }
 
 int MainComponent::getRequiredHeight (int width)
 {
-    return layoutContent (width, false);
+    return isShowingStage() ? 0 : layoutContent (width, false);
 }
 
 int MainComponent::layoutContent (int width, bool apply)
@@ -785,6 +936,12 @@ int MainComponent::layoutContent (int width, bool apply)
     place (&audioSettingsButton, bar.removeFromRight (150).reduced (0, 4));
     bar.removeFromRight (8);
     place (&midiSettingsButton, bar.removeFromRight (80).reduced (0, 4));
+    bar.removeFromRight (8);
+    place (&panicButton, bar.removeFromRight (80).reduced (0, 4));
+    bar.removeFromRight (8);
+    place (&tunerButton, bar.removeFromRight (70).reduced (0, 4));
+    bar.removeFromRight (8);
+    place (&stageButton, bar.removeFromRight (70).reduced (0, 4));
     bar.removeFromRight (12);
     auto names = bar;
     place (&showName, names.removeFromTop (names.getHeight() / 2 + 2));
@@ -804,6 +961,7 @@ int MainComponent::layoutContent (int width, bool apply)
     place (patchList.get(), sidebar);
     body.removeFromLeft (gap);
 
+    place (&editTuner, body.withHeight (juce::jmin (body.getHeight(), 320)));
     place (&chainLabel, body.removeFromTop (30));
     place (chainStrip.get(), body.removeFromTop (120));
     body.removeFromTop (gap);

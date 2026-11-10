@@ -2,6 +2,7 @@
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
 #include "TestSignals.h"
+#include "FakeDevice.h"
 
 #include <juce_events/juce_events.h>
 
@@ -10,32 +11,6 @@
 
 namespace encore::test
 {
-
-/** Just enough of an audio device for the engine to prepare against. */
-class FakeDevice final : public juce::AudioIODevice
-{
-public:
-    FakeDevice() : juce::AudioIODevice ("Fake", "Test") {}
-    juce::StringArray getOutputChannelNames() override       { return { "L", "R" }; }
-    juce::StringArray getInputChannelNames() override        { return { "Guitar" }; }
-    juce::Array<double> getAvailableSampleRates() override   { return { sampleRate }; }
-    juce::Array<int> getAvailableBufferSizes() override      { return { blockSize }; }
-    int getDefaultBufferSize() override                      { return blockSize; }
-    juce::String open (const juce::BigInteger&, const juce::BigInteger&, double, int) override { return {}; }
-    void close() override {}
-    bool isOpen() override                                   { return true; }
-    void start (juce::AudioIODeviceCallback*) override {}
-    void stop() override {}
-    bool isPlaying() override                                { return true; }
-    juce::String getLastError() override                     { return {}; }
-    int getCurrentBufferSizeSamples() override               { return blockSize; }
-    double getCurrentSampleRate() override                   { return sampleRate; }
-    int getCurrentBitDepth() override                        { return 32; }
-    juce::BigInteger getActiveOutputChannels() const override { return 3; }
-    juce::BigInteger getActiveInputChannels() const override  { return 1; }
-    int getOutputLatencyInSamples() override                 { return 0; }
-    int getInputLatencyInSamples() override                  { return 0; }
-};
 
 class ShowSessionTests final : public juce::UnitTest
 {
@@ -253,6 +228,58 @@ public:
             expectEquals (cues[0]->programChange, 12);
             expectEquals ((int) cues[0]->midiOut.size(), 1);
             pumpUntil ([&] { return ! reopened.isBuilding(); });
+        }
+
+        beginTest ("Stage layouts, per-cue layouts and tuner/panic settings are saved and applied");
+        {
+            juce::String bigId;
+
+            {
+                ShowSession session (engine);
+                expect (session.openShow (showFolder).wasOk());
+                pumpUntil ([&] { return ! session.isBuilding(); });
+
+                expectEquals (session.getLayoutForCue (0).name, juce::String ("Default"), "built-in to start");
+
+                bigId = session.addLayout ("Big monitor", {});
+                auto widgets = session.getStage().findLayout (bigId)->widgets;
+                widgets.push_back ({ StageWidgetType::text, 30, 30, 5, 2, 9.0f, "Watch the MD" });   // off the grid
+                session.setLayoutWidgets (bigId, widgets);
+                session.setCueLayout (1, bigId);
+                session.setTunerMutes (false);
+                session.setReferencePitch (442.0f);
+                session.setPanicBehaviour (PanicBehaviour::latch);
+
+                expect (! engine.getTunerMutes(), "applied to the engine at once");
+                expect (engine.getPanicMode() == AudioEngine::PanicMode::latch);
+                expect (session.save().wasOk());
+            }
+
+            {
+                ShowSession reopened (engine);
+                expect (reopened.openShow (showFolder).wasOk());
+                pumpUntil ([&] { return ! reopened.isBuilding(); });
+
+                expectEquals ((int) reopened.getStage().layouts.size(), 2);
+                expectEquals (reopened.getLayoutForCue (0).name, juce::String ("Default"));
+                expectEquals (reopened.getLayoutForCue (1).name, juce::String ("Big monitor"));
+
+                const auto& text = reopened.getLayoutForCue (1).widgets.back();
+                expectEquals (text.text, juce::String ("Watch the MD"));
+                expect (text.x + text.width <= stageGridColumns && text.y + text.height <= stageGridRows, "kept on the grid");
+                expectEquals (text.textScale, 3.0f);
+                expectEquals (reopened.getStage().referencePitch, 442.0f);
+                expectWithinAbsoluteError (engine.getTuner().getReferencePitch(), 442.0f, 0.01f);
+
+                // Deleting a layout sends its cues back to the default; the last one stays.
+                expect (reopened.deleteLayout (bigId));
+                expectEquals (reopened.getLayoutForCue (1).name, juce::String ("Default"));
+                expect (! reopened.deleteLayout (reopened.getStage().layouts.front().id));
+
+                reopened.setTunerMutes (true);
+                reopened.setPanicBehaviour (PanicBehaviour::recover);
+                expect (reopened.save().wasOk());
+            }
         }
 
         beginTest ("The last patch can't be deleted");

@@ -108,6 +108,10 @@ public:
     void previousNow() noexcept             { applyCommand ({ Command::Type::previous, nullptr, 0 }); }
     void goToCueNow (int index) noexcept    { applyCommand ({ Command::Type::goTo, nullptr, index }); }
 
+    /** Panic (once the output is already silent): drops every ringing patch and
+        clears the playing one's state (delay lines, filters). Stays on the cue. */
+    void panicNow() noexcept;
+
     /** Audio thread: the cue to recall for a program change: the one marked
         with that number, else the cue at that position (PC 0 = first cue). */
     int findCueForProgram (int program) const noexcept;
