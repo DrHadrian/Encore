@@ -6,7 +6,7 @@
 
 #include "engine/blocks/EqBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
-#include "engine/core/ChainHandover.h"
+#include "engine/core/PatchPlayer.h"
 #include "engine/core/LockFreeFifo.h"
 #include "engine/core/Realtime.h"
 #include "engine/dsp/SafetyLimiter.h"
@@ -79,48 +79,6 @@ public:
     }
 };
 
-class ChainHandoverTests final : public juce::UnitTest
-{
-public:
-    ChainHandoverTests() : juce::UnitTest ("Chain handover", "Encore") {}
-
-    void runTest() override
-    {
-        beginTest ("Newest chain wins, older ones are freed on the message thread");
-
-        ChainHandover handover;
-        handover.prepareAll (spec);
-
-        auto makeChain = []
-        {
-            auto c = std::make_unique<Chain>();
-            c->addBlock (std::make_unique<EqBlock>());
-            return c;
-        };
-
-        auto first = makeChain();
-        auto* firstRaw = first.get();
-        handover.publish (std::move (first));
-        expect (handover.acquireActive() == firstRaw);
-
-        auto second = makeChain();
-        auto third = makeChain();
-        auto* thirdRaw = third.get();
-        handover.publish (std::move (second));
-        handover.publish (std::move (third));
-        expectEquals (handover.getNumOwnedChains(), 3);
-
-        expect (handover.acquireActive() == thirdRaw, "skips straight to the newest");
-        expect (handover.getLatest() == thirdRaw);
-
-        handover.collectGarbage();
-        expectEquals (handover.getNumOwnedChains(), 1, "the two replaced chains are gone");
-
-        beginTest ("Published chains are prepared with the current spec");
-        expect (thirdRaw->getSpec() == spec);
-    }
-};
-
 class RealtimeSafetyTests final : public juce::UnitTest
 {
 public:
@@ -141,13 +99,15 @@ public:
 
         beginTest ("Processing, bypassing, sweeping and swapping chains never allocates");
         {
-            ChainHandover handover;
-            handover.prepareAll (spec);
+            PatchPlayer player;
+            player.prepareAll (spec);
 
             auto chain = std::make_unique<Chain>();
             auto& gate = chain->addBlock (std::make_unique<NoiseGateBlock>());
             auto& eq = chain->addBlock (std::make_unique<EqBlock>());
-            handover.publish (std::move (chain));
+            auto* first = player.adopt (std::move (chain));
+            player.publish ({});
+            player.play (first);
 
             dsp::SafetyLimiter limiter;
             limiter.prepare (sampleRate);
@@ -163,32 +123,30 @@ public:
                 gate.setEnabled (i % 50 < 25);
                 eq.setEnabled (i % 70 < 50);
 
-                if (i == 1000)   // a chain swap mid-run (publishing is message-thread work)
+                if (i == 1000)   // a chain swap mid-run (adopting/publishing is message-thread work)
                 {
                     auto replacement = std::make_unique<Chain>();
                     replacement->addBlock (std::make_unique<EqBlock>());
-                    handover.publish (std::move (replacement));
+                    auto* second = player.adopt (std::move (replacement));
+                    player.publish ({});
+                    player.play (second);
                 }
 
                 // What the audio callback does.
                 const rt::ScopedRealtimeSection realtime;
                 float* channels[1] = { signal.data() };
-
-                if (auto* active = handover.acquireActive())
-                    active->process (channels, 1, blockSize);
-
+                player.process (signal.data(), blockSize);
                 limiter.process (channels, 1, blockSize);
             }
 
             expectEquals (realtimeAllocationCount() - before, 0);
-            handover.collectGarbage();
+            player.collectGarbage();
         }
     }
 };
 
 static LockFreeFifoTests lockFreeFifoTests;
 static ParameterTests parameterTests;
-static ChainHandoverTests chainHandoverTests;
 static RealtimeSafetyTests realtimeSafetyTests;
 
 } // namespace encore::test

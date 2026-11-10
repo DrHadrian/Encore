@@ -7,7 +7,7 @@
 #include <atomic>
 
 #include "engine/PeakMeter.h"
-#include "engine/core/ChainHandover.h"
+#include "engine/core/PatchPlayer.h"
 #include "engine/dsp/SafetyLimiter.h"
 
 namespace encore
@@ -15,8 +15,8 @@ namespace encore
 
 /** The real-time heart of Encore.
 
-    Signal path: guitar input -> active chain -> master gain/mute -> safety
-    limiter -> every active output.
+    Signal path: guitar input -> patch player (active patch + patches ringing
+    out) -> master gain/mute -> safety limiter -> every active output.
 
     Threading contract (applies to every engine class):
       - audioDeviceIOCallbackWithContext() runs on the audio thread. It never
@@ -31,18 +31,22 @@ class AudioEngine final : public juce::AudioIODeviceCallback
 public:
     AudioEngine();
 
-    //== Chain (message thread) ================================================
-    /** Hands a new chain to the audio thread. It becomes active on the next callback. */
-    void setChain (std::unique_ptr<Chain> chain);
+    //== Patches (message thread) ==============================================
+    /** Owns every patch's chain and switches between them (see PatchPlayer). */
+    PatchPlayer& getPlayer() noexcept { return player; }
 
-    /** The chain the UI should show and edit. */
-    Chain* getChain() const noexcept { return chains.getLatest(); }
+    /** Shortcut for a single chain (tests, simple setups): adopts it, makes it
+        the only playable chain and plays it. Releases the previous one. */
+    Chain* setChain (std::unique_ptr<Chain> chain);
+
+    /** The chain the audio thread is playing (what the UI shows). */
+    Chain* getChain() const noexcept { return player.getActiveChain(); }
 
     /** The device's current sample rate and buffer size (invalid while stopped). */
     ProcessSpec getCurrentSpec() const noexcept { return { currentSampleRate.load(), currentBlockSize.load() }; }
 
-    /** Frees chains the audio thread has finished with. Call from a UI timer. */
-    void collectGarbage() { chains.collectGarbage(); }
+    /** Frees chains, models, IRs the audio thread has finished with. Call from a UI timer. */
+    void collectGarbage();
 
     //== Controls (message thread) =============================================
     void setMasterGainDecibels (float dB) noexcept;
@@ -84,13 +88,14 @@ public:
 private:
     static void clearOutputs (float* const* outputs, int numOutputs, int numSamples) noexcept;
     void renderChunk (const float* input, float* const* outputs, int numOutputs,
-                      int offset, int numSamples, Chain* chain) noexcept;
+                      int offset, int numSamples) noexcept;
 
     std::atomic<float> masterGainDb { -12.0f };
     std::atomic<bool> muted { true };              // always start muted: safest on a stage
     std::atomic<int> guitarInput { 0 };
 
-    ChainHandover chains;
+    PatchPlayer player;
+    Chain* singleChain = nullptr;   // the chain set by setChain(), if used
 
     // Audio-thread-only state, (re)allocated only in audioDeviceAboutToStart().
     juce::AudioBuffer<float> work;

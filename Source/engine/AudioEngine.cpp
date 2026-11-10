@@ -17,9 +17,18 @@ namespace
 AudioEngine::AudioEngine() = default;
 
 //==============================================================================
-void AudioEngine::setChain (std::unique_ptr<Chain> chain)
+Chain* AudioEngine::setChain (std::unique_ptr<Chain> chain)
 {
-    chains.publish (std::move (chain));
+    player.release (singleChain);
+    singleChain = player.adopt (std::move (chain));
+    player.publish ({});
+    player.play (singleChain);
+    return singleChain;
+}
+
+void AudioEngine::collectGarbage()
+{
+    player.collectGarbage();
 }
 
 void AudioEngine::setMasterGainDecibels (float dB) noexcept
@@ -55,7 +64,7 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
 
     // Everything the callback will touch is sized and prepared here, never in it.
     work.setSize (Block::maxChannels, blockSize, false, true, false);
-    chains.prepareAll ({ sampleRate, blockSize });
+    player.prepareAll ({ sampleRate, blockSize });
     limiter.prepare (sampleRate);
 
     // Start the ramp from silence so a (re)started device never pops.
@@ -86,8 +95,6 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputCha
     if (numOutputChannels <= 0 || numSamples <= 0)
         return;
 
-    auto* chain = chains.acquireActive();
-
     const auto inputIndex = guitarInput.load (std::memory_order_relaxed);
     const float* input = (inputIndex < numInputChannels) ? inputChannelData[inputIndex] : nullptr;
 
@@ -112,19 +119,19 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputCha
 
     for (int offset = 0; offset < numSamples; offset += chunkSize)
         renderChunk (input, outputChannelData, numOutputChannels, offset,
-                     juce::jmin (chunkSize, numSamples - offset), chain);
+                     juce::jmin (chunkSize, numSamples - offset));
 }
 
 void AudioEngine::renderChunk (const float* input, float* const* outputs, int numOutputs,
-                               int offset, int numSamples, Chain* chain) noexcept
+                               int offset, int numSamples) noexcept
 {
     float* channels[Block::maxChannels] = { work.getWritePointer (0), work.getWritePointer (1) };
     const int numChannels = 1;   // guitar is mono until a stereo block (later milestones)
 
     juce::FloatVectorOperations::copy (channels[0], input + offset, numSamples);
 
-    if (chain != nullptr)
-        chain->process (channels, numChannels, numSamples);
+    // The active patch, plus any patches still ringing out (mono).
+    player.process (channels[0], numSamples);
 
     // Master gain, ramped.
     for (int i = 0; i < numSamples; ++i)

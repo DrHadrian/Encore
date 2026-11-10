@@ -4,6 +4,7 @@
 #pragma once
 
 #include <juce_events/juce_events.h>
+#include <map>
 
 #include "engine/AudioEngine.h"
 #include "engine/core/BackgroundJobs.h"
@@ -15,9 +16,12 @@ namespace encore
 /** The open show, and everything that keeps it, the disk and the audio in step.
 
     - Holds the show (the saved model) and its folder.
-    - Builds the selected patch into a chain on a background thread and hands
-      it to the engine when it's ready.
-    - Edits the active patch (add, remove, move blocks; patches in the library).
+    - When a show opens, builds a chain for every patch on a background thread
+      (the playing patch first), so switching never loads anything.
+    - Publishes the running order to the engine's PatchPlayer, and follows
+      what the audio thread actually plays (cues can change from MIDI later).
+    - Edits patches, blocks and the running order; rebuilds only the patch
+      whose block structure changed.
     - Writes live knob changes back into the show and autosaves: 2 s after the
       last change, keeping a backup of the previous version at most every
       5 minutes (and on every explicit save).
@@ -54,17 +58,27 @@ public:
     /** Things that went wrong while loading or saving (missing files...), oldest first. Clears them. */
     juce::StringArray takeProblems();
 
+    /** True while patches are being built (show opening, or a patch being rebuilt). */
+    bool isBuilding() const noexcept { return pendingBuilds > 0; }
+
+    /** Call often (UI timer): follows the audio thread's patch and cue changes. */
+    void syncWithAudio();
+
     //== Patches ===============================================================
+    /** The patch playing now (the one the edit view shows). */
     const juce::String& getActivePatchId() const noexcept { return activePatchId; }
+
+    /** Plays a patch directly (the cue position stays where it is). */
     void selectPatch (const juce::String& patchId);
 
     juce::String addPatch (const juce::String& name);
     juce::String duplicatePatch (const juce::String& patchId);
     void renamePatch (const juce::String& patchId, const juce::String& newName);
     bool deletePatch (const juce::String& patchId);   // refuses to delete the last one
+    void setSpillover (const juce::String& patchId, Spillover mode);
 
-    /** True while the selected patch is being built (models loading). */
-    bool isBuilding() const noexcept { return building; }
+    /** How many cues use a patch. */
+    int countCuesUsing (const juce::String& patchId) const;
 
     //== Blocks in the active patch ============================================
     void addBlock (const juce::String& typeId, int index);
@@ -74,24 +88,56 @@ public:
     /** Call when a knob, switch or file changed in the live chain. */
     void markEdited();
 
+    //== Running order =========================================================
+    /** The cues in playing order (sections flattened, cut cues left out). */
+    std::vector<const RunItem*> getCues() const;
+
+    /** The cue the audio thread is at, or -1. */
+    int getCurrentCue() const noexcept { return currentCue; }
+
+    void next();
+    void previous();
+    void goToCue (int index);
+
+    /** Adds a cue for a patch after the given cue (or at the end). Returns its ID. */
+    juce::String addCue (const juce::String& patchId, int afterIndex);
+    void removeCue (int index);
+    void moveCue (int index, int delta);
+    void renameCue (int index, const juce::String& name);
+    void setCuePatch (int index, const juce::String& patchId);
+    void setCueSamePatch (int index, SamePatchBehaviour behaviour);
+
 private:
     void timerCallback() override;
     void changed (bool showContentChanged);
-    void captureActive();
-    void rebuildActiveChain();
     void adoptShow (ShowModel newShow, const ShowFolder& newFolder);
     juce::Result writeToDisk (bool keepBackup);
-    PatchModel* activePatch();
+
+    void buildAll();
+    void rebuildPatch (const juce::String& patchId);
+    void installChain (const juce::String& key, std::unique_ptr<Chain> chain);
+    void publishRunningOrder();
+    void captureAll();
+
+    PatchModel* findPatchForKey (const juce::String& key);
+    static juce::String keyForCue (const RunItem& cue);
+    RunItem* cueAt (int index);
+    bool locateCue (int index, std::vector<RunItem>*& siblings, int& position);
 
     AudioEngine& engine;
+    PatchPlayer& player;
     ShowModel show;
     ShowFolder folder;
-    juce::String activePatchId;
 
-    Chain* liveChain = nullptr;          // the chain we last handed to the engine
-    juce::String liveChainPatchId;       // ...and which patch it was built from
-    int buildGeneration = 0;
-    bool building = false;
+    // One chain per patch (key = patch ID, or "cue:<id>" for a cue's own patch).
+    std::map<juce::String, Chain*> chains;
+    int showGeneration = 0;
+    std::map<juce::String, int> buildGenerations;
+    int pendingBuilds = 0;
+
+    juce::String activePatchId;   // follows the audio thread
+    int currentCue = -1;
+    Chain* lastSeenActive = nullptr;
 
     bool dirty = false;
     juce::Time lastEdit, lastSave, lastBackup;

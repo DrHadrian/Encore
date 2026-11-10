@@ -27,6 +27,8 @@ private:
     int getNumRows() override;
     void paintListBoxItem (int row, juce::Graphics&, int width, int height, bool selected) override;
     void selectedRowsChanged (int lastRowSelected) override;
+    void listBoxItemClicked (int row, const juce::MouseEvent&) override;
+    void showPatchMenu (int row);
     void listBoxItemDoubleClicked (int row, const juce::MouseEvent&) override;
 
     void rename (int row);

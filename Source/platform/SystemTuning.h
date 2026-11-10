@@ -36,6 +36,9 @@ void ensureAudioThreadIsProAudio() noexcept;
 /** True once some audio thread has been registered as Pro Audio. */
 bool isAudioThreadProAudio() noexcept;
 
+/** Memory Encore is using (private bytes), or 0 if unknown. */
+juce::int64 getProcessMemoryBytes();
+
 /** Power source, for the "plug in for shows" warning. */
 enum class PowerSource { mains, battery, unknown };
 PowerSource getPowerSource();

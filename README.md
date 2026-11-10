@@ -13,9 +13,9 @@ musical.
 
 ## Status
 
-Milestone 4: shows and patches saved to disk, edited in a real edit view;
-NAM amps, cab IRs, gate, EQ, safety limiter. Not usable on stage yet (patch
-switching and MIDI come next).
+Milestone 5: gapless patch switching with delay tails ringing out, a set list
+stepped from the keyboard, every patch preloaded; shows saved to disk; NAM amps,
+cab IRs, gate, EQ, delay, safety limiter. Foot controller (MIDI) comes next.
 
 | Milestone | What you can test |
 | --- | --- |
@@ -70,7 +70,9 @@ gate and limiter behaviour, click-free bypass, the chain handover, sample-rate
 conversion, loading and playing real NAM captures, cab IRs with zero latency,
 the show file format and folders (round trips, backups, portability), building
 patches into chains and capturing edits back, the session (edit, save, reopen),
-and that processing (and swapping amps or IRs) never allocates memory. In Visual Studio use *Test → Run CTests for
+patch switching (mathematically seamless, tails ringing out, safe freeing of
+removed patches), and that processing, switching and swapping amps or IRs never
+allocates memory. In Visual Studio use *Test → Run CTests for
 Encore*, or from a terminal:
 
 ```powershell
@@ -89,6 +91,35 @@ effect. For shows also:
   expense (the status line warns you);
 - set Windows' power mode to **Best performance**;
 - use 64 samples or more, so there is headroom for spikes.
+
+## Testing milestone 5 with your guitar
+
+1. **Set up two patches**, e.g. *Clean* and *Lead*. Add a **Delay** to *Clean*
+   (the **+** tile → *Delay*; try 400 ms, 50 % feedback, 40 % mix).
+2. **Set list**: with *Clean* playing, click **+ Add** in *Set list*; select
+   *Lead* in *Patches* and **+ Add** again; add *Clean* once more. Double-click
+   to name the cues (*Verse*, *Solo*, *Outro*). Right-click a cue to change its
+   patch.
+3. **Step through**: press **Space** (or →/↓) for the next cue, ←/↑ for the
+   previous one, or click a cue. The cue and patch show above the chain.
+4. **Gapless**: hold a chord and switch. There should be no gap and no click.
+   Hammer Space as fast as you can while playing: still no clicks.
+5. **Tails**: play a phrase on *Clean* (with the delay) and switch to *Lead*
+   mid-repeat: the repeats keep ringing out under the lead sound. The status line
+   shows "ringing out 1" until they've faded.
+6. **Spill-over modes**: right-click a patch → *When switching away from it*:
+   *Delay and reverb ring out* (default, lighter on CPU) or *The whole patch
+   rings out* (the amp and cab keep sounding too, until silent).
+7. **Same patch twice**: make two cues in a row with the same patch. Right-click
+   the second → *If the previous cue uses the same patch* → *Reset to its saved
+   settings*: tweak a knob on the first, step on, and the knob snaps back. With
+   *Keep playing as it is* nothing changes.
+8. **Preloading**: opening a show builds every patch in the background (the
+   chain title says *loading patches...*); after that, switching never loads
+   anything. Watch *memory* in the status line with a big show.
+9. **CPU while switching**: patches ringing out run alongside the new one, so CPU
+   rises briefly after a switch. Check overruns stay 0 at your buffer size
+   while stepping quickly.
 
 ## Testing milestone 4 with your guitar
 
@@ -219,8 +250,8 @@ Source/
   model/              the show on disk: data model, JSON format, show folders
   session/            the open show: building patches into chains, editing, autosave
   engine/             everything that runs on or talks to the audio thread
-    core/             Block, Chain, Parameter, handovers, lock-free queues, real-time checks
-    blocks/           the built-in blocks (amp, cab, gate, EQ)
+    core/             Block, Chain, PatchPlayer (switching), Parameter, handovers, lock-free queues
+    blocks/           the built-in blocks (amp, cab, gate, EQ, delay)
     dsp/              allocation-free DSP (filters, limiter, sample-rate conversion)
     nam/              loading and running Neural Amp Modeler captures
   ui/                 edit view pieces: patch list, chain strip, block panel, meters

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <vector>
 
@@ -23,6 +24,13 @@ namespace encore
 class Chain
 {
 public:
+    /** What keeps sounding when the patch is switched away from. */
+    enum class TailMode
+    {
+        tailsOnly,   // only delay/reverb blocks (and what follows them) ring out
+        fullChain    // the whole patch keeps processing its decaying signal
+    };
+
     Chain() = default;
 
     /** Before handing over only. */
@@ -44,10 +52,38 @@ public:
 
     int getLatencySamples() const noexcept;
 
+    //== Patch switching =======================================================
+    void setTailMode (TailMode mode) noexcept { tailMode.store (mode, std::memory_order_relaxed); }
+    TailMode getTailMode() const noexcept     { return tailMode.load (std::memory_order_relaxed); }
+
+    /** Index of the first block with a tail, or -1 (computed by prepare()). */
+    int getFirstTailBlock() const noexcept { return firstTailBlock; }
+
+    /** Audio thread: process starting at a given block (earlier blocks are
+        skipped: used to run only the tails of a patch that was switched away). */
+    void processFrom (int firstBlock, float* const* channels, int numChannels, int numSamples) noexcept;
+
+    /** Message thread: remember every parameter and on/off state as "saved". */
+    void saveSnapshot();
+
+    /** Audio thread: return to the saved state (ramped, no clicks). Atomics only. */
+    void restoreSnapshot() noexcept;
+
+    /** Free-form label for the UI and debugging (usually the patch name). */
+    juce::String label;
+
 private:
     std::vector<std::unique_ptr<Block>> blocks;
     ProcessSpec preparedSpec;
     juce::AudioBuffer<float> chainInput;   // copy of the dry input, for keyed blocks
+    std::atomic<TailMode> tailMode { TailMode::tailsOnly };
+    int firstTailBlock = -1;
+
+    // Saved state, as atomics so the audio thread can restore it while the
+    // message thread updates it. Sized when the chain is prepared.
+    std::unique_ptr<std::atomic<float>[]> snapshotValues;
+    std::unique_ptr<std::atomic<bool>[]> snapshotEnabled;
+    size_t snapshotSize = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Chain)
 };

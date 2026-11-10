@@ -13,8 +13,9 @@ PatchList::PatchList (ShowSession& s) : session (s)
     addAndMakeVisible (header);
 
     list.setRowHeight (38);
+    list.setWantsKeyboardFocus (false);   // Space/arrows always step the show (main window)
     list.setColour (juce::ListBox::backgroundColourId, juce::Colour (0xff1b1e23));
-    list.setTooltip ("Click to play a patch, double-click to rename it");
+    list.setTooltip ("Click to play a patch, double-click to rename it, right-click for options");
     addAndMakeVisible (list);
 
     addButton.onClick = [this]
@@ -85,6 +86,43 @@ void PatchList::selectedRowsChanged (int lastRowSelected)
         session.selectPatch (patches[(size_t) lastRowSelected].id);
 }
 
+void PatchList::listBoxItemClicked (int row, const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu())
+        showPatchMenu (row);
+}
+
+void PatchList::showPatchMenu (int row)
+{
+    const auto& patches = session.getShow().patches;
+
+    if (! juce::isPositiveAndBelow (row, (int) patches.size()))
+        return;
+
+    const auto& patch = patches[(size_t) row];
+    const auto id = patch.id;
+    const auto tails = patch.spillover == Spillover::tails;
+    juce::Component::SafePointer<PatchList> safeThis (this);
+
+    juce::PopupMenu spill;
+    spill.addItem ("Delay and reverb ring out (lighter on CPU)", true, tails, [safeThis, id]
+    {
+        if (safeThis != nullptr) safeThis->session.setSpillover (id, Spillover::tails);
+    });
+    spill.addItem ("The whole patch rings out", true, ! tails, [safeThis, id]
+    {
+        if (safeThis != nullptr) safeThis->session.setSpillover (id, Spillover::fullChain);
+    });
+
+    juce::PopupMenu menu;
+    menu.addItem ("Rename...", [safeThis, row] { if (safeThis != nullptr) safeThis->rename (row); });
+    menu.addItem ("Duplicate", [safeThis, id] { if (safeThis != nullptr) safeThis->session.duplicatePatch (id); });
+    menu.addSubMenu ("When switching away from it", spill);
+    menu.addSeparator();
+    menu.addItem ("Delete...", patches.size() > 1, false, [safeThis] { if (safeThis != nullptr) safeThis->confirmDelete(); });
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this));
+}
+
 void PatchList::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
 {
     rename (row);
@@ -123,7 +161,11 @@ void PatchList::confirmDelete()
     juce::AlertWindow::showAsync (juce::MessageBoxOptions{}
                                       .withIconType (juce::MessageBoxIconType::WarningIcon)
                                       .withTitle ("Delete \"" + patch->name + "\"?")
-                                      .withMessage ("The patch is removed from this show. A backup of the show is kept.")
+                                      .withMessage (juce::String ("The patch is removed from this show. A backup of the show is kept.")
+                                                    + (session.countCuesUsing (id) > 0
+                                                           ? "\n\n" + juce::String (session.countCuesUsing (id))
+                                                                 + " cue(s) use it; they will keep their place but no longer change the sound."
+                                                           : juce::String()))
                                       .withButton ("Delete", 1)
                                       .withButton ("Cancel", 0)
                                       .withAssociatedComponent (this),
