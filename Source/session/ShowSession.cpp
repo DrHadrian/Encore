@@ -41,6 +41,53 @@ namespace
         }
     }
 
+    /** The list holding an item (sections included), and where in it. */
+    bool locateItem (RunItem& parent, const juce::String& id, std::vector<RunItem>*& siblings, int& position)
+    {
+        for (int i = 0; i < (int) parent.children.size(); ++i)
+        {
+            if (parent.children[(size_t) i].id == id)
+            {
+                siblings = &parent.children;
+                position = i;
+                return true;
+            }
+
+            if (locateItem (parent.children[(size_t) i], id, siblings, position))
+                return true;
+        }
+
+        return false;
+    }
+
+    /** The section whose children are `list` (or null for the root's). */
+    RunItem* ownerOf (RunItem& item, const std::vector<RunItem>* list)
+    {
+        if (&item.children == list)
+            return &item;
+
+        for (auto& child : item.children)
+            if (auto* found = ownerOf (child, list))
+                return found;
+
+        return nullptr;
+    }
+
+    void collectRows (const RunItem& section, int depth, int& cueIndex, std::vector<ShowSession::Row>& out)
+    {
+        for (auto& item : section.children)
+        {
+            const auto playable = item.kind == RunItem::Kind::cue && ! item.cut;
+            out.push_back ({ &item, depth, playable ? cueIndex : -1 });
+
+            if (playable)
+                ++cueIndex;
+
+            if (item.kind == RunItem::Kind::section)
+                collectRows (item, depth + 1, cueIndex, out);
+        }
+    }
+
     RunItem* findCueById (RunItem& item, const juce::String& id)
     {
         if (item.kind == RunItem::Kind::cue && item.id == id)
@@ -117,6 +164,7 @@ void ShowSession::adoptShow (ShowModel newShow, const ShowFolder& newFolder)
     player.publish ({});
 
     show = std::move (newShow);
+    renumberCues();   // numbers always follow the order (older shows may differ)
     folder = newFolder;
     dirty = false;
     lastSave = lastBackup = juce::Time::getCurrentTime();
@@ -824,6 +872,310 @@ RunItem* ShowSession::cueAt (int index)
     return locateCue (index, siblings, position) ? &(*siblings)[(size_t) position] : nullptr;
 }
 
+//==============================================================================
+std::vector<ShowSession::Row> ShowSession::getRunningOrderRows() const
+{
+    std::vector<Row> rows;
+    int cueIndex = 0;
+    collectRows (show.runningOrder, 0, cueIndex, rows);
+    return rows;
+}
+
+RunItem* ShowSession::findItem (const juce::String& id)
+{
+    std::vector<RunItem>* siblings = nullptr;
+    int position = 0;
+    return locateItem (show.runningOrder, id, siblings, position) ? &(*siblings)[(size_t) position] : nullptr;
+}
+
+int ShowSession::getCueIndexOf (const juce::String& id) const
+{
+    const auto cues = getCues();
+
+    for (int i = 0; i < (int) cues.size(); ++i)
+        if (cues[(size_t) i]->id == id)
+            return i;
+
+    return -1;
+}
+
+int ShowSession::findCueByNumber (const juce::String& number) const
+{
+    const auto wanted = number.trim();
+    const auto cues = getCues();
+
+    for (int i = 0; i < (int) cues.size(); ++i)
+        if (cues[(size_t) i]->number == wanted)
+            return i;
+
+    return -1;
+}
+
+juce::String ShowSession::getSectionPath (int cueIndex) const
+{
+    // Walk the rows keeping the open sections, one per depth.
+    juce::StringArray path;
+
+    for (auto& row : getRunningOrderRows())
+    {
+        while (path.size() > row.depth)
+            path.remove (path.size() - 1);
+
+        if (row.item->kind == RunItem::Kind::section)
+            path.add (row.item->name);
+        else if (row.cueIndex == cueIndex)
+            return path.joinIntoString (" / ");
+    }
+
+    return {};
+}
+
+void ShowSession::renumberCues()
+{
+    // Always 1..N in playing order; cut cues have no number.
+    int number = 1;
+
+    std::function<void (RunItem&)> walk = [&] (RunItem& section)
+    {
+        for (auto& item : section.children)
+        {
+            if (item.kind == RunItem::Kind::section)
+                walk (item);
+            else
+                item.number = item.cut ? juce::String() : juce::String (number++);
+        }
+    };
+
+    walk (show.runningOrder);
+}
+
+void ShowSession::runningOrderChanged (const juce::String& keepPlayingId)
+{
+    renumberCues();
+    publishRunningOrder();
+
+    // "Next" continues from the cue that's playing, wherever it is now.
+    if (keepPlayingId.isNotEmpty())
+    {
+        if (const auto index = getCueIndexOf (keepPlayingId); index >= 0)
+            player.setCuePosition (index);
+    }
+
+    changed (true);
+}
+
+juce::String ShowSession::insertCue (const juce::String& afterId)
+{
+    const auto playingId = cueAt (currentCue) != nullptr ? cueAt (currentCue)->id : juce::String();
+
+    // The new cue plays what the cue before it plays (usually the case on a
+    // score: the sound continues until the next change).
+    juce::String patchId = show.patches.empty() ? juce::String() : show.patches.front().id;
+    const auto rows = getRunningOrderRows();
+
+    for (auto& row : rows)
+    {
+        if (row.item->kind == RunItem::Kind::cue && ! row.item->uniquePatch && row.item->patchId.isNotEmpty())
+            patchId = row.item->patchId;
+
+        if (row.item->id == afterId)
+            break;
+    }
+
+    const auto* patch = show.findPatch (patchId);
+    auto cue = RunItem::makeCue ({}, patch != nullptr ? patch->name : juce::String ("Cue"), patchId);
+    const auto id = cue.id;
+
+    std::vector<RunItem>* siblings = nullptr;
+    int position = 0;
+
+    if (afterId.isEmpty() || ! locateItem (show.runningOrder, afterId, siblings, position))
+        show.runningOrder.children.push_back (std::move (cue));
+    else if ((*siblings)[(size_t) position].kind == RunItem::Kind::section)
+        (*siblings)[(size_t) position].children.insert ((*siblings)[(size_t) position].children.begin(), std::move (cue));
+    else
+        siblings->insert (siblings->begin() + position + 1, std::move (cue));
+
+    runningOrderChanged (playingId);
+    return id;
+}
+
+juce::String ShowSession::insertSection (const juce::String& afterId, const juce::String& name, const juce::String& kind)
+{
+    const auto playingId = cueAt (currentCue) != nullptr ? cueAt (currentCue)->id : juce::String();
+    auto section = RunItem::makeSection (name, kind);
+    const auto id = section.id;
+
+    std::vector<RunItem>* siblings = nullptr;
+    int position = 0;
+
+    if (afterId.isEmpty() || ! locateItem (show.runningOrder, afterId, siblings, position))
+        show.runningOrder.children.push_back (std::move (section));
+    else
+        siblings->insert (siblings->begin() + position + 1, std::move (section));
+
+    runningOrderChanged (playingId);
+    return id;
+}
+
+void ShowSession::deleteItem (const juce::String& id)
+{
+    std::vector<RunItem>* siblings = nullptr;
+    int position = 0;
+
+    if (! locateItem (show.runningOrder, id, siblings, position))
+        return;
+
+    const auto playingId = cueAt (currentCue) != nullptr ? cueAt (currentCue)->id : juce::String();
+    const auto removedIndex = getCueIndexOf (id);
+    auto removed = std::move ((*siblings)[(size_t) position]);
+    siblings->erase (siblings->begin() + position);
+
+    // A section's contents stay where they were, one level up.
+    if (removed.kind == RunItem::Kind::section)
+        siblings->insert (siblings->begin() + position,
+                          std::make_move_iterator (removed.children.begin()),
+                          std::make_move_iterator (removed.children.end()));
+
+    renumberCues();
+    publishRunningOrder();
+
+    if (id == playingId)
+        player.setCuePosition (removedIndex - 1);   // "next" plays the cue that followed
+    else if (const auto index = getCueIndexOf (playingId); index >= 0)
+        player.setCuePosition (index);
+
+    changed (true);
+}
+
+void ShowSession::moveItem (const juce::String& id, int direction)
+{
+    std::vector<RunItem>* siblings = nullptr;
+    int position = 0;
+
+    if (direction == 0 || ! locateItem (show.runningOrder, id, siblings, position))
+        return;
+
+    const auto playingId = cueAt (currentCue) != nullptr ? cueAt (currentCue)->id : juce::String();
+    const auto target = position + (direction < 0 ? -1 : 1);
+
+    if (juce::isPositiveAndBelow (target, (int) siblings->size()))
+    {
+        auto& neighbour = (*siblings)[(size_t) target];
+
+        if (neighbour.kind == RunItem::Kind::section && (*siblings)[(size_t) position].kind == RunItem::Kind::cue)
+        {
+            // Into the neighbouring section: at its end coming from below, at its start from above.
+            auto item = std::move ((*siblings)[(size_t) position]);
+            siblings->erase (siblings->begin() + position);
+            auto& section = (*siblings)[(size_t) (direction < 0 ? target : position)];
+
+            if (direction < 0)
+                section.children.push_back (std::move (item));
+            else
+                section.children.insert (section.children.begin(), std::move (item));
+        }
+        else
+        {
+            std::swap ((*siblings)[(size_t) position], neighbour);
+        }
+    }
+    else if (auto* owner = ownerOf (show.runningOrder, siblings); owner != nullptr && owner != &show.runningOrder)
+    {
+        // At the section's edge: out of it, just before or after it.
+        const auto ownerId = owner->id;
+        auto item = std::move ((*siblings)[(size_t) position]);
+        siblings->erase (siblings->begin() + position);
+
+        std::vector<RunItem>* outer = nullptr;
+        int ownerPosition = 0;
+
+        if (locateItem (show.runningOrder, ownerId, outer, ownerPosition))
+            outer->insert (outer->begin() + ownerPosition + (direction < 0 ? 0 : 1), std::move (item));
+    }
+    else
+    {
+        return;   // already first/last
+    }
+
+    runningOrderChanged (playingId);
+}
+
+void ShowSession::setCut (const juce::String& id, bool cut)
+{
+    auto* item = findItem (id);
+
+    if (item == nullptr || item->kind != RunItem::Kind::cue || item->cut == cut)
+        return;
+
+    const auto playingId = cueAt (currentCue) != nullptr ? cueAt (currentCue)->id : juce::String();
+    const auto wasIndex = getCueIndexOf (id);
+    item->cut = cut;
+
+    // A cue with its own patch that was cut when the show opened has no chain yet.
+    if (! cut && item->uniquePatch && chains.find (keyForCue (*item)) == chains.end())
+        rebuildPatch (keyForCue (*item));
+
+    renumberCues();
+    publishRunningOrder();
+
+    if (id == playingId && cut)
+        player.setCuePosition (wasIndex - 1);
+    else if (const auto index = getCueIndexOf (playingId); index >= 0)
+        player.setCuePosition (index);
+
+    changed (true);
+}
+
+void ShowSession::setItemName (const juce::String& id, const juce::String& name)
+{
+    if (auto* item = findItem (id); item != nullptr && item->name != name.trim())
+    {
+        item->name = name.trim();
+        changed (true);
+    }
+}
+
+void ShowSession::setItemNote (const juce::String& id, const juce::String& note)
+{
+    if (auto* item = findItem (id); item != nullptr && item->note != note.trim())
+    {
+        item->note = note.trim();
+        changed (true);
+    }
+}
+
+void ShowSession::setItemBarMark (const juce::String& id, const juce::String& barMark)
+{
+    if (auto* item = findItem (id); item != nullptr && item->barMark != barMark.trim())
+    {
+        item->barMark = barMark.trim();
+        changed (true);
+    }
+}
+
+void ShowSession::setSectionKind (const juce::String& id, const juce::String& kind)
+{
+    if (auto* item = findItem (id); item != nullptr && item->kind == RunItem::Kind::section)
+    {
+        item->sectionKind = kind;
+        changed (true);
+    }
+}
+
+void ShowSession::setItemPatch (const juce::String& id, const juce::String& patchId)
+{
+    auto* item = findItem (id);
+
+    if (item == nullptr || item->kind != RunItem::Kind::cue || show.findPatch (patchId) == nullptr)
+        return;
+
+    item->patchId = patchId;
+    item->uniquePatch.reset();
+    publishRunningOrder();
+    changed (true);
+}
+
 void ShowSession::next()             { player.next(); }
 void ShowSession::previous()         { player.previous(); }
 void ShowSession::goToCue (int index) { player.goToCue (index); }
@@ -842,6 +1194,7 @@ juce::String ShowSession::addCue (const juce::String& patchId, int afterIndex)
     else
         show.runningOrder.children.push_back (cue);
 
+    renumberCues();
     publishRunningOrder();
 
     // Keep "next" continuing from the cue that is playing, wherever it moved to.
@@ -864,6 +1217,7 @@ void ShowSession::removeCue (int index)
         return;
 
     siblings->erase (siblings->begin() + position);
+    renumberCues();
     publishRunningOrder();
 
     if (index < currentCue)
@@ -889,6 +1243,7 @@ void ShowSession::moveCue (int index, int delta)
 
     const auto currentId = cueAt (currentCue) != nullptr ? cueAt (currentCue)->id : juce::String();
     std::swap ((*siblings)[(size_t) position], (*siblings)[(size_t) target]);
+    renumberCues();
     publishRunningOrder();
 
     const auto cues = getCues();
