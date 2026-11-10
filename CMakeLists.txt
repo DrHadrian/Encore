@@ -33,6 +33,36 @@ else()
 endif()
 
 # ------------------------------------------------------------------------------
+# Engine sources, shared by the app and the tests.
+# An INTERFACE library: each target compiles them with its own JUCE modules,
+# which avoids linking JUCE twice.
+# ------------------------------------------------------------------------------
+add_library(EncoreEngine INTERFACE)
+
+target_sources(EncoreEngine INTERFACE
+    Source/engine/PeakMeter.h
+    Source/engine/blocks/EqBlock.cpp
+    Source/engine/blocks/EqBlock.h
+    Source/engine/blocks/NoiseGateBlock.cpp
+    Source/engine/blocks/NoiseGateBlock.h
+    Source/engine/core/Block.cpp
+    Source/engine/core/Block.h
+    Source/engine/core/Chain.cpp
+    Source/engine/core/Chain.h
+    Source/engine/core/ChainHandover.cpp
+    Source/engine/core/ChainHandover.h
+    Source/engine/core/LockFreeFifo.h
+    Source/engine/core/Parameter.cpp
+    Source/engine/core/Parameter.h
+    Source/engine/core/Realtime.cpp
+    Source/engine/core/Realtime.h
+    Source/engine/dsp/Biquad.h
+    Source/engine/dsp/SafetyLimiter.cpp
+    Source/engine/dsp/SafetyLimiter.h)
+
+target_include_directories(EncoreEngine INTERFACE Source)
+
+# ------------------------------------------------------------------------------
 # The app
 # ------------------------------------------------------------------------------
 juce_add_gui_app(Encore
@@ -48,11 +78,10 @@ target_sources(Encore PRIVATE
     Source/app/MainComponent.h
     Source/engine/AudioEngine.cpp
     Source/engine/AudioEngine.h
-    Source/engine/PeakMeter.h
+    Source/ui/BlockPanel.cpp
+    Source/ui/BlockPanel.h
     Source/ui/LevelMeter.cpp
     Source/ui/LevelMeter.h)
-
-target_include_directories(Encore PRIVATE Source)
 
 target_compile_definitions(Encore PRIVATE
     # Audio drivers. ASIO is the one we play through; WASAPI stays as a fallback
@@ -68,6 +97,7 @@ target_compile_definitions(Encore PRIVATE
 
 target_link_libraries(Encore
     PRIVATE
+        EncoreEngine
         juce::juce_audio_utils
         juce::juce_audio_devices
         juce::juce_audio_basics
@@ -76,6 +106,42 @@ target_link_libraries(Encore
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+# ------------------------------------------------------------------------------
+# Tests: a console app that runs every engine unit test.
+#   cmake --build --preset debug --target EncoreTests && ctest --preset debug
+# ------------------------------------------------------------------------------
+option(ENCORE_BUILD_TESTS "Build the engine unit tests" ON)
+
+if(ENCORE_BUILD_TESTS)
+    enable_testing()
+
+    juce_add_console_app(EncoreTests PRODUCT_NAME "EncoreTests")
+
+    target_sources(EncoreTests PRIVATE
+        Tests/TestMain.cpp
+        Tests/AllocationCounter.cpp
+        Tests/AllocationCounter.h
+        Tests/DspTests.cpp
+        Tests/EngineCoreTests.cpp
+        Tests/TestSignals.h)
+
+    target_compile_definitions(EncoreTests PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_UNIT_TESTS=1)
+
+    target_link_libraries(EncoreTests
+        PRIVATE
+            EncoreEngine
+            juce::juce_audio_basics
+            juce::juce_core
+        PUBLIC
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags)
+
+    add_test(NAME EncoreTests COMMAND EncoreTests)
+endif()
 
 if(MSVC)
     # Encore is the startup project when opening the generated solution.

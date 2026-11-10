@@ -22,6 +22,9 @@ jobs:
       - name: Build (Release)
         run: cmake --build build --config Release --parallel
 
+      - name: Run engine tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
       - name: Upload Encore.exe
         uses: actions/upload-artifact@v4
         with:

@@ -3,6 +3,10 @@
 
 #include "app/MainComponent.h"
 
+#include "engine/blocks/EqBlock.h"
+#include "engine/blocks/NoiseGateBlock.h"
+#include "engine/core/Realtime.h"
+
 namespace encore
 {
 
@@ -96,6 +100,13 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     addAndMakeVisible (inputMeter);
     addAndMakeVisible (outputMeter);
 
+    styleStatus (chainLabel, 16.0f);
+    addAndMakeVisible (chainLabel);
+
+    // The chain is handed to the engine before audio starts, so the device
+    // prepares it along with everything else.
+    buildDefaultChain();
+
     // Open the audio device: the saved one if possible, else a sensible default.
     // Prefer ASIO on first run because it gives the lowest, most stable latency.
     auto savedState = settings.getAudioDeviceState();
@@ -119,7 +130,7 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     refreshInputChoices();
     refreshStatus();
 
-    setSize (760, 540);
+    setSize (1000, 760);
     startTimerHz (30);
 }
 
@@ -129,6 +140,40 @@ MainComponent::~MainComponent()
     deviceManager.removeChangeListener (this);
     deviceManager.removeAudioCallback (&engine);
     settings.save();
+}
+
+//==============================================================================
+void MainComponent::buildDefaultChain()
+{
+    // Milestone 1 test rig: gate then EQ. Patches (milestone 4) replace this.
+    auto chain = std::make_unique<Chain>();
+    chain->addBlock (std::make_unique<NoiseGateBlock>());
+    chain->addBlock (std::make_unique<EqBlock>());
+    engine.setChain (std::move (chain));
+
+    rebuildBlockPanels();
+}
+
+void MainComponent::rebuildBlockPanels()
+{
+    blockPanels.clear();
+    shownChain = engine.getChain();
+
+    if (shownChain == nullptr)
+        return;
+
+    for (auto& block : shownChain->getBlocks())
+    {
+        auto panel = std::make_unique<BlockPanel> (*block);
+
+        if (auto* gate = dynamic_cast<NoiseGateBlock*> (block.get()))
+            panel->setStatusLight ("open", [gate] { return gate->isOpen(); });
+
+        addAndMakeVisible (*panel);
+        blockPanels.push_back (std::move (panel));
+    }
+
+    resized();
 }
 
 //==============================================================================
@@ -238,8 +283,16 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*)
 
 void MainComponent::timerCallback()
 {
+    engine.collectGarbage();
+
+    if (engine.getChain() != shownChain)
+        rebuildBlockPanels();
+
     inputMeter.setPeak (engine.getInputMeter().take());
     outputMeter.setPeak (engine.getOutputMeter().take());
+
+    for (auto& panel : blockPanels)
+        panel->refresh();
 
     // Text changes ~3x a second so numbers stay readable.
     if (++frameCounter % 10 != 0)
@@ -257,7 +310,16 @@ void MainComponent::timerCallback()
             health << "   |   driver dropouts " << driverXruns;
     }
 
-    health << "   |   clips " << engine.getClipCount();
+    const auto limiting = engine.takeLimiterReductionDb();
+    health << "   |   limiter " << (limiting < -0.1f ? juce::String (limiting, 1) + " dB" : juce::String ("idle"));
+
+    if (engine.getClipCount() > 0)
+        health << "   |   clips " << engine.getClipCount();
+
+    // Debug builds only: allocations on the audio thread (must stay 0).
+    if (rt::isAllocationTripwireInstalled())
+        health << "   |   RT violations " << rt::getViolationCount();
+
     healthStatus.setText (health, juce::dontSendNotification);
 }
 
@@ -290,7 +352,18 @@ void MainComponent::resized()
     area.removeFromTop (10);
     outputMeter.setBounds (area.removeFromTop (34));
 
-    area.removeFromTop (24);
+    area.removeFromTop (20);
+    chainLabel.setBounds (area.removeFromTop (26));
+    area.removeFromTop (6);
+    auto chainRow = area.removeFromTop (190);
+
+    for (auto& panel : blockPanels)
+    {
+        panel->setBounds (chainRow.removeFromLeft (panel->getPreferredWidth()));
+        chainRow.removeFromLeft (16);
+    }
+
+    area.removeFromTop (20);
     auto volumeRow = area.removeFromTop (64);
     muteButton.setBounds (volumeRow.removeFromRight (160));
     volumeRow.removeFromRight (16);

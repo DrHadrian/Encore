@@ -13,12 +13,13 @@ musical.
 
 ## Status
 
-Milestone 0: device setup and dry guitar passthrough. Not usable on stage yet.
+Milestone 1: real-time engine core with a noise gate, EQ and safety limiter.
+Not usable on stage yet.
 
 | Milestone | What you can test |
 | --- | --- |
 | **0 – Toolchain and passthrough** ✅ | Dry guitar through ASIO, latency display, meters, CPU/dropout counters, master volume and mute |
-| 1 – Real-time core | Gate and EQ blocks, click-free toggles, limiter |
+| **1 – Real-time core** ✅ | Gate and EQ blocks, click-free toggles and sweeps, safety limiter |
 | 2 – NAM amp block | Play through .nam captures |
 | 3 – Cab IR block | Amp + cab |
 | 4 – Data model and saving | Patches and shows saved to a self-contained folder |
@@ -58,8 +59,40 @@ cmake --build --preset release
 If you already have a JUCE checkout, add `-DENCORE_JUCE_DIR=C:/path/to/JUCE` to
 skip the download.
 
-Every push is also built on GitHub Actions; the built `Encore.exe` is attached to
-each run as an artifact.
+Every push is also built on GitHub Actions and the tests are run there; the built
+`Encore.exe` is attached to each run as an artifact.
+
+### Tests
+
+`EncoreTests` checks the engine without any audio hardware: filter responses,
+gate and limiter behaviour, click-free bypass, the chain handover, and that
+processing never allocates memory. In Visual Studio use *Test → Run CTests for
+Encore*, or from a terminal:
+
+```powershell
+cmake --build --preset debug --target EncoreTests
+ctest --preset debug
+```
+
+## Testing milestone 1 with your guitar
+
+Set up audio as in milestone 0 below, then:
+
+1. **Gate**: with your guitar volume up and not playing, raise **Threshold**
+   until the hiss disappears and the *open* light goes off. Play: the light comes
+   on instantly and notes ring out without being chopped. Lower **Range** toward
+   −20 dB for a gentler gate.
+2. **EQ**: sweep every knob quickly while you play. You should hear the tone
+   change, but never a click, zipper noise or crackle. Double-click a knob to
+   reset it.
+3. **On/off**: hit each block's **ON/OFF** switch repeatedly while a chord
+   rings. No clicks. An *OFF* block shows no CPU because it isn't processed at all.
+4. **Limiter**: turn **Master volume** to +12 dB and dig in. The health line
+   shows the limiter working (e.g. `limiter -4.5 dB`) and the output meter never
+   reaches the red clip light. At normal levels it reads `idle`.
+5. **Debug build only**: the health line shows `RT violations`. It must stay
+   at **0** whatever you do. Anything else means the audio thread allocated
+   memory, which is a bug to report.
 
 ## Testing milestone 0 with your guitar
 
@@ -86,7 +119,11 @@ Source/
   Main.cpp            app start-up, main window
   app/                windows, settings (per-machine, in %APPDATA%\Encore)
   engine/             everything that runs on or talks to the audio thread
+    core/             Block, Chain, Parameter, lock-free queues, real-time checks
+    blocks/           the built-in blocks (gate, EQ; NAM and IR next)
+    dsp/              allocation-free DSP building blocks (filters, limiter)
   ui/                 reusable widgets
+Tests/                engine unit tests (run in CI)
 docs/DECISIONS.md     short log of important design decisions
 ```
 

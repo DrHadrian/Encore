@@ -2,6 +2,7 @@
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
 #include "engine/AudioEngine.h"
+#include "engine/core/Realtime.h"
 
 namespace encore
 {
@@ -9,12 +10,17 @@ namespace encore
 namespace
 {
     constexpr double gainRampSeconds = 0.02;   // 20 ms: fast enough to feel instant, slow enough not to click
-    constexpr float safetyCeiling = 0.999f;    // hard clamp until the real limiter arrives (milestone 1)
+    constexpr float hardCeiling = 0.999f;      // last resort after the limiter; should never act
 }
 
 AudioEngine::AudioEngine() = default;
 
 //==============================================================================
+void AudioEngine::setChain (std::unique_ptr<Chain> chain)
+{
+    chains.publish (std::move (chain));
+}
+
 void AudioEngine::setMasterGainDecibels (float dB) noexcept
 {
     masterGainDb.store (juce::jlimit (-60.0f, 12.0f, dB), std::memory_order_relaxed);
@@ -46,6 +52,11 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     currentBlockSize.store (blockSize);
     loadMeasurer.reset (sampleRate, blockSize);
 
+    // Everything the callback will touch is sized and prepared here, never in it.
+    work.setSize (Block::maxChannels, blockSize, false, true, false);
+    chains.prepareAll ({ sampleRate, blockSize });
+    limiter.prepare (sampleRate);
+
     // Start the ramp from silence so a (re)started device never pops.
     gain.reset (sampleRate, gainRampSeconds);
     gain.setCurrentAndTargetValue (0.0f);
@@ -66,58 +77,90 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputCha
                                                     const juce::AudioIODeviceCallbackContext&)
 {
     // AUDIO THREAD: no allocation, no locks, no I/O, no logging below this line.
+    const rt::ScopedRealtimeSection realtime;
     const juce::ScopedNoDenormals noDenormals;
     const juce::AudioProcessLoadMeasurer::ScopedTimer timer (loadMeasurer, numSamples);
 
     if (numOutputChannels <= 0 || numSamples <= 0)
         return;
 
+    auto* chain = chains.acquireActive();
+
     const auto inputIndex = guitarInput.load (std::memory_order_relaxed);
     const float* input = (inputIndex < numInputChannels) ? inputChannelData[inputIndex] : nullptr;
 
-    if (input == nullptr)
+    if (input == nullptr || work.getNumSamples() == 0)
     {
         clearOutputs (outputChannelData, numOutputChannels, numSamples);
         return;
     }
 
-    // Input meter: the raw guitar signal, before any gain.
+    // Input meter: the raw guitar signal, before anything else.
     const auto inputRange = juce::FloatVectorOperations::findMinAndMax (input, numSamples);
     inputMeter.push (juce::jmax (inputRange.getEnd(), -inputRange.getStart()));
 
-    // Master gain, ramped.
     const auto target = muted.load (std::memory_order_relaxed)
                             ? 0.0f
                             : juce::Decibels::decibelsToGain (masterGainDb.load (std::memory_order_relaxed));
     gain.setTargetValue (target);
 
-    float* const firstOut = outputChannelData[0];
+    // Drivers may occasionally deliver more samples than the buffer size they
+    // announced; process in chunks that fit the prepared size.
+    const auto chunkSize = work.getNumSamples();
 
-    if (firstOut == nullptr)
-        return;
+    for (int offset = 0; offset < numSamples; offset += chunkSize)
+        renderChunk (input, outputChannelData, numOutputChannels, offset,
+                     juce::jmin (chunkSize, numSamples - offset), chain);
+}
+
+void AudioEngine::renderChunk (const float* input, float* const* outputs, int numOutputs,
+                               int offset, int numSamples, Chain* chain) noexcept
+{
+    float* channels[Block::maxChannels] = { work.getWritePointer (0), work.getWritePointer (1) };
+    const int numChannels = 1;   // guitar is mono until a stereo block (later milestones)
+
+    juce::FloatVectorOperations::copy (channels[0], input + offset, numSamples);
+
+    if (chain != nullptr)
+        chain->process (channels, numChannels, numSamples);
+
+    // Master gain, ramped.
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto g = gain.getNextValue();
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            channels[ch][i] *= g;
+    }
+
+    limiter.process (channels, numChannels, numSamples);
 
     float outPeak = 0.0f;
     bool clipped = false;
 
-    for (int i = 0; i < numSamples; ++i)
+    for (int ch = 0; ch < numChannels; ++ch)
     {
-        auto sample = input[i] * gain.getNextValue();
-
-        if (std::abs (sample) > safetyCeiling)
+        for (int i = 0; i < numSamples; ++i)
         {
-            sample = std::copysign (safetyCeiling, sample);
-            clipped = true;
-        }
+            auto& sample = channels[ch][i];
 
-        outPeak = juce::jmax (outPeak, std::abs (sample));
-        firstOut[i] = sample;
+            if (std::abs (sample) > hardCeiling)
+            {
+                sample = std::copysign (hardCeiling, sample);
+                clipped = true;
+            }
+
+            outPeak = juce::jmax (outPeak, std::abs (sample));
+        }
     }
 
-    // Mono guitar to every active output (stereo FOH etc.). Named output buses
-    // replace this in milestone 11.
-    for (int ch = 1; ch < numOutputChannels; ++ch)
-        if (outputChannelData[ch] != nullptr)
-            juce::FloatVectorOperations::copy (outputChannelData[ch], firstOut, numSamples);
+    // Mono (or stereo) result to every active output. Named output buses
+    // (FOH, IEM...) replace this in milestone 11.
+    for (int out = 0; out < numOutputs; ++out)
+        if (outputs[out] != nullptr)
+            juce::FloatVectorOperations::copy (outputs[out] + offset,
+                                               channels[juce::jmin (out, numChannels - 1)],
+                                               numSamples);
 
     outputMeter.push (outPeak);
 
