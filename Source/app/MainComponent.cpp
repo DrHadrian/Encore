@@ -1,0 +1,306 @@
+// Encore — live guitar rig host
+// Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
+
+#include "app/MainComponent.h"
+
+namespace encore
+{
+
+namespace
+{
+    const auto background = juce::Colour (0xff121417);
+    const auto mutedRed   = juce::Colour (0xffc62f35);
+    const auto liveGreen  = juce::Colour (0xff2e9e5b);
+
+    void styleStatus (juce::Label& label, float size)
+    {
+        label.setFont (juce::FontOptions (size));
+        label.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.85f));
+        label.setJustificationType (juce::Justification::centredLeft);
+    }
+
+    juce::String formatMs (int samples, double sampleRate)
+    {
+        return juce::String (1000.0 * samples / sampleRate, 1) + " ms";
+    }
+}
+
+//==============================================================================
+MainComponent::MainComponent (AppSettings& s) : settings (s)
+{
+    title.setText ("Encore", juce::dontSendNotification);
+    title.setFont (juce::FontOptions (28.0f, juce::Font::bold));
+    title.setColour (juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible (title);
+
+    for (auto* label : { &deviceStatus, &latencyStatus, &healthStatus })
+    {
+        styleStatus (*label, 16.0f);
+        addAndMakeVisible (label);
+    }
+
+    styleStatus (warning, 15.0f);
+    warning.setColour (juce::Label::textColourId, juce::Colour (0xfff0b429));
+    addAndMakeVisible (warning);
+
+    for (auto* label : { &inputLabel, &volumeLabel })
+    {
+        styleStatus (*label, 16.0f);
+        addAndMakeVisible (label);
+    }
+
+    audioSettingsButton.onClick = [this] { openAudioSettings(); };
+    addAndMakeVisible (audioSettingsButton);
+
+    resetCountersButton.onClick = [this] { engine.resetCounters(); };
+    addAndMakeVisible (resetCountersButton);
+
+    inputChoice.onChange = [this]
+    {
+        const auto index = inputChoice.getSelectedId() - 1;   // ids are 1-based
+
+        if (index >= 0)
+        {
+            engine.setGuitarInputChannel (index);
+            settings.setGuitarInputChannel (index);
+        }
+    };
+    addAndMakeVisible (inputChoice);
+
+    volume.setRange (-60.0, 12.0, 0.1);
+    volume.setTextValueSuffix (" dB");
+    volume.setDoubleClickReturnValue (true, 0.0);
+    volume.setValue (settings.getMasterGainDecibels(), juce::dontSendNotification);
+    engine.setMasterGainDecibels ((float) volume.getValue());
+    volume.onValueChange = [this]
+    {
+        engine.setMasterGainDecibels ((float) volume.getValue());
+        settings.setMasterGainDecibels ((float) volume.getValue());
+    };
+    addAndMakeVisible (volume);
+
+    // Encore always starts muted: a laptop booting next to a hot PA must not
+    // blast. Unmuting is one deliberate click (a footswitch, from milestone 6).
+    muteButton.setClickingTogglesState (true);
+    muteButton.setToggleState (true, juce::dontSendNotification);
+    muteButton.onClick = [this]
+    {
+        const auto isMuted = muteButton.getToggleState();
+        engine.setMuted (isMuted);
+        muteButton.setButtonText (isMuted ? "MUTED" : "LIVE");
+    };
+    muteButton.setColour (juce::TextButton::buttonOnColourId, mutedRed);
+    muteButton.setColour (juce::TextButton::buttonColourId, liveGreen);
+    addAndMakeVisible (muteButton);
+
+    addAndMakeVisible (inputMeter);
+    addAndMakeVisible (outputMeter);
+
+    // Open the audio device: the saved one if possible, else a sensible default.
+    // Prefer ASIO on first run because it gives the lowest, most stable latency.
+    auto savedState = settings.getAudioDeviceState();
+    auto error = deviceManager.initialise (2, 2, savedState.get(), true);
+
+    if (savedState == nullptr)
+        for (auto* type : deviceManager.getAvailableDeviceTypes())
+            if (type->getTypeName() == "ASIO")
+            {
+                deviceManager.setCurrentAudioDeviceType ("ASIO", true);
+                break;
+            }
+
+    if (error.isNotEmpty())
+        warning.setText ("Audio device problem: " + error, juce::dontSendNotification);
+
+    engine.setGuitarInputChannel (settings.getGuitarInputChannel());
+    deviceManager.addAudioCallback (&engine);
+    deviceManager.addChangeListener (this);
+
+    refreshInputChoices();
+    refreshStatus();
+
+    setSize (760, 540);
+    startTimerHz (30);
+}
+
+MainComponent::~MainComponent()
+{
+    stopTimer();
+    deviceManager.removeChangeListener (this);
+    deviceManager.removeAudioCallback (&engine);
+    settings.save();
+}
+
+//==============================================================================
+void MainComponent::openAudioSettings()
+{
+    auto selector = std::make_unique<juce::AudioDeviceSelectorComponent> (
+        deviceManager,
+        1, 16,      // inputs: at least the guitar, up to 16
+        1, 16,      // outputs
+        false,      // MIDI inputs: own page from milestone 6
+        false,      // MIDI output
+        false,      // list channels individually, not as stereo pairs: guitar is mono
+        false);     // show buffer size / sample rate without an extra click
+    selector->setSize (560, 480);
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned (selector.release());
+    options.dialogTitle = "Audio settings";
+    options.dialogBackgroundColour = background;
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar = true;
+    options.resizable = true;
+    options.launchAsync();
+}
+
+void MainComponent::refreshInputChoices()
+{
+    inputChoice.clear (juce::dontSendNotification);
+
+    auto* device = deviceManager.getCurrentAudioDevice();
+
+    if (device == nullptr)
+        return;
+
+    // The engine sees only *active* input channels, packed in order, so the
+    // combo lists those and maps item N to the Nth active channel.
+    const auto names = device->getInputChannelNames();
+    const auto active = device->getActiveInputChannels();
+
+    int activeIndex = 0;
+
+    for (int ch = 0; ch < names.size(); ++ch)
+        if (active[ch])
+            inputChoice.addItem (juce::String (ch + 1) + ": " + names[ch], ++activeIndex);
+
+    if (activeIndex == 0)
+    {
+        warning.setText ("No input channels enabled: open Audio settings and tick your guitar input.",
+                         juce::dontSendNotification);
+        return;
+    }
+
+    const auto wanted = juce::jlimit (0, activeIndex - 1, engine.getGuitarInputChannel());
+    inputChoice.setSelectedId (wanted + 1, juce::sendNotificationSync);
+}
+
+void MainComponent::refreshStatus()
+{
+    auto* device = deviceManager.getCurrentAudioDevice();
+
+    if (device == nullptr || ! device->isOpen())
+    {
+        deviceStatus.setText ("No audio device open", juce::dontSendNotification);
+        latencyStatus.setText ({}, juce::dontSendNotification);
+        return;
+    }
+
+    const auto rate = device->getCurrentSampleRate();
+    const auto buffer = device->getCurrentBufferSizeSamples();
+    const auto typeName = device->getTypeName();
+
+    deviceStatus.setText (typeName + "  |  " + device->getName()
+                              + "  |  " + juce::String (rate / 1000.0, 1) + " kHz"
+                              + "  |  buffer " + juce::String (buffer) + " samples ("
+                              + formatMs (buffer, rate) + ")",
+                          juce::dontSendNotification);
+
+    // ASIO drivers report their full input and output latency (buffers plus
+    // converters), so the sum is the time from string to speaker.
+    const auto inLatency = device->getInputLatencyInSamples();
+    const auto outLatency = device->getOutputLatencyInSamples();
+    latencyStatus.setText ("Latency: in " + formatMs (inLatency, rate)
+                               + " + out " + formatMs (outLatency, rate)
+                               + " = " + formatMs (inLatency + outLatency, rate) + " round trip",
+                           juce::dontSendNotification);
+
+    if (typeName != "ASIO")
+        warning.setText ("Not using ASIO: expect higher latency. Pick an ASIO driver in Audio settings for the stage.",
+                         juce::dontSendNotification);
+    else if (warning.getText().startsWith ("Not using ASIO"))
+        warning.setText ({}, juce::dontSendNotification);
+}
+
+//==============================================================================
+void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*)
+{
+    // The device, rate, buffer or channels changed: remember them for next launch.
+    if (auto state = deviceManager.createStateXml())
+        settings.setAudioDeviceState (state.get());
+
+    if (warning.getText().startsWith ("No input") || warning.getText().startsWith ("Audio device problem"))
+        warning.setText ({}, juce::dontSendNotification);
+
+    refreshInputChoices();
+    refreshStatus();
+}
+
+void MainComponent::timerCallback()
+{
+    inputMeter.setPeak (engine.getInputMeter().take());
+    outputMeter.setPeak (engine.getOutputMeter().take());
+
+    // Text changes ~3x a second so numbers stay readable.
+    if (++frameCounter % 10 != 0)
+        return;
+
+    juce::String health;
+    health << "CPU " << juce::String (engine.getCpuLoad() * 100.0, 0) << " %"
+           << "   |   overruns " << engine.getOverrunCount();
+
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+    {
+        const auto driverXruns = device->getXRunCount();
+
+        if (driverXruns >= 0)
+            health << "   |   driver dropouts " << driverXruns;
+    }
+
+    health << "   |   clips " << engine.getClipCount();
+    healthStatus.setText (health, juce::dontSendNotification);
+}
+
+//==============================================================================
+void MainComponent::paint (juce::Graphics& g)
+{
+    g.fillAll (background);
+}
+
+void MainComponent::resized()
+{
+    auto area = getLocalBounds().reduced (24);
+
+    auto top = area.removeFromTop (44);
+    audioSettingsButton.setBounds (top.removeFromRight (180).reduced (0, 4));
+    title.setBounds (top);
+
+    area.removeFromTop (12);
+    deviceStatus.setBounds (area.removeFromTop (26));
+    latencyStatus.setBounds (area.removeFromTop (26));
+    warning.setBounds (area.removeFromTop (26));
+
+    area.removeFromTop (12);
+    auto inputRow = area.removeFromTop (36);
+    inputLabel.setBounds (inputRow.removeFromLeft (140));
+    inputChoice.setBounds (inputRow.removeFromLeft (320).reduced (0, 2));
+
+    area.removeFromTop (20);
+    inputMeter.setBounds (area.removeFromTop (34));
+    area.removeFromTop (10);
+    outputMeter.setBounds (area.removeFromTop (34));
+
+    area.removeFromTop (24);
+    auto volumeRow = area.removeFromTop (64);
+    muteButton.setBounds (volumeRow.removeFromRight (160));
+    volumeRow.removeFromRight (16);
+    volumeLabel.setBounds (volumeRow.removeFromLeft (140));
+    volume.setBounds (volumeRow);
+
+    area.removeFromTop (20);
+    auto healthRow = area.removeFromTop (32);
+    resetCountersButton.setBounds (healthRow.removeFromRight (160));
+    healthStatus.setBounds (healthRow);
+}
+
+} // namespace encore
