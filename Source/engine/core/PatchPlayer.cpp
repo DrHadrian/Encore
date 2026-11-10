@@ -4,6 +4,7 @@
 #include "engine/core/PatchPlayer.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace encore
 {
@@ -353,6 +354,15 @@ void PatchPlayer::renderSlot (Slot& slot, const float* input, float* out, int nu
         float* channels[1] = { buffer };
         slot.chain->processFrom (firstBlock, channels, 1, numSamples);
 
+        // A block that blew up (NaN/inf, e.g. an unstable filter) must never
+        // reach the speakers: drop this buffer and give the patch a clean state.
+        if (! isFinite (buffer, numSamples))
+        {
+            std::fill (buffer, buffer + numSamples, 0.0f);
+            slot.chain->reset();
+            badOutputs.fetch_add (1, std::memory_order_relaxed);
+        }
+
         float peak = 0.0f;
 
         for (int i = 0; i < numSamples; ++i)
@@ -375,6 +385,18 @@ void PatchPlayer::renderSlot (Slot& slot, const float* input, float* out, int nu
         slot = {};
         publishSlotsForUi();
     }
+}
+
+bool PatchPlayer::isFinite (const float* samples, int numSamples) noexcept
+{
+    // Summing magnitudes is fast and catches NaN and inf in one pass (a
+    // finite overflow to inf is also worth treating as broken).
+    float sum = 0.0f;
+
+    for (int i = 0; i < numSamples; ++i)
+        sum += std::abs (samples[i]);
+
+    return std::isfinite (sum);
 }
 
 void PatchPlayer::panicNow() noexcept
@@ -421,6 +443,13 @@ void PatchPlayer::process (float* io, int numSamples) noexcept
 
     std::copy (io, io + numSamples, inputCopy.data());
     std::fill (mix.begin(), mix.begin() + numSamples, 0.0f);
+
+    // A driver delivering garbage is silenced rather than fed into every patch.
+    if (! isFinite (inputCopy.data(), numSamples))
+    {
+        std::fill (inputCopy.begin(), inputCopy.begin() + numSamples, 0.0f);
+        badInputs.fetch_add (1, std::memory_order_relaxed);
+    }
 
     if (active.chain != nullptr)
         renderSlot (active, inputCopy.data(), mix.data(), numSamples, false);

@@ -94,6 +94,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputCha
     const juce::ScopedNoDenormals noDenormals;
     const juce::AudioProcessLoadMeasurer::ScopedTimer timer (loadMeasurer, numSamples);
 
+    callbacks.fetch_add (1, std::memory_order_relaxed);   // heartbeat for the device watchdog
+
     if (numOutputChannels <= 0 || numSamples <= 0)
         return;
 
@@ -156,6 +158,16 @@ void AudioEngine::renderChunk (const float* input, float* const* outputs, int nu
     }
 
     advancePanic (numSamples);
+
+    // Last line of defence before the limiter (whose state a NaN would poison).
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        if (! PatchPlayer::isFinite (channels[ch], numSamples))
+        {
+            juce::FloatVectorOperations::clear (channels[ch], numSamples);
+            limiter.reset();
+        }
+    }
 
     limiter.process (channels, numChannels, numSamples);
 

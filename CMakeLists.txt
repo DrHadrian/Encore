@@ -239,6 +239,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/MidiTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
+        Tests/RobustnessTests.cpp
         Tests/StageTests.cpp
         Tests/StageViewTests.cpp
         # Screens tested off-screen (rendered into images, no window).

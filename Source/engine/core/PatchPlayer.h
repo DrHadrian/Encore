@@ -95,6 +95,13 @@ public:
     /** Commands the audio thread had to drop because the queue was full (should stay 0). */
     int getDroppedCommands() const noexcept { return droppedCommands.load(); }
 
+    /** Buffers where a patch produced NaN/inf (silenced, patch reset), and
+        where the input was garbage. Both should stay 0. */
+    int getBadOutputCount() const noexcept { return badOutputs.load (std::memory_order_relaxed); }
+    int getBadInputCount() const noexcept  { return badInputs.load (std::memory_order_relaxed); }
+
+    static bool isFinite (const float* samples, int numSamples) noexcept;
+
     //== Audio thread ==========================================================
     /** Mono, in place: the guitar in, the patches' mix out. numSamples <= prepared block size. */
     void process (float* io, int numSamples) noexcept;
@@ -181,6 +188,7 @@ private:
     std::array<std::atomic<Chain*>, (size_t) maxFading + 1> inUse {};
     std::atomic<Chain*> activeForUi { nullptr };
     std::atomic<int> cueForUi { -1 }, ringingForUi { 0 }, droppedCommands { 0 };
+    std::atomic<int> badOutputs { 0 }, badInputs { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PatchPlayer)
 };
