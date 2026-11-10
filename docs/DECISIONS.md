@@ -134,3 +134,18 @@ while cutting the signal where the gate sits. The default chain places the gate
 after the amp with this on: it removes the amp's amplified hiss using the clean
 signal's clear note endings, the classic "gate after the amp, keyed from the
 guitar" setup.
+
+## 0017 — Tell Windows Encore is a live audio app (after milestone 2)
+
+Testing showed overruns at 32 samples as soon as Encore lost focus on battery:
+Windows' power throttling ("efficiency mode") slows background apps' threads
+and timers. Encore now does what DAWs do:
+- opts its process out of power throttling (execution speed and timer
+  resolution);
+- runs at High process priority (not Realtime, which can starve input
+  handling and the driver itself);
+- registers its audio thread with MMCSS "Pro Audio" at critical priority, on
+  the first callback per thread (one system call, no C++ heap; harmless if the
+  driver already did it);
+- keeps the system and display awake while running.
+The status line shows what took effect, and warns when running on battery.

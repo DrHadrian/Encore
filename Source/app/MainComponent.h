@@ -7,6 +7,7 @@
 #include <map>
 
 #include "app/AppSettings.h"
+#include "platform/SystemTuning.h"
 #include "engine/AudioEngine.h"
 #include "ui/BlockPanel.h"
 #include "ui/LevelMeter.h"
@@ -37,6 +38,7 @@ private:
     void openAudioSettings();
     void refreshInputChoices();
     void refreshStatus();
+    void refreshSystemStatus();
     void buildDefaultChain();
     void rebuildBlockPanels();
     void restoreLastFiles();
@@ -52,7 +54,8 @@ private:
     AudioEngine engine;
     juce::AudioDeviceManager deviceManager;
 
-    juce::Label title, deviceStatus, latencyStatus, healthStatus, warning;
+    juce::Label title, deviceStatus, latencyStatus, healthStatus, warning, systemStatus;
+    system::TuningReport tuning;
     juce::TextButton audioSettingsButton { "Audio settings..." };
     juce::TextButton muteButton { "MUTED" };
     juce::TextButton resetCountersButton { "Reset counters" };
