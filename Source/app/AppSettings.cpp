@@ -80,6 +80,11 @@ void AppSettings::setLastFile (const juce::String& blockTypeId, const juce::File
     file().setValue (keys::lastFile + blockTypeId, f.getFullPathName());
 }
 
+juce::File AppSettings::getFolder() const
+{
+    return file().getFile().getParentDirectory();
+}
+
 std::vector<MidiBinding> AppSettings::getMidiBindings() const
 {
     const auto text = file().getValue (keys::midiMap);

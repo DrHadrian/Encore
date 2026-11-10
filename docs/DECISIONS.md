@@ -333,3 +333,40 @@ Unknown widget types from newer versions are skipped when loading.
 Locked, mouse clicks and keys change nothing (no accidental cue jumps from a
 bumped laptop or a cable on the trackpad); footswitches, pedals and panic
 keep working. Unlocking takes a deliberate one-second hold.
+
+## 0036 — Invalid audio never reaches the speakers (milestone 9)
+
+Every patch's output is checked each buffer (one pass summing magnitudes:
+NaN or inf makes the sum non-finite). A bad buffer is replaced by silence and
+that patch's state is reset (an unstable filter or a misbehaving block
+recovers by itself). The driver's input is checked the same way, and the
+final mix once more before the limiter, whose smoothing a NaN would poison
+for good. Counters show in the pre-show check.
+
+## 0037 — Crash recovery from a small state file (milestone 9)
+
+While running, Encore keeps recovery.json (show, cue, live/muted, view) up to
+date, written atomically only when something changed. A clean exit deletes it,
+so finding it at start-up means a crash, a power cut or a kill: the show is
+reopened at that cue, in that view, and live if it was live. If that happens
+a third time within ten minutes, it comes back muted: a crash loop needs a
+person to look. The audio thread is never involved.
+
+## 0038 — The audio watchdog reopens the same interface (milestone 9)
+
+The engine counts its callbacks. If the count stops for 500 ms while a device
+is open (a stalled ASIO driver, a pulled USB cable) or the device closes, the
+UI closes it and retries the last working setup (type, device, rate, buffer)
+once a second, as soon as the device is listed again. Cue steps from the
+keyboard or footswitch wait in their queues and apply when audio is back.
+Nothing happens while the audio settings dialog is open (the user may be
+changing devices on purpose).
+
+## 0039 — Soak test in CI (milestone 9)
+
+A test plays random notes through four patches (two NAM amps, delays, a
+full-chain tail patch) while randomly stepping cues, toggling stomps, moving
+pedals, panicking, opening the tuner, rebuilding patches and injecting
+invalid input, checking every buffer: finite, never above full scale, no
+audio-thread allocations, ringing bounded, every replaced patch freed. CI
+runs 30 minutes of audio per change; ENCORE_SOAK_SECONDS sets longer runs.

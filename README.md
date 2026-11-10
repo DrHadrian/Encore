@@ -13,10 +13,11 @@ musical.
 
 ## Status
 
-Milestone 7: a stage view you lay out yourself (named layouts, per-cue
-layouts), tuner, panic and lock; foot controllers and expression pedals over
-MIDI; gapless patch switching with tails; shows saved to disk; NAM amps, cab
-IRs, gate, EQ, delay, safety limiter. Theatre cue lists come next.
+Milestone 9: crash recovery, audio interface reconnect, a guard against
+invalid audio, a pre-show check, logs and a soak test; a stage view you lay
+out yourself, tuner, panic and lock; foot controllers and expression pedals
+over MIDI; gapless patch switching with tails; shows saved to disk; NAM amps,
+cab IRs, gate, EQ, delay, safety limiter. Theatre cue lists come next.
 
 | Milestone | What you can test |
 | --- | --- |
@@ -27,9 +28,9 @@ IRs, gate, EQ, delay, safety limiter. Theatre cue lists come next.
 | **4 – Data model and saving** ✅ | Patches and shows saved to a self-contained folder, edit view |
 | **5 – Patch switching** ✅ | Gapless switches with tail spillover |
 | **6 – MIDI** ✅ | Foot controller, expression pedals, MIDI out |
-| **7 – Performance view and tuner** | Stage view with layout editor, tuner, lock, panic |
+| **7 – Performance view and tuner** ✅ | Stage view with layout editor, tuner, lock, panic |
 | 8 – Theatre cue lists | Acts/scenes/cues, insert, renumber, cut, go to |
-| 9 – Robustness | Crash recovery, reconnect, pre-show check, soak test |
+| **9 – Robustness** | Crash recovery, reconnect, pre-show check, soak test |
 | 10 – VST3 hosting | Plugins with crash guard |
 | 11 – Routing | FOH/IEM buses, per-cue input/output |
 | 12 – Plugin sandbox | Risky plugins in their own process |
@@ -92,6 +93,27 @@ effect. For shows also:
   expense (the status line warns you);
 - set Windows' power mode to **Best performance**;
 - use 64 samples or more, so there is headroom for spikes.
+
+## Testing milestone 9 with your guitar
+
+1. **Pre-show check**: Show → *Pre-show check...* or **F9**. Every line is
+   green, amber or red, worst first, with a button where there's a fix
+   (audio/MIDI settings, save, reset counters, unmute). It re-checks every
+   second: unplug the foot controller and watch its line turn red, plug it
+   back in and it turns green.
+2. **Unplug the interface** while playing: within half a second the stage
+   view says *AUDIO INTERFACE LOST*, the edit view says so in red. Step a cue
+   or two with the footswitch. Plug it back in: Encore reopens it by itself
+   with the same settings, and the steps you made count.
+3. **Crash recovery**: with Encore live in the stage view on, say, cue 3,
+   end it in Task Manager (*End task*). Start it again: same show, cue 3,
+   stage view, live, and a note along the top. Do it three times within ten
+   minutes and it comes back **muted** instead (something is wrong then).
+4. **Logs**: Show → *Open log folder*. One log per run (devices, reconnects,
+   recoveries); a crash also leaves *crash-<time>.txt* with details for me.
+5. **Soak test** (optional, no guitar): set `ENCORE_SOAK_SECONDS=14400` and
+   run `EncoreTests` for a 4-hour run of random cues, stomps, pedals, panic
+   and edits. CI runs 30 minutes on every change.
 
 ## Testing milestone 7 with your guitar
 
@@ -324,7 +346,7 @@ Source/
   Main.cpp            app start-up, main window
   app/                the main window, per-machine settings (%APPDATA%\Encore)
   model/              the show on disk: data model, JSON format, show folders
-  session/            the open show: building patches into chains, editing, autosave
+  session/            the open show: building patches into chains, editing, autosave, pre-show check, crash recovery
   engine/             everything that runs on or talks to the audio thread
     core/             Block, Chain, PatchPlayer (switching), Parameter, handovers, lock-free queues
     blocks/           the built-in blocks (amp, cab, gate, EQ, delay)

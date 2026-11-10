@@ -11,6 +11,8 @@
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
 #include "engine/nam/NamModel.h"
+#include "session/PreShowCheck.h"
+#include "session/RecoveryFile.h"
 
 namespace encore::test
 {
@@ -137,6 +139,96 @@ public:
             rig.callback (silence.data());
             rig.callback (silence.data());
             expectEquals ((int) (rig.engine.getCallbackCount() - before), 2);
+        }
+
+        beginTest ("Pre-show check: a ready rig is all green, problems come first");
+        {
+            PreShowFacts ready;
+            ready.deviceOpen = ready.callbacksRunning = true;
+            ready.deviceType = "ASIO";
+            ready.deviceName = "UMC ASIO Driver";
+            ready.bufferSize = 64;
+            ready.sampleRate = 48000.0;
+            ready.cpuLoad = 0.2;
+            ready.numCues = 12;
+            ready.midiInputsEnabled = ready.midiInputsConnected = juce::StringArray ("FCB1010");
+            ready.hasNextCueMapping = true;
+
+            auto results = runPreShowChecks (ready);
+            expect (std::all_of (results.begin(), results.end(), [] (auto& c) { return c.status == PreShowCheckResult::Status::ok; }));
+
+            auto broken = ready;
+            broken.onBattery = true;
+            broken.bufferSize = 512;
+            broken.midiInputsConnected.clear();
+            broken.cuesSendMidi = true;
+            broken.missingFiles = { "Lead / nam: models/x.nam" };
+            results = runPreShowChecks (broken);
+
+            int problems = 0;
+
+            for (auto& c : results)
+                problems += c.status == PreShowCheckResult::Status::problem ? 1 : 0;
+
+            expectEquals (problems, 5);
+            expect (results.front().status == PreShowCheckResult::Status::problem, "worst first");
+        }
+
+        beginTest ("Pre-show check finds missing files and cues without a patch");
+        {
+            const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                    .getChildFile ("encore-check-" + juce::String (juce::Random::getSystemRandom().nextInt()));
+            folder.getChildFile ("models").createDirectory();
+            folder.getChildFile ("models/here.nam").replaceWithText ("{}");
+
+            auto show = makeDefaultShow ("Check");
+            show.patches.front().mainLane().blocks.front().file = "models/here.nam";
+            auto lead = makeDefaultPatch ("Lead");
+            lead.mainLane().blocks.front().file = "models/gone.nam";
+            show.patches.push_back (lead);
+            show.runningOrder.children.push_back (RunItem::makeCue ("1", "Intro", show.patches.front().id));
+            show.runningOrder.children.push_back (RunItem::makeCue ("2", "Ghost", "no-such-patch"));
+
+            const auto missing = findMissingFiles (show, ShowFolder (folder));
+            expectEquals ((int) missing.size(), 1);
+            expect (missing.front().contains ("gone.nam") && missing.front().startsWith ("Lead"));
+
+            const auto orphans = findCuesWithoutPatch (show);
+            expectEquals ((int) orphans.size(), 1);
+            expectEquals (orphans.front(), juce::String ("2 Ghost"));
+            folder.deleteRecursively();
+        }
+
+        beginTest ("Crash recovery: an unclean exit leaves where the show was");
+        {
+            const juce::TemporaryFile temp (".json");
+            const auto now = juce::Time::getCurrentTime();
+
+            {
+                RecoveryFile recovery (temp.getFile());
+                expect (! recovery.readUncleanExit().has_value(), "nothing at first");
+
+                recovery.update ({ "C:/Shows/Phantom.encore", 42, true, true, 0, {} });
+                // ...and Encore dies here.
+            }
+
+            RecoveryFile next (temp.getFile());
+            const auto crashed = next.readUncleanExit();
+            expect (crashed.has_value());
+            expectEquals (crashed->cue, 42);
+            expectEquals (crashed->showFolder, juce::String ("C:/Shows/Phantom.encore"));
+            expect (crashed->live && crashed->stageView);
+            expect (RecoveryFile::shouldGoLiveAutomatically (*crashed, now), "first crash: straight back live");
+
+            auto looping = *crashed;
+            looping.recoveriesInARow = 2;
+            looping.lastRecovery = now - juce::RelativeTime::minutes (1);
+            expect (! RecoveryFile::shouldGoLiveAutomatically (looping, now), "crash loop: start muted");
+            looping.lastRecovery = now - juce::RelativeTime::hours (2);
+            expect (RecoveryFile::shouldGoLiveAutomatically (looping, now), "long ago: live again");
+
+            next.markCleanExit();
+            expect (! RecoveryFile (temp.getFile()).readUncleanExit().has_value(), "clean exit leaves nothing");
         }
 
         soakTest();

@@ -13,7 +13,9 @@
 #include "ui/ChainStrip.h"
 #include "ui/LevelMeter.h"
 #include "ui/MidiSettings.h"
+#include "session/RecoveryFile.h"
 #include "ui/PatchList.h"
+#include "ui/PreShowCheckView.h"
 #include "ui/SetList.h"
 #include "ui/StageView.h"
 #include "ui/TunerDisplay.h"
@@ -66,6 +68,16 @@ private:
     void refreshShowStatus();
     void reportProblems();
 
+    // Robustness
+    void recoverAfterUncleanExit();
+    void updateRecoveryFile();
+    void watchAudioDevice();
+    void reconnectAudioDevice();
+    void openPreShowCheck();
+    PreShowFacts gatherPreShowFacts();
+    void applyFix (PreShowCheckResult::Fix);
+    void showNotice (const juce::String& text, int seconds);
+
     // Stage
     void setStageVisible (bool);
     void showStageSettingsMenu (juce::PopupMenu&);
@@ -116,7 +128,23 @@ private:
     LevelMeter inputMeter { "Input" }, outputMeter { "Output" };
 
     // Open settings windows (closed before the things they edit go away).
-    juce::Component::SafePointer<juce::DialogWindow> audioDialog, midiDialog;
+    juce::Component::SafePointer<juce::DialogWindow> audioDialog, midiDialog, checkDialog;
+
+    // Crash recovery: where the show is, kept on disk while running.
+    std::unique_ptr<RecoveryFile> recovery;
+    std::optional<RecoveryFile::State> uncleanExit;
+    int recoveriesInARow = 0;
+    juce::Time lastRecovery;
+
+    // Audio device watchdog: callbacks must keep coming while a device is open.
+    juce::uint32 lastCallbackCount = 0, lastCallbackTime = 0, nextReconnectAttempt = 0, lastGoodSetupTime = 0;
+    bool deviceLost = false, haveGoodSetup = false, audioDialogWasOpen = false;
+    int reconnectAttempts = 0;
+    juce::AudioDeviceManager::AudioDeviceSetup lastGoodSetup;
+    juce::String lastGoodType;
+
+    juce::String notice;
+    juce::uint32 noticeUntil = 0;
 
     // MIDI state last given to the router.
     std::vector<MidiBinding> appliedBindings;

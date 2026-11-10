@@ -4,6 +4,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "app/AppSettings.h"
+#include "app/EventLog.h"
 #include "app/MainComponent.h"
 #include "engine/core/Realtime.h"
 
@@ -83,6 +84,8 @@ public:
         rt::installAllocationTripwire();
 
         settings = std::make_unique<AppSettings>();
+        eventlog::start (settings->getFolder().getChildFile ("Logs"), getApplicationVersion());
+
         mainWindow = std::make_unique<MainWindow> (getApplicationName(), *settings);
     }
 
@@ -91,6 +94,7 @@ public:
         mainWindow = nullptr;   // closes the audio device first
         settings->save();
         settings = nullptr;
+        eventlog::stop();
     }
 
     void systemRequestedQuit() override { quit(); }

@@ -21,6 +21,9 @@ class AppSettings
 public:
     AppSettings();
 
+    /** %APPDATA%\Encore: settings, logs, the crash recovery file. */
+    juce::File getFolder() const;
+
     std::unique_ptr<juce::XmlElement> getAudioDeviceState() const;
     void setAudioDeviceState (const juce::XmlElement* state);
 
