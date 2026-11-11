@@ -166,10 +166,54 @@ target_include_directories(EncoreEngine INTERFACE Source)
 # ------------------------------------------------------------------------------
 # The app
 # ------------------------------------------------------------------------------
+# The UI's bundled assets: Inter, the icons and the logo (Resources/ui, copied
+# from docs/design/assets). Fonts never come from the system.
+juce_add_binary_data(EncoreUiAssets
+    HEADER_NAME EncoreUiAssets.h
+    NAMESPACE EncoreUiAssets
+    SOURCES
+        Resources/ui/fonts/Inter-Regular.ttf
+        Resources/ui/fonts/Inter-Medium.ttf
+        Resources/ui/fonts/Inter-SemiBold.ttf
+        Resources/ui/fonts/Inter-Bold.ttf
+        Resources/ui/fonts/Inter-ExtraBold.ttf
+        Resources/ui/logo/encore-wordmark-ui.svg
+        Resources/ui/icons/alert.svg
+        Resources/ui/icons/arrow-right.svg
+        Resources/ui/icons/audio-wave.svg
+        Resources/ui/icons/check.svg
+        Resources/ui/icons/chevron-down.svg
+        Resources/ui/icons/chevron-up.svg
+        Resources/ui/icons/close.svg
+        Resources/ui/icons/duplicate.svg
+        Resources/ui/icons/lock.svg
+        Resources/ui/icons/midi-port.svg
+        Resources/ui/icons/minus.svg
+        Resources/ui/icons/plus.svg
+        Resources/ui/icons/sidebar-right.svg
+        Resources/ui/icons/sliders.svg
+        Resources/ui/icons/trash.svg)
+
+# The UI's look (theme) and kit: shared by the app and the UI snapshot tests.
+add_library(EncoreUi INTERFACE)
+target_sources(EncoreUi INTERFACE
+    Source/ui/theme/EncoreFonts.cpp
+    Source/ui/theme/EncoreFonts.h
+    Source/ui/theme/EncoreLookAndFeel.cpp
+    Source/ui/theme/EncoreLookAndFeel.h
+    Source/ui/theme/EncoreTheme.h
+    Source/ui/theme/Icons.cpp
+    Source/ui/theme/Icons.h
+    Source/ui/theme/Paint.cpp
+    Source/ui/theme/Paint.h)
+target_link_libraries(EncoreUi INTERFACE EncoreUiAssets)
+
 juce_add_gui_app(Encore
     PRODUCT_NAME "Encore"
     COMPANY_NAME "Encore"
-    VERSION ${PROJECT_VERSION})
+    VERSION ${PROJECT_VERSION}
+    ICON_BIG Resources/ui/logo/encore-app-icon-256.png
+    ICON_SMALL Resources/ui/logo/encore-app-icon-256.png)
 
 target_sources(Encore PRIVATE
     Source/Main.cpp
@@ -218,6 +262,7 @@ target_compile_definitions(Encore PRIVATE
 target_link_libraries(Encore
     PRIVATE
         EncoreEngine
+        EncoreUi
         nam_core
         juce::juce_audio_utils
         juce::juce_audio_devices
@@ -254,6 +299,8 @@ if(ENCORE_BUILD_TESTS)
         Tests/RobustnessTests.cpp
         Tests/StageTests.cpp
         Tests/StageViewTests.cpp
+        Tests/UiSnapshot.h
+        Tests/UiSnapshotTests.cpp
         # Screens tested off-screen (rendered into images, no window).
         Source/ui/CueDialogs.cpp
         Source/ui/CueListEditor.cpp
@@ -278,6 +325,7 @@ if(ENCORE_BUILD_TESTS)
     target_link_libraries(EncoreTests
         PRIVATE
             EncoreEngine
+            EncoreUi
             nam_core
             juce::juce_audio_basics
             juce::juce_audio_devices

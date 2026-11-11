@@ -6,6 +6,7 @@
 #include "app/AppSettings.h"
 #include "app/EventLog.h"
 #include "app/MainComponent.h"
+#include "ui/theme/EncoreLookAndFeel.h"
 #include "engine/core/Realtime.h"
 
 namespace encore
@@ -46,7 +47,7 @@ class MainWindow final : public juce::DocumentWindow
 {
 public:
     MainWindow (const juce::String& name, AppSettings& settings)
-        : DocumentWindow (name, juce::Colour (0xff121417), DocumentWindow::allButtons)
+        : DocumentWindow (name, juce::Colour (theme::colour::window), DocumentWindow::allButtons)
     {
         setUsingNativeTitleBar (true);
         setContentOwned (new ScrollingContent (settings), false);
@@ -83,6 +84,10 @@ public:
         // Debug builds: count any allocation made on the audio thread.
         rt::installAllocationTripwire();
 
+        // The look comes first and goes last: every window and menu uses it.
+        lookAndFeel = std::make_unique<theme::EncoreLookAndFeel>();
+        juce::LookAndFeel::setDefaultLookAndFeel (lookAndFeel.get());
+
         settings = std::make_unique<AppSettings>();
         eventlog::start (settings->getFolder().getChildFile ("Logs"), getApplicationVersion());
 
@@ -95,6 +100,9 @@ public:
         settings->save();
         settings = nullptr;
         eventlog::stop();
+
+        juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+        lookAndFeel = nullptr;
     }
 
     void systemRequestedQuit() override { quit(); }
@@ -106,6 +114,7 @@ public:
     }
 
 private:
+    std::unique_ptr<theme::EncoreLookAndFeel> lookAndFeel;
     std::unique_ptr<AppSettings> settings;
     std::unique_ptr<MainWindow> mainWindow;
 };
