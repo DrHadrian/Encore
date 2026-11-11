@@ -29,6 +29,9 @@ public:
 
     bool isShowingClip() const noexcept { return clipFrames > 0; }
 
+    /** The level the bar shows now (dB, after the fall-back). */
+    float getDisplayDb() const noexcept { return displayDb; }
+
     /** Where a level sits on the track, 0..1 (the scale's labels: −60 −48
         −36 −24 −12 −6 0, the last three steps wider than linear dB). */
     static float toProportion (float decibels) noexcept;

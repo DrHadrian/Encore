@@ -1,6 +1,8 @@
 // Encore — live guitar rig host
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
+#include <cmath>
+
 #include "UiSnapshot.h"
 #include "KitGallery.h"
 
@@ -139,10 +141,15 @@ public:
             meter.setBounds (0, 0, 400, 14);
 
             for (int i = 0; i < 200; ++i)   // silence, then a burst, then silence again: never NaN, never stuck
+            {
                 meter.setPeak (i < 50 || i > 60 ? 0.0f : 0.8f);
 
-            const auto image = meter.createComponentSnapshot (meter.getLocalBounds());
-            expect (hasContent (image));
+                if (i == 60)   // the burst lights the bar
+                    expect (hasContent (meter.createComponentSnapshot (meter.getLocalBounds())), "a level shows");
+            }
+
+            expect (std::isfinite (meter.getDisplayDb()), "never NaN");
+            expect (MeterBar::toProportion (meter.getDisplayDb()) == 0.0f, "falls back to the bottom after the burst");
         }
 
         beginTest ("Kit: tiny and empty sizes never crash");
