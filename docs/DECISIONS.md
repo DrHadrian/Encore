@@ -397,3 +397,14 @@ replaces the one waiting (which the audio thread never saw, so it can be
 freed at once) and is queued as soon as there's room. Before, editing more
 than eight times while the interface was unplugged could leave the show
 playing an older running order after reconnecting.
+
+## 0043 — One running order; its name follows the kind of show (milestone 8)
+
+A set list and a cue list are the same thing: an ordered list of items that
+each recall a patch, grouped in sections. Encore has one, and the show's kind
+picks the words: band, worship and solo shows have a **Set list** of *songs*
+(sections default to *sets*); musicals have a **Cue list** of *cues*
+(sections default to *scenes*). The sidebar is its compact form (sections as
+headings, cut items hidden) and expands into the full table for editing.
+Keeping one model means every feature (go to, cut, MIDI per item, per-item
+stage layouts) works for every kind of gig.

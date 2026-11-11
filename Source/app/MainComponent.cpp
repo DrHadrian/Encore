@@ -82,11 +82,6 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     audioSettingsButton.onClick = [this] { openAudioSettings(); };
     addAndMakeVisible (audioSettingsButton);
 
-    cueListButton.setTooltip ("The cue list: acts, scenes, cues, bar marks, notes (F6)");
-    cueListButton.setClickingTogglesState (false);
-    cueListButton.onClick = [this] { setCueListVisible (! cueEditor->isVisible()); };
-    addAndMakeVisible (cueListButton);
-
     stageButton.setTooltip ("The performance screen (F5)");
     stageButton.onClick = [this] { setStageVisible (true); };
     addAndMakeVisible (stageButton);
@@ -228,7 +223,9 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     openInitialShow();
 
     cueEditor = std::make_unique<CueListEditor> (*session);
+    cueEditor->onClose = [this] { setCueListVisible (false); };
     addChildComponent (*cueEditor);
+    setList->onExpand = [this] { setCueListVisible (true); };
 
     stageView = std::make_unique<StageView> (engine, *session);
     stageView->setOpaque (true);
@@ -315,6 +312,14 @@ void MainComponent::showMenu()
     menu.addSeparator();
     menu.addItem ("Show folder in Explorer", session->getFolder().isValid(), false,
                   [this] { session->getFolder().getShowFile().revealToUser(); });
+    juce::PopupMenu showType;
+
+    for (auto type : { ShowTemplate::band, ShowTemplate::musical, ShowTemplate::worship, ShowTemplate::solo })
+        showType.addItem (describe (type) + "  (" + wordsFor (type).list + ")", true, session->getShow().showTemplate == type,
+                          [this, type] { session->setShowTemplate (type); });
+
+    menu.addSubMenu ("Kind of show", showType);
+    menu.addSeparator();
     menu.addItem ("Pre-show check... (F9)", [this] { openPreShowCheck(); });
     menu.addItem ("Open log folder", [] { eventlog::getLogsFolder().startAsProcess(); });
     menu.addSeparator();
@@ -758,7 +763,7 @@ bool MainComponent::handleGoToKey (const juce::KeyPress& key)
     {
         goToNumber << juce::String::charToString (c);
         goToUntil = now + 5000;
-        showNotice ("Go to cue " + goToNumber + "_   (Enter to go, Esc to cancel)", 5);
+        showNotice ("Go to " + session->getWords().item + " " + goToNumber + "_   (Enter to go, Esc to cancel)", 5);
         return true;
     }
 
@@ -770,7 +775,7 @@ bool MainComponent::handleGoToKey (const juce::KeyPress& key)
     if (code == juce::KeyPress::backspaceKey)
     {
         goToNumber = goToNumber.dropLastCharacters (1);
-        showNotice (goToNumber.isEmpty() ? juce::String() : "Go to cue " + goToNumber + "_", goToNumber.isEmpty() ? 0 : 5);
+        showNotice (goToNumber.isEmpty() ? juce::String() : "Go to " + session->getWords().item + " " + goToNumber + "_", goToNumber.isEmpty() ? 0 : 5);
         return true;
     }
 
@@ -793,7 +798,7 @@ bool MainComponent::handleGoToKey (const juce::KeyPress& key)
         }
         else
         {
-            showNotice ("There's no cue " + goToNumber, 4);
+            showNotice ("There's no " + session->getWords().item + " " + goToNumber, 4);
         }
 
         goToNumber.clear();
@@ -806,7 +811,6 @@ bool MainComponent::handleGoToKey (const juce::KeyPress& key)
 void MainComponent::setCueListVisible (bool shouldShow)
 {
     cueEditor->setVisible (shouldShow);
-    cueListButton.setToggleState (shouldShow, juce::dontSendNotification);
 
     if (shouldShow)
     {
@@ -1328,8 +1332,7 @@ int MainComponent::layoutContent (int width, bool apply)
     place (&tunerButton, bar.removeFromRight (70).reduced (0, 4));
     bar.removeFromRight (8);
     place (&stageButton, bar.removeFromRight (70).reduced (0, 4));
-    bar.removeFromRight (8);
-    place (&cueListButton, bar.removeFromRight (70).reduced (0, 4));
+
     bar.removeFromRight (12);
     auto names = bar;
     place (&showName, names.removeFromTop (names.getHeight() / 2 + 2));

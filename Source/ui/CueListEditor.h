@@ -10,8 +10,9 @@
 namespace encore
 {
 
-/** The theatre cue list: the whole running order as a table (sections, cues,
-    cut cues), built for typing a show in quickly.
+/** The full running order as a table, the expanded form of the sidebar list:
+    called "Set list" or "Cue list" by the kind of show (ShowWords). Sections,
+    items and cut items, built for typing a show in quickly.
 
     Columns: number (automatic), name, bar mark, note, patch, MIDI.
     Keys (when not typing in a cell):
@@ -29,6 +30,9 @@ public:
 
     /** Re-reads the running order (after any session change). */
     void refresh();
+
+    /** "Back to patches". */
+    std::function<void()> onClose;
 
     /** Keys from the main window; true if used. */
     bool handleKey (const juce::KeyPress&);
@@ -73,7 +77,8 @@ private:
     juce::ListBox list { "Cue list", this };
     juce::TextButton addCueButton { "+ Cue" }, addSectionButton { "+ Section" }, cutButton { "Cut" },
                      deleteButton { "Delete" }, upButton { "Up" }, downButton { "Down" }, goButton { "Go to" };
-    juce::Label summary;
+    juce::Label title, summary;
+    juce::TextButton closeButton { "Back to patches" };
 
     std::unique_ptr<CellEditor> editor;
     juce::String editingId;

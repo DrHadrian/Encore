@@ -96,6 +96,15 @@ CueListEditor::CueListEditor (ShowSession& s) : session (s)
         addAndMakeVisible (b);
     }
 
+    title.setFont (juce::FontOptions (17.0f, juce::Font::bold));
+    title.setColour (juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible (title);
+
+    closeButton.setTooltip ("Back to the patches and the compact list (F6)");
+    closeButton.setWantsKeyboardFocus (false);
+    closeButton.onClick = [this] { if (isTyping()) commitEdit(); if (onClose != nullptr) onClose(); };
+    addAndMakeVisible (closeButton);
+
     summary.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.55f));
     summary.setJustificationType (juce::Justification::centredRight);
     addAndMakeVisible (summary);
@@ -125,7 +134,12 @@ void CueListEditor::refresh()
         cut += row.item->kind == RunItem::Kind::cue && row.item->cut ? 1 : 0;
     }
 
-    summary.setText (juce::String (cues) + " cues" + (cut > 0 ? ", " + juce::String (cut) + " cut" : juce::String())
+    const auto words = session.getWords();
+    title.setText (words.list, juce::dontSendNotification);
+    addCueButton.setButtonText ("+ " + words.Item());
+    addCueButton.setTooltip ("New " + words.item + " after the selected one (Insert or Ctrl+Enter)");
+
+    summary.setText (juce::String (cues) + " " + words.items + (cut > 0 ? ", " + juce::String (cut) + " cut" : juce::String())
                          + (sections > 0 ? ", " + juce::String (sections) + " sections" : juce::String()),
                      juce::dontSendNotification);
 
@@ -464,7 +478,8 @@ void CueListEditor::insertCueAfterSelection (bool editName)
 
 void CueListEditor::insertSectionAfterSelection()
 {
-    const auto id = session.insertSection (selectedId(), "New section", "scene");
+    const auto words = session.getWords();
+    const auto id = session.insertSection (selectedId(), words.newSection, words.sectionKind);
     refresh();
     selectId (id);
     startEditing (list.getSelectedRow(), Column::name, false);
@@ -630,19 +645,19 @@ void CueListEditor::showRowMenu (int row)
     {
         juce::PopupMenu kinds;
 
-        for (auto kind : { "act", "scene", "song", "number", "section" })
+        for (auto kind : { "act", "scene", "set", "song", "number", "section" })
             kinds.addItem (juce::String (kind).substring (0, 1).toUpperCase() + juce::String (kind).substring (1),
                            true, r.item->sectionKind == kind,
                            [safe, id, kind] { if (safe != nullptr) { safe->session.setSectionKind (id, kind); safe->refresh(); } });
 
         menu.addItem ("Rename", [safe, row] { if (safe != nullptr) safe->startEditing (row, Column::name, false); });
         menu.addSubMenu ("Kind", kinds);
-        menu.addItem ("New cue at the start of this section", [safe] { if (safe != nullptr) safe->insertCueAfterSelection (true); });
+        menu.addItem ("New " + session.getWords().item + " at the start of this section", [safe] { if (safe != nullptr) safe->insertCueAfterSelection (true); });
     }
     else
     {
         const auto cueIndex = r.cueIndex;
-        menu.addItem ("Go to this cue (G)", cueIndex >= 0, false, [safe] { if (safe != nullptr) safe->goToSelection(); });
+        menu.addItem ("Go to this " + session.getWords().item + " (G)", cueIndex >= 0, false, [safe] { if (safe != nullptr) safe->goToSelection(); });
         menu.addItem ("Rename (Enter)", [safe, row] { if (safe != nullptr) safe->startEditing (row, Column::name, false); });
         menu.addItem ("Bar mark", [safe, row] { if (safe != nullptr) safe->startEditing (row, Column::bar, false); });
         menu.addItem ("Note", [safe, row] { if (safe != nullptr) safe->startEditing (row, Column::note, false); });
@@ -650,7 +665,7 @@ void CueListEditor::showRowMenu (int row)
         menu.addSeparator();
         menu.addItem ("Recall with a program change...", cueIndex >= 0, false,
                       [safe, cueIndex] { if (safe != nullptr) cuedialogs::editProgramChange (*safe, safe->session, cueIndex); });
-        menu.addItem ("MIDI out when this cue starts...", cueIndex >= 0, false,
+        menu.addItem ("MIDI out when this " + session.getWords().item + " starts...", cueIndex >= 0, false,
                       [safe, cueIndex] { if (safe != nullptr) cuedialogs::editMidiOut (*safe, safe->session, cueIndex); });
         menu.addSeparator();
         menu.addItem (r.item->cut ? "Restore (uncut)" : "Cut (skip in the show)", [safe] { if (safe != nullptr) safe->toggleCutSelection(); });
@@ -676,11 +691,13 @@ void CueListEditor::paint (juce::Graphics& g)
     g.setColour (juce::Colours::white.withAlpha (0.55f));
     g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
 
-    const std::pair<Column, const char*> titles[] = { { Column::number, "#" }, { Column::name, "CUE" }, { Column::bar, "BAR" },
+    const std::pair<Column, const char*> titles[] = { { Column::number, "#" }, { Column::name, nullptr }, { Column::bar, "BAR" },
                                                       { Column::note, "NOTE" }, { Column::patch, "PATCH" }, { Column::midi, "MIDI" } };
 
-    for (auto& [column, title] : titles)
-        g.drawText (title, columnBounds (column, list.getVisibleRowWidth()).withY (header.getY()).withHeight (headerHeight).reduced (6, 0),
+    const auto itemTitle = session.getWords().item.toUpperCase();
+
+    for (auto& [column, text] : titles)
+        g.drawText (text != nullptr ? juce::String (text) : itemTitle, columnBounds (column, list.getVisibleRowWidth()).withY (header.getY()).withHeight (headerHeight).reduced (6, 0),
                     column == Column::number ? juce::Justification::centredRight : juce::Justification::centredLeft);
 }
 
@@ -688,6 +705,9 @@ void CueListEditor::resized()
 {
     auto area = getLocalBounds();
     auto toolbar = area.removeFromTop (toolbarHeight).reduced (0, 4);
+    title.setBounds (toolbar.removeFromLeft (110));
+    closeButton.setBounds (toolbar.removeFromRight (130));
+    toolbar.removeFromRight (12);
 
     for (auto* b : { &addCueButton, &addSectionButton, &cutButton, &deleteButton, &upButton, &downButton, &goButton })
     {

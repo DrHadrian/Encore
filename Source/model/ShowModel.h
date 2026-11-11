@@ -129,6 +129,23 @@ struct ShowModel
 };
 
 //==============================================================================
+/** The words the running order uses, by kind of show: a band plays songs from
+    a set list, a musical runs cues from a cue list. Same data, same features. */
+struct ShowWords
+{
+    juce::String list;          // "Set list" / "Cue list"
+    juce::String item;          // "song" / "cue"
+    juce::String items;         // "songs" / "cues"
+    juce::String sectionKind;   // default for a new section: "set" / "scene"
+    juce::String newSection;    // "New set" / "New scene"
+
+    juce::String Item() const   { return item.substring (0, 1).toUpperCase() + item.substring (1); }
+};
+
+ShowWords wordsFor (ShowTemplate);
+juce::String describe (ShowTemplate);   // "Band", "Musical / theatre"...
+
+//==============================================================================
 /** A new show with one ready-to-play patch, so a first start makes sound. */
 ShowModel makeDefaultShow (const juce::String& name);
 

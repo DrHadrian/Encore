@@ -930,6 +930,15 @@ juce::String ShowSession::getSectionPath (int cueIndex) const
     return {};
 }
 
+void ShowSession::setShowTemplate (ShowTemplate t)
+{
+    if (show.showTemplate != t)
+    {
+        show.showTemplate = t;
+        changed (true);
+    }
+}
+
 void ShowSession::renumberCues()
 {
     // Always 1..N in playing order; cut cues have no number.

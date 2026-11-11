@@ -97,29 +97,33 @@ effect. For shows also:
 
 ## Testing milestone 8 with your guitar
 
-1. **Cue list**: click **Cues** in the top bar (or **F6**). The whole running
-   order as a table: number, cue, bar, note, patch, MIDI. **Cues** again goes
-   back to the patches.
-2. **Type a show in**: select a row and press **Insert** (or Ctrl+Enter, or
-   **+ Cue**). Type the name, **Tab** to the bar mark, **Tab** to the note,
-   **Enter**: the next cue is created and ready for its name. Keep going;
-   **Enter** on an empty name stops. New cues play the patch of the cue
-   before them; click the patch cell (or double-click) to change it.
-3. **Acts and scenes**: **+ Section** (Ctrl+Shift+Enter) adds one after the
-   selection; right-click it for *Kind* (act, scene, song...). Cues move in
-   and out of sections with **Up/Down** (Ctrl+Up/Down): at a section's edge a
-   cue steps out, next to a section it steps in.
-4. **Numbers are automatic**: insert a cue between 4 and 5 and everything
-   after renumbers. **Cut** a cue: it stays (struck through, *cut*), the show
-   skips it, the numbers close up. **Restore** brings it back.
-5. **Go to a cue**: anywhere (edit view, cue list, stage view), type the
-   number and press **Enter** (e.g. `4 2 Enter`). Esc cancels. In the cue
-   list, **G** or double-clicking the number plays the selected cue.
-6. **Rehearsal**: delete (asks first; a section's cues stay), move, cut and
-   insert while the show is playing: the playing cue stays the playing cue
-   and *next* continues from it.
-7. **Stage view**: the current cue shows its act/scene, and the set list
-   widget shows the act and scene headings.
+One running order, named for the kind of show: **Set list** with *songs*
+(band, worship, solo) or **Cue list** with *cues* (musical). Show → *Kind of
+show* switches it; nothing else changes.
+
+1. **The list**: the sidebar shows it compactly, with acts/scenes/sets as
+   headings. **Full list** (or **F6**) opens it full size: number, name, bar
+   mark, note, patch, MIDI, and cut items. **Back to patches** (or F6) closes it.
+2. **Type a show in**: in the full list, select a row and press **Insert**
+   (or Ctrl+Enter, or **+ Cue/+ Song**). Type the name, **Tab** to the bar
+   mark, **Tab** to the note, **Enter**: the next one is created, ready for
+   its name. **Enter** on an empty name stops. New items play the patch of
+   the one before; click the patch cell to change it.
+3. **Sections**: **+ Section** (Ctrl+Shift+Enter) adds an act/scene/set after
+   the selection; right-click it for *Kind*. Items move in and out of
+   sections with **Ctrl+Up/Down** (or Up/Down in the sidebar): at a
+   section's edge an item steps out, next to a section it steps in.
+4. **Numbers are automatic**: insert between 4 and 5 and everything after
+   renumbers. **Cut** an item: it stays in the full list (struck through),
+   the show skips it, the numbers close up. **Restore** brings it back.
+5. **Go to**: anywhere, type the number and press **Enter** (e.g. `4 2 Enter`).
+   Esc cancels. In the full list, **G** or double-clicking the number plays
+   the selected item.
+6. **Rehearsal**: delete (asks first; a section's items stay), move, cut and
+   insert while playing: the playing item stays playing and *next* continues
+   from it.
+7. **Stage view**: the current cue/song shows its act/scene/set, and the set
+   list widget shows the headings.
 
 ## Testing milestone 9 with your guitar
 

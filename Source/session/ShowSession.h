@@ -119,7 +119,11 @@ public:
     void setCueProgramChange (int index, int program);   // -1 = none
     void setCueMidiOut (int index, std::vector<MidiOutMessage> messages);
 
-    //== Running order editing (theatre cue lists) ============================
+    //== Running order editing (set lists and theatre cue lists) =============
+    /** Band, musical, worship, solo: decides the words (set list / cue list). */
+    void setShowTemplate (ShowTemplate);
+    ShowWords getWords() const { return wordsFor (show.showTemplate); }
+
     /** Every item in order (sections, cues, cut cues), as the cue list shows them. */
     struct Row
     {

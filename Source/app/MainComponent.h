@@ -109,7 +109,7 @@ private:
     juce::TextButton showButton { "Show" };
     juce::TextButton audioSettingsButton { "Audio settings..." };
     juce::TextButton midiSettingsButton { "MIDI..." };
-    juce::TextButton stageButton { "Stage" }, tunerButton { "Tuner" }, panicButton { "PANIC" }, cueListButton { "Cues" };
+    juce::TextButton stageButton { "Stage" }, tunerButton { "Tuner" }, panicButton { "PANIC" };
 
     std::unique_ptr<CueListEditor> cueEditor;
     juce::String goToNumber;

@@ -92,7 +92,10 @@ public:
         switch (spec.type)
         {
             case StageWidgetType::currentCue:
-                title = cue != nullptr && cue->number.isNotEmpty() ? "CUE " + cue->number : juce::String ("CUE");
+                title = owner.session.getWords().item.toUpperCase();
+
+                if (cue != nullptr && cue->number.isNotEmpty())
+                    title << " " << cue->number;
 
                 if (const auto path = owner.session.getSectionPath (index); path.isNotEmpty())
                     title << "   " << path.toUpperCase();

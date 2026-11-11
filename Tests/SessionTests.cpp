@@ -288,6 +288,11 @@ public:
             expect (session.newShow (temp.getChildFile ("Theatre.encore"), "Theatre").wasOk());
             pumpUntil ([&] { return ! session.isBuilding(); });
 
+            expectEquals (session.getWords().list, juce::String ("Set list"), "a new show is a band's set list");
+            session.setShowTemplate (ShowTemplate::musical);
+            expectEquals (session.getWords().list, juce::String ("Cue list"));
+            expectEquals (session.getWords().item, juce::String ("cue"));
+
             const auto act1 = session.insertSection ({}, "Act 1", "act");
             const auto overture = session.insertCue (act1);          // first in Act 1
             session.setItemName (overture, "Overture");
@@ -360,6 +365,7 @@ public:
             expect (reopened.openShow (temp.getChildFile ("Theatre.encore")).wasOk());
             pumpUntil ([&] { return ! reopened.isBuilding(); });
             expectEquals (reopened.getCues()[2]->number, juce::String ("3"));
+            expect (reopened.getShow().showTemplate == ShowTemplate::musical, "the kind of show is saved");
             expectEquals (reopened.getCues()[(size_t) reopened.getCueIndexOf (masq)]->note, juce::String ("watch conductor"));
         }
 
