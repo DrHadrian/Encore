@@ -213,10 +213,10 @@ juce::Font EncoreLookAndFeel::getTextButtonFont (juce::TextButton& button, int b
     const auto v = effectiveVariant (button);
 
     if (v == Variant::small || buttonHeight <= size::buttonSmallHeight)
-        return fontOfSize (type::Weight::medium, 10.5f);
+        return font (type::buttonSmall);
 
     if (v == Variant::danger || v == Variant::muted)
-        return fontOfSize (type::Weight::bold, type::button.px);
+        return font (type::buttonBold);
 
     return font (type::button);
 }
@@ -396,7 +396,7 @@ void EncoreLookAndFeel::drawPopupMenuBackgroundWithOptions (juce::Graphics& g, i
     g.setColour (c (colour::menu));
     g.fillRoundedRectangle (r, radius);
     g.setColour (c (colour::menuHighlightBorder));
-    g.fillRect (r.getX() + radius, 1.0f, r.getWidth() - radius * 2.0f, 1.0f);
+    paint::hline (g, r.getX() + radius, 1.0f, r.getWidth() - radius * 2.0f);
     g.setColour (c (colour::paneBorder));
     g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
 }
@@ -563,7 +563,10 @@ void EncoreLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int w
 
 void EncoreLookAndFeel::drawKnob (juce::Graphics& g, juce::Rectangle<float> cell, float proportion, bool enabled)
 {
-    // 11 ticks on a 270° arc, a 46/64 knob, a pointer (DESIGN-SYSTEM.md §8).
+    // 11 ticks on a 270° arc (radius 25…30 of a 64 cell; majors at both ends
+    // and the top, 1.6 px; minors 1 px), a 46/64 knob, a 2 × 16 pointer
+    // (DESIGN-SYSTEM.md §8). Disabled: every colour at 45 % (no layer).
+    const auto alpha = enabled ? 1.0f : state::disabledAlpha;
     const auto side = juce::jmin (cell.getWidth(), cell.getHeight());
     const auto area = juce::Rectangle<float> (side, side).withCentre (cell.getCentre());
     const auto centre = area.getCentre();
@@ -571,35 +574,44 @@ void EncoreLookAndFeel::drawKnob (juce::Graphics& g, juce::Rectangle<float> cell
     const auto startAngle = -juce::MathConstants<float>::pi * 0.75f;
     const auto range = juce::MathConstants<float>::pi * 1.5f;
 
-    if (! enabled)
-        g.beginTransparencyLayer (state::disabledAlpha);
-
-    g.setColour (c (colour::tickMark));
+    g.setColour (c (colour::tickMark).withMultipliedAlpha (alpha));
 
     for (int i = 0; i <= 10; ++i)
     {
         const auto angle = startAngle + range * (float) i / 10.0f;
         const auto major = i == 0 || i == 5 || i == 10;
-        const auto inner = (major ? 26.0f : 27.5f) * scale, outer = 31.0f * scale;
         const juce::Point<float> dir (std::sin (angle), -std::cos (angle));
-        g.drawLine ({ centre + dir * inner, centre + dir * outer }, (major ? 1.6f : 1.0f) * scale);
+        g.drawLine ({ centre + dir * (25.0f * scale), centre + dir * (30.0f * scale) }, (major ? 1.6f : 1.0f) * scale);
     }
 
     const auto knob = juce::Rectangle<float> (46.0f * scale, 46.0f * scale).withCentre (centre);
-    g.setGradientFill (juce::ColourGradient (c (colour::knobTop), knob.getCentreX() - knob.getWidth() * 0.15f, knob.getY() + knob.getHeight() * 0.25f,
-                                             c (colour::knobBot), knob.getRight(), knob.getBottom(), true));
+
+    // box-shadow 0 2px 3px black 50 %, approximated by two soft rings.
+    g.setColour (c (colour::knobShadow).withMultipliedAlpha (alpha * 0.5f));
+    g.fillEllipse (knob.translated (0.0f, 2.0f * scale).expanded (1.0f * scale));
+    g.setColour (c (colour::knobShadow).withMultipliedAlpha (alpha));
+    g.fillEllipse (knob.translated (0.0f, 2.0f * scale));
+
+    // radial-gradient (circle at 40 % 35 %, top, bottom 70 %)
+    const juce::Point<float> light (knob.getX() + knob.getWidth() * 0.4f, knob.getY() + knob.getHeight() * 0.35f);
+    const auto reach = light.getDistanceFrom (knob.getBottomRight()) * 0.7f;
+    g.setGradientFill (juce::ColourGradient (c (colour::knobTop).withMultipliedAlpha (alpha), light,
+                                             c (colour::knobBot).withMultipliedAlpha (alpha), light.translated (reach, 0.0f), true));
     g.fillEllipse (knob);
-    g.setColour (c (colour::knobBorder));
+    g.setColour (c (colour::knobBorder).withMultipliedAlpha (alpha));
     g.drawEllipse (knob.reduced (0.5f), 1.0f);
 
     const auto angle = startAngle + range * juce::jlimit (0.0f, 1.0f, proportion);
-    juce::Path pointer;
-    pointer.addRoundedRectangle (-1.0f * scale, -21.0f * scale, 2.0f * scale, 16.0f * scale, 1.0f * scale);
-    g.setColour (c (colour::knobPointer));
-    g.fillPath (pointer, juce::AffineTransform::rotation (angle).translated (centre));
+    // The pointer at 64-cell scale, pointing up from the centre; made once.
+    static const juce::Path pointer = []
+    {
+        juce::Path p;
+        p.addRoundedRectangle (-1.0f, -21.0f, 2.0f, 16.0f, 1.0f);
+        return p;
+    }();
 
-    if (! enabled)
-        g.endTransparencyLayer();
+    g.setColour (c (colour::knobPointer).withMultipliedAlpha (alpha));
+    g.fillPath (pointer, juce::AffineTransform::scale (scale).rotated (angle).translated (centre));
 }
 
 void EncoreLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float proportion, float, float,
@@ -681,7 +693,7 @@ void EncoreLookAndFeel::drawAlertBox (juce::Graphics& g, juce::AlertWindow& aler
         g.setGradientFill (juce::ColourGradient::vertical (c (colour::dialogTitleTop), 0.0f, c (colour::dialogTitleBot), (float) alertTitleBar));
         g.fillPath (bar);
         g.setColour (c (colour::paneBorder));
-        g.fillRect (0.0f, (float) alertTitleBar - 1.0f, bounds.getWidth(), 1.0f);
+        paint::hline (g, 0.0f, (float) alertTitleBar - 1.0f, bounds.getWidth());
         paint::text (g, alert.getName(), juce::Rectangle<float> (0.0f, 0.0f, bounds.getWidth(), (float) alertTitleBar),
                      type::dialogTitle, colour::textSoft, juce::Justification::centred);
     }
@@ -701,7 +713,7 @@ void EncoreLookAndFeel::drawAlertBox (juce::Graphics& g, juce::AlertWindow& aler
         g.setColour (c (colour::dialogFooter));
         g.fillPath (footer);
         g.setColour (c (colour::paneBorder));
-        g.fillRect (0.0f, footerTop, bounds.getWidth(), 1.0f);
+        paint::hline (g, 0.0f, footerTop, bounds.getWidth());
     }
 
     // The message. JUCE lays the title out as the first line of the text; it's

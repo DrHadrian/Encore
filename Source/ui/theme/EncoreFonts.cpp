@@ -3,6 +3,9 @@
 
 #include "ui/theme/EncoreFonts.h"
 
+#include <map>
+#include <tuple>
+
 #include "EncoreUiAssets.h"
 
 namespace encore::theme
@@ -51,9 +54,27 @@ juce::Typeface::Ptr EncoreFonts::typeface (type::Weight weight) const
 
 juce::Font fontOfSize (type::Weight weight, float px, float tracking)
 {
-    return juce::Font (juce::FontOptions (EncoreFonts::get().typeface (weight))
-                           .withPointHeight (juce::jmax (1.0f, px))
-                           .withKerningFactor (tracking));
+    // Fonts are made once per (weight, size, tracking) and copied after that
+    // (a copy shares the font's data), so paint() never builds a font.
+    // Message thread only, like all UI.
+    JUCE_ASSERT_MESSAGE_THREAD
+
+    using Key = std::tuple<int, int, int>;
+    static std::map<Key, juce::Font> cache;
+
+    const Key key { (int) weight, juce::roundToInt (juce::jmax (1.0f, px) * 100.0f), juce::roundToInt (tracking * 1000.0f) };
+
+    if (const auto found = cache.find (key); found != cache.end())
+        return found->second;
+
+    if (cache.size() > 1024)   // fitted text can ask for many sizes; never grow without bound
+        cache.clear();
+
+    juce::Font f (juce::FontOptions (EncoreFonts::get().typeface (weight))
+                      .withPointHeight ((float) std::get<1> (key) / 100.0f)
+                      .withKerningFactor (tracking));
+    cache.emplace (key, f);
+    return f;
 }
 
 juce::Font font (const type::Style& style, float scale)

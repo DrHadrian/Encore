@@ -2,10 +2,14 @@
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
 #include "UiSnapshot.h"
+#include "KitGallery.h"
 
 #include "ui/theme/EncoreFonts.h"
 #include "ui/theme/EncoreLookAndFeel.h"
 #include "ui/theme/Icons.h"
+#include "ui/kit/MeterBar.h"
+#include "ui/kit/NoticeBar.h"
+#include "ui/kit/Lcd.h"
 
 namespace encore::test
 {
@@ -80,6 +84,81 @@ public:
             expect (LnF::splitShortcut ("Go to this cue (G)").second == "G");
             expect (LnF::splitShortcut ("Stage settings (this show)").second.isEmpty());
             expect (LnF::splitShortcut ("Save a copy to... (USB stick, backup)").second.isEmpty());
+        }
+
+        beginTest ("Kit: every component draws, at 1x and 2x");
+        {
+            KitGallery gallery;
+            gallery.setBounds (0, 0, 1440, 1320);
+            const auto image = renderSnapshot (gallery, "kit");
+            expect (hasContent (image), "the gallery drew something");
+
+            const auto hiDpi = gallery.createComponentSnapshot (gallery.getLocalBounds(), false, 2.0f);
+            expectEquals (hiDpi.getWidth(), 2880);
+            expect (hasContent (hiDpi));
+        }
+
+        beginTest ("Kit: meters map the scale as labelled and only move when the level does");
+        {
+            using kit::MeterBar;
+            expectWithinAbsoluteError (MeterBar::toProportion (-60.0f), 0.0f, 1.0e-6f);
+            expectWithinAbsoluteError (MeterBar::toProportion (-12.0f), 4.0f / 6.0f, 1.0e-6f);
+            expectWithinAbsoluteError (MeterBar::toProportion (-6.0f), 5.0f / 6.0f, 1.0e-6f);
+            expectWithinAbsoluteError (MeterBar::toProportion (0.0f), 1.0f, 1.0e-6f);
+            expectWithinAbsoluteError (MeterBar::toProportion (6.0f), 1.0f, 1.0e-6f);
+            expectWithinAbsoluteError (MeterBar::toProportion (-200.0f), 0.0f, 1.0e-6f);
+
+            float last = -1.0f;
+
+            for (float db = -70.0f; db <= 3.0f; db += 0.5f)
+            {
+                const auto p = MeterBar::toProportion (db);
+                expect (p >= last, "the scale never runs backwards");
+                last = p;
+            }
+
+            MeterBar meter ("Input");
+            meter.setBounds (0, 0, 400, 14);
+
+            for (int i = 0; i < 200; ++i)   // silence, then a burst, then silence again: never NaN, never stuck
+                meter.setPeak (i < 50 || i > 60 ? 0.0f : 0.8f);
+
+            const auto image = meter.createComponentSnapshot (meter.getLocalBounds());
+            expect (hasContent (image));
+        }
+
+        beginTest ("Kit: tiny and empty sizes never crash");
+        {
+            KitGallery gallery;
+
+            for (auto size : { juce::Point<int> (0, 0), juce::Point<int> (1, 1), juce::Point<int> (640, 480), juce::Point<int> (3840, 2160) })
+            {
+                gallery.setSize (size.x, size.y);
+
+                for (auto* child : gallery.getChildren())
+                {
+                    child->setSize (juce::jmin (child->getWidth(), 3), juce::jmin (child->getHeight(), 3));
+
+                    if (child->getWidth() > 0 && child->getHeight() > 0)
+                        child->createComponentSnapshot (child->getLocalBounds());
+                }
+            }
+
+            kit::NoticeBar bar (kit::NoticeBar::Kind::lost);
+            bar.setText (juce::String::repeatedString ("very long text ", 200), juce::String::repeatedString ("note ", 100));
+            bar.setBounds (0, 0, 120, 35);
+
+            for (int i = 0; i < 40; ++i)
+                bar.advance();
+
+            bar.createComponentSnapshot (bar.getLocalBounds());   // long text is cut, not wrapped over the bar
+
+            kit::Lcd lcd (true);
+            lcd.setItems ({});
+            expectEquals (lcd.getIdealWidth(), 2 * (theme::size::lcdPadXStage + 1));
+            lcd.setItems ({ { juce::String::repeatedString ("W", 300), "Song", 0 } });
+            lcd.setBounds (0, 0, 50, kit::Lcd::heightFor (true));
+            lcd.createComponentSnapshot (lcd.getLocalBounds());
         }
     }
 };

@@ -38,9 +38,20 @@ namespace paint
     /** A pane header strip (gradient + line under it). `r` is the strip. */
     void paneHeader (juce::Graphics&, juce::Rectangle<float> r, float topRadius);
 
-    /** Single line of text in a token style, uppercased if the style says so. */
+    /** Text as a style shows it: upper case for caps styles. Call this when
+        the text changes (setters), not in paint(). */
+    juce::String caps (const type::Style&, const juce::String&);
+
+    /** Single line of text in a token style (already passed through caps()). */
     void text (juce::Graphics&, const juce::String&, juce::Rectangle<float> r, const type::Style&, juce::uint32 colour,
                juce::Justification = juce::Justification::centredLeft, float scale = 1.0f);
+
+    /** A 1 px horizontal line (highlights, rules); nothing when `width` <= 0. */
+    inline void hline (juce::Graphics& g, float x, float y, float width)
+    {
+        if (width > 0.0f)
+            g.fillRect (x, y, width, 1.0f);
+    }
 
     /** The focus ring: 2 px accent, 1 px outside `r`. */
     void focusRing (juce::Graphics&, juce::Rectangle<float> r, float radius);

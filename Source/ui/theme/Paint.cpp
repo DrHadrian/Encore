@@ -35,7 +35,7 @@ void raised (juce::Graphics& g, juce::Rectangle<float> r, juce::uint32 top, juce
 
     // Inner top highlight: a 1 px line just inside the border.
     g.setColour (c (highlight));
-    g.fillRect (r.getX() + radius * 0.6f, r.getY() + 1.0f, r.getWidth() - radius * 1.2f, 1.0f);
+    hline (g, r.getX() + radius * 0.6f, r.getY() + 1.0f, r.getWidth() - radius * 1.2f);
 
     g.setColour (c (border));
     g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
@@ -81,7 +81,7 @@ void pane (juce::Graphics& g, juce::Rectangle<float> r)
     g.setColour (c (colour::pane));
     g.fillRoundedRectangle (r, radius);
     g.setColour (c (colour::paneHighlight));
-    g.fillRect (r.getX() + radius, r.getY() + 1.0f, r.getWidth() - radius * 2.0f, 1.0f);
+    hline (g, r.getX() + radius, r.getY() + 1.0f, r.getWidth() - radius * 2.0f);
     g.setColour (c (colour::paneBorder));
     g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
 }
@@ -93,7 +93,7 @@ void paneHeader (juce::Graphics& g, juce::Rectangle<float> r, float topRadius)
     g.setGradientFill (juce::ColourGradient::vertical (c (colour::paneHeaderTop), r.getY(), c (colour::paneHeaderBot), r.getBottom()));
     g.fillPath (p);
     g.setColour (c (colour::paneHeaderLine));
-    g.fillRect (r.getX(), r.getBottom() - 1.0f, r.getWidth(), 1.0f);
+    hline (g, r.getX(), r.getBottom() - 1.0f, r.getWidth());
 }
 
 void text (juce::Graphics& g, const juce::String& s, juce::Rectangle<float> r, const type::Style& style, juce::uint32 colour,
@@ -101,7 +101,12 @@ void text (juce::Graphics& g, const juce::String& s, juce::Rectangle<float> r, c
 {
     g.setColour (c (colour));
     g.setFont (font (style, scale));
-    g.drawText (style.uppercase ? s.toUpperCase() : s, r, justification, true);
+    g.drawText (s, r, justification, true);
+}
+
+juce::String caps (const type::Style& style, const juce::String& s)
+{
+    return style.uppercase ? s.toUpperCase() : s;
 }
 
 void focusRing (juce::Graphics& g, juce::Rectangle<float> r, float radius)

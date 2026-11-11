@@ -205,7 +205,32 @@ target_sources(EncoreUi INTERFACE
     Source/ui/theme/Icons.cpp
     Source/ui/theme/Icons.h
     Source/ui/theme/Paint.cpp
-    Source/ui/theme/Paint.h)
+    Source/ui/theme/Paint.h
+    Source/ui/kit/DialogFrame.cpp
+    Source/ui/kit/DialogFrame.h
+    Source/ui/kit/GearPlaceholder.cpp
+    Source/ui/kit/GearPlaceholder.h
+    Source/ui/kit/GearView.h
+    Source/ui/kit/IconButton.cpp
+    Source/ui/kit/IconButton.h
+    Source/ui/kit/KeyCap.cpp
+    Source/ui/kit/KeyCap.h
+    Source/ui/kit/KnobView.cpp
+    Source/ui/kit/KnobView.h
+    Source/ui/kit/Lcd.cpp
+    Source/ui/kit/Lcd.h
+    Source/ui/kit/MeterBar.cpp
+    Source/ui/kit/MeterBar.h
+    Source/ui/kit/NoticeBar.cpp
+    Source/ui/kit/NoticeBar.h
+    Source/ui/kit/Pane.cpp
+    Source/ui/kit/Pane.h
+    Source/ui/kit/SegmentedControl.cpp
+    Source/ui/kit/SegmentedControl.h
+    Source/ui/kit/StatusBadge.cpp
+    Source/ui/kit/StatusBadge.h
+    Source/ui/kit/Toolbar.cpp
+    Source/ui/kit/Toolbar.h)
 target_link_libraries(EncoreUi INTERFACE EncoreUiAssets)
 
 juce_add_gui_app(Encore
@@ -299,6 +324,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/RobustnessTests.cpp
         Tests/StageTests.cpp
         Tests/StageViewTests.cpp
+        Tests/KitGallery.h
         Tests/UiSnapshot.h
         Tests/UiSnapshotTests.cpp
         # Screens tested off-screen (rendered into images, no window).

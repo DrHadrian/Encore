@@ -101,6 +101,9 @@ namespace colour
     constexpr juce::uint32 lostWidgetSub   = 0xffFFD3CE;
     constexpr juce::uint32 problemTint     = 0x14D83A30;   // pre-show problem row tint (8 %)
     constexpr juce::uint32 problemBadge    = 0xffD83A30;
+    constexpr juce::uint32 problemBadgeHi  = 0xffFF7A70;   // summary badge: radial gradient light spot
+    constexpr juce::uint32 problemBadgeLo  = 0xff8E1E18;   // summary badge: radial gradient rim
+    constexpr juce::uint32 problemGlow     = 0x73D83A30;   // summary badge glow (45 %)
     constexpr juce::uint32 problemText     = 0xffFF8A80;
     constexpr juce::uint32 problemBandTop  = 0xff2A1E1E;   // pre-show summary band when red
     constexpr juce::uint32 problemBandBot  = 0xff241C1D;
@@ -117,6 +120,8 @@ namespace colour
     constexpr juce::uint32 lcdBorder       = 0xff07090B;
     constexpr juce::uint32 lcdText         = 0xffD5E4F7;
     constexpr juce::uint32 lcdLabel        = 0xff7F95B3;
+    constexpr juce::uint32 lcdShadow       = 0xA6000000;   // inner shadow (black 65 %)
+    constexpr juce::uint32 lcdHighlight    = 0x0DFFFFFF;   // 1 px bottom highlight (white 5 %)
 
     // Stage widgets
     constexpr juce::uint32 widget          = 0xff1C1E23;
@@ -147,6 +152,10 @@ namespace colour
     constexpr juce::uint32 dialogTitleBot  = 0xff2E2E31;
     constexpr juce::uint32 dialogFooter    = 0xff262629;
     constexpr juce::uint32 dimmer          = 0x73000000;   // behind modal dialogs (black 45 %)
+    constexpr juce::uint32 dialogHighlight = 0x14FFFFFF;   // inner top highlight (white 8 %)
+    constexpr juce::uint32 dialogShadow    = 0xB3000000;   // 0, 30, 80 px, black 70 %
+    constexpr juce::uint32 tabStripTop     = 0xff2E2E31;   // settings tab strip
+    constexpr juce::uint32 tabStripBot     = 0xff28282B;
     constexpr juce::uint32 scrollThumb     = 0xff4A4A4F;
     constexpr juce::uint32 scrollThumbHover= 0xff5E5E64;
 
@@ -157,10 +166,27 @@ namespace colour
     constexpr juce::uint32 gearStrip       = 0xff26262A;
     constexpr juce::uint32 gearStripBorder = 0xff38383D;
     constexpr juce::uint32 gearLabel       = 0xff85858C;
+    constexpr juce::uint32 gearHighlight   = 0x14FFFFFF;   // inner top highlight (white 8 %)
+    constexpr juce::uint32 pedalTop        = 0xff303034;   // pedal placeholder gradient
+    constexpr juce::uint32 pedalBot        = 0xff232326;
+    constexpr juce::uint32 pedalShadow     = 0x73000000;   // pedal drop shadow (0, 6, 10 px, black 45 %)
+    constexpr juce::uint32 pedalName       = 0xffE8E8EB;
+    constexpr juce::uint32 footswitchTop   = 0xff4A4A4F;
+    constexpr juce::uint32 footswitchBot   = 0xff2E2E32;
+    constexpr juce::uint32 footswitchBorder= 0xff0E0E10;
+    constexpr juce::uint32 ledGlow         = 0xCCFF3B30;   // LED glow (0 0 8 px, 80 %)
+    constexpr juce::uint32 ledHaloCore     = 0x8CFF6E3C;   // power LED halo: 55 % at the centre
+    constexpr juce::uint32 ledHaloMid      = 0x38FF5028;   //   22 % at 35 %
+    constexpr juce::uint32 ledHaloEdge     = 0x00FF3C1E;   //   0 at 70 %
+    constexpr juce::uint32 groupRule       = 0xff3A3A3F;   // rules beside PREAMP / EQ / OUTPUT
+    constexpr juce::uint32 toggleBorder    = 0xff4A4A4F;
+    constexpr juce::uint32 knobLabelText   = 0xffC4C4C9;   // INPUT, BASS... under knobs
     constexpr juce::uint32 knobTop         = 0xff4A4A4F;
     constexpr juce::uint32 knobBot         = 0xff2A2A2E;
     constexpr juce::uint32 knobPointer     = 0xffE8E8EB;
     constexpr juce::uint32 tickMark        = 0xff6E6E75;
+    constexpr juce::uint32 knobShadow      = 0x80000000;   // knob drop shadow (0, 2, 3 px, black 50 %)
+    constexpr juce::uint32 knobChipFill    = 0xff141414;   // "EXP 1" chip under a gear knob
     constexpr juce::uint32 ledOn           = 0xffFF3B30;
     constexpr juce::uint32 ledOff          = 0xff3A1C1A;
     constexpr juce::uint32 chainBoard      = 0xff19191B;   // signal-chain board (was tolex)
@@ -266,8 +292,33 @@ namespace size
     constexpr int menuSeparatorH    = 9;     // 1 px line + 4 px above and below
     constexpr int dialogRadius      = 10;
     constexpr int dialogTitleBar    = 30;
-    constexpr int dialogFooter      = 48;
+    constexpr int dialogFooter      = 48;    // + 1 px line above it
+    constexpr int dialogPadX        = 20;    // footer, content
+    constexpr int dialogClose       = 20, dialogCloseInset = 8, dialogCloseIcon = 14;
+    constexpr int dialogButtonW     = 84, dialogButtonGap = 8;
+    constexpr int dialogShadowY     = 30, dialogShadowBlur = 80;
+    constexpr int tabStrip          = 78;    // + 1 px line under it
+    constexpr int tabW = 78, tabH = 54, tabGap = 4, tabIcon = 22, tabIconGap = 4, tabRadius = 6;
     constexpr int focusRing         = 2;
+    constexpr int keyCapRadius      = 3, keyCapPadX = 4;
+    constexpr int statusBadge       = 22, statusBadgeLarge = 44, statusGlow = 18;   // pre-show check
+
+    // Gear placeholders (DESIGN-SYSTEM.md §8; real art uses the same boxes, EXTENDING.md §6)
+    constexpr int ampTileW = 117, tileW = 64, tileH = 84, plusTileW = 48, tileGap = 6;
+    constexpr int pedalW = 160, pedalH = 210;            // drawn at 0.4 in the chain, 0.7 on Stage
+    constexpr int ampPanelW = 600, ampPanelH = 430, blockPanelH = 300, cabPanelW = 230, cabPanelH = 300;
+    constexpr int ampStripX = 22, ampStripY = 44, ampStripW = 556, ampStripH = 138;
+    constexpr int gearRadius = 10, pedalRadius = 14, pedalBorder = 2, stripRadius = 6, plusTileRadius = 8;
+    constexpr int pedalInset = 15, pedalLed = 16, pedalLedY = 48, pedalNameY = 85, pedalNameH = 25;
+    constexpr int footswitch = 55, footswitchY = 138, footswitchBorderW = 2;
+    constexpr int pedalShadowY = 6, pedalShadowBlur = 10;
+    constexpr int panelLabelBottom = 57, panelLabelH = 16;  // "AMP · NAM CAPTURE": top at height − 57
+    constexpr int platePadX = 10, plateH = 20, plateRadius = 3, plateRight = 44, plateBottom = 38;
+    constexpr int knobCell = 64, knobColumn = 74, knobLabelGap = 4, knobLabelH = 12, chipH = 13, chipPadX = 5, chipRadius = 3;
+    constexpr int toggleW = 22, toggleH = 36, toggleKnob = 16, toggleColumn = 74, toggleColumnH = 91;
+    constexpr int toggleOnH = 10, toggleTrackY = 14, toggleNameY = 54, toggleNameLineH = 12, toggleOffY = 80;
+    constexpr int powerLed = 28, ledGlowR = 8, ledHalo = 54;
+    constexpr int gearLabelMin = 8, gearLabelDivisor = 14;   // kind label size = height / 14, at least 8
     constexpr int scrollbar         = 10;    // track width; thumb inset 2 px, radius 6
 
     // Stage widgets
@@ -275,6 +326,20 @@ namespace size
     constexpr int widgetTagInset    = 6;     // name tag at (6, 6)
     constexpr int stageListRow      = 48;    // set list widget rows at text scale 1
     constexpr int stageHeadingRow   = 30;
+
+    // Notices
+    constexpr int noticeBadge = 16, noticePadX = 12, noticeGap = 10;          // Edit notice bar (+ 1 px line = 31)
+    constexpr int bannerPadX = 14, bannerGap = 12, spinner = 12, spinnerStroke = 2; // Stage strips (+ 1 px line = 35)
+
+    // Meters
+    constexpr int meterTrackH = 8, meterValueW = 54, meterLabelW = 50, meterGap = 8, meterScaleH = 11, meterPeakW = 2;
+
+    // LCD
+    // Heights and padding inside the 1 px border (the box is 34 / 38 tall); a
+    // 1 px highlight line sits under the box, so the component is 35 / 39.
+    constexpr int lcdRadius = 6, lcdEdit = 32, lcdStage = 36, lcdShadowH = 5;
+    constexpr int lcdPadX = 14, lcdGap = 18, lcdPadXStage = 16, lcdGapStage = 20;
+    constexpr int lcdMinPatch = 110, lcdMinPatchStage = 140;   // the name item keeps its width
 
     // Full list columns (CueListEditor): number, name 45 % of flex, bar, note (rest), patch, MIDI
     constexpr int colNumber = 64, colBar = 150, colPatch = 190, colMidi = 90;
@@ -294,6 +359,8 @@ namespace type
     enum class Weight { regular = 400, medium = 500, semibold = 600, bold = 700, extraBold = 800 };
 
     struct Style { float px; Weight weight; float tracking = 0.0f; bool uppercase = false; };
+
+    constexpr float lcdLineHeight = 1.05f;   // LCD value / label lines (em)
 
     // UI chrome
     constexpr Style body            { 12.5f, Weight::regular };             // rows, values
@@ -316,6 +383,42 @@ namespace type
     constexpr Style noticeText      { 12.5f, Weight::semibold };
     constexpr Style bannerText      { 15.0f, Weight::bold };                // stage banners
 
+    // Added while building the design in JUCE (values read from the boards)
+    constexpr Style paneHeaderNote  { 10.0f, Weight::medium };              // "6.9% CPU", "value · pedal"
+    constexpr Style buttonSmall     { 10.5f, Weight::medium };              // 18 px pane buttons
+    constexpr Style buttonBold      { 12.0f, Weight::bold };                // PANIC, MUTED, Mute
+    constexpr Style lcdValueStage   { 16.0f, Weight::semibold };
+    constexpr Style lcdLabelStage   {  9.0f, Weight::semibold };
+    constexpr Style meterValue      { 11.0f, Weight::regular };
+    constexpr Style meterScale      {  9.0f, Weight::regular };
+    constexpr Style miniMeterLabel  {  9.0f, Weight::bold };                // Stage toolbar CPU / DROPOUTS
+    constexpr Style rowStrong       { 12.5f, Weight::semibold };            // current row, show name
+    constexpr Style rowTrailing     { 11.0f, Weight::regular };             // patch name at the end of a row
+    constexpr Style saveState       { 10.5f, Weight::regular };             // "Saved 23:28"
+    constexpr Style headerLine      { 14.0f, Weight::semibold };            // "Cue 1 of 8: Clean"
+    constexpr Style gearKind        {  8.0f, Weight::bold, 0.08f, true };   // AMP on chain tiles
+    constexpr Style gearGroup       { 10.0f, Weight::extraBold, 0.16f, true }; // PREAMP / EQ / OUTPUT
+    constexpr Style knobLabel       { 10.0f, Weight::extraBold, 0.12f, true }; // INPUT, BASS...
+    constexpr Style toggleLabel     {  8.0f, Weight::extraBold };           // ON / OFF
+    constexpr Style chip            {  9.5f, Weight::bold };                // "EXP 1"
+    constexpr Style gearChip        {  9.0f, Weight::extraBold };           // "EXP 1" under a gear knob
+    constexpr Style gearPanelKind   { 13.0f, Weight::bold, 1.0f / 13.0f, true }; // AMP · NAM CAPTURE on the amp panel (1 px)
+    constexpr float gearBoxTrackingPx = 1.0f;                               // amp and cab kind labels: 1 px at any size
+    constexpr Style plate           { 11.0f, Weight::extraBold, 0.12f, true }; // model plate "JC 120B"
+    constexpr Style pedalName       { 22.0f, Weight::semibold };            // name on a 160 × 210 pedal
+    constexpr Style toggleName      { 10.0f, Weight::extraBold, 0.08f, true }; // LEVEL MATCH
+    constexpr Style keyCap          { 10.0f, Weight::regular };             // "F6"
+    constexpr Style subToolbarTitle { 14.0f, Weight::bold };                // "Cue list"
+    constexpr Style subtitle        { 12.0f, Weight::regular };             // summaries, help in dialogs
+    constexpr Style groupTitle      { 10.0f, Weight::bold, 0.08f, true };   // dialog group boxes
+    constexpr Style tabLabel        { 11.0f, Weight::medium };              // settings tabs
+    constexpr Style noticeNote      { 11.0f, Weight::medium };              // notice bar, right-hand note
+    constexpr Style lostNote        { 11.5f, Weight::medium };              // lost banner, right-hand note
+    constexpr Style badgeMark       { 11.0f, Weight::extraBold };           // "!" in the notice badge
+    constexpr Style statusMark      { 12.0f, Weight::extraBold };           // "!" in a 22 px status badge
+    constexpr Style statusMarkLarge { 22.0f, Weight::extraBold };           // "!" in the 44 px summary badge
+    constexpr Style mutedBar        { 12.0f, Weight::semibold };            // "Output muted - click to go live"
+
     // Stage (scaled by the widget's text size and the widget's height)
     constexpr Style widgetTag       { 10.5f, Weight::semibold };
     constexpr Style widgetTitle     { 13.0f, Weight::bold, 0.08f, true };
@@ -331,6 +434,9 @@ namespace state
     constexpr float hoverLighten  = 0.06f;   // raised controls get 6 % lighter on hover
     constexpr float disabledAlpha = 0.45f;
     constexpr float cutAlpha      = 0.35f;   // cut items in the full list
+    // Summary badge for warning / ok (the boards only draw the problem one):
+    // the badge colour lit and darkened the way the problem badge is.
+    constexpr float badgeLight = 0.4f, badgeRim = 0.5f, badgeGlowAlpha = 0.45f;
 }
 
 //==============================================================================
