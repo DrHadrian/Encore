@@ -608,12 +608,12 @@ private:
             return (r.index < 0 ? (float) (size::stageHeadingRow + size::stageHeadingPadBottom) : (float) size::stageListRow) * k;
         };
 
-        auto last = first;   // one past the last row shown
+        auto end = first;   // one past the last row shown
         auto used = 0.0f;
 
-        for (; last < (int) all.size(); ++last)
+        for (; end < (int) all.size(); ++end)
         {
-            const auto h = heightOf (all[(size_t) last]) + (last > first ? (float) size::stageListGap * k : 0.0f);
+            const auto h = heightOf (all[(size_t) end]) + (end > first ? (float) size::stageListGap * k : 0.0f);
 
             if (used + h > available)
                 break;
@@ -621,13 +621,13 @@ private:
             used += h;
         }
 
-        if (last == (int) all.size())
+        if (end == (int) all.size())
         {
             while (first > 0 && used + heightOf (all[(size_t) first - 1]) + (float) size::stageListGap * k <= available)
                 used += heightOf (all[(size_t) --first]) + (float) size::stageListGap * k;
         }
 
-        out.assign (all.begin() + first, all.begin() + juce::jmax (first, last));
+        out.assign (all.begin() + first, all.begin() + juce::jmax (first, end));
     }
 
     //==========================================================================
