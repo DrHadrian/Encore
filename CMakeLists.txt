@@ -225,6 +225,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/NoticeBar.h
     Source/ui/kit/Pane.cpp
     Source/ui/kit/Pane.h
+    Source/ui/kit/RowList.cpp
+    Source/ui/kit/RowList.h
     Source/ui/kit/SegmentedControl.cpp
     Source/ui/kit/SegmentedControl.h
     Source/ui/kit/StatusBadge.cpp

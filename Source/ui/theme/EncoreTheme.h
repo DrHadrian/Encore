@@ -299,7 +299,10 @@ namespace size
     constexpr int rowHeight         = 26;    // pane lists
     constexpr int tableRowHeight    = 28;    // full list
     constexpr int tableHeaderHeight = 24;
-    constexpr int sectionHeadingH   = 22;    // sidebar section heading
+    constexpr int sectionHeadingH   = 24;    // sidebar section heading (22 in the CSS; the target renders 24)
+    constexpr int listPad = 4, listGap = 1, rowPadX = 8, rowGap = 8, rowNumberW = 18, paneBarW = 3, paneBarH = 16;
+    constexpr int swatch = 9, swatchRadius = 2, rowRadius = 4, headingPadBottom = 2;
+    constexpr int paneFooterPadX = 10, paneFooterPadY = 8, headerButtonGap = 1, headerSmallButtonMargin = 4;
     constexpr int menuItemHeight    = 24;
     constexpr int menuPadding       = 5;
     constexpr int menuRadius        = 7;
