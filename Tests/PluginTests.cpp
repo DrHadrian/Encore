@@ -134,6 +134,37 @@ public:
             expect (again->find (PluginCatalog::toRef (plugins[0])).has_value());
         }
 
+        beginTest ("A VST3 folder without moduleinfo.json (JUCE names the DLL inside) stays in the list");
+        {
+            // The UAD case: JUCE reports such plugins by the DLL inside the
+            // .vst3 folder (on Windows), the scan searches for the folder.
+            const auto folder = temp.getChildFile ("no-moduleinfo");
+            const auto bundle = folder.getChildFile (testPluginFile().getFileName());
+            expect (testPluginFile().copyDirectoryTo (bundle));
+            bundle.getChildFile ("Contents/Resources/moduleinfo.json").deleteFile();
+
+            auto catalog2 = std::make_shared<PluginCatalog> (folder.getChildFile ("plugins.xml"),
+                                                             juce::File::getSpecialLocation (juce::File::currentExecutableFile));
+            catalog2->setFolders (juce::FileSearchPath (folder.getFullPathName()));
+            scan (*catalog2, false);
+            expectEquals (catalog2->getPlugins().size(), 1, "still there after the scan finished");
+            expect (catalog2->getBlocked().empty());
+
+            scan (*catalog2, false);
+            expectEquals (catalog2->getPlugins().size(), 1);
+            auto scans = 0;
+
+            for (const auto& line : juce::StringArray::fromLines (folder.getChildFile ("plugin-scan.log").loadFileAsString()))
+                scans += line.contains ("found 1") ? 1 : 0;
+
+            expectEquals (scans, 1, "known and unchanged: not scanned again");
+
+            expectEquals (PluginBlock::vst3BundleOf ("C:\\VST3\\UAD 1176.vst3\\Contents\\x86_64-win\\UAD 1176.vst3"),
+                          juce::String ("C:\\VST3\\UAD 1176.vst3"));
+            expectEquals (PluginBlock::vst3BundleOf ("C:\\VST3\\Old.vst3"), juce::String ("C:\\VST3\\Old.vst3"));
+            expectEquals (PluginBlock::vst3BundleOf ("C:\\VST3\\Odd.vst3x"), juce::String ("C:\\VST3\\Odd.vst3x"));
+        }
+
         beginTest ("A plugin that crashes while being scanned is blocked; Encore carries on");
         {
             auto crashing = makeCatalog (temp.getChildFile ("crash"));

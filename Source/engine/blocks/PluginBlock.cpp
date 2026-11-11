@@ -81,6 +81,22 @@ private:
     JUCE_DECLARE_NON_COPYABLE (ScopedCall)
 };
 
+juce::Optional<juce::AudioPlayHead::PositionInfo> HostPlayHead::getPosition() const
+{
+    PositionInfo info;
+    info.setBpm (120.0);
+    info.setTimeSignature (TimeSignature { 4, 4 });
+    info.setTimeInSamples (0);
+    info.setTimeInSeconds (0.0);
+    info.setPpqPosition (0.0);
+    info.setPpqPositionOfLastBarStart (0.0);
+    info.setBarCount (0);
+    info.setIsPlaying (false);
+    info.setIsRecording (false);
+    info.setIsLooping (false);
+    return info;
+}
+
 const char* PluginBlock::getPluginInUseOnThisThread() noexcept
 {
     return pluginInUse;
@@ -112,19 +128,17 @@ namespace
 
     juce::SpinLock loadedLock;
     std::vector<LoadedPlugin> loadedPlugins;
+}
 
-    /** The .vst3 a path belongs to: a VST3 is usually a folder with its DLL
-        inside, sometimes the DLL itself, and either may be reported. */
-    juce::String vst3Root (const juce::String& path)
-    {
-        const auto at = path.indexOfIgnoreCase (".vst3");
+juce::String PluginBlock::vst3BundleOf (const juce::String& path)
+{
+    const auto at = path.indexOfIgnoreCase (".vst3");
 
-        if (at < 0)
-            return path;
+    if (at < 0)
+        return path;
 
-        const auto end = at + 5;
-        return end == path.length() || path[end] == '/' || path[end] == '\\' ? path.substring (0, end) : path;
-    }
+    const auto end = at + 5;
+    return end == path.length() || path[end] == '/' || path[end] == '\\' ? path.substring (0, end) : path;
 }
 
 juce::String PluginBlock::getCrashLabelsForModule (const juce::String& modulePath)
@@ -136,10 +150,10 @@ juce::String PluginBlock::getCrashLabelsForModule (const juce::String& modulePat
 
     juce::StringArray labels;
 
-    const auto root = vst3Root (modulePath);
+    const auto root = vst3BundleOf (modulePath);
 
     for (const auto& p : loadedPlugins)
-        if (p.file.isNotEmpty() && vst3Root (p.file).equalsIgnoreCase (root))
+        if (p.file.isNotEmpty() && vst3BundleOf (p.file).equalsIgnoreCase (root))
             labels.addIfNotAlreadyThere (p.label);
 
     return labels.joinIntoString ("\n");
@@ -158,6 +172,7 @@ PluginBlock::PluginBlock (const PluginRef& refToUse, std::unique_ptr<juce::Audio
         return;
 
     instance->addListener (this);
+    instance->setPlayHead (&playHead);
 
     {
         const juce::SpinLock::ScopedLockType lock (loadedLock);
@@ -246,6 +261,8 @@ PluginBlock::~PluginBlock()
         juce::ignoreUnused (instance.release());
         return;
     }
+
+    instance->setPlayHead (nullptr);   // the play head goes with this block
 
     if (juce::MessageManager::existsAndIsCurrentThread())
     {

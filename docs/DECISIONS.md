@@ -445,7 +445,11 @@ each one gets time on the message loop to finish starting and closing
 plugins isn't cut off; a plugin that loads but can't be used (no audio input
 or output, failed to create) is listed under Blocked with why, never silently
 dropped; main buses switched off by default are switched on; each scanned
-file gets a line in plugin-scan.log next to the plugin list.
+file gets a line in plugin-scan.log next to the plugin list. Plugins are
+matched to scanned files by the .vst3 folder they're in: without a
+moduleinfo.json, JUCE names the DLL inside the folder (UAD's plugins
+vanished at the end of every scan). Instruments are skipped without being
+loaded. Plugins get a play head (stopped, 120 BPM, 4/4), as hosts provide.
 
 ## 0046 — Plugin blocks: created on the message thread, guarded while playing (milestone 10)
 

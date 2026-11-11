@@ -123,6 +123,7 @@ private:
 
     // What the scan thread asks and reports.
     bool isUpToDate (const juce::String& file, juce::AudioPluginFormat&) const;
+    static bool isInFile (const juce::PluginDescription&, const juce::String& file);
     void scanProgress (int index, int total, const juce::String& file);
     void scanFoundTypes (const juce::String& file, const juce::OwnedArray<juce::PluginDescription>&);
     void scanFailed (const juce::String& file, const juce::String& reason);

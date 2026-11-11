@@ -53,7 +53,9 @@ private:
     kit::Group deviceGroup { "Device" }, channelsGroup { "Active channels" }, tuningGroup { juce::String (juce::CharPointer_UTF8 ("Windows live tuning \xc2\xb7 automatic")) },
                statusGroup { "Status" }, tipGroup { "Tip" };
 
-    kit::SegmentedControl driverTypes, bufferSizes;
+    // Driver type: a popup (Windows offers up to four, with long names).
+    juce::ComboBox driverTypes;
+    kit::SegmentedControl bufferSizes;
     juce::ComboBox outputDevice, inputDevice, sampleRate, moreSizes;
     juce::TextButton controlPanel { "Control panel" }, resetCounters { "Reset counters" };
     juce::OwnedArray<juce::ToggleButton> inputs, outputs;

@@ -422,7 +422,7 @@ namespace size
     constexpr int settingsW = 1040, settingsH = 760;
     constexpr int groupTitleH = 18, groupGap = 16, groupRadius = 7, groupPad = 15, settingsColumnGap = 16, settingsPadTop = 18;
     constexpr int audioLeftW = 664, audioRightW = 320, settingsLabelW = 130, settingsLabelGap = 12;
-    constexpr int segmentHeight = 26, driverSegmentW = 130, bufferSegmentW = 68;   // segmented controls in settings (+ 2 px border)
+    constexpr int segmentHeight = 26, bufferSegmentW = 68;   // segmented controls in settings (+ 2 px border)
     constexpr int deviceRowGap = 10, devicePopupW = 340, ratePopupW = 140, latencyBarH = 8, latencyTextGap = 5;
     constexpr int channelColumnX = 325, checkRowH = 22, checkHeadGap = 7, statusBadgeMid = 26, statusRowH = 21;
     constexpr int statusKeyW = 146, statusDividerY = 54, statusRowsY = 65, tuningRowH = 23, tickSize = 9;

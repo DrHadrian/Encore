@@ -39,6 +39,15 @@ namespace encore
     (0..1), so stomps and expression pedals reach them; changes made in the
     plugin's own window come back into them.
 */
+/** What plugins are told about the transport, as a host must: stopped, at
+    120 BPM in 4/4 (until Encore has a tempo). Tempo-synced effects ask for
+    it, and some plugins crash without one. Real-time safe. */
+class HostPlayHead final : public juce::AudioPlayHead
+{
+public:
+    juce::Optional<PositionInfo> getPosition() const override;
+};
+
 class PluginBlock final : public Block,
                           private juce::AudioProcessorListener,
                           private juce::AudioProcessorParameter::Listener
@@ -114,6 +123,11 @@ public:
         threads). Empty if none, or if the list is being changed right now. */
     static juce::String getCrashLabelsForModule (const juce::String& modulePath);
 
+    /** The .vst3 a path belongs to. A VST3 is usually a folder with its DLL
+        inside, and JUCE reports either (the DLL when the folder has no
+        moduleinfo.json, on Windows): compare plugins by this. */
+    static juce::String vst3BundleOf (const juce::String& path);
+
     /** Splits crash labels into (block ID, plugin name) pairs. */
     static std::vector<std::pair<juce::String, juce::String>> parseCrashLabels (const juce::String&);
 
@@ -153,6 +167,7 @@ private:
     std::vector<float> lastPushed;                        // audio thread
     std::vector<Parameter*> encoreByIndex;                // by the plugin's parameter index (null: not exposed)
 
+    HostPlayHead playHead;
     juce::AudioBuffer<float> work;                        // the plugin's channels
     juce::MidiBuffer midi;
     int numIns = 0, numOuts = 0;                          // main buses

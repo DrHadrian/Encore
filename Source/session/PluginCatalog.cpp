@@ -329,8 +329,9 @@ std::optional<PluginCatalog::Blocked> PluginCatalog::findBlocked (const PluginRe
 {
     const juce::ScopedLock sl (lock);
 
-    if (auto it = blocked.find (ref.file); it != blocked.end())
-        return Blocked { it->first, it->second };
+    for (const auto& [file, reason] : blocked)
+        if (PluginBlock::vst3BundleOf (file).equalsIgnoreCase (PluginBlock::vst3BundleOf (ref.file)))
+            return Blocked { file, reason };
 
     return {};
 }
@@ -409,7 +410,26 @@ bool PluginCatalog::isUpToDate (const juce::String& file, juce::AudioPluginForma
             return true;   // stays blocked until unblocked or a full scan
     }
 
-    return known.getTypeForFile (file) != nullptr && known.isListingUpToDate (file, format);
+    // Its plugins, by the .vst3 they're in (JUCE may name the DLL inside).
+    auto any = false;
+
+    for (const auto& d : known.getTypes())
+    {
+        if (! isInFile (d, file))
+            continue;
+
+        if (format.pluginNeedsRescanning (d))
+            return false;
+
+        any = true;
+    }
+
+    return any;
+}
+
+bool PluginCatalog::isInFile (const juce::PluginDescription& d, const juce::String& file)
+{
+    return PluginBlock::vst3BundleOf (d.fileOrIdentifier).equalsIgnoreCase (PluginBlock::vst3BundleOf (file));
 }
 
 void PluginCatalog::scanProgress (int index, int total, const juce::String& file)
@@ -425,7 +445,7 @@ void PluginCatalog::scanProgress (int index, int total, const juce::String& file
 void PluginCatalog::scanFoundTypes (const juce::String& file, const juce::OwnedArray<juce::PluginDescription>& found)
 {
     for (const auto& d : known.getTypes())
-        if (d.fileOrIdentifier == file)
+        if (isInFile (d, file))
             known.removeType (d);
 
     for (auto* d : found)
@@ -438,7 +458,7 @@ void PluginCatalog::scanFoundTypes (const juce::String& file, const juce::OwnedA
 void PluginCatalog::scanFailed (const juce::String& file, const juce::String& reason)
 {
     for (const auto& d : known.getTypes())
-        if (d.fileOrIdentifier == file)
+        if (isInFile (d, file))
             known.removeType (d);
 
     const juce::ScopedLock sl (lock);
@@ -451,7 +471,7 @@ void PluginCatalog::scanFinished (const juce::StringArray& filesNowPresent, bool
     {
         // Uninstalled plugins (or folders no longer searched) leave the list.
         for (const auto& d : known.getTypes())
-            if (! filesNowPresent.contains (d.fileOrIdentifier))
+            if (std::none_of (filesNowPresent.begin(), filesNowPresent.end(), [&d] (const juce::String& f) { return isInFile (d, f); }))
                 known.removeType (d);
 
         const juce::ScopedLock sl (lock);
@@ -599,6 +619,16 @@ namespace
             }
 
             auto& d = *types[next++];
+
+            // Encore can't use instruments: not even loaded (some, like a
+            // whole rack, are the heaviest thing in their file).
+            if (d.isInstrument)
+            {
+                skip (d, "Is an instrument (no audio input)");
+                startTimer (1);
+                return;
+            }
+
             juce::String error;
             instance = formats.createPluginInstance (d, testSampleRate, testBlockSize, error);
             played = false;
@@ -610,6 +640,7 @@ namespace
                 return;
             }
 
+            instance->setPlayHead (&playHead);
             PluginBlock::setUp (*instance, {});
             startTimer (settleMs);   // let it finish starting
         }
@@ -670,6 +701,7 @@ namespace
         juce::AudioPluginFormatManager formats;
         juce::OwnedArray<juce::PluginDescription> types;
         juce::XmlElement root { "ENCORE_SCAN" };
+        HostPlayHead playHead;
         std::unique_ptr<juce::AudioPluginInstance> instance;
         int next = 0;
         bool played = false;
