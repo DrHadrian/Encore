@@ -21,7 +21,17 @@ int main (int argc, char* argv[])
     if (encore::PluginCatalog::isScannerCommandLine (args))
         return encore::PluginCatalog::runScanner (args);
 
-    juce::UnitTestRunner runner;
+    // JUCE logs to the debugger on Windows: print each step to the console
+    // (flushed), so a crash in CI shows where it happened.
+    struct ConsoleRunner final : juce::UnitTestRunner
+    {
+        void logMessage (const juce::String& message) override
+        {
+            std::cout << message << std::endl;
+        }
+    };
+
+    ConsoleRunner runner;
     runner.setAssertOnFailure (false);
     // ENCORE_TEST_ONLY=<name>|<name>...: run just those (e.g. the showcase tour).
     // ENCORE_TEST_SKIP=<name>|<name>...: run all but those. ctest uses both to
