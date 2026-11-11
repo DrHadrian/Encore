@@ -125,7 +125,7 @@ void ChainStrip::resized()
     juce::Path rounded;
     rounded.addRoundedRectangle (addTile.toFloat().reduced (1.0f), (float) size::plusTileRadius - 1.0f);
     const float dashes[] = { (float) size::dash, (float) size::dash };
-    juce::PathStrokeType (2.0f).createDashedStroke (addTileOutline, rounded, dashes, 2);
+    juce::PathStrokeType ((float) size::plusTileStroke).createDashedStroke (addTileOutline, rounded, dashes, 2);
 }
 
 void ChainStrip::paint (juce::Graphics& g)

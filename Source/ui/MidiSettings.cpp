@@ -526,9 +526,9 @@ void MidiSettings::resized()
     // HOW MAPPINGS WORK, DEFAULTS
     const auto rightX = outputGroup.getRight() + size::settingsColumnGap;
     howGroup.setBounds (rightX, size::midiPadTop, size::midiRightW,
-                        kit::Group::heightFor (juce::roundToInt (howText.getHeight()) + 2 * size::groupPad - 2));
-    defaultsGroup.setBounds (rightX, howGroup.getBottom() + size::groupGap - 2, size::midiRightW,
-                             kit::Group::heightFor (2 * size::groupPad - 2 + 4 * size::statusRowH));
+                        kit::Group::heightFor (juce::roundToInt (howText.getHeight()) + 2 * size::groupPadTight));
+    defaultsGroup.setBounds (rightX, howGroup.getBottom() + size::groupGap - (size::groupPad - size::groupPadTight), size::midiRightW,
+                             kit::Group::heightFor (2 * size::groupPadTight + 4 * size::statusRowH));
 }
 
 void MidiSettings::paintOverChildren (juce::Graphics& g)
@@ -579,10 +579,10 @@ void MidiSettings::paintOverChildren (juce::Graphics& g)
 
     // The help groups.
     {
-        const auto box = (howGroup.getBoxBounds() + howGroup.getPosition()).toFloat().reduced ((float) size::groupPad, (float) size::groupPad - 2.0f);
+        const auto box = (howGroup.getBoxBounds() + howGroup.getPosition()).toFloat().reduced ((float) size::groupPad, (float) size::groupPadTight);
         howText.draw (g, box);
 
-        const auto defaults = (defaultsGroup.getBoxBounds() + defaultsGroup.getPosition()).toFloat().reduced ((float) size::groupPad, (float) size::groupPad - 2.0f);
+        const auto defaults = (defaultsGroup.getBoxBounds() + defaultsGroup.getPosition()).toFloat().reduced ((float) size::groupPad, (float) size::groupPadTight);
 
         for (int i = 0; i < 4; ++i)
         {

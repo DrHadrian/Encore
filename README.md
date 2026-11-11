@@ -18,7 +18,10 @@ cues, bar marks and notes, fast typing, go to a cue by number); crash
 recovery, interface reconnect, pre-show check; a stage view you lay out
 yourself, tuner, panic and lock; foot controllers and expression pedals over
 MIDI; gapless patch switching with tails; NAM amps, cab IRs, gate, EQ, delay.
-The Logic-style look (design v3) comes next.
+The Logic-style look (design v3): a native JUCE UI drawn from design tokens,
+with an Edit view (running order, signal chain, block stage, inspector),
+the full cue list, a Stage view and its layout editor, one settings window
+(Audio | MIDI) and the pre-show check (see [docs/design](docs/design)).
 
 | Milestone | What you can test |
 | --- | --- |
@@ -384,9 +387,14 @@ Source/
     dsp/              allocation-free DSP (filters, limiter, sample-rate conversion)
     nam/              loading and running Neural Amp Modeler captures
     midi/             foot controller and pedal input, MIDI out
-  ui/                 edit view pieces, MIDI settings, stage view and layout editor, tuner display
+  ui/                 the screens: edit view pieces, full cue list, stage view and layout editor,
+                      settings window (audio, MIDI), pre-show check, tuner display
+    theme/            design v3 tokens (EncoreTheme.h), fonts, icons, the LookAndFeel
+    kit/              shared components: panes, toolbar, LCD, meters, dialogs, gear placeholders
   platform/           Windows-specific tuning
-Tests/                engine unit tests (run in CI)
+Resources/ui/         bundled Inter font, icons, the wordmark
+Tests/                engine and UI tests (run in CI); UI snapshots with ENCORE_UI_SNAPSHOTS=<folder>
+docs/design/          design v3: design system, screens, reference boards and targets
 docs/DECISIONS.md     short log of important design decisions
 ```
 
@@ -398,6 +406,8 @@ Steinberg ASIO SDK headers bundled with JUCE (GPLv3 option, compatible with
 AGPLv3), [NeuralAmpModelerCore](https://github.com/sdatkinson/NeuralAmpModelerCore)
 (MIT), [Eigen](https://eigen.tuxfamily.org) (MPL 2.0) and
 [nlohmann/json](https://github.com/nlohmann/json) (MIT). All are downloaded at
-configure time at pinned versions.
+configure time at pinned versions. The UI font, [Inter](https://rsms.me/inter/)
+by Rasmus Andersson, is bundled in `Resources/ui/fonts` under the SIL Open
+Font License 1.1 (`OFL-and-copyright.txt` there).
 
 ASIO is a trademark of Steinberg Media Technologies GmbH.

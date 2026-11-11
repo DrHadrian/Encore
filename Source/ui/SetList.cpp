@@ -171,7 +171,7 @@ void SetList::paintRow (juce::Graphics& g, int row, juce::Rectangle<int> bounds)
     if (playing)
     {
         g.setColour (paint::c (colour::healthy));
-        g.fillRoundedRectangle (bar.withSizeKeepingCentre (bar.getWidth(), (float) size::paneBarH), 2.0f);
+        g.fillRoundedRectangle (bar.withSizeKeepingCentre (bar.getWidth(), (float) size::paneBarH), (float) size::paneBarRadius);
     }
 
     area.removeFromLeft ((float) size::rowGap);

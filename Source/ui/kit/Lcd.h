@@ -18,6 +18,7 @@ public:
     {
         juce::String value, label;
         int minWidth = 0;   // keeps the layout still while values change
+        int maxWidth = 0;   // 0: as wide as the text; else longer text is cut with "..."
 
         bool operator== (const Item&) const = default;
     };
@@ -28,6 +29,10 @@ public:
     static int heightFor (bool stage) noexcept;
 
     void setItems (std::vector<Item>);
+
+    /** The room there is: items with a maxWidth are cut further (down to
+        lcdCutMinW) so the LCD fits. 0: no limit. */
+    void setAvailableWidth (int);
 
     /** The width the items need (with padding). */
     int getIdealWidth() const noexcept { return idealWidth; }
@@ -48,7 +53,7 @@ private:
 
     const bool isStage;
     std::vector<Shown> shown;
-    int idealWidth = 0;
+    int idealWidth = 0, availableWidth = 0;
     juce::Path outline;
     juce::ColourGradient fill, shadow;
 };

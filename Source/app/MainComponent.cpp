@@ -90,7 +90,7 @@ public:
     void paint (juce::Graphics& g) override
     {
         // 12.5 / 600 over 10.5, line height 1.15, the pair centred on the bar.
-        const auto nameH = type::toolbarTitle.px * 1.15f, stateH = type::saveState.px * 1.15f;
+        const auto nameH = type::toolbarTitle.px * type::titleLineHeight, stateH = type::saveState.px * type::titleLineHeight;
         auto r = getLocalBounds().toFloat().withSizeKeepingCentre ((float) getWidth(), nameH + stateH);
         paint::text (g, name, r.removeFromTop (nameH), type::toolbarTitle, colour::text);
         paint::text (g, state, r, type::saveState, colour::textMuted);
@@ -1427,7 +1427,7 @@ void MainComponent::refreshLcd()
 
     lcd.setItems ({
         { (playing ? juce::String (cue + 1) : dash) + " / " + juce::String ((int) cues.size()), words.item, 0 },
-        { name.isNotEmpty() ? name : dash, "Patch " + (patch != nullptr ? patch->name : dash), size::lcdMinPatch },
+        { name.isNotEmpty() ? name : dash, "Patch " + (patch != nullptr ? patch->name : dash), size::lcdMinPatch, size::lcdNameMaxW },
         { roundTripMs > 0.0 ? juce::String (roundTripMs, 1) + " ms" : dash, "Round trip", 0 },
         { sampleRate > 0.0 ? juce::String (sampleRate / 1000.0, 1) + "k" : dash, "Rate", 0 },
     });
@@ -1674,7 +1674,7 @@ void MainComponent::layoutToolbar (juce::Rectangle<int> bar)
     place (showButton, left, widthOf (showButton), buttonH, buttonY);
     left = showButton.getRight() + size::toolbarGap;
 
-    place (*showTitle, left, showTitle->getIdealWidth(), bar.getHeight() - 1, 0);
+    place (*showTitle, left, juce::jmin (showTitle->getIdealWidth(), size::showTitleMaxW), bar.getHeight() - 1, 0);   // long names are cut
     left = showTitle->getRight() + size::toolbarGap + size::modeSwitchGap;
 
     const auto modeH = size::toolbarButtonH + 2;
@@ -1704,8 +1704,9 @@ void MainComponent::layoutToolbar (juce::Rectangle<int> bar)
     fromRight (tunerButton, widthOf (tunerButton), buttonH, buttonY, size::toolbarGap);
 
     // The LCD centred between the two groups; hidden if it doesn't fit.
-    const auto lcdW = lcd.getIdealWidth(), lcdH = kit::Lcd::heightFor (false);
     const auto space = right + size::toolbarGap - left;
+    lcd.setAvailableWidth (space);
+    const auto lcdW = lcd.getIdealWidth(), lcdH = kit::Lcd::heightFor (false);
     lcd.setVisible (lcdW <= space);
     place (lcd, left + (space - lcdW) / 2, lcdW, lcdH, (bar.getHeight() - 1 - (lcdH - 1)) / 2);
 }

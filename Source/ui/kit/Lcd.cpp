@@ -36,7 +36,8 @@ void Lcd::setItems (std::vector<Item> newItems)
     bool sameShape = newItems.size() == shown.size();
 
     for (size_t i = 0; sameShape && i < newItems.size(); ++i)
-        sameShape = newItems[i].label == shown[i].item.label && newItems[i].minWidth == shown[i].item.minWidth;
+        sameShape = newItems[i].label == shown[i].item.label && newItems[i].minWidth == shown[i].item.minWidth
+                    && newItems[i].maxWidth == shown[i].item.maxWidth;
 
     if (sameShape)
     {
@@ -86,6 +87,16 @@ void Lcd::setItems (std::vector<Item> newItems)
     repaint();
 }
 
+void Lcd::setAvailableWidth (int width)
+{
+    if (width != availableWidth)
+    {
+        availableWidth = width;
+        layOut();
+        repaint();
+    }
+}
+
 void Lcd::layOut()
 {
     const auto valueFont = font (valueStyle (isStage));
@@ -98,11 +109,40 @@ void Lcd::layOut()
         s.caps = s.item.label.toUpperCase();
         const auto w = juce::jmax (textWidth (valueFont, s.item.value), textWidth (labelFont, s.caps));
         s.width = (float) juce::jmax (s.item.minWidth, (int) std::ceil (w));
+
+        if (s.item.maxWidth > 0)
+            s.width = juce::jmin (s.width, (float) juce::jmax (s.item.minWidth, s.item.maxWidth));
         s.x = x;
         x += s.width + itemGap (isStage);
     }
 
     idealWidth = (int) std::ceil (shown.empty() ? padX (isStage) * 2.0f : x - itemGap (isStage) + padX (isStage));
+
+    // Too wide for the room: the cuttable items give way, then everything moves left.
+    if (availableWidth > 0 && idealWidth > availableWidth)
+    {
+        auto excess = (float) (idealWidth - availableWidth);
+
+        for (auto& s : shown)
+        {
+            if (s.item.maxWidth > 0 && excess > 0.0f)
+            {
+                const auto give = juce::jmin (excess, s.width - (float) juce::jmin (s.item.minWidth, size::lcdCutMinW));
+                s.width -= juce::jmax (0.0f, give);
+                excess -= juce::jmax (0.0f, give);
+            }
+        }
+
+        x = padX (isStage);
+
+        for (auto& s : shown)
+        {
+            s.x = x;
+            x += s.width + itemGap (isStage);
+        }
+
+        idealWidth = (int) std::ceil (x - itemGap (isStage) + padX (isStage));
+    }
 }
 
 juce::Rectangle<float> Lcd::cellBounds (const Shown& s) const

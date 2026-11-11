@@ -330,7 +330,7 @@ namespace size
     constexpr int inspectorPadX = 10, inspectorPadTop = 6, inspectorPadBottom = 10, inspectorKeyW = 74, inspectorColGap = 8;
     constexpr int inspectorRowGap = 6, inspectorTextH = 15, inspectorListPadX = 6, inspectorNameW = 60, inspectorChipW = 44;
     constexpr int inspectorBarH = 4, assignKeyW = 62, assignArrowW = 12;
-    constexpr int listPad = 4, listGap = 1, rowPadX = 8, rowGap = 8, rowNumberW = 18, paneBarW = 3, paneBarH = 16;
+    constexpr int listPad = 4, listGap = 1, rowPadX = 8, rowGap = 8, rowNumberW = 18, paneBarW = 3, paneBarH = 16, paneBarRadius = 2;
     constexpr int swatch = 9, swatchRadius = 2, rowRadius = 4, headingPadBottom = 2;
     constexpr int paneFooterPadX = 10, paneFooterPadY = 8, headerButtonGap = 1, headerSmallButtonMargin = 4;
     constexpr int menuItemHeight    = 24;
@@ -396,7 +396,8 @@ namespace size
     constexpr int stageTriangleGap = 0;      // ◂ Back, NEXT ▸: the triangle's own box leaves the space
     constexpr float stageTriangle = 0.85f;    // the triangle's box, of the font's ascent
     constexpr float stageCapCentre = 0.375f; // the middle of the capitals above the baseline, of the ascent
-    constexpr float stagePedalScale = 0.7f;  // stomp pedals: 0.7 of 160 x 210 at the reference size
+    constexpr float stagePedalScale = 0.7f;
+    constexpr float nextCuePatchShare = 0.3f;   // Next cue: the patch name keeps at least this share of the width (then it's cut)  // stomp pedals: 0.7 of 160 x 210 at the reference size
     constexpr int widgetTagRadius = 3, stageEmptyPadX = 8;
     constexpr int stompsX = 14, stompsRight = 10, stompsBottom = 10, stompsGap = 22, stageShadowH = 8;
     constexpr int barsTop = 34, barsBottom = 30, barsLabelBottom = 8, meterBarsGap = 8;
@@ -425,12 +426,16 @@ namespace size
     constexpr int midiColumnW = 335, midiRightW = 300, midiPadTop = 16, midiInputRowH = 28, midiInputTop = 13;
     constexpr int mappingHeaderH = 27, mappingRowH = 31, mappingBarH = 37, mappingPadX = 12, actionW = 200;
     constexpr int triggerX = 222, learnW = 76, learnH = 22, removeW = 22, removeRight = 18, lastValueW = 117, lastValueH = 21;
-    constexpr int helpLineH = 18, helpGap = 10;
+    constexpr int helpLineH = 18, helpGap = 10, groupPadTight = 13;   // (help groups: 13 above and below the text)
     constexpr int statusTitleH = 15, statusLineH = 14, statusTextH = 15, latencySplit = 2, tickTextGap = 10, defaultsValueX = 170;
     constexpr float tickStroke = 1.5f;
     // Pre-show check (SCREENS.md §8, preshow-check.json)
     constexpr int preShowW = 840, preShowH = 780, summaryBandH = 81, summaryBadgeX = 22, summaryBadgeY = 18, summaryTextX = 82;
     constexpr int summaryTitleY = 19, summaryTitleH = 24, summarySubY = 46, summarySubH = 15, liveDot = 7, liveGap = 6;
+    constexpr int plusTileStroke = 2;
+    constexpr int showTitleMaxW = 160;
+    constexpr int lcdCutMinW = 60;        // ...and further, down to this, when the toolbar is short of room
+    constexpr int lcdNameMaxW = 320;      // a long cue or patch name in the LCD is cut here   // the show name in the toolbar: longer names are cut   // the dashed "+" tile border
     constexpr int summaryBadge = 44, liveAreaW = 60, liveTop = 5, liveKeyGap = 3, rowLineGap = 2;
     constexpr int checkListTop = 6, checkHeadingH = 26, preShowRowH = 59, rowBadge = 22, rowTextX = 62, checkPadX = 22, rowTitleH = 16;
     // Tuner overlay (the board's tuner pane)
@@ -477,6 +482,7 @@ namespace type
     struct Style { float px; Weight weight; float tracking = 0.0f; bool uppercase = false; };
 
     constexpr float lcdLineHeight = 1.05f;   // LCD value / label lines (em)
+    constexpr float titleLineHeight = 1.15f; // the show name over its save state
     constexpr float normalLine = 1.21f;      // Inter's "normal" line height (ascent + descent), em
     constexpr float minTextPx = 8.0f, shrinkStep = 0.9f;   // text that shrinks to fit: not below 8 px, 10 % a step
 

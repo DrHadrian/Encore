@@ -707,8 +707,10 @@ private:
                 auto mainFont = fontFor (type::nextCueName, pxOf (type::nextCueName, k));
                 auto subFont = fontFor (type::nextCuePatch, pxOf (type::nextCuePatch, k));
 
-                // Both shrink together until the line fits (width and height).
-                const auto total = textWidth (mainFont, content.main) + gapX + textWidth (subFont, content.sub);
+                // Both shrink together until the name and some of the patch fit; a
+                // long patch name is cut rather than shrinking everything.
+                const auto total = textWidth (mainFont, content.main) + gapX
+                                   + juce::jmin (textWidth (subFont, content.sub), width * size::nextCuePatchShare);
                 const auto f = juce::jmin (1.0f, width / juce::jmax (1.0f, total), (bottom - tagBottom()) / juce::jmax (1.0f, lineOf (mainFont)));
 
                 if (f < 1.0f)
@@ -1150,7 +1152,7 @@ private:
 
             if (content.state == State::active)   // panic while it silences
             {
-                g.setColour (juce::Colours::white.withAlpha (state::activeLighten));
+                g.setColour (paint::c (colour::textStrong).withAlpha (state::activeLighten));
                 g.fillRoundedRectangle (r, radius);
             }
 
@@ -2156,7 +2158,7 @@ void StageView::refreshToolbar()
     const auto number = cue != nullptr ? (cue->number.isNotEmpty() ? cue->number : juce::String (index + 1)) : dash;
 
     const auto lcdWidth = lcd.getIdealWidth();
-    lcd.setItems ({ { number, words.item, 0 }, { name, session.getSectionPath (index), size::lcdMinPatchStage } });
+    lcd.setItems ({ { number, words.item, 0 }, { name, session.getSectionPath (index), size::lcdMinPatchStage, size::lcdNameMaxW } });
 
     const auto oldName = layoutName->getIdealWidth();
     layoutName->setText (juce::String (juce::CharPointer_UTF8 ("Layout \xe2\x80\x9c")) + current.name + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9d")));
@@ -2548,8 +2550,9 @@ void StageView::layoutToolbar()
     left = layoutName->isVisible() ? layoutName->getRight() + gap : modeSwitch.getRight() + gap;
 
     // The LCD centred in the space between the two groups; hidden if it doesn't fit.
-    const auto lcdW = lcd.getIdealWidth(), lcdH = kit::Lcd::heightFor (true);
     const auto space = right - left;
+    lcd.setAvailableWidth (space);
+    const auto lcdW = lcd.getIdealWidth(), lcdH = kit::Lcd::heightFor (true);
     lcd.setVisible (lcdW <= space);
     lcd.setBounds (left + (space - lcdW) / 2, (h - (lcdH - 1)) / 2, lcdW, lcdH);
 }
