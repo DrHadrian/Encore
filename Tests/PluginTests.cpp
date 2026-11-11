@@ -256,8 +256,7 @@ public:
             play (*chain->getBlocks()[0]);
 
             captureChain (*chain, patch, {});
-            const auto& saved = patch.mainLane().blocks[0];
-            expect (saved.state.isNotEmpty());
+            expect (patch.mainLane().blocks[0].state.isNotEmpty());
 
             // Nothing changed since: the plugin isn't asked again (its state
             // counts how often it was asked, so a new read would differ).
@@ -274,6 +273,10 @@ public:
             findParameterNamed (pluginBlock, "Gain")->setValue (0.125f);
             play (pluginBlock);
             captureChain (*chain, patch, {});
+
+            // A copy: capturing again replaces the patch's blocks.
+            const auto saved = patch.mainLane().blocks[0];
+            expect (saved.state.isNotEmpty());
             expectEquals (saved.plugin.name, juce::String ("Encore Test Plugin"));
             expect (saved.params.empty(), "the plugin's state holds its settings");
 
