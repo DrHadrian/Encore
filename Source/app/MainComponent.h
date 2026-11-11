@@ -14,6 +14,7 @@
 #include "ui/LevelMeter.h"
 #include "ui/MidiSettings.h"
 #include "session/RecoveryFile.h"
+#include "ui/CueListEditor.h"
 #include "ui/PatchList.h"
 #include "ui/PreShowCheckView.h"
 #include "ui/SetList.h"
@@ -78,6 +79,10 @@ private:
     void applyFix (PreShowCheckResult::Fix);
     void showNotice (const juce::String& text, int seconds);
 
+    // Cue list
+    void setCueListVisible (bool);
+    bool handleGoToKey (const juce::KeyPress&);
+
     // Stage
     void setStageVisible (bool);
     void showStageSettingsMenu (juce::PopupMenu&);
@@ -105,6 +110,10 @@ private:
     juce::TextButton audioSettingsButton { "Audio settings..." };
     juce::TextButton midiSettingsButton { "MIDI..." };
     juce::TextButton stageButton { "Stage" }, tunerButton { "Tuner" }, panicButton { "PANIC" };
+
+    std::unique_ptr<CueListEditor> cueEditor;
+    juce::String goToNumber;
+    juce::uint32 goToUntil = 0;
 
     std::unique_ptr<StageView> stageView;
     TunerDisplay editTuner;

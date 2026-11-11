@@ -282,6 +282,93 @@ public:
             }
         }
 
+        beginTest ("Theatre cue lists: sections, insert, move, cut and automatic numbering");
+        {
+            ShowSession session (engine);
+            expect (session.newShow (temp.getChildFile ("Theatre.encore"), "Theatre").wasOk());
+            pumpUntil ([&] { return ! session.isBuilding(); });
+
+            expectEquals (session.getWords().list, juce::String ("Set list"), "a new show is a band's set list");
+            session.setShowTemplate (ShowTemplate::musical);
+            expectEquals (session.getWords().list, juce::String ("Cue list"));
+            expectEquals (session.getWords().item, juce::String ("cue"));
+
+            const auto act1 = session.insertSection ({}, "Act 1", "act");
+            const auto overture = session.insertCue (act1);          // first in Act 1
+            session.setItemName (overture, "Overture");
+            const auto think = session.insertCue (overture);
+            session.setItemName (think, "Think of me");
+            const auto act2 = session.insertSection (act1, "Act 2", "act");
+            const auto masq = session.insertCue (act2);
+            session.setItemName (masq, "Masquerade");
+            session.setItemBarMark (masq, "bar 12 / B");
+            session.setItemNote (masq, "watch conductor");
+
+            auto names = [&]
+            {
+                juce::StringArray out;
+
+                for (auto* cue : session.getCues())
+                    out.add (cue->number + " " + cue->name);
+
+                return out.joinIntoString (", ");
+            };
+
+            expectEquals (names(), juce::String ("1 Overture, 2 Think of me, 3 Masquerade"));
+            expectEquals (session.getSectionPath (2), juce::String ("Act 2"));
+            expectEquals (session.findCueByNumber ("2"), 1);
+
+            // Insert between: everything after renumbers.
+            const auto angel = session.insertCue (overture);
+            session.setItemName (angel, "Angel of Music");
+            expectEquals (names(), juce::String ("1 Overture, 2 Angel of Music, 3 Think of me, 4 Masquerade"));
+
+            // Cut: skipped and unnumbered, but kept.
+            session.setCut (angel, true);
+            expectEquals (names(), juce::String ("1 Overture, 2 Think of me, 3 Masquerade"));
+            expectEquals ((int) session.getRunningOrderRows().size(), 6, "2 sections + 4 cues, cut included");
+            session.setCut (angel, false);
+            expectEquals (names(), juce::String ("1 Overture, 2 Angel of Music, 3 Think of me, 4 Masquerade"));
+
+            // Moving down out of Act 1 lands at the start of Act 2 ("into the neighbouring section").
+            session.moveItem (think, +1);   // last in Act 1 -> out, after Act 1 (top level)
+            session.moveItem (think, +1);   // next to Act 2 -> into it, first
+            expectEquals (session.getSectionPath (session.getCueIndexOf (think)), juce::String ("Act 2"));
+            expectEquals (names(), juce::String ("1 Overture, 2 Angel of Music, 3 Think of me, 4 Masquerade"));
+            session.moveItem (think, +1);   // after Masquerade
+            expectEquals (names(), juce::String ("1 Overture, 2 Angel of Music, 3 Masquerade, 4 Think of me"));
+
+            // A new cue plays the patch of the cue before it.
+            const auto lead = session.addPatch ("Lead");
+            session.setItemPatch (masq, lead);
+            const auto after = session.insertCue (masq);
+            expectEquals (session.getCues()[(size_t) session.getCueIndexOf (after)]->patchId, lead);
+
+            // Deleting a section keeps its cues.
+            session.deleteItem (act2);
+            expectEquals ((int) session.getCues().size(), 5);
+            expectEquals (session.getSectionPath (2), juce::String());
+
+            // The playing cue stays the playing cue through edits above it.
+            session.goToCue (3);
+            playOneBlock (engine);
+            session.syncWithAudio();
+            const auto playingId = session.getCues()[3]->id;
+            session.insertCue (overture);
+            playOneBlock (engine);
+            session.syncWithAudio();
+            expectEquals (session.getCues()[(size_t) session.getCurrentCue()]->id, playingId);
+
+            // Numbers and sections survive saving.
+            expect (session.save().wasOk());
+            ShowSession reopened (engine);
+            expect (reopened.openShow (temp.getChildFile ("Theatre.encore")).wasOk());
+            pumpUntil ([&] { return ! reopened.isBuilding(); });
+            expectEquals (reopened.getCues()[2]->number, juce::String ("3"));
+            expect (reopened.getShow().showTemplate == ShowTemplate::musical, "the kind of show is saved");
+            expectEquals (reopened.getCues()[(size_t) reopened.getCueIndexOf (masq)]->note, juce::String ("watch conductor"));
+        }
+
         beginTest ("The last patch can't be deleted");
         {
             ShowSession session (engine);

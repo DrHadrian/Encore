@@ -44,11 +44,18 @@ public:
         owned.push_back (std::move (object));
         latest = raw;
 
-        // The audio thread drains this every few milliseconds; filling it
-        // would need a stalled audio thread.
-        const auto queued = incoming.push (raw);
-        jassert (queued);
-        juce::ignoreUnused (queued);
+        // The queue only fills while the audio thread isn't running (no
+        // device, interface unplugged). Then only the newest object matters:
+        // one still waiting was never seen by the audio thread, so it can go.
+        if (waiting != nullptr)
+        {
+            eraseOwned (waiting);
+            waiting = nullptr;
+        }
+
+        if (! incoming.push (raw))
+            waiting = raw;   // queued by collectGarbage() once there's room
+
         return raw;
     }
 
@@ -67,6 +74,18 @@ public:
             if (latest == dead)
                 latest = nullptr;
         }
+
+        const juce::ScopedLock sl (ownedLock);
+
+        if (waiting != nullptr && incoming.push (waiting))
+            waiting = nullptr;
+    }
+
+    /** True while an object waits for room in the queue (audio not running). */
+    bool hasWaiting() const
+    {
+        const juce::ScopedLock sl (ownedLock);
+        return waiting != nullptr;
     }
 
     /** The most recently published object that hasn't been deleted. */
@@ -122,6 +141,12 @@ public:
     }
 
 private:
+    void eraseOwned (T* object)
+    {
+        owned.erase (std::remove_if (owned.begin(), owned.end(), [object] (const auto& o) { return o.get() == object; }),
+                     owned.end());
+    }
+
     void flushBacklog() noexcept
     {
         while (backlogSize > 0 && retired.push (backlog[(size_t) backlogSize - 1]))
@@ -133,6 +158,7 @@ private:
     mutable juce::CriticalSection ownedLock;
     std::vector<std::unique_ptr<T>> owned;
     T* latest = nullptr;
+    T* waiting = nullptr;   // newest object not yet queued (queue was full)
 
     LockFreeFifo<T*, QueueSize> incoming, retired;
 

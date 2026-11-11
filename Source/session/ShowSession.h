@@ -119,6 +119,52 @@ public:
     void setCueProgramChange (int index, int program);   // -1 = none
     void setCueMidiOut (int index, std::vector<MidiOutMessage> messages);
 
+    //== Running order editing (set lists and theatre cue lists) =============
+    /** Band, musical, worship, solo: decides the words (set list / cue list). */
+    void setShowTemplate (ShowTemplate);
+    ShowWords getWords() const { return wordsFor (show.showTemplate); }
+
+    /** Every item in order (sections, cues, cut cues), as the cue list shows them. */
+    struct Row
+    {
+        const RunItem* item = nullptr;
+        int depth = 0;          // 0 = top level, 1 = inside a section...
+        int cueIndex = -1;      // position among playable cues; -1 for sections and cut cues
+    };
+
+    std::vector<Row> getRunningOrderRows() const;
+
+    /** Adds a cue after an item (inside a section if `afterId` is a section;
+        at the end if empty). It plays the same patch as the cue before it.
+        Cues are renumbered 1..N. Returns the new cue's id. */
+    juce::String insertCue (const juce::String& afterId);
+    juce::String insertSection (const juce::String& afterId, const juce::String& name, const juce::String& kind);
+
+    /** Removes an item. A section's cues stay, moving up a level. */
+    void deleteItem (const juce::String& id);
+
+    /** Moves an item one place up (-1) or down (+1) in the list; at a section's
+        edge it moves out of it, next to a section it moves into it. */
+    void moveItem (const juce::String& id, int direction);
+
+    /** Cut cues stay in the file but are skipped in the show (and unnumbered). */
+    void setCut (const juce::String& id, bool cut);
+
+    void setItemName (const juce::String& id, const juce::String& name);
+    void setItemNote (const juce::String& id, const juce::String& note);
+    void setItemBarMark (const juce::String& id, const juce::String& barMark);
+    void setSectionKind (const juce::String& id, const juce::String& kind);
+    void setItemPatch (const juce::String& id, const juce::String& patchId);
+
+    /** Playable cue index of an item, or -1. */
+    int getCueIndexOf (const juce::String& id) const;
+
+    /** "Go to cue 42": the playable cue with that number, or -1. */
+    int findCueByNumber (const juce::String& number) const;
+
+    /** "Act 1 / Scene 3" for a playable cue (empty at the top level). */
+    juce::String getSectionPath (int cueIndex) const;
+
     //== MIDI mappings =========================================================
     /** Whether the show uses its own mappings instead of the computer's. */
     void setOwnMidiMappings (bool own, const std::vector<MidiBinding>& startingPoint);
@@ -161,6 +207,9 @@ private:
     const PatchModel* findPatchForKey (const juce::String& key) const;
     static juce::String keyForCue (const RunItem& cue);
     RunItem* cueAt (int index);
+    RunItem* findItem (const juce::String& id);
+    void renumberCues();
+    void runningOrderChanged (const juce::String& keepPlayingId);
     bool locateCue (int index, std::vector<RunItem>*& siblings, int& position);
 
     AudioEngine& engine;
