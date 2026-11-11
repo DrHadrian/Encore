@@ -49,6 +49,15 @@ public:
         folders = catalog.folders;
         timeout = catalog.scanTimeout;
         scanner = catalog.scanner;
+
+        // The log of the last scans only (a fresh one when it grows large).
+        logFile = catalog.dataFile.getSiblingFile ("plugin-scan.log");
+
+        if (logFile.getSize() > 512 * 1024)
+            logFile.deleteFile();
+
+        logFile.appendText ("\n" + juce::Time::getCurrentTime().toString (true, true, true, true)
+                            + (everything ? "  Scan all again" : "  Scan") + " in " + folders.toString() + "\n");
     }
 
     ~ScanThread() override { stopThread (10000); }
@@ -84,6 +93,20 @@ public:
     }
 
 private:
+    void fail (const juce::String& file, const juce::String& reason, juce::Time started, const juce::String& detail = {})
+    {
+        catalog.scanFailed (file, reason);
+        log (file, "BLOCKED: " + reason + (detail.isNotEmpty() ? " (" + detail + ")" : juce::String()), started);
+    }
+
+    /** One line per scanned file in plugin-scan.log, next to the plugin list. */
+    void log (const juce::String& file, const juce::String& what, juce::Time started)
+    {
+        const auto seconds = (juce::Time::getCurrentTime() - started).inSeconds();
+        logFile.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + file + "  ("
+                            + juce::String (seconds, 1) + " s)  " + what + "\n");
+    }
+
     /** False if the scan was cancelled. */
     bool scanOne (const juce::String& file)
     {
@@ -97,6 +120,9 @@ private:
         }
 
         const auto started = juce::Time::getCurrentTime();
+        const auto progress = result.withFileExtension ("progress");
+        auto lastSignOfLife = started;
+        juce::String lastProgress;
 
         while (process.isRunning())
         {
@@ -104,15 +130,24 @@ private:
             {
                 process.kill();
                 result.deleteFile();
+                progress.deleteFile();
                 return false;
             }
 
-            if (juce::Time::getCurrentTime() - started > timeout)
+            // Each plugin it finishes counts as a sign of life (shells hold many).
+            if (const auto p = progress.loadFileAsString(); p != lastProgress)
+            {
+                lastProgress = p;
+                lastSignOfLife = juce::Time::getCurrentTime();
+            }
+
+            if (juce::Time::getCurrentTime() - lastSignOfLife > timeout)
             {
                 process.kill();
                 result.deleteFile();
-                catalog.scanFailed (file, "Didn't finish loading within "
-                                              + juce::String (juce::roundToInt (timeout.inSeconds())) + " s while being scanned");
+                progress.deleteFile();
+                fail (file, "Didn't finish loading within " + juce::String (juce::roundToInt (timeout.inSeconds())) + " s while being scanned",
+                      started);
                 return true;
             }
 
@@ -122,15 +157,25 @@ private:
         juce::OwnedArray<juce::PluginDescription> found;
         const auto xml = juce::parseXMLIfTagMatches (result, "ENCORE_SCAN");
         result.deleteFile();
+        progress.deleteFile();
 
         if (xml == nullptr)
         {
-            catalog.scanFailed (file, "Crashed while being scanned");
+            fail (file, "Crashed while being scanned", started,
+                  "exit code " + juce::String::toHexString ((int) process.getExitCode()));
             return true;
         }
 
+        juce::StringArray skipped;
+
         for (auto* e : xml->getChildIterator())
         {
+            if (e->hasTagName ("SKIPPED"))
+            {
+                skipped.add (e->getStringAttribute ("name") + ": " + e->getStringAttribute ("reason"));
+                continue;
+            }
+
             auto description = std::make_unique<juce::PluginDescription>();
 
             if (description->loadFromXml (*e))
@@ -138,9 +183,19 @@ private:
         }
 
         if (found.isEmpty())
-            catalog.scanFailed (file, "Has no plugin Encore can load");
+        {
+            // One plugin in the file: its own reason; several: the first, and how many.
+            const auto reason = skipped.isEmpty() ? juce::String ("Has no plugin Encore can load")
+                              : skipped.size() == 1 ? skipped[0].fromFirstOccurrenceOf (": ", false, false)
+                                                    : skipped[0] + " (and " + juce::String (skipped.size() - 1) + " more)";
+            fail (file, reason, started);
+        }
         else
+        {
             catalog.scanFoundTypes (file, found);
+            log (file, "found " + juce::String (found.size()) + (skipped.isEmpty() ? juce::String() : ", skipped " + skipped.joinIntoString ("; ")),
+                 started);
+        }
 
         return true;
     }
@@ -149,7 +204,7 @@ private:
     const bool rescanEverything;
     juce::FileSearchPath folders;
     juce::RelativeTime timeout;
-    juce::File scanner;
+    juce::File scanner, logFile;
 };
 
 //==============================================================================
@@ -491,49 +546,77 @@ bool PluginCatalog::isScannerCommandLine (const juce::StringArray& args)
     return args.size() >= 3 && args.contains (scanArgument);
 }
 
-int PluginCatalog::runScanner (const juce::StringArray& args)
+namespace
 {
-   #if JUCE_WINDOWS
-    // A plugin that crashes here must not leave a "stopped working" dialog
-    // up: the scan would wait for it until it times out.
-    SetErrorMode (SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
-    _set_abort_behavior (0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
-   #endif
-
-    const auto at = args.indexOf (scanArgument);
-
-    if (at < 0 || at + 2 >= args.size())
-        return 2;
-
-    const auto file = args[at + 1];
-    const auto resultFile = juce::File (args[at + 2].unquoted());
-
-    juce::AudioPluginFormatManager formats;
-    addFormats (formats);
-
-    juce::XmlElement root ("ENCORE_SCAN");
-    root.setAttribute ("file", file);
-
-    for (auto* format : formats.getFormats())
+    /** The scanner process's work, driven by the message loop: each plugin
+        is created, given time to start (plugins post messages while they
+        start), played briefly, closed, and given time to finish closing,
+        the way a host treats them. Tearing a plugin down at once can make it
+        crash on the way out (and some then report a crash on their next
+        start). After each plugin, a progress file tells the scan it is
+        still alive (a shell with hundreds of plugins takes a while). */
+    class ScannerProcess final : private juce::Timer
     {
-        if (! format->fileMightContainThisPluginType (file))
-            continue;
-
-        juce::OwnedArray<juce::PluginDescription> found;
-        format->findAllTypesForFile (found, file);
-
-        for (auto* d : found)
+    public:
+        ScannerProcess (juce::String fileToScan, juce::File resultToWrite, std::function<void (int)> onDone)
+            : file (std::move (fileToScan)), result (std::move (resultToWrite)), done (std::move (onDone))
         {
-            // Listing isn't enough (VST3 lists from a file without loading
-            // anything): load each plugin and play it briefly, the way a show
-            // will. If it crashes or hangs, it does so here, not on stage.
+            addFormats (formats);
+            root.setAttribute ("file", file);
+
+            for (auto* format : formats.getFormats())
+                if (format->fileMightContainThisPluginType (file))
+                    format->findAllTypesForFile (types, file);
+
+            startTimer (1);
+        }
+
+        ~ScannerProcess() override { stopTimer(); }
+
+    private:
+        static constexpr int settleMs = 250;
+
+        void timerCallback() override
+        {
+            stopTimer();
+
+            if (instance != nullptr)
+            {
+                if (! played)
+                {
+                    play();
+                    played = true;
+                    startTimer (settleMs);   // let it finish closing
+                }
+
+                return;
+            }
+
+            if (next >= types.size())
+            {
+                finish();
+                return;
+            }
+
+            auto& d = *types[next++];
             juce::String error;
-            auto instance = formats.createPluginInstance (*d, testSampleRate, testBlockSize, error);
+            instance = formats.createPluginInstance (d, testSampleRate, testBlockSize, error);
+            played = false;
 
             if (instance == nullptr)
-                continue;   // listed but unusable: not offered
+            {
+                skip (d, "Couldn't be loaded" + (error.isNotEmpty() ? ": " + error : juce::String()));
+                startTimer (1);
+                return;
+            }
 
             PluginBlock::setUp (*instance, {});
+            startTimer (settleMs);   // let it finish starting
+        }
+
+        void play()
+        {
+            auto& d = *types[next - 1];
             instance->prepareToPlay (testSampleRate, testBlockSize);
 
             juce::AudioBuffer<float> buffer (juce::jmax (1, instance->getTotalNumInputChannels(), instance->getTotalNumOutputChannels()),
@@ -550,16 +633,91 @@ int PluginCatalog::runScanner (const juce::StringArray& args)
             instance->getStateInformation (state);
             instance->releaseResources();
 
-            d->numInputChannels = instance->getTotalNumInputChannels();
-            d->numOutputChannels = instance->getTotalNumOutputChannels();
+            d.numInputChannels = instance->getMainBusNumInputChannels();
+            d.numOutputChannels = instance->getMainBusNumOutputChannels();
             instance = nullptr;
 
-            root.addChildElement (d->createXml().release());
+            if (d.numInputChannels == 0)
+                skip (d, d.isInstrument ? "Is an instrument (no audio input)" : "Has no audio input Encore can use");
+            else if (d.numOutputChannels == 0)
+                skip (d, "Has no audio output Encore can use");
+            else
+                root.addChildElement (d.createXml().release());
+
+            result.withFileExtension ("progress").replaceWithText (juce::String (next));
         }
+
+        void skip (const juce::PluginDescription& d, const juce::String& reason)
+        {
+            auto* e = root.createNewChildElement ("SKIPPED");
+            e->setAttribute ("name", d.name);
+            e->setAttribute ("reason", reason);
+        }
+
+        void finish()
+        {
+            // Only a complete result file counts as a successful scan.
+            const auto ok = root.writeTo (result);
+            result.withFileExtension ("progress").deleteFile();
+
+            if (done != nullptr)
+                done (ok ? 0 : 1);
+        }
+
+        const juce::String file;
+        const juce::File result;
+        std::function<void (int)> done;
+        juce::AudioPluginFormatManager formats;
+        juce::OwnedArray<juce::PluginDescription> types;
+        juce::XmlElement root { "ENCORE_SCAN" };
+        std::unique_ptr<juce::AudioPluginInstance> instance;
+        int next = 0;
+        bool played = false;
+    };
+
+    std::unique_ptr<ScannerProcess> scannerProcess;
+}
+
+void PluginCatalog::startScanner (const juce::StringArray& args, std::function<void (int)> onDone)
+{
+   #if JUCE_WINDOWS
+    // A plugin that crashes here must not leave a "stopped working" dialog
+    // up: the scan would wait for it until it times out.
+    SetErrorMode (SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    _set_abort_behavior (0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+   #endif
+
+    const auto at = args.indexOf (scanArgument);
+
+    if (at < 0 || at + 2 >= args.size())
+    {
+        onDone (2);
+        return;
     }
 
-    // Only a complete result file counts as a successful scan.
-    return root.writeTo (resultFile) ? 0 : 1;
+    scannerProcess = std::make_unique<ScannerProcess> (args[at + 1], juce::File (args[at + 2].unquoted()),
+                                                       [onDone] (int code)
+    {
+        // Finished: free the scanner (and its plugins) after this callback.
+        juce::MessageManager::callAsync ([onDone, code]
+        {
+            scannerProcess = nullptr;
+            onDone (code);
+        });
+    });
 }
+
+#if JUCE_MODAL_LOOPS_PERMITTED
+int PluginCatalog::runScanner (const juce::StringArray& args)
+{
+    auto exitCode = -1;
+    startScanner (args, [&exitCode] (int code) { exitCode = code; });
+
+    while (exitCode < 0)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+
+    return exitCode;
+}
+#endif
 
 } // namespace encore

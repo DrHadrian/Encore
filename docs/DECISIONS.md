@@ -438,6 +438,15 @@ belong to the computer, not the show (0006), in one XML file in the app-data
 folder. Known, unchanged files aren't scanned again. Instruments without an
 audio input aren't offered.
 
+The scanner treats plugins as a host does (after the first real-world test):
+each one gets time on the message loop to finish starting and closing
+(tearing one down at once made some report a crash on their next start); the
+"time limit" counts from the last plugin finished, so a shell holding many
+plugins isn't cut off; a plugin that loads but can't be used (no audio input
+or output, failed to create) is listed under Blocked with why, never silently
+dropped; main buses switched off by default are switched on; each scanned
+file gets a line in plugin-scan.log next to the plugin list.
+
 ## 0046 — Plugin blocks: created on the message thread, guarded while playing (milestone 10)
 
 A plugin is a block like the built-in ones (stomps, expression pedals,

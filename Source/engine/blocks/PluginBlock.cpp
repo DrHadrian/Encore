@@ -146,8 +146,11 @@ PluginBlock::PluginBlock (const PluginRef& refToUse, std::unique_ptr<juce::Audio
         p->addListener (this);
     }
 
-    numIns = instance->getTotalNumInputChannels();
-    numOuts = instance->getTotalNumOutputChannels();
+    // The guitar goes into the main input only (a sidechain gets silence),
+    // and only the main output comes back.
+    numIns = instance->getMainBusNumInputChannels();
+    numOuts = instance->getMainBusNumOutputChannels();
+    numPluginChannels = juce::jmax (instance->getTotalNumInputChannels(), instance->getTotalNumOutputChannels());
     latency.store (instance->getLatencySamples(), std::memory_order_relaxed);
     tailSeconds = instance->getTailLengthSeconds();
 }
@@ -221,6 +224,15 @@ void PluginBlock::setUp (juce::AudioPluginInstance& plugin, const juce::String& 
             if (plugin.checkBusesLayoutSupported (layout) && plugin.setBusesLayout (layout))
                 break;
         }
+    }
+
+    // Some plugins (e.g. UAD) refuse all of those or start with their main
+    // buses switched off: then turn their main buses on as they are.
+    if (plugin.getMainBusNumInputChannels() == 0 || plugin.getMainBusNumOutputChannels() == 0)
+    {
+        for (const auto isInput : { true, false })
+            if (auto* bus = plugin.getBus (isInput, 0); bus != nullptr && ! bus->isEnabled())
+                bus->enable (true);
     }
 
     plugin.setNonRealtime (false);
@@ -344,7 +356,7 @@ bool PluginBlock::hasTail() const noexcept
 void PluginBlock::prepareBlock (const ProcessSpec& spec)
 {
     secondsPerSample = 1.0 / spec.sampleRate;
-    work.setSize (juce::jmax (1, numIns, numOuts), spec.maxBlockSize, false, true, false);
+    work.setSize (juce::jmax (1, numPluginChannels), spec.maxBlockSize, false, true, false);
     midi.ensureSize (2048);
 
     if (instance != nullptr && getFault() != Fault::crashed)
@@ -513,7 +525,11 @@ void PluginBlock::processBlock (float* const* channels, int numChannels, int num
 //==============================================================================
 void PluginBlock::audioProcessorParameterChanged (juce::AudioProcessor*, int, float)
 {
-    stateChanged.store (true, std::memory_order_relaxed);
+    // Not a settings change by itself: many plugins report meters as
+    // (read-only) parameters, many times a second, and reading a big plugin's
+    // state on every autosave would stall the message thread. Changes to the
+    // parameters that are settings arrive in parameterValueChanged; other
+    // changes in audioProcessorChanged.
 }
 
 void PluginBlock::audioProcessorChanged (juce::AudioProcessor* processor, const ChangeDetails& details)

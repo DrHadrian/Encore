@@ -80,7 +80,8 @@ public:
             if (updating || owner.blockIndex < 0)
                 return;
 
-            owner.session.setBlockStomp (owner.blockIndex, stompBox.getSelectedId() - 1);
+            shownStomp = stompBox.getSelectedId() - 1;
+            owner.session.setBlockStomp (owner.blockIndex, shownStomp);
 
             if (owner.onEdited != nullptr)
                 owner.onEdited();
@@ -251,11 +252,17 @@ public:
 
         if (block != nullptr && owner.blockIndex >= 0)
         {
+            // Only when the saved value changed (e.g. from the chain's menu): a
+            // choice just made here reaches onChange a moment later (ComboBox
+            // notifies asynchronously), and must not be undone before that.
             const juce::ScopedValueSetter<bool> guard (updating, true);
             const auto stomp = owner.session.getBlockStomp (owner.blockIndex);
 
-            if (stompBox.getSelectedId() != stomp + 1)
+            if (force || stomp != shownStomp)
+            {
+                shownStomp = stomp;
                 stompBox.setSelectedId (stomp + 1, juce::dontSendNotification);
+            }
         }
 
         for (size_t i = 0; i < onOff.size() && (int) i < switches.size(); ++i)
@@ -516,6 +523,7 @@ private:
     int hiddenParams = 0;
     juce::Rectangle<int> moreParams;
     bool updating = false;
+    int shownStomp = -1;
 
     juce::Label modelField;
     juce::ComboBox stompBox;

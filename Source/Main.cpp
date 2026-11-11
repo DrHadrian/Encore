@@ -103,8 +103,11 @@ public:
     {
         if (PluginCatalog::isScannerCommandLine (getCommandLineParameterArray()))
         {
-            setApplicationReturnValue (PluginCatalog::runScanner (getCommandLineParameterArray()));
-            quit();
+            PluginCatalog::startScanner (getCommandLineParameterArray(), [this] (int exitCode)
+            {
+                setApplicationReturnValue (exitCode);
+                quit();
+            });
             return;
         }
 

@@ -16,6 +16,7 @@
 #include "session/PluginCatalog.h"
 #include "session/RecoveryFile.h"
 #include "ui/ChainStrip.h"
+#include "ui/Inspector.h"
 #include "ui/theme/EncoreTheme.h"
 
 namespace encore::test
@@ -161,6 +162,41 @@ public:
             expect (plugin != nullptr && plugin->isLoaded());
             expect (findChild<BlockPanel> (main) != nullptr && &findChild<BlockPanel> (main)->getBlock() == plugin);
             expect (hasContent (renderSnapshot (main, "edit-plugin")));
+
+            beginTest ("The inspector's Stomp switch menu sets the stomp, even with a refresh before its change arrives");
+            {
+                juce::ComboBox* stompBox = nullptr;
+
+                std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+                {
+                    for (auto* child : c.getChildren())
+                    {
+                        if (auto* box = dynamic_cast<juce::ComboBox*> (child); box != nullptr && box->getTitle() == "Stomp switch")
+                            stompBox = box;
+
+                        find (*child);
+                    }
+                };
+
+                auto* inspector = findChild<Inspector> (main);
+                expect (inspector != nullptr);
+                find (*inspector);
+                expect (stompBox != nullptr);
+
+                if (stompBox != nullptr && inspector != nullptr)
+                {
+                    expectEquals (stompBox->getSelectedId(), 3, "stomp 2");
+
+                    // As a pick in the popup does: the change is sent asynchronously,
+                    // and the 30 Hz refresh can run first.
+                    stompBox->setSelectedId (6, juce::sendNotificationAsync);
+                    inspector->refresh();
+                    pump (100);
+                    inspector->refresh();
+                    expectEquals (stompBox->getSelectedId(), 6);
+                    expectEquals (plugin->getStomp(), 5);
+                }
+            }
 
            #if JUCE_WINDOWS
             beginTest ("The plugin's own window opens, and follows its block when the patch is rebuilt");

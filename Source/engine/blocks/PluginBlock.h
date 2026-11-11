@@ -146,7 +146,8 @@ private:
 
     juce::AudioBuffer<float> work;                        // the plugin's channels
     juce::MidiBuffer midi;
-    int numIns = 0, numOuts = 0;
+    int numIns = 0, numOuts = 0;                          // main buses
+    int numPluginChannels = 0;                            // all buses
     double secondsPerSample = 0.0;
     int overrunsInARow = 0;
     int drainSamplesLeft = 0, maxDrainSamples = 0;        // feeding silence while bypassed

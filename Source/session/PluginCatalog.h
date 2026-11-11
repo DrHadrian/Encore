@@ -88,7 +88,7 @@ public:
     /** "Scanning 3 of 40: Shimmer.vst3", "Scan stopped", or "12 plugins, 1 blocked". */
     juce::String getScanStatus() const;
 
-    /** How long one file may take to scan (default 60 s). */
+    /** How long a scanned file may go without finishing a plugin (default 60 s). */
     void setScanTimeout (juce::RelativeTime);
 
     //== Making plugins =======================================================
@@ -101,9 +101,16 @@ public:
     /** True if Encore was started as a scanner (by a scan, not by a person). */
     static bool isScannerCommandLine (const juce::StringArray& args);
 
-    /** The scanner process's work: examines the file, writes what it found to
-        the result file, returns the exit code. Needs a message manager. */
+    /** The scanner process's work: loads and plays every plugin in the file
+        (driven by the message loop, so plugins get time to start and close),
+        writes what it found and what it skipped (with the reason) to the
+        result file, then calls onDone with the exit code. */
+    static void startScanner (const juce::StringArray& args, std::function<void (int exitCode)> onDone);
+
+   #if JUCE_MODAL_LOOPS_PERMITTED
+    /** startScanner, waiting for it (the test runner). */
     static int runScanner (const juce::StringArray& args);
+   #endif
 
 private:
     class ScanThread;

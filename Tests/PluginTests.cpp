@@ -115,6 +115,7 @@ public:
             expectEquals (plugins[0].manufacturerName, juce::String ("Encore"));
             expect (catalog->getBlocked().empty());
             expect (catalog->getScanStatus().startsWith ("1 plugin"), catalog->getScanStatus());
+            expect (temp.getChildFile ("plugin-scan.log").loadFileAsString().contains ("found 1"), "the scan log");
 
             // Another start: the list comes from disk, nothing needs scanning.
             auto again = makeCatalog (temp);
@@ -257,6 +258,22 @@ public:
             captureChain (*chain, patch, {});
             const auto& saved = patch.mainLane().blocks[0];
             expect (saved.state.isNotEmpty());
+
+            // Nothing changed since: the plugin isn't asked again (its state
+            // counts how often it was asked, so a new read would differ).
+            auto& pluginBlock = dynamic_cast<PluginBlock&> (*chain->getBlocks()[0]);
+            const auto first = pluginBlock.getState();
+            play (pluginBlock, 4);
+            expectEquals (pluginBlock.getState(), first, "autosave doesn't re-read an unchanged plugin");
+            findParameterNamed (pluginBlock, "Gain")->setValue (0.125f);
+            play (pluginBlock);
+            expectEquals (pluginBlock.getState(), first, "the same value again is no change");
+            findParameterNamed (pluginBlock, "Gain")->setValue (0.2f);
+            play (pluginBlock);
+            expect (pluginBlock.getState() != first, "a change is read");
+            findParameterNamed (pluginBlock, "Gain")->setValue (0.125f);
+            play (pluginBlock);
+            captureChain (*chain, patch, {});
             expectEquals (saved.plugin.name, juce::String ("Encore Test Plugin"));
             expect (saved.params.empty(), "the plugin's state holds its settings");
 
