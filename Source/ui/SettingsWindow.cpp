@@ -16,11 +16,11 @@ class SettingsWindow::Body final : public juce::Component
 public:
     explicit Body (std::initializer_list<juce::Component*> tabs)
     {
-        for (auto* tab : tabs)
+        for (auto* page : tabs)
         {
             auto* v = views.add (new juce::Viewport());
             v->setScrollBarsShown (true, false);
-            v->setViewedComponent (tab, false);
+            v->setViewedComponent (page, false);
             addChildComponent (v);
         }
     }
