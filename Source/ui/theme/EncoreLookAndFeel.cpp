@@ -339,7 +339,7 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
 {
     const auto variant = effectiveVariant (button);
 
-    if (variant == Variant::field)
+    if (variant == Variant::field || variant == Variant::popup)
     {
         // Text left, chevron right, as a combo box field.
         auto area = button.getLocalBounds().toFloat().reduced ((float) size::fieldPadX, 0.0f);

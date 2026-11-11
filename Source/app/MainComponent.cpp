@@ -351,7 +351,9 @@ MainComponent::~MainComponent()
     stopTimer();
 
     // Settings windows hold references to the engine, devices and session.
-    for (auto* dialog : { audioDialog.getComponent(), midiDialog.getComponent(), checkDialog.getComponent() })
+    settingsWindow = nullptr;
+
+    for (auto* dialog : { checkDialog.getComponent() })
         delete dialog;
 
     stageView = nullptr;
@@ -782,7 +784,7 @@ void MainComponent::watchAudioDevice()
     auto* device = deviceManager.getCurrentAudioDevice();
 
     // Changing settings in the dialog may close the device on purpose.
-    const auto dialogOpen = audioDialog != nullptr;
+    const auto dialogOpen = settingsWindow != nullptr;
 
     if (audioDialogWasOpen && ! dialogOpen)
         haveGoodSetup = device != nullptr && device->isOpen();
@@ -1181,48 +1183,49 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
 }
 
 //==============================================================================
-void MainComponent::openAudioSettings()
-{
-    auto selector = std::make_unique<juce::AudioDeviceSelectorComponent> (
-        deviceManager,
-        1, 16,      // inputs: at least the guitar, up to 16
-        1, 16,      // outputs
-        false,      // MIDI inputs: own page from milestone 6
-        false,      // MIDI output
-        false,      // list channels individually, not as stereo pairs: guitar is mono
-        false);     // show buffer size / sample rate without an extra click
-    selector->setSize (560, 480);
+void MainComponent::openAudioSettings()   { openSettings (SettingsWindow::Tab::audio); }
+void MainComponent::openMidiSettings()    { openSettings (SettingsWindow::Tab::midi); }
 
-    juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned (selector.release());
-    options.dialogTitle = "Audio settings";
-    options.dialogBackgroundColour = paint::c (colour::window);
-    options.escapeKeyTriggersCloseButton = true;
-    options.useNativeTitleBar = true;
-    options.resizable = true;
-    audioDialog = options.launchAsync();
-}
-
-void MainComponent::openMidiSettings()
+void MainComponent::openSettings (SettingsWindow::Tab tab)
 {
-    if (midiDialog != nullptr)
+    // One dialog with two tabs, over the window (SCREENS.md §7).
+    if (settingsWindow == nullptr)
     {
-        midiDialog->toFront (true);
-        return;
+        settingsWindow = std::make_unique<SettingsWindow> (
+            deviceManager, tuning, [this] { engine.resetCounters(); },
+            engine.getMidiRouter(), settings, *session,
+            [this] { applyMidiBindings(); }, [this] { applyMidiOutput(); },
+            [this]
+            {
+                // Closed from one of its own buttons: let the click return first.
+                juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
+                {
+                    if (safe != nullptr)
+                        safe->closeSettings();
+                });
+            });
+
+        auto& overlay = settingsWindow->getOverlay();
+        addAndMakeVisible (overlay);
+        overlay.setBounds (getLocalBounds());
+        overlay.toFront (true);
+        overlay.enterModalState (isShowing());   // focus only when on screen (not in off-screen tests)
     }
 
-    auto content = std::make_unique<MidiSettings> (deviceManager, engine.getMidiRouter(), settings, *session,
-                                                   [this] { applyMidiBindings(); },
-                                                   [this] { applyMidiOutput(); });
+    settingsWindow->showTab (tab);
+    settingsWindow->setAudioStatus (audioStatus);
+}
 
-    juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned (content.release());
-    options.dialogTitle = "MIDI settings";
-    options.dialogBackgroundColour = paint::c (colour::window);
-    options.escapeKeyTriggersCloseButton = true;
-    options.useNativeTitleBar = true;
-    options.resizable = true;
-    midiDialog = options.launchAsync();
+void MainComponent::closeSettings()
+{
+    if (settingsWindow == nullptr)
+        return;
+
+    settingsWindow->getOverlay().exitModalState (0);
+    settingsWindow = nullptr;
+
+    if (isShowing())
+        grabKeyboardFocus();
 }
 
 void MainComponent::applyMidiBindings()
@@ -1577,6 +1580,32 @@ void MainComponent::timerCallback()
     if (rt::isAllocationTripwireInstalled())
         health << "   |   RT violations " << rt::getViolationCount();
 
+    // The settings window's status values (the same data).
+    {
+        AudioSettingsView::Status st;
+        st.cpu = juce::String (juce::roundToInt (engine.getCpuLoad() * 100.0)) + "%";
+        st.overruns = juce::String (engine.getOverrunCount());
+        auto* device = deviceManager.getCurrentAudioDevice();
+        st.driverDropouts = device != nullptr && device->getXRunCount() >= 0 ? juce::String (device->getXRunCount()) : juce::String ("-");
+        st.limiter = limiting < -0.1f ? juce::String (limiting, 1) + " dB" : juce::String ("idle");
+
+        if (const auto bytes = system::getProcessMemoryBytes(); bytes > 0)
+            st.memory = juce::String ((int) (bytes / (1024 * 1024))) + " MB of " + juce::String (juce::SystemStats::getMemorySizeInMegabytes() / 1024) + " GB";
+        else
+            st.memory = "-";
+
+        if (device != nullptr && device->isOpen() && sampleRate > 0.0)
+            st.latency = "in " + juce::String (1000.0 * device->getInputLatencyInSamples() / sampleRate, 1) + " + out "
+                         + juce::String (1000.0 * device->getOutputLatencyInSamples() / sampleRate, 1) + " = " + juce::String (roundTripMs, 1) + " ms";
+        else
+            st.latency = "-";
+
+        audioStatus = st;
+
+        if (settingsWindow != nullptr)
+            settingsWindow->setAudioStatus (audioStatus);
+    }
+
     // Short line in the pane, today's full line in the tooltip.
     juce::String shortHealth;
     shortHealth << "CPU " << juce::roundToInt (engine.getCpuLoad() * 100.0) << "%" << sep() << "overruns " << engine.getOverrunCount();
@@ -1721,6 +1750,9 @@ void MainComponent::resized()
 
     if (stageView != nullptr)
         stageView->setBounds (area);
+
+    if (settingsWindow != nullptr)
+        settingsWindow->getOverlay().setBounds (area);
 
     toolbar.setBounds (area.removeFromTop (size::toolbarEdit + 1));
     layoutToolbar (toolbar.getLocalBounds());

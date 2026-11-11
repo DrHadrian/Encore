@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+# A newer push to the same branch replaces a run still going (saves runner time).
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows:
     name: Windows Release (app + tests)

@@ -106,6 +106,36 @@ public:
             expect (hasContent (renderSnapshot (main, "full-list-typing")));
         }
 
+        beginTest ("Settings: Audio and MIDI tabs (settings-audio.png, settings-midi.png)");
+        {
+            AppSettings settings (root.getChildFile ("Settings dialogs"));
+            settings.setLastShowFolder (showFolder);
+            const auto setup = boardDeviceSetup();
+            settings.setAudioDeviceState (&setup);
+
+            MainComponent main (settings, std::make_unique<BoardDeviceType>());
+            main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            pump (800);
+
+            main.openSettings (SettingsWindow::Tab::audio);
+            expect (main.isShowingSettings());
+            pump (400);   // the status values arrive from the main window's timer
+            expect (hasContent (renderSnapshot (main, "settings-audio")));
+
+            main.openSettings (SettingsWindow::Tab::midi);
+            pump (100);
+            expect (hasContent (renderSnapshot (main, "settings-midi")));
+
+            for (auto size : { juce::Point<int> (640, 480), juce::Point<int> (3840, 2160), juce::Point<int> (1440, 900) })
+            {
+                main.setSize (size.x, size.y);
+                pump (30);
+            }
+
+            main.closeSettings();
+            expect (! main.isShowingSettings());
+        }
+
         beginTest ("Edit view: no audio device at all");
         {
             AppSettings settings (root.getChildFile ("Settings without device"));

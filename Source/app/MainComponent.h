@@ -13,6 +13,7 @@
 #include "ui/ChainStrip.h"
 #include "ui/Inspector.h"
 #include "ui/MidiSettings.h"
+#include "ui/SettingsWindow.h"
 #include "session/RecoveryFile.h"
 #include "ui/CueListEditor.h"
 #include "ui/PatchList.h"
@@ -57,6 +58,11 @@ public:
         re-lays out when it's switched. */
     std::function<void()> onViewChanged;
     bool isShowingStage() const noexcept { return stageView != nullptr && stageView->isVisible(); }
+
+    /** Settings — Audio | MIDI (Audio..., MIDI..., the pre-show check's fixes). */
+    void openSettings (SettingsWindow::Tab);
+    void closeSettings();
+    bool isShowingSettings() const noexcept { return settingsWindow != nullptr; }
 
 private:
     // Audio
@@ -174,7 +180,9 @@ private:
     juce::String stageDeviceLine, footswitchLine;   // the stage footer (SCREENS.md §3.4)
 
     // Open settings windows (closed before the things they edit go away).
-    juce::Component::SafePointer<juce::DialogWindow> audioDialog, midiDialog, checkDialog;
+    juce::Component::SafePointer<juce::DialogWindow> checkDialog;
+    std::unique_ptr<SettingsWindow> settingsWindow;
+    AudioSettingsView::Status audioStatus;
 
     // Crash recovery: where the show is, kept on disk while running.
     std::unique_ptr<RecoveryFile> recovery;

@@ -304,6 +304,12 @@ juce::Rectangle<int> DialogOverlay::getFrameBounds() const
         .withCentre (getLocalBounds().getCentre());
 }
 
+bool DialogOverlay::keyPressed (const juce::KeyPress& key)
+{
+    frame.keyPressed (key);
+    return true;
+}
+
 void DialogOverlay::resized()
 {
     frame.setBounds (getFrameBounds());

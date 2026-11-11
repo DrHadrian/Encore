@@ -208,6 +208,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/theme/Paint.h
     Source/ui/kit/DialogFrame.cpp
     Source/ui/kit/DialogFrame.h
+    Source/ui/kit/Group.cpp
+    Source/ui/kit/Group.h
     Source/ui/kit/GearPlaceholder.cpp
     Source/ui/kit/GearPlaceholder.h
     Source/ui/kit/GearView.h
@@ -258,6 +260,10 @@ target_sources(Encore PRIVATE
     Source/ui/Inspector.h
     Source/ui/MidiSettings.cpp
     Source/ui/MidiSettings.h
+    Source/ui/AudioSettingsView.cpp
+    Source/ui/AudioSettingsView.h
+    Source/ui/SettingsWindow.cpp
+    Source/ui/SettingsWindow.h
     Source/ui/CueDialogs.cpp
     Source/ui/CueDialogs.h
     Source/ui/CueListEditor.cpp
@@ -340,6 +346,8 @@ if(ENCORE_BUILD_TESTS)
         Source/ui/ChainStrip.cpp
         Source/ui/Inspector.cpp
         Source/ui/MidiSettings.cpp
+        Source/ui/AudioSettingsView.cpp
+        Source/ui/SettingsWindow.cpp
         Source/ui/PatchList.cpp
         Source/ui/PreShowCheckView.cpp
         Source/ui/SetList.cpp

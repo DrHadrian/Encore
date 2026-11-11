@@ -21,7 +21,8 @@ enum class Variant
     danger,     // raised grey, red bold text (PANIC in Edit, Mute on Stage)
     muted,      // red (MUTED)
     small,      // 18 px pane buttons (Full list, Load amp..., Reset counters)
-    field       // combo box drawn as an inset field with a chevron
+    field,      // combo box drawn as an inset field with a chevron
+    popup       // a button that opens a menu: raised, text left, chevron right (the MIDI action)
 };
 
 /** Where a button sits in a segmented control: only its outer corners round. */

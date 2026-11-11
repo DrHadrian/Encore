@@ -91,6 +91,10 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    /** Escape reaches the frame; no key gets through to the window behind
+        (a dialog was a separate modal window before). */
+    bool keyPressed (const juce::KeyPress&) override;
+
 private:
     DialogFrame& frame;
     const juce::Rectangle<int> wantedSize;

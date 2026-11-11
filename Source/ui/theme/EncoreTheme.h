@@ -214,6 +214,10 @@ namespace colour
     constexpr juce::uint32 patchSelected   = 0xff2B2B30;   // selected row in the Patches pane
     constexpr juce::uint32 tooltip         = 0xff2C2C30;
     constexpr juce::uint32 groupBox        = 0xff1A1A1D;   // group boxes in dialogs
+    constexpr juce::uint32 mappingHeader   = 0xff1E1E21;   // MIDI mappings: column header, bottom bar
+    constexpr juce::uint32 mappingRowAlt   = 0xff1C1C1F;   // MIDI mappings: every other row
+    constexpr juce::uint32 triggerText     = 0xffD5D5DA;   // "CC 64, any channel"
+    constexpr juce::uint32 latencyOut      = 0xff6EA5FA;   // the latency bar's output part (input: accent)
     constexpr juce::uint32 tabOn           = 0xff3A3A3F;   // selected settings tab
     constexpr juce::uint32 dashedTile      = 0xff3E3E42;   // "+" tile border in the chain
     constexpr juce::uint32 plusTile        = 0xffA5A5AB;   // "+" glyph, cab help text
@@ -404,6 +408,20 @@ namespace size
     constexpr int handle = 8, handleRadius = 2, handleGrab = 14, selectionBorder = 2, selectionHalo = 3;
     constexpr int layoutInspectorPad = 10, layoutLabelGap = 8, layoutButtonGap = 8, layoutHalfGap = 6;
     constexpr int layoutNotesH = 123, layoutNoteGap = 6;
+    // Settings window (SCREENS.md §7, settings-*.json)
+    constexpr int settingsW = 1040, settingsH = 760;
+    constexpr int groupTitleH = 18, groupGap = 16, groupRadius = 7, groupPad = 15, settingsColumnGap = 16, settingsPadTop = 18;
+    constexpr int audioLeftW = 664, audioRightW = 320, settingsLabelW = 130, settingsLabelGap = 12;
+    constexpr int segmentHeight = 26, driverSegmentW = 130, bufferSegmentW = 68;   // segmented controls in settings (+ 2 px border)
+    constexpr int deviceRowGap = 10, devicePopupW = 340, ratePopupW = 140, latencyBarH = 8, latencyTextGap = 5;
+    constexpr int channelColumnX = 325, checkRowH = 22, checkHeadGap = 7, statusBadgeMid = 26, statusRowH = 21;
+    constexpr int statusKeyW = 146, statusDividerY = 54, statusRowsY = 65, tuningRowH = 23, tickSize = 9;
+    constexpr int midiColumnW = 335, midiRightW = 300, midiPadTop = 16, midiInputRowH = 28, midiInputTop = 13;
+    constexpr int mappingHeaderH = 27, mappingRowH = 31, mappingBarH = 37, mappingPadX = 12, actionW = 200;
+    constexpr int triggerX = 222, learnW = 76, learnH = 22, removeW = 22, removeRight = 18, lastValueW = 117, lastValueH = 21;
+    constexpr int helpLineH = 18, helpGap = 10;
+    constexpr int statusTitleH = 15, statusLineH = 14, statusTextH = 15, latencySplit = 2, tickTextGap = 10, defaultsValueX = 170;
+    constexpr float tickStroke = 1.5f;
     // Tuner overlay (the board's tuner pane)
     constexpr int tunerPaneW = 900, tunerPad = 24, tunerGap = 18, tunerLcdPad = 22, tunerLcdGap = 16;
     constexpr int tunerNote = 180, tunerTicksH = 52, tunerTickMid = 38, tunerTickShort = 26, tunerTickGap = 6, tunerTickRadius = 3;
@@ -545,6 +563,13 @@ namespace type
     constexpr Style widgetTagPreview{  8.5f, Weight::semibold };            // name tags on the layout artboard
     constexpr Style layoutHint      { 11.5f, Weight::regular };
     constexpr Style layoutNote      { 11.0f, Weight::regular };
+    constexpr Style settingsLabel   { 12.0f, Weight::regular };             // "Driver type", status keys
+    constexpr Style helpText        { 12.0f, Weight::regular };
+    constexpr Style helpStrong      { 12.0f, Weight::bold };
+    constexpr Style statusTitle     { 12.5f, Weight::semibold };
+    constexpr Style noteText        { 11.5f, Weight::regular };             // notes under groups, the latency line
+    constexpr Style noteStrong      { 11.5f, Weight::bold };
+    constexpr Style columnHead      { 10.5f, Weight::bold, 0.06f, true };   // DOES, FOOTSWITCH / PEDAL
     constexpr Style tunerCaption    { 11.0f, Weight::bold, 0.08f, true };
     constexpr Style tunerNote       { 180.0f, Weight::semibold };
     constexpr Style tunerDetail     { 18.0f, Weight::regular };
