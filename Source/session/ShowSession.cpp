@@ -1419,6 +1419,39 @@ void ShowSession::turnPluginBackOn (int blockIndex)
     }
 }
 
+std::vector<juce::String> ShowSession::getPluginProblems() const
+{
+    std::vector<juce::String> list;
+
+    for (const auto& [key, chain] : chains)
+    {
+        for (const auto& block : chain->getBlocks())
+        {
+            const auto* plugin = dynamic_cast<const PluginBlock*> (block.get());
+
+            if (plugin == nullptr)
+                continue;
+
+            const auto& fault = plugin->getFaultText();
+
+            if (! plugin->isLoaded())
+                list.push_back (chain->label + ": " + plugin->getLoadError());
+            else if (fault.isNotEmpty())
+                list.push_back (chain->label + ": " + plugin->getName() + " " + fault.substring (0, 1).toLowerCase() + fault.substring (1));
+        }
+    }
+
+    std::sort (list.begin(), list.end());
+    return list;
+}
+
+juce::StringArray ShowSession::takePluginNotices()
+{
+    auto taken = pluginNotices;
+    pluginNotices.clear();
+    return taken;
+}
+
 void ShowSession::checkPluginFaults()
 {
     // Cheap until a plugin actually faults: one atomic read per call.
@@ -1444,9 +1477,11 @@ void ShowSession::checkPluginFaults()
             if (reportedFaults.insert (id).second)
             {
                 const auto* patch = findPatchForKey (key);
-                problems.add ((patch != nullptr ? patch->name + ": " : juce::String())
-                              + plugin->getName() + " " + plugin->getFaultText().substring (0, 1).toLowerCase()
-                              + plugin->getFaultText().substring (1));
+                const auto text = (patch != nullptr ? patch->name + ": " : juce::String())
+                                  + plugin->getName() + " " + plugin->getFaultText().substring (0, 1).toLowerCase()
+                                  + plugin->getFaultText().substring (1);
+                problems.add (text);
+                pluginNotices.add (text);
             }
         }
     }

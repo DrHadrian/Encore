@@ -3,6 +3,8 @@
 
 #include "ui/BlockPanel.h"
 
+#include "engine/blocks/PluginBlock.h"
+
 #include "engine/blocks/CabIrBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
 #include "ui/ChainStrip.h"
@@ -47,6 +49,9 @@ namespace
         {
             if (block.getTypeId() == CabIrBlock::typeId)
                 info.kindLabel = "Cab" + middot() + "IR";
+            else if (auto* plugin = dynamic_cast<const PluginBlock*> (&block))
+                info.kindLabel = "Plugin" + middot() + (plugin->getPluginRef().format.isNotEmpty() ? plugin->getPluginRef().format
+                                                                                                   : juce::String ("VST3"));
 
             info.shape = kit::BlockInfo::Shape::pedal;   // panel size: a block box with a strip
         }
@@ -265,8 +270,16 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
     setHeaderColours (colour::stageHeaderTop, colour::stageHeaderBot);
     setTitle (block.getName());
 
+    // A plugin can have hundreds of parameters: its first few are knobs
+    // here, the rest are in its own window.
+    const auto* plugin = dynamic_cast<const PluginBlock*> (&block);
+    auto shown = 0;
+
     for (auto& p : block.getParameters())
     {
+        if (plugin != nullptr && shown++ >= size::pluginPanelKnobs)
+            break;
+
         auto control = std::make_unique<Control> (*p);
         const auto& spec = p->getSpec();
         auto* param = p.get();
@@ -326,6 +339,19 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
         setVariant (loadButton, Variant::small);
         loadButton.setButtonText (slot->buttonText);
         loadButton.onClick = [this] { chooseFile(); };
+        addAndMakeVisible (loadButton);
+    }
+    else if (plugin != nullptr)
+    {
+        // The header button opens the plugin's own window instead.
+        setVariant (loadButton, Variant::small);
+        loadButton.setButtonText ("Open plugin window...");
+        loadButton.setTooltip ("The plugin's own controls, in a window of their own");
+        loadButton.onClick = [this]
+        {
+            if (onOpenPluginWindow != nullptr)
+                onOpenPluginWindow();
+        };
         addAndMakeVisible (loadButton);
     }
 
@@ -456,10 +482,15 @@ juce::String BlockPanel::headerLabel() const
     return block.getName() != kind ? kind + middot() + block.getName() : kind;
 }
 
+juce::uint32 BlockPanel::headerDot() const
+{
+    return shownProblem ? colour::amber : (block.isEnabled() ? colour::healthy : colour::dotOff);
+}
+
 void BlockPanel::updateHeader()
 {
     setHeader (headerLabel(), shownCpu);
-    setHeaderDot (block.isEnabled() ? colour::healthy : colour::dotOff);
+    setHeaderDot (headerDot());
 }
 
 void BlockPanel::refresh()
@@ -520,6 +551,24 @@ void BlockPanel::refresh()
         }
     }
 
+    if (auto* plugin = dynamic_cast<PluginBlock*> (&block))
+    {
+        // Not loaded, or switched off by the crash guard: an amber dot, and
+        // the window can't be opened.
+        const auto problem = ! plugin->isLoaded() || plugin->getFault() != PluginBlock::Fault::none;
+        loadButton.setEnabled (plugin->getInstance() != nullptr && plugin->getInstance()->hasEditor());
+
+        if (problem)
+            cpuText.clear();
+
+        if (problem != shownProblem)
+        {
+            shownProblem = problem;
+            shownCpu = cpuText;
+            updateHeader();
+        }
+    }
+
     if (cpuText != shownCpu)
     {
         shownCpu = cpuText;
@@ -527,7 +576,7 @@ void BlockPanel::refresh()
     }
     else
     {
-        setHeaderDot (block.isEnabled() ? colour::healthy : colour::dotOff);
+        setHeaderDot (headerDot());
     }
 
     if (cabColumn != nullptr)
@@ -594,10 +643,10 @@ void BlockPanel::resized()
     stageClip.addRoundedRectangle (area.getX(), area.getY(), area.getWidth(), area.getHeight(),
                                    (float) size::paneRadius - 1.0f, (float) size::paneRadius - 1.0f, false, false, true, true);
 
-    // Header: "6.9% CPU", then the file button on the right.
+    // Header: "6.9% CPU", then the file button (a plugin: its window) on the right.
     auto header = getHeaderBounds().withTrimmedRight (size::paneHeaderPadR);
 
-    if (block.getFileSlot() != nullptr)
+    if (loadButton.isVisible())
     {
         const auto w = loadButton.getBestWidthForHeight (size::buttonSmallHeight);
         loadButton.setBounds (header.removeFromRight (w).withTrimmedTop ((header.getHeight() - size::buttonSmallHeight) / 2)

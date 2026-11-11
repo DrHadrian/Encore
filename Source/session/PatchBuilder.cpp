@@ -74,7 +74,9 @@ std::unique_ptr<Block> createPluginBlock (const BlockModel& model, const Process
         block = std::make_unique<PluginBlock> (ref, nullptr, model.state, model.id);
     }
 
-    static_cast<PluginBlock&> (*block).setKeepWaiting (plugins.keepWaiting);
+    auto& plugin = static_cast<PluginBlock&> (*block);
+    plugin.setKeepWaiting (plugins.keepWaiting);
+    plugin.setLoadError (error);
 
     return block;
 }

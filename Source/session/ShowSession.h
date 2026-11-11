@@ -97,6 +97,14 @@ public:
     /** Tries a plugin block of the active patch that the crash guard switched off again. */
     void turnPluginBackOn (int blockIndex);
 
+    /** Plugin blocks that aren't playing (not loaded, or switched off by the
+        crash guard): "Lead: Shimmer isn't installed on this computer". */
+    std::vector<juce::String> getPluginProblems() const;
+
+    /** Plugins the crash guard just switched off ("Clean: Shimmer crashed and
+        was switched off"), for a notice. Clears them. */
+    juce::StringArray takePluginNotices();
+
     //== Blocks in the active patch ============================================
     void addBlock (const juce::String& typeId, int index);
     void addPluginBlock (const PluginRef& plugin, int index);
@@ -256,7 +264,7 @@ private:
     void checkPluginFaults();
     std::shared_ptr<PluginCatalog> pluginCatalog;
     std::shared_ptr<std::atomic<int>> buildsWanted = std::make_shared<std::atomic<int>> (0);
-    juce::StringArray crashedPlugins;
+    juce::StringArray crashedPlugins, pluginNotices;
     int lastFaultCount = 0;
     std::set<juce::String> reportedFaults;
 

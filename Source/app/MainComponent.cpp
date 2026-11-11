@@ -300,9 +300,31 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     recovery = std::make_unique<RecoveryFile> (settings.getFolder().getChildFile ("recovery.json"));
     uncleanExit = recovery->readUncleanExit();
 
+    // Plugins this computer has (Settings > Plugins); scanned in separate processes.
+    plugins = std::make_shared<PluginCatalog> (settings.getFolder().getChildFile ("plugins.xml"),
+                                               juce::File::getSpecialLocation (juce::File::currentExecutableFile));
+
+    // A plugin's window closes before its plugin does (a rebuilt patch reopens it).
+    PluginBlock::setBeforeClosing ([this] (PluginBlock& block) { closePluginWindow (block.getModelId(), true); });
+
     // The show: with the device running, patches build for the right rate.
     session = std::make_unique<ShowSession> (engine);
+    session->setPluginCatalog (plugins);
     session->addChangeListener (this);
+
+    // Crashed inside a plugin last time? That block starts switched off.
+    if (const auto crashFile = settings.getFolder().getChildFile ("plugin-crash.txt"); crashFile.existsAsFile())
+    {
+        const auto [blockId, pluginName] = PluginBlock::parseCrashLabel (crashFile.loadFileAsString());
+        crashFile.deleteFile();
+
+        if (uncleanExit && blockId.isNotEmpty())
+        {
+            session->setCrashedPlugins ({ blockId });
+            crashedPluginNote = ". " + pluginName + " was running: it starts switched off";
+            eventlog::write ("Crashed inside the plugin " + pluginName + ": it starts switched off");
+        }
+    }
 
     setList = std::make_unique<SetList> (*session);
     addAndMakeVisible (*setList);
@@ -312,10 +334,17 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
 
     inspector = std::make_unique<Inspector> (*session);
     inspector->onEdited = [this] { session->markEdited(); };
+    inspector->onOpenPluginWindow = [this]
+    {
+        if (auto* chain = engine.getChain(); chain != nullptr && juce::isPositiveAndBelow (shownBlockIndex, (int) chain->getBlocks().size()))
+            if (auto* plugin = dynamic_cast<PluginBlock*> (chain->getBlocks()[(size_t) shownBlockIndex].get()))
+                openPluginWindow (*plugin);
+    };
     addAndMakeVisible (*inspector);
 
     chainStrip = std::make_unique<ChainStrip> (*session);
     chainStrip->onSelectionChanged = [this] (int) { showSelectedBlock(); };
+    chainStrip->onFindPlugins = [this] { openSettings (SettingsWindow::Tab::plugins); };
     addAndMakeVisible (*chainStrip);
 
     openInitialShow();
@@ -349,6 +378,10 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
 MainComponent::~MainComponent()
 {
     stopTimer();
+
+    // Plugin windows close before their plugins (which go with the engine).
+    pluginWindows.clear();
+    PluginBlock::setBeforeClosing (nullptr);
 
     // Settings windows hold references to the engine, devices and session.
     settingsWindow = nullptr;
@@ -619,6 +652,9 @@ void MainComponent::showSelectedBlock()
         };
         blockPanel->onEdited = [this] { session->markEdited(); };
 
+        if (auto* plugin = dynamic_cast<PluginBlock*> (&block))
+            blockPanel->onOpenPluginWindow = [this, plugin] { openPluginWindow (*plugin); };
+
         // The amp with a cab right after it: the cab stands beside it (a click selects it).
         if (block.getTypeId() == NamAmpBlock::typeId && index + 1 < (int) chain->getBlocks().size()
             && chain->getBlocks()[(size_t) index + 1]->getTypeId() == CabIrBlock::typeId)
@@ -694,7 +730,7 @@ void MainComponent::recoverAfterUncleanExit()
         setStageVisible (true);
 
     eventlog::write ("Recovered after an unclean exit" + where + (goLive ? ", live" : ", muted (repeated crashes)"));
-    showNotice ("Encore restarted after an unexpected exit - back" + where
+    showNotice ("Encore restarted after an unexpected exit - back" + where + crashedPluginNote
                     + (goLive ? juce::String() : juce::String (". MUTED: it happened again soon after, check before unmuting.")),
                 30, true);
 }
@@ -917,6 +953,7 @@ void MainComponent::applyFix (PreShowCheckResult::Fix fix)
     {
         case Fix::audioSettings:  openAudioSettings(); break;
         case Fix::midiSettings:   openMidiSettings(); break;
+        case Fix::pluginSettings: openSettings (SettingsWindow::Tab::plugins); break;
         case Fix::save:           session->save(); reportProblems(); break;
         case Fix::resetCounters:  engine.resetCounters(); break;
         case Fix::unmute:         engine.setMuted (false); break;
@@ -967,6 +1004,7 @@ PreShowFacts MainComponent::gatherPreShowFacts()
     f.numCues = (int) session->getCues().size();
     f.missingFiles = findMissingFiles (session->getShow(), folder);
     f.cuesWithoutPatch = findCuesWithoutPatch (session->getShow());
+    f.pluginProblems = session->getPluginProblems();
 
     // MIDI inputs the user enabled (remembered even while unplugged) vs. present.
     if (const auto state = deviceManager.createStateXml())
@@ -1209,12 +1247,12 @@ void MainComponent::openMidiSettings()    { openSettings (SettingsWindow::Tab::m
 
 void MainComponent::openSettings (SettingsWindow::Tab tab)
 {
-    // One dialog with two tabs, over the window (SCREENS.md §7).
+    // One dialog with a tab each (Audio, MIDI, Plugins), over the window (SCREENS.md §7).
     if (settingsWindow == nullptr)
     {
         settingsWindow = std::make_unique<SettingsWindow> (
             deviceManager, tuning, [this] { engine.resetCounters(); },
-            engine.getMidiRouter(), settings, *session,
+            engine.getMidiRouter(), settings, *session, *plugins,
             [this] { applyMidiBindings(); }, [this] { applyMidiOutput(); },
             [this]
             {
@@ -1449,6 +1487,15 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
         patchList->refresh();
         refreshShowStatus();
         reportProblems();
+
+        // The crash guard switched a plugin off: say so at once.
+        for (const auto& text : session->takePluginNotices())
+        {
+            showNotice (text, 20, true);
+            eventlog::write ("Plugin switched off - " + text);
+        }
+
+        syncPluginWindows();
         return;
     }
 
@@ -1470,8 +1517,10 @@ void MainComponent::timerCallback()
     session->syncWithAudio();   // cue or patch changed on the audio thread
 
     // Take the keyboard back (e.g. after a dialog closed), unless a dialog is open.
+    // ...but not from a plugin's own window the player is typing in.
     if (frameCounter % 15 == 0 && isShowing() && ! hasKeyboardFocus (true)
-        && juce::Component::getCurrentlyModalComponent() == nullptr && juce::Process::isForegroundProcess())
+        && juce::Component::getCurrentlyModalComponent() == nullptr && juce::Process::isForegroundProcess()
+        && ! isPluginWindowActive())
         grabKeyboardFocus();
 
     // A newly built chain arrived (patch selected, block added...).
@@ -1840,6 +1889,105 @@ void MainComponent::resized()
 
     if (blockPanel != nullptr)
         blockPanel->setBounds (area);   // the block stage fills the rest
+}
+
+//==============================================================================
+void MainComponent::startFirstPluginScanIfNeeded()
+{
+    // The first start: find the installed plugins in the background.
+    if (! settings.getFolder().getChildFile ("plugins.xml").existsAsFile())
+        plugins->startScan();
+}
+
+void MainComponent::openPluginWindow (PluginBlock& block)
+{
+    const auto id = block.getModelId();
+
+    if (auto it = pluginWindows.find (id); it != pluginWindows.end())
+    {
+        if (&it->second->getBlock() == &block)
+        {
+            it->second->toFront (true);
+            return;
+        }
+
+        closePluginWindow (id, false);
+    }
+
+    if (block.getInstance() == nullptr)
+        return;
+
+    const auto* chain = engine.getChain();
+    auto window = std::make_unique<PluginWindow> (block, chain != nullptr ? chain->label : juce::String(), [this, id]
+    {
+        // Closed with its own button: after the click returns.
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this), id]
+        {
+            if (safe != nullptr)
+                safe->closePluginWindow (id, false);
+        });
+    });
+
+    if (const auto it = pluginWindowBounds.find (id); it != pluginWindowBounds.end())
+        window->setTopLeftPosition (it->second.getPosition());
+    else
+        window->centreAroundComponent (this, window->getWidth(), window->getHeight());
+
+    window->setVisible (true);
+    window->toFront (true);
+    pluginWindows[id] = std::move (window);
+}
+
+void MainComponent::closePluginWindow (const juce::String& blockId, bool reopenWhenRebuilt)
+{
+    const auto it = pluginWindows.find (blockId);
+
+    if (it == pluginWindows.end())
+        return;
+
+    pluginWindowBounds[blockId] = it->second->getBounds();
+
+    if (reopenWhenRebuilt && it->second->getBlock().getFault() != PluginBlock::Fault::crashed)
+        pluginWindowsToReopen.addIfNotAlreadyThere (blockId);
+
+    pluginWindows.erase (it);
+}
+
+void MainComponent::syncPluginWindows()
+{
+    // A crashed plugin's window goes (without touching the plugin).
+    std::vector<juce::String> crashed;
+
+    for (const auto& [id, window] : pluginWindows)
+        if (window->getBlock().getFault() == PluginBlock::Fault::crashed)
+            crashed.push_back (id);
+
+    for (const auto& id : crashed)
+        closePluginWindow (id, false);
+
+    // Windows closed because their patch was rebuilt come back for the new plugin.
+    if (pluginWindowsToReopen.isEmpty())
+        return;
+
+    auto* chain = engine.getChain();
+
+    if (chain == nullptr || session->isBuilding())
+        return;
+
+    for (const auto& block : chain->getBlocks())
+        if (auto* plugin = dynamic_cast<PluginBlock*> (block.get()); plugin != nullptr && pluginWindowsToReopen.contains (plugin->getModelId()))
+            openPluginWindow (*plugin);
+
+    pluginWindowsToReopen.clear();
+}
+
+bool MainComponent::isPluginWindowActive() const
+{
+    for (const auto& [id, window] : pluginWindows)
+        if (window->isActiveWindow())
+            return true;
+
+    return false;
 }
 
 } // namespace encore

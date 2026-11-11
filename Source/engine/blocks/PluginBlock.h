@@ -64,6 +64,10 @@ public:
 
     bool isLoaded() const noexcept { return instance != nullptr; }
 
+    /** Why the plugin couldn't be loaded ("Shimmer isn't installed on this computer"). */
+    const juce::String& getLoadError() const noexcept { return loadError; }
+    void setLoadError (const juce::String& error) { loadError = error; }
+
     /** The plugin's settings as the show saves them (base64). Asks the plugin
         only if something changed since last time, else returns the last one. */
     juce::String getState();
@@ -92,6 +96,10 @@ public:
     /** Goes up by one whenever any plugin block faults, so the UI notices
         without polling every block. */
     static int getFaultCount() noexcept { return faultCount.load (std::memory_order_relaxed); }
+
+    /** Message thread: called as a plugin block is about to close its plugin,
+        so whatever shows the plugin's own window closes it first. */
+    static void setBeforeClosing (std::function<void (PluginBlock&)>);
 
     /** For the crash handler: "<block id>\t<plugin name>" of the plugin this
         thread is calling right now, or null. Parse it with parseCrashLabel. */
@@ -127,6 +135,7 @@ private:
     const PluginRef ref;
     std::unique_ptr<juce::AudioPluginInstance> instance;
     juce::String state;                                   // the last state read (or the saved one)
+    juce::String loadError;
     std::string crashLabel;
 
     // The plugin's parameters and the Encore parameter for each.

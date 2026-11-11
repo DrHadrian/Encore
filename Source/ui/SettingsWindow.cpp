@@ -14,22 +14,22 @@ using namespace theme;
 class SettingsWindow::Body final : public juce::Component
 {
 public:
-    Body (juce::Component& a, juce::Component& m)
+    explicit Body (std::initializer_list<juce::Component*> tabs)
     {
-        for (auto* v : { &audioView, &midiView })
+        for (auto* tab : tabs)
         {
+            auto* v = views.add (new juce::Viewport());
             v->setScrollBarsShown (true, false);
+            v->setViewedComponent (tab, false);
             addChildComponent (v);
         }
-
-        audioView.setViewedComponent (&a, false);
-        midiView.setViewedComponent (&m, false);
     }
 
-    void show (bool audio)
+    void show (int index)
     {
-        audioView.setVisible (audio);
-        midiView.setVisible (! audio);
+        for (int i = 0; i < views.size(); ++i)
+            views[i]->setVisible (i == index);
+
         resized();
     }
 
@@ -37,7 +37,7 @@ public:
 
     void resized() override
     {
-        for (auto* v : { &audioView, &midiView })
+        for (auto* v : views)
         {
             v->setBounds (getLocalBounds());
 
@@ -48,21 +48,25 @@ public:
     }
 
 private:
-    juce::Viewport audioView, midiView;
+    juce::OwnedArray<juce::Viewport> views;
 };
 
 SettingsWindow::SettingsWindow (juce::AudioDeviceManager& dm, const system::TuningReport& tuning, std::function<void()> resetCounters,
-                                MidiRouter& router, AppSettings& settings, ShowSession& session,
+                                MidiRouter& router, AppSettings& settings, ShowSession& session, PluginCatalog& catalog,
                                 std::function<void()> applyBindings, std::function<void()> applyOutput, std::function<void()> close)
     : frame ("Settings", "Close settings"),
       audio (dm, tuning, std::move (resetCounters)),
-      midi (dm, router, settings, session, std::move (applyBindings), std::move (applyOutput))
+      midi (dm, router, settings, session, std::move (applyBindings), std::move (applyOutput)),
+      plugins (catalog)
 {
-    body = std::make_unique<Body> (audio, midi);
-    body->idealHeight = [this] (juce::Component& c) { return &c == &audio ? audio.getIdealHeight() : midi.getIdealHeight(); };
+    body = std::make_unique<Body> (std::initializer_list<juce::Component*> { &audio, &midi, &plugins });
+    body->idealHeight = [this] (juce::Component& c)
+    {
+        return &c == &audio ? audio.getIdealHeight() : &c == &midi ? midi.getIdealHeight() : plugins.getIdealHeight();
+    };
 
-    frame.setTabs ({ { "Audio", Icon::audioWave }, { "MIDI", Icon::midiPort } });
-    frame.onTabChange = [this] (int index) { showTab (index == 0 ? Tab::audio : Tab::midi); };
+    frame.setTabs ({ { "Audio", Icon::audioWave }, { "MIDI", Icon::midiPort }, { "Plugins", Icon::plug } });
+    frame.onTabChange = [this] (int index) { showTab ((Tab) index); };
     frame.setContent (body.get());
 
     // Changes apply immediately: both buttons close.
@@ -79,13 +83,18 @@ SettingsWindow::~SettingsWindow() = default;
 void SettingsWindow::showTab (Tab t)
 {
     tab = t;
-    const auto isAudio = tab == Tab::audio;
-    frame.setSelectedTab (isAudio ? 0 : 1);
-    frame.setDialogTitle ("Settings " + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x94 ")) + (isAudio ? "Audio" : "MIDI"));
-    frame.setFooterText (isAudio ? juce::String ("Changes apply immediately; audio restarts for less than a second when you change the device.")
-                                 : juce::String (juce::CharPointer_UTF8 ("Mappings save automatically to this computer (%APPDATA%\\Encore), "
-                                                                        "never into the show \xe2\x80\x94 unless you choose \xe2\x80\x9cThis show\xe2\x80\x9d.")));
-    body->show (isAudio);
+    static const juce::String names[] { "Audio", "MIDI", "Plugins" };
+    static const juce::String footers[] {
+        "Changes apply immediately; audio restarts for less than a second when you change the device.",
+        juce::String (juce::CharPointer_UTF8 ("Mappings save automatically to this computer (%APPDATA%\\Encore), "
+                                             "never into the show \xe2\x80\x94 unless you choose \xe2\x80\x9cThis show\xe2\x80\x9d.")),
+        "Plugins belong to this computer. Each new one is tried in a separate process first, so a crash can't take Encore down." };
+
+    const auto index = (int) tab;
+    frame.setSelectedTab (index);
+    frame.setDialogTitle ("Settings " + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x94 ")) + names[index]);
+    frame.setFooterText (footers[index]);
+    body->show (index);
 }
 
 void SettingsWindow::setAudioStatus (const AudioSettingsView::Status& status)

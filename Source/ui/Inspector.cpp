@@ -3,6 +3,7 @@
 
 #include "ui/Inspector.h"
 
+#include "engine/blocks/PluginBlock.h"
 #include "model/MidiMapping.h"
 #include "session/PatchBuilder.h"
 #include "ui/ChainStrip.h"
@@ -45,6 +46,9 @@ namespace
 
     juce::String typeName (const Block& block)
     {
+        if (block.getTypeId() == PluginBlock::typeId)
+            return "Plugin";
+
         for (auto& t : getBlockTypes())
             if (t.id == block.getTypeId())
                 return t.displayName;
@@ -82,20 +86,55 @@ public:
                 owner.onEdited();
         };
         addChildComponent (stompBox);
+
+        // Plugin blocks: its window, and a way back after the crash guard switched it off.
+        for (auto* b : { &openWindowButton, &pluginActionButton })
+        {
+            setVariant (*b, Variant::small);
+            b->setWantsKeyboardFocus (false);
+            addChildComponent (b);
+        }
+
+        openWindowButton.setButtonText ("Open plugin window...");
+        openWindowButton.onClick = [this]
+        {
+            if (owner.onOpenPluginWindow != nullptr)
+                owner.onOpenPluginWindow();
+        };
+
+        pluginActionButton.onClick = [this]
+        {
+            // Turning it back on may rebuild the patch (and this inspector): after the click.
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<Content> (this), index = owner.blockIndex]
+            {
+                if (safe != nullptr)
+                    safe->owner.session.turnPluginBackOn (index);
+            });
+        };
     }
 
     void setBlock (Block* newBlock)
     {
         block = newBlock;
+        plugin = dynamic_cast<PluginBlock*> (block);
         switches.clear();
         values.clear();
         params.clear();
         onOff.clear();
+        hiddenParams = 0;
+        pluginStatus.clear();
+        pluginAction.clear();
 
         if (block != nullptr)
         {
             for (auto& p : block->getParameters())
             {
+                if (plugin != nullptr && (int) params.size() >= size::inspectorPluginParams)
+                {
+                    ++hiddenParams;
+                    continue;
+                }
+
                 if (isOnOff (*p))
                 {
                     onOff.push_back (p.get());
@@ -121,8 +160,14 @@ public:
                     l->setJustificationType (juce::Justification::centredRight);
                     l->setColour (juce::Label::textColourId, paint::c (colour::textRow));
                     l->setBorderSize ({});
-                    l->setEditable (false, true, false);   // double-click to type an exact value
-                    l->setTooltip ("Double-click to type a value");
+
+                    // Typed values are in the parameter's units; a plugin's are its own text.
+                    if (plugin == nullptr)
+                    {
+                        l->setEditable (false, true, false);   // double-click to type an exact value
+                        l->setTooltip ("Double-click to type a value");
+                    }
+
                     l->setTitle (param->getSpec().name);
                     l->onTextChange = [this, l, param]
                     {
@@ -142,6 +187,7 @@ public:
 
         modelField.setVisible (block != nullptr && block->getFileSlot() != nullptr);
         stompBox.setVisible (block != nullptr);
+        openWindowButton.setVisible (plugin != nullptr);
         refresh (true);
     }
 
@@ -162,7 +208,40 @@ public:
             newFormat = display (block->getLoadedFileInfo());
         }
 
-        if (newModel != modelField.getText() || newFormat != format)
+        if (plugin != nullptr)
+        {
+            const auto& ref = plugin->getPluginRef();
+            newModel = ref.name + (ref.maker.isNotEmpty() ? middot() + ref.maker : juce::String());
+            newFormat = plugin->isLoaded() ? display (plugin->getLoadedFileInfo()) : ref.format;
+
+            const auto fault = plugin->getFault();
+            const auto status = ! plugin->isLoaded() ? (plugin->getLoadError().isNotEmpty() ? plugin->getLoadError() : juce::String ("Not loaded"))
+                              : fault != PluginBlock::Fault::none ? plugin->getFaultText()
+                                                                  : juce::String ("Running");
+            const auto action = fault == PluginBlock::Fault::crashed ? juce::String ("Load again")
+                              : plugin->canTurnBackOn()               ? juce::String ("Turn back on")
+                                                                      : juce::String();
+            const auto canOpen = plugin->getInstance() != nullptr && plugin->getInstance()->hasEditor();
+
+            if (status != pluginStatus || action != pluginAction || canOpen != openWindowButton.isEnabled())
+            {
+                pluginStatus = status;
+                pluginAction = action;
+                pluginProblem = ! plugin->isLoaded() || fault != PluginBlock::Fault::none;
+                pluginActionButton.setButtonText (action);
+                pluginActionButton.setVisible (action.isNotEmpty());
+                openWindowButton.setEnabled (canOpen);
+                relayout = true;
+            }
+
+            if (newModel != pluginName || newFormat != format)
+            {
+                pluginName = newModel;
+                format = newFormat;
+                relayout = true;
+            }
+        }
+        else if (newModel != modelField.getText() || newFormat != format)
         {
             modelField.setText (newModel, juce::dontSendNotification);
             modelField.setTooltip (newModelTip);
@@ -193,8 +272,14 @@ public:
                                                                                               p.parameter->getSpec().range.end, v));
             auto* label = values[(int) i];
 
-            if (const auto text = display (p.parameter->toText (v)); text != label->getText() && ! label->isBeingEdited())
-                label->setText (text, juce::dontSendNotification);
+            // Text only when the value moved (a plugin's text comes from the plugin).
+            if (force || ! juce::exactlyEqual (v, p.shownValue))
+            {
+                p.shownValue = v;
+
+                if (const auto text = display (p.parameter->toText (v)); text != label->getText() && ! label->isBeingEdited())
+                    label->setText (text, juce::dontSendNotification);
+            }
 
             if (pedal != p.pedal || std::abs (proportion - p.proportion) > 0.002f)
             {
@@ -260,7 +345,19 @@ public:
             typeText = typeName (*block);
             keys.push_back ({ "Type", row (size::inspectorTextH) });
 
-            if (block->getFileSlot() != nullptr)
+            if (plugin != nullptr)
+            {
+                const auto lines = [&] (const juce::String& text) { return textWidth (font (type::bodySmall), text) > (float) valueW ? 2 : 1; };
+                keys.push_back ({ "Plugin", row (size::inspectorTextH * lines (pluginName)) });
+                keys.push_back ({ "Format", row (size::inspectorTextH * lines (format)) });
+                keys.push_back ({ "Status", row (size::inspectorTextH * lines (pluginStatus)) });
+
+                if (pluginActionButton.isVisible())
+                    pluginActionButton.setBounds (row (size::buttonSmallHeight).withWidth (pluginActionButton.getBestWidthForHeight (size::buttonSmallHeight)));
+
+                openWindowButton.setBounds (row (size::buttonSmallHeight).withWidth (openWindowButton.getBestWidthForHeight (size::buttonSmallHeight)));
+            }
+            else if (block->getFileSlot() != nullptr)
             {
                 keys.push_back ({ "Model", row (size::fieldHeight) });
                 modelField.setBounds (keys.back().second);
@@ -292,6 +389,12 @@ public:
             const auto r = rowBounds.back().reduced (size::listPad, 0);
             values[(int) i]->setBounds (r.withX (r.getRight() - size::inspectorChipW - size::inspectorRowGap - size::meterValueW)
                                          .withWidth (size::meterValueW));
+            y += size::rowHeight;
+        }
+
+        if (hiddenParams > 0)
+        {
+            moreParams = { size::inspectorListPadX + size::listPad, y, w - 2 * (size::inspectorListPadX + size::listPad), size::rowHeight };
             y += size::rowHeight;
         }
 
@@ -327,11 +430,14 @@ public:
 
             if (key == "Type")
                 paint::text (g, typeText, r.toFloat(), type::bodySmall, colour::text);
-            else if (key == "Format")
+            else if (key == "Format" || key == "Plugin" || key == "Status")
             {
+                const auto& text = key == "Format" ? format : key == "Plugin" ? pluginName : pluginStatus;
                 g.setFont (font (type::bodySmall));
-                g.setColour (paint::c (colour::textSoft));
-                g.drawFittedText (format, r, juce::Justification::centredLeft, 2, 1.0f);
+                g.setColour (paint::c (key == "Plugin" ? colour::text
+                                       : key == "Status" && pluginProblem ? colour::amber
+                                                                          : colour::textSoft));
+                g.drawFittedText (text, r, juce::Justification::centredLeft, 2, 1.0f);
             }
         }
 
@@ -362,6 +468,9 @@ public:
                 paint::text (g, p.chip, c, type::chip, colour::expChipText, juce::Justification::centred);
             }
         }
+
+        if (hiddenParams > 0)
+            paint::text (g, "+ " + juce::String (hiddenParams) + " more in the plugin window", moreParams.toFloat(), type::body, colour::textMuted);
 
         kit::paintSubheader (g, assignHeader, "ASSIGNMENTS", "right-click a knob or block");
 
@@ -395,10 +504,17 @@ private:
         juce::String chip;
         int pedal = -1;
         float proportion = -1.0f;
+        float shownValue = -1.0f;
     };
 
     Inspector& owner;
     Block* block = nullptr;
+    PluginBlock* plugin = nullptr;
+    juce::TextButton openWindowButton, pluginActionButton;
+    juce::String pluginName, pluginStatus, pluginAction;
+    bool pluginProblem = false;
+    int hiddenParams = 0;
+    juce::Rectangle<int> moreParams;
     bool updating = false;
 
     juce::Label modelField;

@@ -158,7 +158,7 @@ Target: `layout-editor.png` (`layout-editor.json`). Code: `StageView` edit mode 
 
 ---
 
-## 7. Settings: Audio and MIDI (one window, two tabs)
+## 7. Settings: Audio, MIDI and Plugins (one window, a tab each)
 
 Targets: `settings-audio.png`, `settings-midi.png` (geometry same names). Code: `MainComponent::openAudioSettings` (`AudioDeviceSelectorComponent`), `MidiSettings`, `system::TuningReport`. Opened by **Audio...** / **MIDI...**; the pre-show check's fix buttons open the matching tab.
 
@@ -182,6 +182,14 @@ Implementation note: don't embed JUCE's stock `AudioDeviceSelectorComponent` loo
 - MAPPINGS (full width of the first two columns): "This show has its own mappings (instead of this computer's)" checkbox on the header line; table header "Does" / "Footswitch / pedal" (10.5 / 700 #6E6E75); rows 31 px: action popup (200; menu as in `MidiSettings`: Next cue, Previous cue, Program recall, Stomp switch ▸ 1–8, Expression pedal ▸ 1–4, Mute, Tuner, Panic — the code still appends " (from milestone 7)" to Tuner and Panic; that suffix is stale and may be dropped), trigger text 12.5 #D5D5DA ("CC 64, any channel"), **Learn** (76) / **Cancel** (primary) while learning, with "Press the control now..." in amber, ✕ remove (22). Bottom: **+ Add mapping**, **Reset to defaults**, "Last received" + value field.
 - HOW MAPPINGS WORK and DEFAULTS help groups (right column, text from the board).
 - Footer: "Mappings save automatically to this computer (%APPDATA%\Encore), never into the show — unless you choose “This show”."
+
+**Plugins tab** (milestone 10; `PluginSettings`, snapshot `settings-plugins.png`, no reference board yet: built per EXTENDING.md from the MIDI tab's pieces; tab icon `plug`). Opened from the tab strip, Add block → *Plugin* → *Find plugins...*, and the pre-show check's **Plugin settings...**:
+- PLUGINS (where the MIDI tab has MAPPINGS, full height): table header "Name" / "Maker" / "Version" (column heads as MAPPINGS), 28 px rows, alternate rows `mappingRowAlt`; empty: "No plugins yet. Scan looks in the folders on the right." Bar: **Scan** (**Stop** while scanning), **Scan all again**, then the status ("Scanning 3 of 40: Shimmer.vst3", "Scan stopped", "12 plugins, 1 blocked").
+- FOLDERS (right column, 320): one 26 px row per folder (click to select), bar: **+ Add folder...**, **Remove**, **Defaults**.
+- BLOCKED (right, fills the rest): 44 px rows: file name, reason in amber caption ("Crashed while being scanned", "Didn't finish loading within 60 s while being scanned"), **Try again**; empty: "Nothing blocked".
+- Footer: "Plugins belong to this computer. Each new one is tried in a separate process first, so a crash can't take Encore down."
+
+Plugin blocks in Edit (§4.3): chain tile kind "Plugin"; block stage header "PLUGIN · <name>" with **Open plugin window...** in place of the file button, dot amber when not loaded or switched off by the crash guard; the gear placeholder ("Plugin · VST3") shows the first 8 parameters as knobs. Inspector BLOCK rows: Type "Plugin", Plugin (name · maker), Format ("VST3 · maker · v1.2"), Status ("Running", the load error, or the crash guard's reason in amber) with **Turn back on** / **Load again** when it applies, **Open plugin window...**; PARAMETERS lists the first 48 (values not typed; the plugin's own text), then "+ N more in the plugin window". Add block menu: a *Plugin* submenu by maker, "No plugins found" when empty, *Find plugins...*. The plugin's own window is a native window titled "<plugin> — <patch>" around the plugin's editor (a plain parameter list if it has none).
 
 ---
 

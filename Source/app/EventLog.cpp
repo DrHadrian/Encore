@@ -3,6 +3,8 @@
 
 #include "app/EventLog.h"
 
+#include "engine/blocks/PluginBlock.h"
+
 namespace encore::eventlog
 {
 
@@ -12,10 +14,14 @@ namespace
     juce::File folder;
 
     // Prepared up front: the crash handler should do as little as possible.
-    std::string crashFilePrefix;
+    std::string crashFilePrefix, pluginCrashFile;
 
     void onCrash (void*)
     {
+        // Crashed inside a plugin? Say which, so it starts switched off next time.
+        if (const auto* plugin = PluginBlock::getPluginInUseOnThisThread(); plugin != nullptr && ! pluginCrashFile.empty())
+            juce::File (juce::String (pluginCrashFile)).replaceWithText (juce::String::fromUTF8 (plugin));
+
         const auto when = juce::Time::getCurrentTime().formatted ("%Y-%m-%d_%H-%M-%S");
         const auto text = "Encore crashed at " + when + "\n\n" + juce::SystemStats::getStackBacktrace();
 
@@ -51,6 +57,7 @@ void start (const juce::File& logsFolder, const juce::String& appVersion)
     juce::Logger::setCurrentLogger (logger.get());
 
     crashFilePrefix = folder.getChildFile ("crash-").getFullPathName().toStdString();
+    pluginCrashFile = getPluginCrashFile().getFullPathName().toStdString();
     juce::SystemStats::setApplicationCrashHandler (onCrash);
 }
 
@@ -67,5 +74,7 @@ void write (const juce::String& message)
 }
 
 juce::File getLogsFolder() { return folder; }
+
+juce::File getPluginCrashFile() { return folder.getParentDirectory().getChildFile ("plugin-crash.txt"); }
 
 } // namespace encore::eventlog

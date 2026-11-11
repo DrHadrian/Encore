@@ -475,3 +475,19 @@ and keeps everything it saved. A show that contains a plugin is written as
 schema 2; a show without one stays schema 1, so older Encore versions keep
 opening it. Adding, removing or moving a block reloads the patch's plugins
 (their settings carry over).
+
+## 0048 — Plugins in the UI: thin, from the kit, ready to be redesigned (milestone 10)
+
+The design is still moving, so the plugin screens hold no logic: the catalog
+(session) and the plugin block (engine) do everything, and each screen is a
+small file built from `Source/ui/kit` and the theme tokens. Settings gets a
+**Plugins** tab (the plugin list where MIDI has its mappings, folders and the
+blocklist on the right). Plugins are added from the chain's Add block menu
+(*Plugin* → maker → plugin); the Library panel in PROPOSALS can replace that
+later on the same catalog. The block stage shows a plugin's first 8
+parameters as knobs and the inspector its first 48, because plugins can have
+hundreds; the rest are in the plugin's own window, a native window around the
+plugin's editor. That window closes before its plugin does and comes back
+when the patch is rebuilt (an edit reloads the patch's plugins); the
+main window doesn't pull keyboard focus away from it (decision 0025 still
+holds otherwise). Encore's own on/off replaces the plugin's bypass parameter.

@@ -27,6 +27,8 @@ namespace
     // The plugin this thread is inside right now, for the crash handler.
     thread_local const char* pluginInUse = nullptr;
 
+    std::function<void (PluginBlock&)> beforeClosing;   // message thread
+
     constexpr int overrunsBeforeSwitchingOff = 3;
     constexpr double maxDrainSeconds = 10.0;
     constexpr float drainedLevel = 1.0e-5f;   // -100 dB
@@ -107,9 +109,12 @@ PluginBlock::PluginBlock (const PluginRef& refToUse, std::unique_ptr<juce::Audio
     const auto& all = instance->getParameters();
     encoreByIndex.assign ((size_t) all.size(), nullptr);
 
+    // Encore's own on/off (a click-free bypass, stomps) replaces the plugin's bypass.
+    const auto* bypass = instance->getBypassParameter();
+
     for (auto* p : all)
     {
-        if (! p->isAutomatable() || p->isMetaParameter())
+        if (! p->isAutomatable() || p->isMetaParameter() || p == bypass)
             continue;
 
         Parameter::Spec spec;
@@ -147,10 +152,19 @@ PluginBlock::PluginBlock (const PluginRef& refToUse, std::unique_ptr<juce::Audio
     tailSeconds = instance->getTailLengthSeconds();
 }
 
+void PluginBlock::setBeforeClosing (std::function<void (PluginBlock&)> fn)
+{
+    beforeClosing = std::move (fn);
+}
+
 PluginBlock::~PluginBlock()
 {
     if (instance == nullptr)
         return;
+
+    // Its window (the plugin's editor) goes before the plugin.
+    if (beforeClosing != nullptr && juce::MessageManager::existsAndIsCurrentThread())
+        beforeClosing (*this);
 
     for (auto* p : pluginParams)
         p->removeListener (this);
@@ -279,7 +293,7 @@ juce::String PluginBlock::getFaultText() const
         case Fault::crashed:         return "Crashed and was switched off";
         case Fault::badOutput:       return "Sent broken audio and was switched off";
         case Fault::tooSlow:         return "Took longer than the audio buffer and was switched off";
-        case Fault::crashedLastTime: return "Switched off: Encore closed unexpectedly while it was running";
+        case Fault::crashedLastTime: return "Switched off: it crashed Encore last time";
         case Fault::none:            break;
     }
 

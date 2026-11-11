@@ -12,6 +12,7 @@
 #include "model/ShowJson.h"
 #include "session/PatchBuilder.h"
 #include "session/PluginCatalog.h"
+#include "session/PreShowCheck.h"
 #include "session/ShowSession.h"
 
 #include <cstdlib>
@@ -65,7 +66,7 @@ public:
 
         pumpUntil ([&] { return ! catalog.isScanning(); });
         expect (! catalog.isScanning(), "the scan finished");
-        juce::MessageManager::getInstance()->runDispatchLoopUntil (20);   // its last update
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);   // its last update (saves the list)
     }
 
     static Parameter* findParameterNamed (Block& block, const juce::String& name)
@@ -434,6 +435,30 @@ public:
                 expect (session.openShow (showFolder).wasOk());
                 pumpUntil ([&] { return ! session.isBuilding(); }, 10000);
                 expect (session.takeProblems().isEmpty());
+                expect (session.getPluginProblems().empty());
+            }
+
+            beginTest ("Plugins that don't play are in the pre-show check");
+            {
+                ShowSession session (engine);   // no plugin catalog: nothing can load
+                expect (session.openShow (showFolder).wasOk());
+                pumpUntil ([&] { return ! session.isBuilding(); }, 10000);
+
+                const auto problems = session.getPluginProblems();
+                expectEquals ((int) problems.size(), 1);
+
+                PreShowFacts facts;
+                facts.pluginProblems = problems;
+                const auto checks = runPreShowChecks (facts);
+                const auto it = std::find_if (checks.begin(), checks.end(), [] (const auto& c) { return c.title == "1 plugin not playing"; });
+                expect (it != checks.end());
+
+                if (it != checks.end())
+                {
+                    expect (it->status == PreShowCheckResult::Status::problem);
+                    expect (it->fix == PreShowCheckResult::Fix::pluginSettings);
+                    expect (it->detail.contains ("can't be loaded here"), it->detail);
+                }
             }
 
             engine.audioDeviceStopped();

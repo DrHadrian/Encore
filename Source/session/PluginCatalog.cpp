@@ -300,6 +300,9 @@ void PluginCatalog::startScanThread (bool rescanEverything)
         scanStatus = "Looking for plugins...";
     }
 
+    scanThread = nullptr;   // a finished one not collected yet
+    scanEnded.store (false);
+    scanning.store (true);
     scanThread = std::make_unique<ScanThread> (*this, rescanEverything);
     scanThread->startThread();
     sendChangeMessage();
@@ -313,13 +316,27 @@ void PluginCatalog::cancelScan()
 
 bool PluginCatalog::isScanning() const noexcept
 {
-    return scanThread != nullptr && scanThread->isThreadRunning();
+    return scanning.load();
 }
 
 juce::String PluginCatalog::getScanStatus() const
 {
-    const juce::ScopedLock sl (lock);
-    return scanStatus;
+    {
+        const juce::ScopedLock sl (lock);
+
+        if (scanStatus.isNotEmpty())
+            return scanStatus;
+    }
+
+    return summary();
+}
+
+juce::String PluginCatalog::summary() const
+{
+    const auto plugins = getPlugins().size();
+    const auto numBlocked = (int) getBlocked().size();
+    return juce::String (plugins) + (plugins == 1 ? " plugin" : " plugins")
+           + (numBlocked > 0 ? ", " + juce::String (numBlocked) + " blocked" : juce::String());
 }
 
 void PluginCatalog::setScanTimeout (juce::RelativeTime t)
@@ -388,22 +405,20 @@ void PluginCatalog::scanFinished (const juce::StringArray& filesNowPresent, bool
             it = filesNowPresent.contains (it->first) ? std::next (it) : blocked.erase (it);
     }
 
-    const auto plugins = getPlugins().size();
-    const auto numBlocked = (int) getBlocked().size();
-
     {
         const juce::ScopedLock sl (lock);
-        scanStatus = cancelled ? juce::String ("Scan stopped")
-                               : juce::String (plugins) + (plugins == 1 ? " plugin" : " plugins")
-                                   + (numBlocked > 0 ? ", " + juce::String (numBlocked) + " blocked" : juce::String());
+        scanStatus = cancelled ? juce::String ("Scan stopped") : juce::String();   // empty: the summary
     }
 
+    scanning.store (false);
+    scanEnded.store (true);
     triggerAsyncUpdate();
 }
 
 void PluginCatalog::handleAsyncUpdate()
 {
-    if (scanThread != nullptr && ! scanThread->isThreadRunning())
+    // The scan reported its end: the thread is returning (joining it is quick).
+    if (scanEnded.exchange (false))
     {
         scanThread = nullptr;
         save();
@@ -454,8 +469,11 @@ void PluginCatalog::save() const
 
     dataFile.getParentDirectory().createDirectory();
 
-    if (! root.writeTo (dataFile))   // writes a temporary file, then swaps it in
-        DBG ("Couldn't save the plugin list to " << dataFile.getFullPathName());
+    // Writes a temporary file, then swaps it in. If that fails, the list is
+    // found again by the next scan.
+    const auto saved = root.writeTo (dataFile);
+    jassert (saved);
+    juce::ignoreUnused (saved);
 }
 
 //==============================================================================

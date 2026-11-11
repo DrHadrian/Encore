@@ -5,6 +5,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <atomic>
 #include <functional>
 #include <map>
 #include <memory>
@@ -84,7 +85,7 @@ public:
     void cancelScan();
     bool isScanning() const noexcept;
 
-    /** "Scanning 3 of 40: Shimmer.vst3", or how the last scan ended. */
+    /** "Scanning 3 of 40: Shimmer.vst3", "Scan stopped", or "12 plugins, 1 blocked". */
     juce::String getScanStatus() const;
 
     /** How long one file may take to scan (default 60 s). */
@@ -110,6 +111,7 @@ private:
     void handleAsyncUpdate() override;
     void load();
     void save() const;
+    juce::String summary() const;
     void startScanThread (bool rescanEverything);
 
     // What the scan thread asks and reports.
@@ -130,6 +132,7 @@ private:
     juce::RelativeTime scanTimeout { juce::RelativeTime::seconds (60) };
 
     std::unique_ptr<ScanThread> scanThread;
+    std::atomic<bool> scanning { false }, scanEnded { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginCatalog)
 };

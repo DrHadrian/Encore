@@ -195,6 +195,7 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/icons/lock.svg
         Resources/ui/icons/midi-port.svg
         Resources/ui/icons/minus.svg
+        Resources/ui/icons/plug.svg
         Resources/ui/icons/plus.svg
         Resources/ui/icons/sidebar-right.svg
         Resources/ui/icons/sliders.svg
@@ -282,6 +283,10 @@ target_sources(Encore PRIVATE
     Source/ui/TunerDisplay.h
     Source/ui/PatchList.cpp
     Source/ui/PatchList.h
+    Source/ui/PluginSettings.cpp
+    Source/ui/PluginSettings.h
+    Source/ui/PluginWindow.cpp
+    Source/ui/PluginWindow.h
     Source/ui/SetList.cpp
     Source/ui/SetList.h)
 
@@ -385,6 +390,8 @@ if(ENCORE_BUILD_TESTS)
         Source/ui/AudioSettingsView.cpp
         Source/ui/SettingsWindow.cpp
         Source/ui/PatchList.cpp
+        Source/ui/PluginSettings.cpp
+        Source/ui/PluginWindow.cpp
         Source/ui/PreShowCheckView.cpp
         Source/ui/SetList.cpp
         Source/ui/CueDialogs.cpp
@@ -394,6 +401,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/PatchBuilderTests.cpp
         Tests/PatchPlayerTests.cpp
         Tests/PluginTests.cpp
+        Tests/PluginViewTests.cpp
         Tests/ResamplerTests.cpp
         Tests/SessionTests.cpp
         Tests/TestSignals.h)

@@ -23,6 +23,7 @@ public:
     {
         setViewedComponent (content.get(), false);
         setScrollBarsShown (true, true);
+        content->startFirstPluginScanIfNeeded();
         setScrollBarThickness (theme::size::scrollbar);
 
         content->onViewChanged = [this]
