@@ -60,7 +60,7 @@ juce::Font fontOfSize (type::Weight weight, float px, float tracking)
     JUCE_ASSERT_MESSAGE_THREAD
 
     using Key = std::tuple<int, int, int>;
-    static std::map<Key, juce::Font> cache;
+    auto& cache = EncoreFonts::get().sizedFonts();
 
     const Key key { (int) weight, juce::roundToInt (juce::jmax (1.0f, px) * 100.0f), juce::roundToInt (tracking * 1000.0f) };
 

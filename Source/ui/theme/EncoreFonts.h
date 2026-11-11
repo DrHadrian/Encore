@@ -5,6 +5,9 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <map>
+#include <tuple>
+
 #include "ui/theme/EncoreTheme.h"
 
 namespace encore::theme
@@ -22,12 +25,17 @@ public:
 
     juce::Typeface::Ptr typeface (type::Weight) const;
 
+    /** fontOfSize()'s made fonts: (weight, px x 100, tracking x 1000). Kept
+        here so they go when JUCE shuts down, before its leak checks. */
+    std::map<std::tuple<int, int, int>, juce::Font>& sizedFonts() noexcept { return cache; }
+
     JUCE_DECLARE_SINGLETON_INLINE (EncoreFonts, false)
 
 private:
     EncoreFonts();
 
     juce::Typeface::Ptr regular, medium, semibold, bold, extraBold;
+    std::map<std::tuple<int, int, int>, juce::Font> cache;
 };
 
 /** A token style as a JUCE font, at `scale` times its size. Sizes are the em
