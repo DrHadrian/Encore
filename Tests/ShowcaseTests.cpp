@@ -75,6 +75,8 @@ public:
         main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
         pump (1500);
 
+        // ENCORE_SHOWCASE_SCALE=2: frames at twice the size (sharp crops for a promo video).
+        const auto scale = juce::jlimit (1.0f, 4.0f, juce::SystemStats::getEnvironmentVariable ("ENCORE_SHOWCASE_SCALE", "1").getFloatValue());
         int frame = 0;
         const auto centreOf = [&main] (juce::Component* c)
         {
@@ -88,7 +90,7 @@ public:
                                std::function<void (juce::Image&)> overlay = {})
         {
             pump (350);
-            auto image = main.createComponentSnapshot (main.getLocalBounds());
+            auto image = main.createComponentSnapshot (main.getLocalBounds(), false, scale);
 
             if (overlay != nullptr)
                 overlay (image);
@@ -136,6 +138,7 @@ public:
             shot ("The Show menu", 3.0, centreOf (showButton), true, [&] (juce::Image& image)
             {
                 juce::Graphics g (image);
+                g.addTransform (juce::AffineTransform::scale (scale));
                 paintMenu (g, main.getLookAndFeel(), menu, at.translated (-theme::size::menuPadding, 0));
             });
         }
@@ -152,7 +155,14 @@ public:
         shot ("F9: the pre-show check, worst first, with fixes", 4.5);
         main.closePreShowCheck();
 
-        // Stage
+        // Go live (Encore always starts muted), then Stage
+        if (auto* mute = dynamic_cast<juce::Button*> (button ("MUTED")))
+        {
+            const auto at = centreOf (mute);
+            mute->triggerClick();
+            shot ("Unmute: live", 2.0, at, true);
+        }
+
         key (juce::KeyPress::F5Key);
         shot ("Stage: big and readable from across the stage", 4.0, centreOf (button ("Stage")), true);
         key (juce::KeyPress::spaceKey, ' ');
