@@ -75,10 +75,10 @@ void inset (juce::Graphics& g, juce::Rectangle<float> r, juce::uint32 fill, juce
     g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
 }
 
-void pane (juce::Graphics& g, juce::Rectangle<float> r)
+void pane (juce::Graphics& g, juce::Rectangle<float> r, juce::uint32 fill)
 {
     const auto radius = (float) size::paneRadius;
-    g.setColour (c (colour::pane));
+    g.setColour (c (fill));
     g.fillRoundedRectangle (r, radius);
     g.setColour (c (colour::paneHighlight));
     hline (g, r.getX() + radius, r.getY() + 1.0f, r.getWidth() - radius * 2.0f);

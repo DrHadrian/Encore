@@ -157,6 +157,46 @@ public:
             }
         }
 
+        beginTest ("Layout editor: the current cue selected, inspector on (layout-editor.png)");
+        {
+            ShowSession session (engine);
+            expect (session.openShow (makeLayoutShow (root)).wasOk());
+            const auto id = session.addLayout ("Default", {});
+            session.setLayoutWidgets (id, layoutEditorWidgets());
+            session.setDefaultLayout (id);
+            session.addLayout ("Big monitor", id);
+            settle (engine, session);
+            session.goToCue (0);
+            settle (engine, session);
+
+            StageView view (engine, session);
+            view.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            view.setEditingLayout (true);
+            expect (view.isEditingLayout());
+            view.selectLayoutWidget (0);   // Current cue
+            view.update (boardSnapshot());
+
+            expect (hasContent (renderSnapshot (view, "layout-editor")));
+            renderSnapshot (view, "layout-editor@2x", 2.0f);
+
+            // Inspector off: the artboard takes the width; nothing selected: the same.
+            view.setLayoutInspectorShown (false);
+            expect (! view.isLayoutInspectorShown());
+            expect (hasContent (renderSnapshot (view, "layout-editor-no-inspector")));
+            view.setLayoutInspectorShown (true);
+            view.selectLayoutWidget (-1);
+            view.update (boardSnapshot());
+
+            for (auto size : { juce::Point<int> (640, 480), juce::Point<int> (3840, 2160), juce::Point<int> (1, 1) })
+            {
+                view.setSize (size.x, size.y);
+                view.update (boardSnapshot());
+            }
+
+            view.setEditingLayout (false);
+            expect (! view.isEditingLayout());
+        }
+
         beginTest ("Stage: a musical, typing a cue number (stage-musical-goto.png)");
         {
             ShowSession session (engine);

@@ -240,6 +240,9 @@ namespace colour
     constexpr juce::uint32 iconChipText    = 0xffB9BEC9;
     constexpr juce::uint32 gridLine        = 0x0AFFFFFF;   // layout editor cell lines (white 4 %)
     constexpr juce::uint32 handleBorder    = 0xff2E6FDC;   // layout editor resize handles
+    constexpr juce::uint32 canvasPane      = 0xff111113;   // layout editor: the pane around the artboard
+    constexpr juce::uint32 artboard        = 0xff121418;   // layout editor: the stage preview
+    constexpr juce::uint32 artboardBorder  = 0xff000000;
     constexpr juce::uint32 selectionHalo   = 0x404C8DF6;   // accent at 25 %
     constexpr juce::uint32 learningRow     = 0x1FFFB340;   // MIDI row being learned (amber 12 %)
 
@@ -392,6 +395,15 @@ namespace size
     constexpr int stageListX = 6, stageListTop = 30, stageListBottom = 6, stageListGap = 2;
     constexpr int stageListPadX = 12, stageListNumberW = 20, stageListCellGap = 12, stageHeadingPadBottom = 3;
     constexpr int stageCurrentBase = 140;    // the current cue's name at text size 1 (168 at the board's 1.2)
+    // Layout editor (SCREENS.md §6, layout-editor.json)
+    constexpr int layoutToolbarGap = 8, layoutSeparatorGap = 12, layoutHintGap = 14, layoutsButtonW = 150, layoutDoneW = 70;
+    constexpr int separatorH = 22, inspectorToggleIcon = 15;
+    constexpr int artboardMargin = 20, artboardInset = 3;           // around the preview; inside its border
+    constexpr int widgetListTop = 8, widgetGroupH = 24, widgetGroupX = 11, widgetRowH = 30;
+    constexpr int widgetChipX = 15, widgetChipW = 24, widgetChipH = 20, widgetChipRadius = 3, widgetNameX = 48, widgetListPadX = 7;
+    constexpr int handle = 8, handleRadius = 2, handleGrab = 14, selectionBorder = 2, selectionHalo = 3;
+    constexpr int layoutInspectorPad = 10, layoutLabelGap = 8, layoutButtonGap = 8, layoutHalfGap = 6;
+    constexpr int layoutNotesH = 123, layoutNoteGap = 6;
     // Tuner overlay (the board's tuner pane)
     constexpr int tunerPaneW = 900, tunerPad = 24, tunerGap = 18, tunerLcdPad = 22, tunerLcdGap = 16;
     constexpr int tunerNote = 180, tunerTicksH = 52, tunerTickMid = 38, tunerTickShort = 26, tunerTickGap = 6, tunerTickRadius = 3;
@@ -528,6 +540,11 @@ namespace type
     constexpr Style stageFooter     { 11.0f, Weight::regular };
     constexpr Style stageFooterAlert{ 11.0f, Weight::semibold };             // the lost text in the footer
     constexpr Style layoutName      { 11.0f, Weight::regular };              // "Layout “Default”" in the toolbar
+    constexpr Style widgetChip      {  9.0f, Weight::bold };                // "CC", "SL" in the widget list
+    constexpr Style widgetGroup     { 10.0f, Weight::bold, 0.08f, true };   // SHOW, PLAY, MONITOR, SAFETY
+    constexpr Style widgetTagPreview{  8.5f, Weight::semibold };            // name tags on the layout artboard
+    constexpr Style layoutHint      { 11.5f, Weight::regular };
+    constexpr Style layoutNote      { 11.0f, Weight::regular };
     constexpr Style tunerCaption    { 11.0f, Weight::bold, 0.08f, true };
     constexpr Style tunerNote       { 180.0f, Weight::semibold };
     constexpr Style tunerDetail     { 18.0f, Weight::regular };

@@ -31,6 +31,11 @@ public:
     void setHeaderColours (juce::uint32 top, juce::uint32 bottom);
     void setHeaderDot (std::optional<juce::uint32> dotColour);
     void setHeaderRightInset (int px);
+
+    /** Another body fill (the layout editor's darker canvas pane) and
+        another colour for the header's right text ("selected" in blue). */
+    void setFill (juce::uint32 fillColour);
+    void setHeaderRightColour (juce::uint32 colourToken);
     bool hasHeader() const noexcept { return headerHeight > 0; }
 
     /** Space for header actions: the header minus its padding and label. */
@@ -47,6 +52,7 @@ private:
     int headerHeight = 0, rightInset = 0;
     float rightTextW = 0.0f;
     juce::uint32 headerTop = theme::colour::paneHeaderTop, headerBot = theme::colour::paneHeaderBot;
+    juce::uint32 bodyFill = theme::colour::pane, rightColour = theme::colour::textMuted;
     std::optional<juce::uint32> headerDot;
     juce::Path headerShape;
     juce::ColourGradient headerFill;

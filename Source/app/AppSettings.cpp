@@ -16,6 +16,7 @@ namespace keys
     static constexpr auto lastShow    = "lastShowFolder";
     static constexpr auto midiMap     = "midiBindings";
     static constexpr auto midiOut     = "midiOutput";
+    static constexpr auto layoutInspector = "layoutEditorInspector";
 }
 
 AppSettings::AppSettings() : AppSettings (juce::File()) {}
@@ -70,6 +71,16 @@ float AppSettings::getMasterGainDecibels() const
 void AppSettings::setMasterGainDecibels (float dB)
 {
     file().setValue (keys::masterGain, (double) dB);
+}
+
+bool AppSettings::getLayoutInspectorShown() const
+{
+    return file().getBoolValue (keys::layoutInspector, true);
+}
+
+void AppSettings::setLayoutInspectorShown (bool shown)
+{
+    file().setValue (keys::layoutInspector, shown);
 }
 
 juce::File AppSettings::getLastFile (const juce::String& blockTypeId) const

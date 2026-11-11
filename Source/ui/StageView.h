@@ -10,6 +10,7 @@
 #include "ui/TunerDisplay.h"
 #include "ui/kit/Lcd.h"
 #include "ui/kit/NoticeBar.h"
+#include "ui/kit/Pane.h"
 #include "ui/kit/SegmentedControl.h"
 #include "ui/kit/Toolbar.h"
 
@@ -60,6 +61,15 @@ public:
     /** The main window shows the edit view again. */
     std::function<void()> onLeave;
 
+    /** The layout editor's widget inspector (SCREENS.md §6): the Inspector
+        toggle (key I). The main window remembers it per computer. */
+    void setLayoutInspectorShown (bool);
+    bool isLayoutInspectorShown() const noexcept { return inspectorShown; }
+    std::function<void (bool shown)> onLayoutInspectorChanged;
+
+    /** Layout editor: selects a widget by its position in the layout (-1: none). */
+    void selectLayoutWidget (int index);
+
     void paint (juce::Graphics&) override;
     void resized() override;
 
@@ -68,6 +78,9 @@ private:
     class Editor;
     class MiniMeters;
     class Caption;
+    class WidgetPanel;
+    class Artboard;
+    class LayoutInspector;
 
     void rebuildWidgets();
     void layoutWidgets();
@@ -79,6 +92,13 @@ private:
     int stripHeight (const kit::NoticeBar&) const;
     juce::Rectangle<int> cellBounds (const StageWidget&) const;
     float getContentScale() const noexcept { return contentScale; }
+    float getChromeScale() const noexcept;
+    int getGap() const noexcept;
+    juce::Component& widgetParent();
+    void layoutEditor (juce::Rectangle<int> body);
+    void addWidgetAtFreeCell (StageWidgetType);
+    juce::Point<int> nextFreeCell() const;
+    void selectionChanged();
 
     void beginUnlockPress();
     void endUnlockPress();
@@ -106,17 +126,25 @@ private:
     kit::Toolbar toolbar;
     kit::SegmentedControl modeSwitch;
     std::unique_ptr<Caption> layoutName, hint;
+    std::unique_ptr<juce::Component> separator;
     kit::Lcd lcd { true };
     std::unique_ptr<MiniMeters> miniMeters;
     juce::TextButton lockButton, tunerButton { "Tuner" }, muteButton { "Mute" };
-    juce::TextButton layoutsButton, addWidgetButton { "+ Widget" }, doneButton { "Done" };
+    juce::TextButton layoutsButton, addWidgetButton { "+ Widget" }, doneButton { "Done" }, inspectorButton { "Inspector" };
+
+    // Layout editor (§6): widget list, the artboard with the stage preview, the widget inspector.
+    kit::Pane widgetPane, canvasPane, inspectorPane;
+    std::unique_ptr<WidgetPanel> widgetPanel;
+    std::unique_ptr<Artboard> artboard;
+    std::unique_ptr<LayoutInspector> layoutInspector;
+    bool inspectorShown = true;
 
     // Strips under the toolbar (§3.2)
     kit::NoticeBar lostBar { kit::NoticeBar::Kind::lost }, noticeBar { kit::NoticeBar::Kind::stageNotice },
                    mutedBar { kit::NoticeBar::Kind::muted };
 
     // Footer (§3.4): drawn by paint(), placed by refreshFooter().
-    juce::String footerDevice, footerFootswitch, footerHelp;
+    juce::String footerDevice, footerFootswitch, footerHelp, stageHelp;
     bool footerAlert = false;
     juce::Rectangle<float> footerDeviceBox, footerFootswitchBox, footerHelpBox;
 

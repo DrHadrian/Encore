@@ -33,7 +33,7 @@ namespace paint
                 juce::uint32 shadow = 0x99000000);
 
     /** A pane (fill, border, radius, 1 px top highlight). */
-    void pane (juce::Graphics&, juce::Rectangle<float> r);
+    void pane (juce::Graphics&, juce::Rectangle<float> r, juce::uint32 fill = colour::pane);
 
     /** A pane header strip (gradient + line under it). `r` is the strip. */
     void paneHeader (juce::Graphics&, juce::Rectangle<float> r, float topRadius);

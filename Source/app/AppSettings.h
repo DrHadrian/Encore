@@ -36,6 +36,10 @@ public:
     float getMasterGainDecibels() const;
     void setMasterGainDecibels (float dB);
 
+    /** The layout editor's widget inspector (Inspector toggle, key I). */
+    bool getLayoutInspectorShown() const;
+    void setLayoutInspectorShown (bool shown);
+
     /** Last file loaded into a block type (e.g. the amp), reloaded at start-up
         until shows and patches (milestone 4) remember this properly. */
     juce::File getLastFile (const juce::String& blockTypeId) const;

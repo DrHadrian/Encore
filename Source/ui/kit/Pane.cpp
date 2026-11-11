@@ -106,10 +106,28 @@ juce::Rectangle<int> Pane::getContentBounds() const
     return getLocalBounds().reduced (1).withTrimmedTop (headerHeight > 0 ? headerHeight + 1 : 0);
 }
 
+void Pane::setFill (juce::uint32 fillColour)
+{
+    if (bodyFill != fillColour)
+    {
+        bodyFill = fillColour;
+        repaint();
+    }
+}
+
+void Pane::setHeaderRightColour (juce::uint32 colourToken)
+{
+    if (rightColour != colourToken)
+    {
+        rightColour = colourToken;
+        repaint();
+    }
+}
+
 void Pane::paint (juce::Graphics& g)
 {
     const auto bounds = getLocalBounds().toFloat();
-    paint::pane (g, bounds);
+    paint::pane (g, bounds, bodyFill);
 
     if (headerHeight > 0)
     {
@@ -136,7 +154,7 @@ void Pane::paint (juce::Graphics& g)
         if (rightText.isNotEmpty())
         {
             paint::text (g, rightText, text.removeFromRight (juce::jmin (rightTextW, text.getWidth() * 0.6f)),
-                         type::paneHeaderNote, colour::textMuted, juce::Justification::centredRight);
+                         type::paneHeaderNote, rightColour, juce::Justification::centredRight);
             text.removeFromRight ((float) size::rowGap);
         }
 

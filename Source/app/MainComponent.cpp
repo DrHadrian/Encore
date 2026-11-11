@@ -328,6 +328,8 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     stageView = std::make_unique<StageView> (engine, *session);
     stageView->setOpaque (true);
     stageView->onLeave = [this] { setStageVisible (false); };
+    stageView->setLayoutInspectorShown (settings.getLayoutInspectorShown());
+    stageView->onLayoutInspectorChanged = [this] (bool shown) { settings.setLayoutInspectorShown (shown); };
     addChildComponent (*stageView);
 
     recoverAfterUncleanExit();
@@ -1114,6 +1116,13 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
     if (key == juce::KeyPress ('t') || key == juce::KeyPress ('T'))
     {
         engine.setTunerOpen (! engine.isTunerOpen());
+        return true;
+    }
+
+    // I: the layout editor's widget inspector.
+    if ((key == juce::KeyPress ('i') || key == juce::KeyPress ('I')) && isShowingStage() && stageView->isEditingLayout())
+    {
+        stageView->setLayoutInspectorShown (! stageView->isLayoutInspectorShown());
         return true;
     }
 

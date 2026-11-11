@@ -270,6 +270,43 @@ inline juce::File makeStageShow (const juce::File& parent)
     return folder;
 }
 
+/** The layout editor board's layout: the Stage board's with a wider stomp
+    board and level meters. */
+inline std::vector<StageWidget> layoutEditorWidgets()
+{
+    auto widgets = boardStageWidgets();
+
+    for (auto& w : widgets)
+    {
+        if (w.type == StageWidgetType::stomps)  w.width = 10;
+        if (w.type == StageWidgetType::pedals)  w.x = 10;
+        if (w.type == StageWidgetType::meters)  { w.x = 12; w.width = 4; }
+    }
+
+    return widgets;
+}
+
+/** The layout editor board's show: a new show's two cues, "Clean" and
+    "Clean 2", the first with a capo note. */
+inline juce::File makeLayoutShow (const juce::File& parent)
+{
+    auto show = makeDefaultShow ("My Show");
+    show.showTemplate = ShowTemplate::band;
+    addStageStomps (show.patches[0]);
+    show.patches[0].name = "Clean";
+    auto clean2 = duplicatePatch (show.patches[0], "Clean 2");
+
+    auto first = RunItem::makeCue ("1", "Clean", show.patches[0].id);
+    first.note = juce::String (juce::CharPointer_UTF8 ("Capo 2 \xc2\xb7 start on clean arpeggio"));
+    first.barMark = "bar 1 / A";
+    show.runningOrder.children = { first, RunItem::makeCue ("2", "Clean 2", clean2.id) };
+    show.patches.push_back (std::move (clean2));
+
+    const auto folder = parent.getChildFile ("Layout Show");
+    ShowFolder::create (folder, show);
+    return folder;
+}
+
 /** The full-list board's show (a musical): two acts, scenes, bar marks,
     notes, a cut cue, a cue with its own patch, program changes and MIDI out. */
 inline juce::File makeMusicalShow (const juce::File& parent)

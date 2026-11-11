@@ -52,9 +52,9 @@ namespace
 
     /** A widget's rectangle in the grid: cells (W + gap) / 24 wide, the gap
         between neighbours (SCREENS.md §3.3). */
-    juce::Rectangle<int> gridCell (juce::Rectangle<int> grid, const StageWidget& w)
+    juce::Rectangle<int> gridCell (juce::Rectangle<int> grid, const StageWidget& w, int gapPx)
     {
-        const auto gap = (float) size::gap;
+        const auto gap = (float) gapPx;
         const auto cw = ((float) grid.getWidth() + gap) / (float) stageGridColumns;
         const auto ch = ((float) grid.getHeight() + gap) / (float) stageGridRows;
         const auto left = juce::roundToInt ((float) grid.getX() + (float) w.x * cw);
@@ -65,6 +65,22 @@ namespace
     }
 
     float lineOf (const juce::Font& f)          { return f.getAscent() + f.getDescent(); }
+
+    /** A new widget of a type at a cell, at its usual size (as the add menu always made them). */
+    StageWidget newWidget (StageWidgetType type, juce::Point<int> cell)
+    {
+        StageWidget w;
+        w.type = type;
+        w.x = cell.x;
+        w.y = cell.y;
+        w.width = type == StageWidgetType::setList ? 8 : (type == StageWidgetType::tuner ? 10 : 6);
+        w.height = type == StageWidgetType::setList ? 8 : (type == StageWidgetType::tuner ? 5 : 3);
+
+        if (type == StageWidgetType::text)
+            w.text = "Text";
+
+        return w;
+    }
 
     /** The baseline of a line of text in a box of `lineHeight` starting at
         `top` (as CSS places it). */
@@ -617,7 +633,7 @@ private:
     //==========================================================================
     float scale() const noexcept     { return owner.getContentScale(); }
     float rowScale() const noexcept  { return owner.getContentScale() * spec.textScale; }
-    float chromeScale() const noexcept { return juce::jmax (1.0f, owner.getContentScale()); }
+    float chromeScale() const noexcept { return owner.getChromeScale(); }
     float listTop() const noexcept   { return 1.0f + (float) size::stageListTop * scale(); }
     float listBottom() const noexcept { return 1.0f + (float) size::stageListBottom * scale(); }
     float tagBottom() const noexcept { return tagBox.getBottom(); }
@@ -1200,41 +1216,64 @@ private:
 };
 
 //==============================================================================
-/** Edit layout mode: sits over the widgets, draws the grid, and moves and
-    resizes them in whole cells. Changes are saved when the mouse is let go. */
+/** Edit layout mode: sits over the widgets on the artboard and moves and
+    resizes them in whole cells (snapping to the grid). Changes are saved when
+    the mouse is let go. The selected widget gets the accent border, a halo,
+    a blue name tag and handles on its right edge, bottom edge and corner. */
 class StageView::Editor final : public juce::Component
 {
 public:
-    Editor() { noFocus (*this); }
+    explicit Editor (int gapPx) : gap (gapPx) { noFocus (*this); }
+
+    void setGap (int gapPx)
+    {
+        gap = gapPx;
+        repaint();
+    }
 
     void paint (juce::Graphics& g) override
     {
-        g.setColour (paint::c (colour::gridLine));
-
-        for (int c = 1; c < stageGridColumns; ++c)
-            g.fillRect (juce::Rectangle<float> ((float) c * cellWidth() - (float) size::gap * 0.5f, 0.0f, 1.0f, (float) getHeight()));
-
-        for (int r = 1; r < stageGridRows; ++r)
-            g.fillRect (juce::Rectangle<float> (0.0f, (float) r * cellHeight() - (float) size::gap * 0.5f, (float) getWidth(), 1.0f));
-
-        for (int i = 0; i < (int) widgets.size(); ++i)
-        {
-            auto r = bounds (widgets[(size_t) i]).toFloat();
-            const auto isSelected = i == selected;
-
-            g.setColour (paint::c (isSelected ? colour::accent : colour::textDisabled));
-            g.drawRoundedRectangle (r.reduced (isSelected ? 1.0f : 0.5f), (float) size::widgetRadius, isSelected ? 2.0f : 1.0f);
-
-            if (isSelected)
-            {
-                g.setColour (paint::c (colour::accent));
-                g.fillRect (r.removeFromRight ((float) handleSize).removeFromBottom ((float) handleSize));
-            }
-        }
-
         if (widgets.empty())
+        {
             paint::text (g, "Empty layout: \"+ Widget\" or double-click to add one", getLocalBounds().toFloat(),
                          type::subToolbarTitle, colour::textMuted, juce::Justification::centred);
+            return;
+        }
+
+        if (! juce::isPositiveAndBelow (selected, (int) widgets.size()))
+            return;
+
+        const auto r = bounds (widgets[(size_t) selected]).toFloat();
+        const auto halo = (float) size::selectionHalo, border = (float) size::selectionBorder;
+        const auto radius = (float) size::widgetRadius;
+
+        g.setColour (paint::c (colour::selectionHalo));
+        g.drawRoundedRectangle (r.expanded (halo * 0.5f), radius + halo * 0.5f, halo);
+        g.setColour (paint::c (colour::accent));
+        g.drawRoundedRectangle (r.reduced (border * 0.5f), radius, border);
+
+        // The name tag turns blue.
+        const auto f = font (type::widgetTagPreview);
+        const auto name = describe (widgets[(size_t) selected].type);
+        const auto inset = border + (float) size::widgetTagInset * tagScale();
+        const juce::Rectangle<float> tag (r.getX() + inset, r.getY() + inset,
+                                          juce::jmin (r.getWidth() - 2.0f * inset, textWidth (f, name) + 2.0f * (float) size::widgetTagPadX * tagScale()),
+                                          lineOf (f) + 2.0f);
+        g.setColour (paint::c (colour::primaryBot));
+        g.fillRoundedRectangle (tag, (float) size::widgetTagRadius);
+        paint::text (g, name, tag.reduced ((float) size::widgetTagPadX * tagScale(), 0.0f), type::widgetTagPreview, colour::textStrong);
+
+        // Handles: right edge, bottom edge, corner.
+        const auto h = (float) size::handle;
+        for (auto centre : { juce::Point<float> (r.getRight(), r.getCentreY()), juce::Point<float> (r.getCentreX(), r.getBottom()),
+                             r.getBottomRight() })
+        {
+            const auto box = juce::Rectangle<float> (h, h).withCentre (centre);
+            g.setColour (paint::c (colour::textStrong));
+            g.fillRoundedRectangle (box, (float) size::handleRadius);
+            g.setColour (paint::c (colour::handleBorder));
+            g.drawRoundedRectangle (box.reduced (0.5f), (float) size::handleRadius, 1.0f);
+        }
     }
 
     void setWidgets (std::vector<StageWidget> w)
@@ -1242,28 +1281,83 @@ public:
         widgets = std::move (w);
 
         if (selected >= (int) widgets.size())
-            selected = -1;
+            select (-1);
 
         repaint();
     }
 
+    int getSelected() const noexcept { return juce::isPositiveAndBelow (selected, (int) widgets.size()) ? selected : -1; }
+    const std::vector<StageWidget>& getWidgets() const noexcept { return widgets; }
+
+    void select (int index)
+    {
+        if (index != selected)
+        {
+            selected = index;
+            repaint();
+
+            if (onSelectionChanged != nullptr)
+                onSelectionChanged();
+        }
+    }
+
     std::function<void (const std::vector<StageWidget>&)> onPreview, onCommit;
     std::function<void (juce::Point<int> cell)> onAddAt;
+    std::function<void()> onSelectionChanged;
+
+    /** Changes the selected widget (the inspector and the right-click menu). */
+    void changeSelected (std::function<void (std::vector<StageWidget>&, size_t index)> edit)
+    {
+        if (const auto index = getSelected(); index >= 0)
+        {
+            auto copy = widgets;
+            edit (copy, (size_t) index);
+            onCommit (copy);
+        }
+    }
+
+    void duplicateSelected()
+    {
+        changeSelected ([] (auto& w, size_t i)
+        {
+            auto copy = w[i];
+            copy.x += 1;
+            copy.y += 1;
+            w.push_back (clampToGrid (copy));
+        });
+    }
+
+    void bringSelectedToFront()
+    {
+        changeSelected ([this] (auto& w, size_t i)
+        {
+            auto item = w[i];
+            w.erase (w.begin() + (std::ptrdiff_t) i);
+            w.push_back (item);
+            selected = (int) w.size() - 1;   // it stays selected
+        });
+    }
+
+    void removeSelected()
+    {
+        changeSelected ([] (auto& w, size_t i) { w.erase (w.begin() + (std::ptrdiff_t) i); });
+        select (-1);
+    }
+
+    void setSelectedTextScale (float value)
+    {
+        changeSelected ([value] (auto& w, size_t i) { w[i].textScale = value; });
+    }
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        selected = widgetAt (e.getPosition());
+        select (widgetAt (e.getPosition()));
         mode = Mode::none;
 
         if (selected >= 0)
         {
             original = widgets[(size_t) selected];
-            const auto r = bounds (original);
-            const auto nearRight = e.x > r.getRight() - handleSize, nearBottom = e.y > r.getBottom() - handleSize;
-            mode = nearRight && nearBottom ? Mode::resizeBoth
-                 : nearRight               ? Mode::resizeWidth
-                 : nearBottom              ? Mode::resizeHeight
-                                           : Mode::move;
+            mode = modeAt (bounds (original), e.getPosition());
 
             if (e.mods.isPopupMenu())
             {
@@ -1271,8 +1365,6 @@ public:
                 showWidgetMenu();
             }
         }
-
-        repaint();
     }
 
     void mouseMove (const juce::MouseEvent& e) override
@@ -1282,12 +1374,11 @@ public:
 
         if (i >= 0)
         {
-            const auto r = bounds (widgets[(size_t) i]);
-            const auto nearRight = e.x > r.getRight() - handleSize, nearBottom = e.y > r.getBottom() - handleSize;
-            newCursor = nearRight && nearBottom ? juce::MouseCursor::BottomRightCornerResizeCursor
-                   : nearRight               ? juce::MouseCursor::LeftRightResizeCursor
-                   : nearBottom              ? juce::MouseCursor::UpDownResizeCursor
-                                             : juce::MouseCursor::DraggingHandCursor;
+            const auto m = modeAt (bounds (widgets[(size_t) i]), e.getPosition());
+            newCursor = m == Mode::resizeBoth   ? juce::MouseCursor::BottomRightCornerResizeCursor
+                      : m == Mode::resizeWidth  ? juce::MouseCursor::LeftRightResizeCursor
+                      : m == Mode::resizeHeight ? juce::MouseCursor::UpDownResizeCursor
+                                                : juce::MouseCursor::DraggingHandCursor;
         }
 
         setMouseCursor (newCursor);
@@ -1338,77 +1429,11 @@ public:
                        juce::jlimit (0, stageGridRows - 1, (int) ((float) e.y / cellHeight())) });
     }
 
-    int selected = -1;
-
-private:
-    enum class Mode { none, move, resizeWidth, resizeHeight, resizeBoth };
-
-    // A cell is (size + gap) / cells: the gap sits between widgets.
-    float cellWidth() const  { return ((float) getWidth() + (float) size::gap) / (float) stageGridColumns; }
-    float cellHeight() const { return ((float) getHeight() + (float) size::gap) / (float) stageGridRows; }
-
-    juce::Rectangle<int> bounds (const StageWidget& w) const { return gridCell (getLocalBounds(), w); }
-
-    int widgetAt (juce::Point<int> p) const
-    {
-        for (int i = (int) widgets.size(); --i >= 0;)   // topmost first
-            if (bounds (widgets[(size_t) i]).contains (p))
-                return i;
-
-        return -1;
-    }
-
-    void showWidgetMenu()
-    {
-        const auto index = selected;
-        juce::Component::SafePointer<Editor> safe (this);
-
-        auto change = [safe, index] (std::function<void (std::vector<StageWidget>&)> edit)
-        {
-            if (safe == nullptr || ! juce::isPositiveAndBelow (index, (int) safe->widgets.size()))
-                return;
-
-            auto copy = safe->widgets;
-            edit (copy);
-            safe->onCommit (copy);
-        };
-
-        juce::PopupMenu sizes;
-        const std::pair<const char*, float> textSizes[] = { { "Small", 0.7f }, { "Normal", 1.0f }, { "Large", 1.4f },
-                                                            { "Huge", 2.0f }, { "Biggest", 3.0f } };
-
-        for (auto& [name, value] : textSizes)
-            sizes.addItem (name, true, std::abs (widgets[(size_t) index].textScale - value) < 0.01f,
-                           [change, index, value = value] { change ([index, value] (auto& w) { w[(size_t) index].textScale = value; }); });
-
-        juce::PopupMenu menu;
-        menu.addSectionHeader (describe (widgets[(size_t) index].type));
-        menu.addSubMenu ("Text size", sizes);
-
-        if (widgets[(size_t) index].type == StageWidgetType::text)
-            menu.addItem ("Edit text...", [safe, index] { if (safe != nullptr) safe->editText (index); });
-
-        menu.addItem ("Duplicate", [change, index] { change ([index] (auto& w)
-        {
-            auto copy = w[(size_t) index];
-            copy.x += 1;
-            copy.y += 1;
-            w.push_back (clampToGrid (copy));
-        }); });
-        menu.addItem ("Bring to front", [change, index] { change ([index] (auto& w)
-        {
-            auto item = w[(size_t) index];
-            w.erase (w.begin() + index);
-            w.push_back (item);
-        }); });
-        menu.addSeparator();
-        menu.addItem ("Remove", [change, index] { change ([index] (auto& w) { w.erase (w.begin() + index); }); });
-
-        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
-    }
-
     void editText (int index)
     {
+        if (! juce::isPositiveAndBelow (index, (int) widgets.size()))
+            return;
+
         auto* window = new juce::AlertWindow ("Text", "What this widget says (several lines are fine).",
                                               juce::MessageBoxIconType::NoIcon, this);
         window->addTextEditor ("text", widgets[(size_t) index].text);
@@ -1427,9 +1452,328 @@ private:
         }), true);
     }
 
+    /** The text sizes of the menu and the inspector. */
+    static const std::vector<std::pair<juce::String, float>>& textSizes()
+    {
+        static const std::vector<std::pair<juce::String, float>> sizes { { "Small", 0.7f }, { "Normal", 1.0f }, { "Large", 1.4f },
+                                                                        { "Huge", 2.0f }, { "Biggest", 3.0f } };
+        return sizes;
+    }
+
+private:
+    enum class Mode { none, move, resizeWidth, resizeHeight, resizeBoth };
+
+    static Mode modeAt (juce::Rectangle<int> r, juce::Point<int> p)
+    {
+        const auto nearRight = p.x > r.getRight() - size::handleGrab, nearBottom = p.y > r.getBottom() - size::handleGrab;
+        return nearRight && nearBottom ? Mode::resizeBoth
+             : nearRight               ? Mode::resizeWidth
+             : nearBottom              ? Mode::resizeHeight
+                                       : Mode::move;
+    }
+
+    float tagScale() const noexcept { return type::widgetTagPreview.px / type::widgetTag.px; }
+
+    // A cell is (size + gap) / cells: the gap sits between widgets.
+    float cellWidth() const  { return ((float) getWidth() + (float) gap) / (float) stageGridColumns; }
+    float cellHeight() const { return ((float) getHeight() + (float) gap) / (float) stageGridRows; }
+
+    juce::Rectangle<int> bounds (const StageWidget& w) const { return gridCell (getLocalBounds(), w, gap); }
+
+    int widgetAt (juce::Point<int> p) const
+    {
+        for (int i = (int) widgets.size(); --i >= 0;)   // topmost first
+            if (bounds (widgets[(size_t) i]).contains (p))
+                return i;
+
+        return -1;
+    }
+
+    void showWidgetMenu()
+    {
+        const auto index = selected;
+        juce::Component::SafePointer<Editor> safe (this);
+
+        juce::PopupMenu sizes;
+
+        for (auto& [name, value] : textSizes())
+            sizes.addItem (name, true, std::abs (widgets[(size_t) index].textScale - value) < 0.01f,
+                           [safe, value = value] { if (safe != nullptr) safe->setSelectedTextScale (value); });
+
+        juce::PopupMenu menu;
+        menu.addSectionHeader (describe (widgets[(size_t) index].type));
+        menu.addSubMenu ("Text size", sizes);
+
+        if (widgets[(size_t) index].type == StageWidgetType::text)
+            menu.addItem ("Edit text...", [safe, index] { if (safe != nullptr) safe->editText (index); });
+
+        menu.addItem ("Duplicate", [safe] { if (safe != nullptr) safe->duplicateSelected(); });
+        menu.addItem ("Bring to front", [safe] { if (safe != nullptr) safe->bringSelectedToFront(); });
+        menu.addSeparator();
+        menu.addItem ("Remove", [safe] { if (safe != nullptr) safe->removeSelected(); });
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
+    }
+
+    int gap;
     std::vector<StageWidget> widgets;
     StageWidget original;
     Mode mode = Mode::none;
+    int selected = -1;
+};
+
+//==============================================================================
+/** The stage preview: the window's shape at the preview scale, faint cell
+    lines; the widgets and the editor sit on it. */
+class StageView::Artboard final : public juce::Component
+{
+public:
+    Artboard() { noFocus (*this); }
+
+    juce::Rectangle<int> getGrid() const { return getLocalBounds().reduced (1 + size::artboardInset); }
+
+    void setGap (int gapPx) { gap = gapPx; repaint(); }
+
+    void paint (juce::Graphics& g) override
+    {
+        g.fillAll (paint::c (colour::artboard));
+        g.setColour (paint::c (colour::artboardBorder));
+        g.drawRect (getLocalBounds());
+
+        // Cell lines in the middle of the gaps.
+        const auto grid = getGrid().toFloat();
+        const auto cw = (grid.getWidth() + (float) gap) / (float) stageGridColumns;
+        const auto ch = (grid.getHeight() + (float) gap) / (float) stageGridRows;
+        g.setColour (paint::c (colour::gridLine));
+
+        for (int c = 1; c < stageGridColumns; ++c)
+            g.fillRect (juce::Rectangle<float> (std::round (grid.getX() + (float) c * cw - (float) gap * 0.5f), grid.getY(), 1.0f, grid.getHeight()));
+
+        for (int r = 1; r < stageGridRows; ++r)
+            g.fillRect (juce::Rectangle<float> (grid.getX(), std::round (grid.getY() + (float) r * ch - (float) gap * 0.5f), grid.getWidth(), 1.0f));
+    }
+
+private:
+    int gap = size::gap;
+};
+
+//==============================================================================
+/** "+ Widget": every widget type in four groups; a click adds one at the
+    next free cell (SCREENS.md §6). */
+class StageView::WidgetPanel final : public juce::Component
+{
+public:
+    WidgetPanel()
+    {
+        noFocus (*this);
+        using T = StageWidgetType;
+        const std::pair<const char*, std::vector<std::pair<T, const char*>>> groups[] = {
+            { "Show",    { { T::currentCue, "CC" }, { T::nextCue, "NC" }, { T::patchName, "P" }, { T::cueNote, "N" },
+                           { T::setList, "SL" }, { T::text, "TX" } } },
+            { "Play",    { { T::nextButton, ">" }, { T::previousButton, "<" }, { T::stomps, "SW" }, { T::pedals, "EX" } } },
+            { "Monitor", { { T::meters, "LM" }, { T::health, "SH" }, { T::clock, "CL" }, { T::tuner, "TU" } } },
+            { "Safety",  { { T::panicButton, "!" }, { T::lockButton, "LK" } } },
+        };
+
+        for (auto& [group, types] : groups)
+        {
+            rows.push_back ({ true, T::text, paint::caps (type::widgetGroup, group), {} });
+
+            for (auto& [t, chip] : types)
+                rows.push_back ({ false, t, describe (t), chip });
+        }
+    }
+
+    std::function<void (StageWidgetType)> onAdd;
+
+    void paint (juce::Graphics& g) override
+    {
+        for (int i = 0; i < (int) rows.size(); ++i)
+        {
+            const auto& row = rows[(size_t) i];
+            const auto r = rowBounds (i).toFloat();
+
+            if (row.group)
+            {
+                paint::text (g, row.name, r.withTrimmedLeft ((float) (size::widgetGroupX - size::widgetListPadX)), type::widgetGroup,
+                             colour::textDisabled);
+                continue;
+            }
+
+            if (i == hovered)
+            {
+                g.setColour (paint::c (colour::rowHover));
+                g.fillRoundedRectangle (r, (float) size::rowRadius);
+            }
+
+            const auto chip = juce::Rectangle<float> ((float) (size::widgetChipX - size::widgetListPadX), 0.0f,
+                                                      (float) size::widgetChipW, (float) size::widgetChipH)
+                                  .withCentre ({ (float) (size::widgetChipX - size::widgetListPadX) + (float) size::widgetChipW * 0.5f, r.getCentreY() });
+            g.setColour (paint::c (colour::iconChipFill));
+            g.fillRoundedRectangle (chip, (float) size::widgetChipRadius);
+            g.setColour (paint::c (colour::iconChipBorder));
+            g.drawRoundedRectangle (chip.reduced (0.5f), (float) size::widgetChipRadius, 1.0f);
+
+            if (row.chip == ">" || row.chip == "<")   // ▸ ◂ are drawn, not typed
+                drawIcon (g, row.chip == ">" ? Icon::triangleRight : Icon::triangleLeft,
+                          chip.withSizeKeepingCentre (type::widgetChip.px, type::widgetChip.px), paint::c (colour::iconChipText));
+            else
+                paint::text (g, row.chip, chip, type::widgetChip, colour::iconChipText, juce::Justification::centred);
+
+            paint::text (g, row.name, r.withTrimmedLeft ((float) (size::widgetNameX - size::widgetListPadX)), type::body, colour::textRow);
+        }
+    }
+
+    void mouseMove (const juce::MouseEvent& e) override  { setHovered (rowAt (e.y)); }
+    void mouseExit (const juce::MouseEvent&) override    { setHovered (-1); }
+
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        const auto i = rowAt (e.y);
+
+        if (i >= 0 && onAdd != nullptr && getLocalBounds().contains (e.getPosition()))
+            onAdd (rows[(size_t) i].type);
+    }
+
+private:
+    struct Row { bool group; StageWidgetType type; juce::String name, chip; };
+
+    juce::Rectangle<int> rowBounds (int index) const
+    {
+        auto y = size::widgetListTop;
+
+        for (int i = 0; i < index; ++i)
+            y += rows[(size_t) i].group ? size::widgetGroupH : size::widgetRowH;
+
+        return { 0, y, getWidth(), rows[(size_t) index].group ? size::widgetGroupH : size::widgetRowH };
+    }
+
+    int rowAt (int y) const
+    {
+        for (int i = 0; i < (int) rows.size(); ++i)
+            if (! rows[(size_t) i].group && rowBounds (i).contains (0, y))
+                return i;
+
+        return -1;
+    }
+
+    void setHovered (int i)
+    {
+        if (i != hovered)
+        {
+            hovered = i;
+            setMouseCursor (i >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+            repaint();
+        }
+    }
+
+    std::vector<Row> rows;
+    int hovered = -1;
+};
+
+//==============================================================================
+/** The selected widget's options (SCREENS.md §6): the same as its
+    right-click menu, plus two notes at the bottom. */
+class StageView::LayoutInspector final : public juce::Component
+{
+public:
+    explicit LayoutInspector (std::function<Editor*()> e) : editorOf (std::move (e))
+    {
+        juce::StringArray names;
+
+        for (auto& [name, value] : Editor::textSizes())
+            names.add (name);
+
+        sizes.setSegments (names);
+        sizes.setTitle ("Text size");
+        sizes.onClick = [this] (int index)
+        {
+            if (auto* editor = editorOf(); editor != nullptr && juce::isPositiveAndBelow (index, (int) Editor::textSizes().size()))
+                editor->setSelectedTextScale (Editor::textSizes()[(size_t) index].second);
+        };
+
+        editTextButton.onClick = [this] { if (auto* editor = editorOf()) editor->editText (editor->getSelected()); };
+        duplicateButton.onClick = [this] { if (auto* editor = editorOf()) editor->duplicateSelected(); };
+        frontButton.onClick = [this] { if (auto* editor = editorOf()) editor->bringSelectedToFront(); };
+        setVariant (removeButton, Variant::danger);
+        removeButton.onClick = [this] { if (auto* editor = editorOf()) editor->removeSelected(); };
+
+        for (auto* c : std::initializer_list<juce::Component*> { &sizes, &editTextButton, &duplicateButton, &frontButton, &removeButton })
+        {
+            noFocus (*c);
+            addAndMakeVisible (c);
+        }
+
+        for (int i = 0; i < sizes.getNumSegments(); ++i)
+            noFocus (*sizes.getSegmentButton (i));
+
+        notes = { "Widgets snap to the 24 " + juce::String (juce::CharPointer_UTF8 ("\xc3\x97")) + " 16 grid and scale with the window, "
+                  "so one layout works on a laptop and on a big monitor.",
+                  "Same options as the right-click menu. Shows while a widget is selected; hide it with Inspector (I) in the top bar." };
+    }
+
+    void refresh (const StageWidget& w)
+    {
+        int index = -1;
+
+        for (int i = 0; i < (int) Editor::textSizes().size(); ++i)
+            if (std::abs (Editor::textSizes()[(size_t) i].second - w.textScale) < 0.01f)
+                index = i;
+
+        sizes.setSelected (index);
+        const auto isText = w.type == StageWidgetType::text;
+        editTextButton.setButtonText (isText ? "Edit text..." : "Edit text... (Text widget only)");
+        editTextButton.setEnabled (isText);
+    }
+
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (size::layoutInspectorPad);
+        const auto buttonH = size::buttonHeight + size::buttonDrop;
+        labelBox = r.removeFromTop (juce::roundToInt (lineOf (font (type::label)))).toFloat();
+        r.removeFromTop (size::layoutLabelGap);
+        sizes.setBounds (r.removeFromTop (size::buttonHeight + 2));
+        r.removeFromTop (size::layoutButtonGap);
+        editTextButton.setBounds (r.removeFromTop (buttonH));
+        r.removeFromTop (size::layoutButtonGap - size::buttonDrop);
+        auto row = r.removeFromTop (buttonH);
+        duplicateButton.setBounds (row.removeFromLeft ((row.getWidth() - size::layoutHalfGap) / 2));
+        row.removeFromLeft (size::layoutHalfGap);
+        frontButton.setBounds (row);
+        r.removeFromTop (size::layoutButtonGap - size::buttonDrop);
+        removeButton.setBounds (r.removeFromTop (buttonH));
+
+        notesBox = getLocalBounds().removeFromBottom (size::layoutNotesH).toFloat();
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        paint::text (g, "Text size", labelBox, type::label, colour::textTertiary);
+
+        // The notes, under a line, at the bottom.
+        g.setColour (paint::c (colour::paneHeaderLine));
+        paint::hline (g, notesBox.getX(), notesBox.getY(), notesBox.getWidth());
+        auto r = notesBox.reduced ((float) size::layoutInspectorPad);
+        const auto noteH = (r.getHeight() - (float) size::layoutNoteGap) / (float) notes.size();
+        g.setColour (paint::c (colour::textTertiary));
+        g.setFont (font (type::layoutNote));
+
+        for (auto& note : notes)
+        {
+            const auto box = r.removeFromTop (noteH);
+            g.drawFittedText (note, box.toNearestInt(), juce::Justification::topLeft,
+                              juce::jmax (1, (int) (box.getHeight() / lineOf (font (type::layoutNote)))), 1.0f);
+            r.removeFromTop ((float) size::layoutNoteGap);
+        }
+    }
+
+private:
+    std::function<Editor*()> editorOf;
+    kit::SegmentedControl sizes;
+    juce::TextButton editTextButton { "Edit text..." }, duplicateButton { "Duplicate" }, frontButton { "Bring to front" },
+                     removeButton { "Remove" };
+    juce::StringArray notes;
+    juce::Rectangle<float> labelBox, notesBox;
 };
 
 //==============================================================================
@@ -1441,8 +1785,15 @@ StageView::StageView (AudioEngine& e, ShowSession& s) : engine (e), session (s)
     // Toolbar
     addAndMakeVisible (toolbar);
     layoutName = std::make_unique<Caption> (type::layoutName);
-    hint = std::make_unique<Caption> (type::layoutName);
+    hint = std::make_unique<Caption> (type::layoutHint);
     miniMeters = std::make_unique<MiniMeters>();
+
+    struct Separator final : juce::Component
+    {
+        void paint (juce::Graphics& g) override { g.fillAll (paint::c (colour::buttonBorder)); }
+    };
+
+    separator = std::make_unique<Separator>();
 
     modeSwitch.setSegments ({ "Stage", "Edit", "Layout" });
     modeSwitch.setTooltips ({ {}, "Back to editing patches and the set list", "Move, resize, add and remove what this screen shows" });
@@ -1483,16 +1834,21 @@ StageView::StageView (AudioEngine& e, ShowSession& s) : engine (e), session (s)
     setVariant (muteButton, Variant::muted);
     muteButton.onClick = [this] { engine.setMuted (! engine.isMuted()); };
 
+    // Layout editor toolbar (§6)
     layoutsButton.onClick = [this] { showLayoutMenu(); };
     setButtonIcon (layoutsButton, Icon::chevronDown, (float) size::fieldChevron, true);
-    addWidgetButton.onClick = [this] { showAddWidgetMenu(); };
+    setVariant (addWidgetButton, Variant::primary);
+    addWidgetButton.onClick = [this] { addWidgetCell = nextFreeCell(); showAddWidgetMenu(); };
     setVariant (doneButton, Variant::primary);
     doneButton.onClick = [this] { setEditingLayout (false); };
+    setButtonIcon (inspectorButton, Icon::sidebarRight, (float) size::inspectorToggleIcon, false);
+    inspectorButton.setTooltip ("Show or hide the widget inspector (I)");
+    inspectorButton.onClick = [this] { setLayoutInspectorShown (! inspectorShown); };
     hint->setText ("Drag to move, drag the edges to resize, right-click for options, double-click empty space to add");
 
     for (auto* c : std::initializer_list<juce::Component*> { &modeSwitch, layoutName.get(), &lcd, miniMeters.get(), &lockButton,
                                                              &tunerButton, &muteButton, &layoutsButton, &addWidgetButton,
-                                                             &doneButton, hint.get() })
+                                                             &doneButton, &inspectorButton, hint.get(), separator.get() })
     {
         noFocus (*c);
         toolbar.addAndMakeVisible (c);
@@ -1511,7 +1867,25 @@ StageView::StageView (AudioEngine& e, ShowSession& s) : engine (e), session (s)
         addChildComponent (bar);
     }
 
-    footerHelp = "Lock: Ctrl+L" + middot() + "hold the lock 1 s to unlock" + middot() + "F11 full screen";
+    stageHelp = "Lock: Ctrl+L" + middot() + "hold the lock 1 s to unlock" + middot() + "F11 full screen";
+
+    // Layout editor panes (shown while editing)
+    widgetPane.setHeader ("+ Widget", "click to add");
+    canvasPane.setFill (colour::canvasPane);
+    inspectorPane.setHeaderRightColour (colour::accent);
+    widgetPanel = std::make_unique<WidgetPanel>();
+    widgetPanel->onAdd = [this] (StageWidgetType type) { addWidgetAtFreeCell (type); };
+    widgetPane.addAndMakeVisible (*widgetPanel);
+    artboard = std::make_unique<Artboard>();
+    canvasPane.addAndMakeVisible (*artboard);
+    layoutInspector = std::make_unique<LayoutInspector> ([this] { return editor.get(); });
+    inspectorPane.addAndMakeVisible (*layoutInspector);
+
+    for (auto* pane : { &widgetPane, &canvasPane, &inspectorPane })
+    {
+        noFocus (*pane);
+        addChildComponent (pane);
+    }
 
     noFocus (tunerOverlay);
     tunerOverlay.onClick = [this] { if (! locked) engine.setTunerOpen (false); };
@@ -1548,6 +1922,9 @@ int StageView::stripHeight (const kit::NoticeBar& bar) const
 
 juce::Rectangle<int> StageView::getGridArea() const
 {
+    if (editing)
+        return artboard->getGrid();   // in the artboard's coordinates
+
     auto area = getLocalBounds();
     area.removeFromTop (size::toolbarStage + 1);
 
@@ -1561,7 +1938,23 @@ juce::Rectangle<int> StageView::getGridArea() const
 
 juce::Rectangle<int> StageView::cellBounds (const StageWidget& w) const
 {
-    return gridCell (getGridArea(), w);
+    return gridCell (getGridArea(), w, getGap());
+}
+
+float StageView::getChromeScale() const noexcept
+{
+    // Name tags: 8.5 px on the artboard, else as the board (bigger on big screens).
+    return editing ? type::widgetTagPreview.px / type::widgetTag.px : juce::jmax (1.0f, contentScale);
+}
+
+int StageView::getGap() const noexcept
+{
+    return editing ? juce::jmax (1, (int) ((float) size::gap * contentScale)) : size::gap;
+}
+
+juce::Component& StageView::widgetParent()
+{
+    return editing ? static_cast<juce::Component&> (*artboard) : static_cast<juce::Component&> (*this);
 }
 
 void StageView::rebuildWidgets()
@@ -1572,7 +1965,7 @@ void StageView::rebuildWidgets()
     {
         auto* widget = widgets.add (new Widget (*this, spec));
         widget->setInterceptsMouseClicks (! editing, ! editing);
-        addAndMakeVisible (widget);
+        widgetParent().addAndMakeVisible (widget);
     }
 
     if (editor != nullptr)
@@ -1584,7 +1977,71 @@ void StageView::rebuildWidgets()
     tunerOverlay.toFront (false);
     layoutWidgets();
     refreshToolbar();
+    selectionChanged();
     update (last);
+}
+
+juce::Point<int> StageView::nextFreeCell() const
+{
+    // The first cell, row by row, that no widget covers.
+    for (int y = 0; y < stageGridRows; ++y)
+        for (int x = 0; x < stageGridColumns; ++x)
+            if (std::none_of (current.widgets.begin(), current.widgets.end(), [x, y] (const StageWidget& w)
+                              { return x >= w.x && x < w.x + w.width && y >= w.y && y < w.y + w.height; }))
+                return { x, y };
+
+    return {};
+}
+
+void StageView::addWidgetAtFreeCell (StageWidgetType type)
+{
+    auto list = current.widgets;
+    list.push_back (clampToGrid (newWidget (type, nextFreeCell())));
+
+    if (editor != nullptr)
+        editor->select ((int) list.size() - 1);   // the new one is selected
+
+    commitWidgets (list);
+}
+
+void StageView::selectionChanged()
+{
+    if (! editing || editor == nullptr)
+        return;
+
+    const auto index = editor->getSelected();
+    const auto* w = index >= 0 ? &editor->getWidgets()[(size_t) index] : nullptr;
+
+    if (w != nullptr)
+    {
+        inspectorPane.setHeader ("Widget" + middot() + describe (w->type), "selected");
+        layoutInspector->refresh (*w);
+    }
+
+    if (inspectorPane.isVisible() != (w != nullptr && inspectorShown))
+        resized();
+
+    refreshFooter (last);
+}
+
+void StageView::selectLayoutWidget (int index)
+{
+    if (editor != nullptr)
+        editor->select (juce::isPositiveAndBelow (index, (int) current.widgets.size()) ? index : -1);
+}
+
+void StageView::setLayoutInspectorShown (bool shouldShow)
+{
+    if (inspectorShown == shouldShow)
+        return;
+
+    inspectorShown = shouldShow;
+    inspectorButton.setToggleState (inspectorShown, juce::dontSendNotification);
+
+    if (onLayoutInspectorChanged != nullptr)
+        onLayoutInspectorChanged (inspectorShown);
+
+    resized();
 }
 
 void StageView::layoutWidgets()
@@ -1680,7 +2137,7 @@ void StageView::refreshStrips (const StageSnapshot& snapshot)
     show (lostBar, lost);
     noticeBar.setText (snapshot.notice);
     show (noticeBar, snapshot.notice.isNotEmpty());
-    show (mutedBar, engine.isMuted());
+    show (mutedBar, engine.isMuted() && ! editing);   // the layout editor has no Mute; Stage shows it again
 
     if (changed)
         resized();
@@ -1730,17 +2187,30 @@ void StageView::refreshToolbar()
 
 void StageView::refreshFooter (const StageSnapshot& snapshot)
 {
-    const auto alert = snapshot.audioProblem.isNotEmpty();
+    // Stage: device line, footswitch ... keys (§3.4). Layout editor: the
+    // widget count, the selection ... "Changes save with the show" (§6).
+    auto alert = snapshot.audioProblem.isNotEmpty();
+    juce::String left = snapshot.deviceLine, middle = snapshot.footswitch, right = stageHelp;
 
-    if (snapshot.deviceLine == footerDevice && snapshot.footswitch == footerFootswitch && alert == footerAlert
-        && ! footerHelpBox.isEmpty())
+    if (editing)
+    {
+        const auto count = (int) current.widgets.size();
+        const auto selected = editor != nullptr ? editor->getSelected() : -1;
+        left = juce::String (count) + (count == 1 ? " widget" : " widgets") + middot() + juce::String (stageGridColumns) + " "
+               + juce::String (juce::CharPointer_UTF8 ("\xc3\x97")) + " " + juce::String (stageGridRows) + " grid";
+        middle = selected >= 0 ? "Selected: " + describe (editor->getWidgets()[(size_t) selected].type) : juce::String();
+        right = "Changes save with the show";
+        alert = false;
+    }
+
+    if (left == footerDevice && middle == footerFootswitch && right == footerHelp && alert == footerAlert && ! footerHelpBox.isEmpty())
         return;
 
-    footerDevice = snapshot.deviceLine;
-    footerFootswitch = snapshot.footswitch;
+    footerDevice = left;
+    footerFootswitch = middle;
+    footerHelp = right;
     footerAlert = alert;
 
-    // device line, 16, footswitch ... help, right-aligned (§3.4)
     auto row = getLocalBounds().removeFromBottom (size::stageFooter).toFloat().reduced ((float) size::stageFooterPadX, 0.0f);
     const auto helpW = juce::jmin (row.getWidth() * 0.5f, textWidth (font (type::stageFooter), footerHelp) + 1.0f);
     footerHelpBox = row.removeFromRight (helpW);
@@ -1792,11 +2262,12 @@ void StageView::setEditingLayout (bool shouldEdit)
         return;
 
     editing = shouldEdit;
+    widgets.clear();   // they move between the stage and the artboard
 
     if (editing)
     {
         editingLayoutId = session.getLayoutForCue (session.getCurrentCue()).id;
-        editor = std::make_unique<Editor>();
+        editor = std::make_unique<Editor> (getGap());
         editor->onPreview = [this] (const std::vector<StageWidget>& preview)
         {
             for (int i = 0; i < widgets.size() && i < (int) preview.size(); ++i)
@@ -1815,7 +2286,8 @@ void StageView::setEditingLayout (bool shouldEdit)
             });
         };
         editor->onAddAt = [this] (juce::Point<int> cell) { addWidgetCell = cell; showAddWidgetMenu(); };
-        addAndMakeVisible (*editor);
+        editor->onSelectionChanged = [this] { selectionChanged(); };
+        artboard->addAndMakeVisible (*editor);
     }
     else
     {
@@ -1824,16 +2296,21 @@ void StageView::setEditingLayout (bool shouldEdit)
     }
 
     modeSwitch.setSelected (editing ? 2 : 0);
+    inspectorButton.setToggleState (inspectorShown, juce::dontSendNotification);
 
-    for (auto* c : std::initializer_list<juce::Component*> { &layoutsButton, &addWidgetButton, &doneButton, hint.get() })
+    for (auto* c : std::initializer_list<juce::Component*> { &layoutsButton, &addWidgetButton, &doneButton, &inspectorButton,
+                                                             hint.get(), separator.get(), &widgetPane, &canvasPane })
         c->setVisible (editing);
 
-    for (auto* c : std::initializer_list<juce::Component*> { &lcd, miniMeters.get() })
+    for (auto* c : std::initializer_list<juce::Component*> { &lcd, miniMeters.get(), &tunerButton, &muteButton, layoutName.get() })
         c->setVisible (! editing);
 
+    if (! editing)
+        inspectorPane.setVisible (false);
+
     current = shownLayout();
-    rebuildWidgets();
     resized();
+    rebuildWidgets();
 }
 
 //==============================================================================
@@ -1928,7 +2405,13 @@ void StageView::showLayoutMenu()
             safe->commitWidgets (makeDefaultStageLayout().widgets);
     });
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&layoutsButton));
+    // The button stays pressed while its menu is open.
+    layoutsButton.setToggleState (true, juce::dontSendNotification);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&layoutsButton), [safe] (int)
+    {
+        if (safe != nullptr)
+            safe->layoutsButton.setToggleState (false, juce::dontSendNotification);
+    });
 }
 
 void StageView::showAddWidgetMenu()
@@ -1945,18 +2428,12 @@ void StageView::showAddWidgetMenu()
             if (safe == nullptr)
                 return;
 
-            StageWidget w;
-            w.type = type;
-            w.x = cell.x;
-            w.y = cell.y;
-            w.width = type == StageWidgetType::setList ? 8 : (type == StageWidgetType::tuner ? 10 : 6);
-            w.height = type == StageWidgetType::setList ? 8 : (type == StageWidgetType::tuner ? 5 : 3);
-
-            if (type == StageWidgetType::text)
-                w.text = "Text";
-
             auto list = safe->current.widgets;
-            list.push_back (clampToGrid (w));
+            list.push_back (clampToGrid (newWidget (type, cell)));
+
+            if (safe->editor != nullptr)
+                safe->editor->select ((int) list.size() - 1);
+
             safe->commitWidgets (list);
         });
     }
@@ -1985,11 +2462,43 @@ void StageView::paint (juce::Graphics& g)
 void StageView::layoutToolbar()
 {
     const auto bar = toolbar.getLocalBounds();
+
+    if (editing)
+    {
+        // The layout editor's toolbar (44, as Edit's): logo, mode switch | Layout: ▾, + Widget, hint ... Inspector, Done.
+        const auto h = size::toolbarEdit;
+        const auto buttonH = size::buttonHeight + size::buttonDrop, buttonY = (h - size::buttonHeight) / 2;
+        auto left = bar.getX() + size::toolbarPadX;
+        toolbar.setLogoBounds ({ left + size::logoMargin, (h - size::logoH) / 2, size::logoW, size::logoH });
+        left += size::logoMargin + size::logoW + size::logoMargin + size::layoutToolbarGap;
+
+        const auto modeH = size::toolbarButtonH + 2;
+        modeSwitch.setBounds (left, (h - modeH) / 2, size::modeSegmentW * 3 + 2, modeH);
+        left = modeSwitch.getRight() + size::layoutSeparatorGap;
+        separator->setBounds (left, (h - size::separatorH) / 2, 1, size::separatorH);
+        left = separator->getRight() + size::layoutSeparatorGap;
+
+        layoutsButton.setButtonText ("Layout: " + current.name);
+        layoutsButton.setBounds (left, buttonY, juce::jmax (size::layoutsButtonW, layoutsButton.getBestWidthForHeight (buttonH)), buttonH);
+        left = layoutsButton.getRight() + size::layoutToolbarGap;
+        addWidgetButton.setBounds (left, buttonY, addWidgetButton.getBestWidthForHeight (buttonH), buttonH);
+        left = addWidgetButton.getRight() + size::layoutHintGap;
+
+        auto right = bar.getRight() - size::toolbarPadX;
+        doneButton.setBounds (right - size::layoutDoneW, buttonY, size::layoutDoneW, buttonH);
+        right = doneButton.getX() - size::layoutToolbarGap;
+        const auto inspectorW = inspectorButton.getBestWidthForHeight (buttonH);
+        inspectorButton.setBounds (right - inspectorW, buttonY, inspectorW, buttonH);
+        right = inspectorButton.getX() - size::layoutToolbarGap;
+
+        hint->setBounds (left, 0, juce::jmax (0, right - left), h);
+        lockButton.setVisible (false);
+        return;
+    }
+
     const auto h = size::toolbarStage;
     const auto buttonH = size::stageToolbarButtonH + size::buttonDrop;
     const auto buttonY = (h - size::stageToolbarButtonH) / 2;
-    const auto smallH = size::buttonHeight + size::buttonDrop;
-    const auto smallY = (h - size::buttonHeight) / 2;
     const auto gap = size::stageToolbarGap;
 
     auto left = bar.getX() + size::stageToolbarPadX;
@@ -2018,7 +2527,7 @@ void StageView::layoutToolbar()
     fromRight (muteButton, juce::jmax (size::stageMuteMinW, padded (muteButton)), buttonH, buttonY);
     fromRight (tunerButton, padded (tunerButton), buttonH, buttonY);
 
-    const auto lockShown = ! editing && (locked || ! layoutHas (StageWidgetType::lockButton));
+    const auto lockShown = locked || ! layoutHas (StageWidgetType::lockButton);
     lockButton.setVisible (lockShown);
 
     if (lockShown)
@@ -2027,20 +2536,6 @@ void StageView::layoutToolbar()
         const auto lockedW = juce::roundToInt (textWidth (font (type::button), "LOCKED: unlocking 100 %")) + 2 * size::stageButtonPadX
                              + juce::roundToInt ((float) size::iconSize + 1.0f) + size::stageTriangleGap + 2;
         fromRight (lockButton, locked ? lockedW : size::stageToolbarButtonH, buttonH, buttonY);
-    }
-
-    if (editing)
-    {
-        layoutName->setVisible (false);   // the layouts button names it
-        fromRight (doneButton, juce::jmax (size::dialogButtonW, doneButton.getBestWidthForHeight (smallH)), smallH, smallY);
-        layoutsButton.setButtonText ("Layout: " + current.name);
-        const auto layoutsW = juce::jmin (layoutsButton.getBestWidthForHeight (smallH), juce::jmax (0, right - left));
-        layoutsButton.setBounds (left, smallY, layoutsW, smallH);
-        left = layoutsButton.getRight() + gap;
-        addWidgetButton.setBounds (left, smallY, addWidgetButton.getBestWidthForHeight (smallH), smallH);
-        left = addWidgetButton.getRight() + gap;
-        hint->setBounds (left, 0, juce::jmax (0, right + gap - left), h);
-        return;
     }
 
     // A narrow window drops the mini meters, then the layout name, then the LCD.
@@ -2059,13 +2554,55 @@ void StageView::layoutToolbar()
     lcd.setBounds (left + (space - lcdW) / 2, (h - (lcdH - 1)) / 2, lcdW, lcdH);
 }
 
+void StageView::layoutEditor (juce::Rectangle<int> body)
+{
+    // + Widget | artboard | widget inspector (only while one is selected and it's switched on).
+    body = body.reduced (size::outerPadding);
+    widgetPane.setBounds (body.removeFromLeft (size::widgetPanelWidth));
+    body.removeFromLeft (size::gap);
+
+    const auto showInspector = inspectorShown && editor != nullptr && editor->getSelected() >= 0;
+    inspectorPane.setVisible (showInspector);
+
+    if (showInspector)
+    {
+        inspectorPane.setBounds (body.removeFromRight (size::layoutInspectorWidth));
+        body.removeFromRight (size::gap);
+        layoutInspector->setBounds (inspectorPane.getContentBounds());
+    }
+
+    canvasPane.setBounds (body);
+    widgetPanel->setBounds (widgetPane.getContentBounds().reduced (size::widgetListPadX - 1, 0));
+
+    // The artboard: the stage window's shape at the scale that fits.
+    const auto content = canvasPane.getContentBounds();
+    const auto margin = (float) size::artboardMargin;
+    contentScale = juce::jmax (0.05f, juce::jmin (((float) content.getWidth() - 2.0f * margin) / (float) juce::jmax (1, getWidth()),
+                                                  ((float) content.getHeight() - 2.0f * margin) / (float) juce::jmax (1, getHeight())));
+    const auto board = juce::Rectangle<int> (juce::roundToInt ((float) getWidth() * contentScale), juce::roundToInt ((float) getHeight() * contentScale))
+                           .withCentre (content.getCentre());
+    artboard->setBounds (board);
+    artboard->setGap (getGap());
+
+    canvasPane.setHeader ("Stage layout" + middot() + juce::String (juce::roundToInt (contentScale * 100.0f)) + "%",
+                          "Drag to move" + middot() + "drag edges to resize" + middot() + "right-click for options" + middot()
+                              + "double-click empty space to add");
+
+    if (editor != nullptr)
+    {
+        editor->setGap (getGap());
+        editor->setBounds (artboard->getGrid());
+        editor->toFront (false);
+    }
+}
+
 void StageView::resized()
 {
     contentScale = juce::jmax (0.1f, juce::jmin ((float) getWidth() / (float) size::referenceWidth,
                                                  (float) getHeight() / (float) size::referenceHeight));
 
     auto area = getLocalBounds();
-    toolbar.setBounds (area.removeFromTop (size::toolbarStage + 1));
+    toolbar.setBounds (area.removeFromTop ((editing ? size::toolbarEdit : size::toolbarStage) + 1));
     layoutToolbar();
 
     for (auto* bar : { &lostBar, &noticeBar, &mutedBar })
@@ -2074,8 +2611,8 @@ void StageView::resized()
 
     area.removeFromBottom (size::stageFooter + 1);
 
-    if (editor != nullptr)
-        editor->setBounds (getGridArea());
+    if (editing)
+        layoutEditor (area);
 
     tunerOverlay.setBounds (area);
     layoutWidgets();
