@@ -7,21 +7,23 @@
 
 #include "ui/AudioSettingsView.h"
 #include "ui/MidiSettings.h"
+#include "ui/PluginSettings.h"
 #include "ui/kit/DialogFrame.h"
 
 namespace encore
 {
 
-/** Settings — Audio | MIDI (SCREENS.md §7): one dialog over the main window
-    with two tabs. Changes apply immediately (as the two separate windows
+/** Settings — Audio | MIDI | Plugins (SCREENS.md §7): one dialog over the
+    main window with a tab each. Changes apply immediately (as the two separate windows
     did), so Done and Cancel both just close it; so do Escape and ✕. */
 class SettingsWindow final
 {
 public:
-    enum class Tab { audio, midi };
+    enum class Tab { audio, midi, plugins };
 
     SettingsWindow (juce::AudioDeviceManager&, const system::TuningReport&, std::function<void()> resetCounters,
-                    MidiRouter&, AppSettings&, ShowSession&, std::function<void()> applyBindings, std::function<void()> applyOutput,
+                    MidiRouter&, AppSettings&, ShowSession&, PluginCatalog&,
+                    std::function<void()> applyBindings, std::function<void()> applyOutput,
                     std::function<void()> close);
     ~SettingsWindow();
 
@@ -40,6 +42,7 @@ private:
     kit::DialogFrame frame;
     AudioSettingsView audio;
     MidiSettings midi;
+    PluginSettings plugins;
     std::unique_ptr<Body> body;
     std::unique_ptr<kit::DialogOverlay> overlay;
     Tab tab = Tab::audio;

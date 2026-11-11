@@ -21,7 +21,9 @@ MIDI; gapless patch switching with tails; NAM amps, cab IRs, gate, EQ, delay.
 The Logic-style look (design v3): a native JUCE UI drawn from design tokens,
 with an Edit view (running order, signal chain, block stage, inspector),
 the full cue list, a Stage view and its layout editor, one settings window
-(Audio | MIDI) and the pre-show check (see [docs/design](docs/design)).
+(Audio | MIDI | Plugins) and the pre-show check (see [docs/design](docs/design)).
+Milestone 10 adds VST3 plugins as blocks, each new plugin tried in a separate
+process first, with a crash guard while playing.
 
 | Milestone | What you can test |
 | --- | --- |
@@ -35,7 +37,7 @@ the full cue list, a Stage view and its layout editor, one settings window
 | **7 – Performance view and tuner** ✅ | Stage view with layout editor, tuner, lock, panic |
 | **8 – Theatre cue lists** | Acts/scenes/cues, insert, renumber, cut, go to |
 | **9 – Robustness** ✅ | Crash recovery, reconnect, pre-show check, soak test |
-| 10 – VST3 hosting | Plugins with crash guard |
+| **10 – VST3 hosting** | Plugins as blocks, scanned out of process, crash guard |
 | 11 – Routing | FOH/IEM buses, per-cue input/output |
 | 12 – Plugin sandbox | Risky plugins in their own process |
 
@@ -86,6 +88,16 @@ cmake --build --preset debug --target EncoreTests
 ctest --preset debug
 ```
 
+The tests run as four processes side by side (robustness and its soak,
+plugins, screens, everything else). `ENCORE_TEST_ONLY=<name>|<name>` runs
+just those, `ENCORE_TEST_SKIP` all but those.
+
+Build speed: Encore's own sources compile against a precompiled JUCE header
+(`ENCORE_PCH`, on by default; parsing JUCE is ~95 % of compiling a typical
+file). CI uses a compiler cache instead, skips link-time optimisation on pull
+requests (`ENCORE_LTO=OFF`) and runs the 4-hour soak every night instead of
+on every change.
+
 ## Live performance settings (Windows)
 
 At start-up Encore opts out of Windows power throttling, raises its priority,
@@ -127,6 +139,40 @@ show* switches it; nothing else changes.
    from it.
 7. **Stage view**: the current cue/song shows its act/scene/set, and the set
    list widget shows the headings.
+
+## Testing milestone 10 with your guitar
+
+Have one or two VST3 effects installed (any free amp sim, delay or reverb;
+Common Files\VST3 is where they go).
+
+1. **Find them**: the first start scans by itself. Otherwise Settings →
+   **Plugins** (or Add block → *Plugin* → *Find plugins...*) → **Scan**. Each
+   new plugin is loaded and played briefly in a separate copy of Encore; the
+   list shows name, maker and version. **+ Add folder...** for plugins kept
+   elsewhere. Known plugins aren't scanned again unless they changed.
+2. **Add one**: in the signal chain, **+** (or right-click → insert) →
+   *Plugin* → maker → plugin. It plays at once. The block stage shows its
+   first knobs; **Open plugin window...** (block stage header or inspector)
+   opens its own controls. Turn something there: the knob in Encore follows.
+3. **Like any block**: give it a stomp switch, put a knob on an expression
+   pedal (right-click the knob), switch patches with it ringing out. Save,
+   close, reopen: its settings are back (they're saved in the show).
+4. **Edits keep it**: add or move another block while its window is open:
+   the plugin reloads with its settings and the window comes back.
+5. **A missing plugin**: open the show on a computer without it (or remove
+   the plugin and reopen). The block passes the guitar through, the
+   inspector says why, the pre-show check lists it, and saving keeps it.
+6. **Blocked plugins**: a plugin that crashes or hangs while being scanned is
+   listed under *Blocked* with the reason; Encore keeps running. **Try
+   again** after updating it.
+7. **Crash guard** (hard to test without a broken plugin): a plugin that
+   crashes while playing, sends broken audio or is far too slow is switched
+   off at once, with a notice; the dry guitar continues. *Turn back on* in
+   the inspector (a crashed one: *Load again*). If Encore itself ever goes
+   down inside a plugin, that block starts switched off next time.
+
+Encore is still mono until routing (milestone 11): stereo plugins get the
+guitar on both inputs and their output is mixed to mono.
 
 ## Testing milestone 9 with your guitar
 
@@ -380,20 +426,22 @@ Source/
   Main.cpp            app start-up, main window
   app/                the main window, per-machine settings (%APPDATA%\Encore)
   model/              the show on disk: data model, JSON format, show folders
-  session/            the open show: building patches into chains, editing, autosave, pre-show check, crash recovery
+  session/            the open show: building patches into chains, editing, autosave, pre-show check, crash recovery,
+                      the plugin catalog (scanning in a separate process)
   engine/             everything that runs on or talks to the audio thread
     core/             Block, Chain, PatchPlayer (switching), Parameter, handovers, lock-free queues
-    blocks/           the built-in blocks (amp, cab, gate, EQ, delay)
+    blocks/           the built-in blocks (amp, cab, gate, EQ, delay) and the plugin block (VST3)
     dsp/              allocation-free DSP (filters, limiter, sample-rate conversion)
     nam/              loading and running Neural Amp Modeler captures
     midi/             foot controller and pedal input, MIDI out
   ui/                 the screens: edit view pieces, full cue list, stage view and layout editor,
-                      settings window (audio, MIDI), pre-show check, tuner display
+                      settings window (audio, MIDI, plugins), plugin windows, pre-show check, tuner display
     theme/            design v3 tokens (EncoreTheme.h), fonts, icons, the LookAndFeel
     kit/              shared components: panes, toolbar, LCD, meters, dialogs, gear placeholders
   platform/           Windows-specific tuning
 Resources/ui/         bundled Inter font, icons, the wordmark
-Tests/                engine and UI tests (run in CI); UI snapshots with ENCORE_UI_SNAPSHOTS=<folder>
+Tests/                engine and UI tests (run in CI); UI snapshots with ENCORE_UI_SNAPSHOTS=<folder>;
+                      a test VST3 plugin (Tests/plugin) for the hosting tests
 docs/design/          design v3: design system, screens, reference boards and targets
 docs/DECISIONS.md     short log of important design decisions
 ```

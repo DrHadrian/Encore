@@ -5,6 +5,7 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <atomic>
+#include <functional>
 
 namespace encore
 {
@@ -28,6 +29,7 @@ public:
         juce::String unit;                 // "dB", "Hz", "ms"...
         int decimals = 1;
         double rampSeconds = 0.03;
+        std::function<juce::String (float)> textFunction {};   // optional: the value as text (e.g. a plugin's own); message thread
     };
 
     explicit Parameter (Spec specToUse);

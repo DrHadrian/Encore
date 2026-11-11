@@ -31,6 +31,9 @@ public:
     void selectBlock (int index);   // as if clicked
     std::function<void (int)> onSelectionChanged;
 
+    /** "Find plugins..." in the add menu (opens Settings > Plugins). */
+    std::function<void()> onFindPlugins;
+
     /** Call from a UI timer: tile states (on/off, loaded file) can change anywhere. */
     void refresh();
 

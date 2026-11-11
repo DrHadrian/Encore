@@ -1,62 +1,102 @@
 name: Build
 
+# When it runs (decision 0049):
+# - pull requests, pushes to main, by hand: Debug and Release in parallel,
+#   with a compiler cache, the tests as parallel processes and a short soak;
+# - every night (main) and by hand with a length: the long soak, 4 hours of
+#   simulated playing, with the Release app built as players get it (LTO).
 on:
   push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE*']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE*']
+  schedule:
+    - cron: '23 1 * * *'
+  workflow_dispatch:
+    inputs:
+      soak_seconds:
+        description: Seconds of simulated playing for the soak test (14400 = a 4-hour show)
+        default: '120'
 
-# A newer push to the same branch replaces a run still going (saves runner time).
+# A newer run for the same branch or pull request replaces one still going.
 concurrency:
-  group: build-${{ github.ref }}
+  group: build-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  # The long soak at night; short everywhere else (or what was asked for).
+  ENCORE_SOAK_SECONDS: ${{ github.event_name == 'schedule' && '14400' || inputs.soak_seconds || '120' }}
+  # Link-time optimisation only where the app is built for players.
+  ENCORE_LTO: ${{ github.event_name == 'pull_request' && 'OFF' || 'ON' }}
+  SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
 
 jobs:
   windows:
-    name: Windows Release (app + tests)
+    name: Windows ${{ matrix.config }}
     runs-on: windows-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - config: Release
+            targets: Encore EncoreTests
+          - config: Debug
+            targets: EncoreTests
     steps:
       - uses: actions/checkout@v4
 
+      # Ninja + MSVC from the command line, as the CMake presets use.
+      - name: Visual Studio environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # Compiled objects are reused across runs: only what changed compiles.
+      # sccache is the cache that works with MSVC (needs /Z7 debug info, set below).
+      - name: Compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          variant: sccache
+          key: windows-${{ matrix.config }}
+          max-size: 2G
+
+      # JUCE, NeuralAmpModelerCore and Eigen as downloaded (and JUCE's build
+      # helper as built), per configuration and generator.
       - name: Cache downloaded dependencies
         uses: actions/cache@v4
         with:
           path: build/_deps
-          key: deps-release-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          key: deps-ninja-${{ runner.os }}-${{ matrix.config }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: deps-ninja-${{ runner.os }}-${{ matrix.config }}-
 
+      # ENCORE_PCH=OFF: sccache can't reuse files compiled against a precompiled
+      # header, and the cache saves far more. It also proves every file
+      # includes what it uses.
       - name: Configure
-        run: cmake -S . -B build -A x64
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.config }}
+          -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
+          -DENCORE_PCH=OFF -DENCORE_LTO=${{ env.ENCORE_LTO }}
 
-      - name: Build (Release)
-        run: cmake --build build --config Release --parallel
+      - name: Build (${{ matrix.config }})
+        run: cmake --build build --target ${{ matrix.targets }}
 
-      - name: Run engine tests (with a 10-minute soak)
-        run: ctest --test-dir build -C Release --output-on-failure
-        env:
-          ENCORE_SOAK_SECONDS: 600
+      - name: Compiler cache statistics
+        run: sccache --show-stats
+
+      # Four test processes at once (robustness, plugins, screens, the rest).
+      - name: Run the tests (soak ${{ env.ENCORE_SOAK_SECONDS }} s)
+        run: ctest --test-dir build --output-on-failure --parallel 4 --timeout 7200
 
       - name: Upload Encore.exe
+        if: matrix.config == 'Release'
         uses: actions/upload-artifact@v4
         with:
           name: Encore-windows-x64
           path: build/Encore_artefacts/Release/Encore.exe
           if-no-files-found: error
-
-  windows-debug-tests:
-    name: Windows Debug (tests)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Cache downloaded dependencies
-        uses: actions/cache@v4
-        with:
-          path: build/_deps
-          key: deps-debug-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
-
-      - name: Configure
-        run: cmake -S . -B build -A x64
-
-      - name: Build tests (Debug)
-        run: cmake --build build --config Debug --target EncoreTests --parallel
-
-      - name: Run engine tests
-        run: ctest --test-dir build -C Debug --output-on-failure

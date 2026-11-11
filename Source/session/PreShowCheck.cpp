@@ -156,6 +156,17 @@ std::vector<PreShowCheckResult> runPreShowChecks (const PreShowFacts& f)
              "These amps/IRs won't sound right: " + lines.joinIntoString ("; "));
     }
 
+    if (! f.pluginProblems.empty())
+    {
+        juce::StringArray lines;
+
+        for (auto& p : f.pluginProblems)
+            lines.add (p);
+
+        add (Status::problem, juce::String ((int) f.pluginProblems.size()) + (f.pluginProblems.size() == 1 ? " plugin" : " plugins") + " not playing",
+             "The signal passes through them dry: " + lines.joinIntoString ("; "), Fix::pluginSettings);
+    }
+
     if (! f.cuesWithoutPatch.empty())
     {
         juce::StringArray lines;

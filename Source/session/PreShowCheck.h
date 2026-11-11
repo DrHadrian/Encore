@@ -41,6 +41,7 @@ struct PreShowFacts
     int numCues = 0;
     std::vector<juce::String> missingFiles;  // "Lead / Amp: models/x.nam"
     std::vector<juce::String> cuesWithoutPatch;
+    std::vector<juce::String> pluginProblems;   // "Lead: Shimmer isn't installed on this computer"
 
     // MIDI
     juce::StringArray midiInputsEnabled, midiInputsConnected;
@@ -51,7 +52,7 @@ struct PreShowFacts
 struct PreShowCheckResult
 {
     enum class Status { ok, warning, problem };
-    enum class Fix { none, audioSettings, midiSettings, save, resetCounters, unmute };
+    enum class Fix { none, audioSettings, midiSettings, pluginSettings, save, resetCounters, unmute };
 
     Status status = Status::ok;
     juce::String title, detail;

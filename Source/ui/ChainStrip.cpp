@@ -7,6 +7,8 @@
 #include "engine/blocks/CabIrBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
+#include "engine/blocks/PluginBlock.h"
+#include "session/PluginCatalog.h"
 #include "ui/theme/Paint.h"
 
 namespace encore
@@ -29,6 +31,7 @@ kit::BlockInfo ChainStrip::describe (const Block& block)
     info.kindLabel = type == NamAmpBlock::typeId    ? juce::String ("Amp")
                    : type == CabIrBlock::typeId     ? juce::String ("Cab")
                    : type == NoiseGateBlock::typeId ? juce::String ("Gate")
+                   : type == PluginBlock::typeId    ? juce::String ("Plugin")
                                                     : block.getName();   // "EQ", "Delay"
     info.name = block.getName();
     info.on = block.isEnabled();
@@ -208,6 +211,38 @@ juce::PopupMenu ChainStrip::blockTypeMenu (int insertAt)
             }
         });
 
+    // Plugins, by maker (Settings > Plugins finds them).
+    menu.addSeparator();
+    juce::PopupMenu plugins;
+    const auto catalog = session.getPluginCatalog();
+    const auto found = catalog != nullptr ? catalog->getPlugins() : juce::Array<juce::PluginDescription>();
+    std::map<juce::String, juce::PopupMenu> byMaker;
+
+    for (const auto& d : found)
+        byMaker[d.manufacturerName.isNotEmpty() ? d.manufacturerName : juce::String ("Other")]
+            .addItem (d.name, [safeThis, ref = PluginCatalog::toRef (d), insertAt]
+            {
+                if (safeThis != nullptr)
+                {
+                    safeThis->selected = insertAt;
+                    safeThis->session.addPluginBlock (ref, insertAt);
+                }
+            });
+
+    for (auto& [maker, items] : byMaker)
+        plugins.addSubMenu (maker, items);
+
+    if (found.isEmpty())
+        plugins.addItem ("No plugins found", false, false, nullptr);
+
+    plugins.addSeparator();
+    plugins.addItem ("Find plugins...", [safeThis]
+    {
+        if (safeThis != nullptr && safeThis->onFindPlugins != nullptr)
+            safeThis->onFindPlugins();
+    });
+
+    menu.addSubMenu ("Plugin", plugins);
     return menu;
 }
 

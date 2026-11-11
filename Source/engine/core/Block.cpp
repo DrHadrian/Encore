@@ -74,6 +74,7 @@ void Block::process (float* const* channels, int numChannels, int numSamples,
     {
         sleeping = true;
         cpuLoad.store (0.0, std::memory_order_relaxed);
+        idleBlock (numSamples);
         return;
     }
 
@@ -81,7 +82,10 @@ void Block::process (float* const* channels, int numChannels, int numSamples,
     // so the fade-in doesn't carry stale filter memory or a ramp from old settings.
     if (sleeping)
     {
-        reset();
+        for (auto& p : parameters)
+            p->snapToTarget();
+
+        wakeBlock();
         sleeping = false;
     }
 

@@ -22,6 +22,7 @@ namespace
         {
             case Fix::audioSettings:  return "Audio settings...";
             case Fix::midiSettings:   return "MIDI settings...";
+            case Fix::pluginSettings: return "Plugin settings...";
             case Fix::save:           return "Save now";
             case Fix::resetCounters:  return "Reset counters";
             case Fix::unmute:         return "Unmute";

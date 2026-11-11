@@ -329,6 +329,9 @@ namespace size
     constexpr int headerDot = 7;
     constexpr int inspectorPadX = 10, inspectorPadTop = 6, inspectorPadBottom = 10, inspectorKeyW = 74, inspectorColGap = 8;
     constexpr int inspectorRowGap = 6, inspectorTextH = 15, inspectorListPadX = 6, inspectorNameW = 60, inspectorChipW = 44;
+    // Plugins can have hundreds of parameters: the block stage shows the first
+    // few as knobs, the inspector lists the first ones; the rest are in the plugin's window.
+    constexpr int pluginPanelKnobs = 8, inspectorPluginParams = 48;
     constexpr int inspectorBarH = 4, assignKeyW = 62, assignArrowW = 12;
     constexpr int listPad = 4, listGap = 1, rowPadX = 8, rowGap = 8, rowNumberW = 18, paneBarW = 3, paneBarH = 16, paneBarRadius = 2;
     constexpr int swatch = 9, swatchRadius = 2, rowRadius = 4, headingPadBottom = 2;
@@ -419,12 +422,15 @@ namespace size
     constexpr int settingsW = 1040, settingsH = 760;
     constexpr int groupTitleH = 18, groupGap = 16, groupRadius = 7, groupPad = 15, settingsColumnGap = 16, settingsPadTop = 18;
     constexpr int audioLeftW = 664, audioRightW = 320, settingsLabelW = 130, settingsLabelGap = 12;
-    constexpr int segmentHeight = 26, driverSegmentW = 130, bufferSegmentW = 68;   // segmented controls in settings (+ 2 px border)
+    constexpr int segmentHeight = 26, bufferSegmentW = 68;   // segmented controls in settings (+ 2 px border)
     constexpr int deviceRowGap = 10, devicePopupW = 340, ratePopupW = 140, latencyBarH = 8, latencyTextGap = 5;
     constexpr int channelColumnX = 325, checkRowH = 22, checkHeadGap = 7, statusBadgeMid = 26, statusRowH = 21;
     constexpr int statusKeyW = 146, statusDividerY = 54, statusRowsY = 65, tuningRowH = 23, tickSize = 9;
     constexpr int midiColumnW = 335, midiRightW = 300, midiPadTop = 16, midiInputRowH = 28, midiInputTop = 13;
     constexpr int mappingHeaderH = 27, mappingRowH = 31, mappingBarH = 37, mappingPadX = 12, actionW = 200;
+    // Settings > Plugins (milestone 10): the plugin list where the MIDI tab has
+    // its mappings (same header, rows and bar), folders and the blocklist on the right.
+    constexpr int pluginsMakerW = 160, pluginsVersionW = 72, pluginsFolderRows = 4, pluginsBlockedRowH = 44, pluginsTryAgainW = 76;
     constexpr int triggerX = 222, learnW = 76, learnH = 22, removeW = 22, removeRight = 18, lastValueW = 117, lastValueH = 21;
     constexpr int helpLineH = 18, helpGap = 10, groupPadTight = 13;   // (help groups: 13 above and below the text)
     constexpr int statusTitleH = 15, statusLineH = 14, statusTextH = 15, latencySplit = 2, tickTextGap = 10, defaultsValueX = 170;
