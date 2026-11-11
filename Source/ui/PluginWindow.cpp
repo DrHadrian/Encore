@@ -19,7 +19,9 @@ PluginWindow::PluginWindow (PluginBlock& b, const juce::String& patchName, std::
 
     if (auto* plugin = block.getInstance())
     {
-        editor.reset (plugin->hasEditor() ? plugin->createEditorAndMakeActive() : nullptr);
+        // Asking hasEditor() first would make the plugin build its window
+        // twice (crashing some plugins): create it once, fall back if none.
+        editor.reset (plugin->createEditorAndMakeActive());
 
         if (editor == nullptr)
             editor = std::make_unique<juce::GenericAudioProcessorEditor> (*plugin);

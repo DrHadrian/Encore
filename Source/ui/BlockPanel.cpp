@@ -556,7 +556,7 @@ void BlockPanel::refresh()
         // Not loaded, or switched off by the crash guard: an amber dot, and
         // the window can't be opened.
         const auto problem = ! plugin->isLoaded() || plugin->getFault() != PluginBlock::Fault::none;
-        loadButton.setEnabled (plugin->getInstance() != nullptr && plugin->getInstance()->hasEditor());
+        loadButton.setEnabled (plugin->getInstance() != nullptr);   // never hasEditor() (see Inspector)
 
         if (problem)
             cpuText.clear();

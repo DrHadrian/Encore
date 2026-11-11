@@ -222,7 +222,10 @@ public:
             const auto action = fault == PluginBlock::Fault::crashed ? juce::String ("Load again")
                               : plugin->canTurnBackOn()               ? juce::String ("Turn back on")
                                                                       : juce::String();
-            const auto canOpen = plugin->getInstance() != nullptr && plugin->getInstance()->hasEditor();
+            // Never hasEditor(): for VST3 it makes the plugin build its window
+            // and throw it away, which crashes some plugins. Opening falls back
+            // to a parameter list if it has none.
+            const auto canOpen = plugin->getInstance() != nullptr;
 
             if (status != pluginStatus || action != pluginAction || canOpen != openWindowButton.isEnabled())
             {

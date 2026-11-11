@@ -9,7 +9,8 @@
         0 normal, 1 outputs NaN, 2 takes far too long, 3 crashes (access violation).
     It reports a fixed latency and keeps some state that isn't a parameter
     (a counter of how often its state was saved), so state round trips are
-    tested too.
+    tested too. With ENCORE_TEST_PLUGIN_EDITORS=<file> it notes each editor
+    it creates there (a host creating editors needlessly crashes some plugins).
 
     Misbehaving while being scanned (in the scanner process):
         ENCORE_TEST_PLUGIN_SCAN=crash   crashes in its constructor
@@ -96,8 +97,17 @@ public:
         buffer.applyGain (gain->get());
     }
 
-    bool hasEditor() const override                    { return true; }
-    juce::AudioProcessorEditor* createEditor() override { return new juce::GenericAudioProcessorEditor (*this); }
+    bool hasEditor() const override { return true; }
+
+    juce::AudioProcessorEditor* createEditor() override
+    {
+        // The tests check a host doesn't create editors needlessly: one line
+        // per editor in the file ENCORE_TEST_PLUGIN_EDITORS names.
+        if (const auto log = juce::SystemStats::getEnvironmentVariable ("ENCORE_TEST_PLUGIN_EDITORS", {}); log.isNotEmpty())
+            juce::File (log).appendText ("editor\n");
+
+        return new juce::GenericAudioProcessorEditor (*this);
+    }
 
     double getTailLengthSeconds() const override { return 0.0; }
     bool acceptsMidi() const override             { return false; }

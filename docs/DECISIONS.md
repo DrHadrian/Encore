@@ -505,6 +505,11 @@ plugin's editor. That window closes before its plugin does and comes back
 when the patch is rebuilt (an edit reloads the patch's plugins); the
 main window doesn't pull keyboard focus away from it (decision 0025 still
 holds otherwise). Encore's own on/off replaces the plugin's bypass parameter.
+Encore never asks a plugin `hasEditor()`: for VST3 that makes the plugin
+build its window and throw it away (JUCE notes it crashes some plugins), and
+the screens refreshing 30 times a second did exactly that until a plugin
+crashed. "Open plugin window..." is on whenever the plugin is loaded; the
+window is created once, and shows a parameter list if the plugin has none.
 
 ## 0049 — Build and test speed: compiler cache, precompiled JUCE, parallel tests, nightly soak
 

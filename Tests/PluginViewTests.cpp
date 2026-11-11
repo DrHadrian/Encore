@@ -9,6 +9,8 @@
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
+#include <cstdlib>
+
 #include "app/AppSettings.h"
 #include "app/MainComponent.h"
 #include "engine/blocks/PluginBlock.h"
@@ -36,6 +38,18 @@ public:
     }
 
     static void pump (int ms) { pumpUntil ([] { return false; }, ms); }
+
+    static void setEnvironment (const char* name, const char* value)
+    {
+       #if JUCE_WINDOWS
+        _putenv_s (name, value);
+       #else
+        if (*value == 0)
+            unsetenv (name);
+        else
+            setenv (name, value, 1);
+       #endif
+    }
 
     template <typename Type>
     static Type* findChild (juce::Component& parent)
@@ -162,6 +176,29 @@ public:
             expect (plugin != nullptr && plugin->isLoaded());
             expect (findChild<BlockPanel> (main) != nullptr && &findChild<BlockPanel> (main)->getBlock() == plugin);
             expect (hasContent (renderSnapshot (main, "edit-plugin")));
+
+            beginTest ("Showing a plugin block never makes the plugin build its window (that crashes some plugins)");
+            {
+                const auto editors = root.getChildFile ("editors.txt");
+                setEnvironment ("ENCORE_TEST_PLUGIN_EDITORS", editors.getFullPathName().toRawUTF8());
+
+                for (int i = 0; i < 30; ++i)
+                {
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+                    findChild<Inspector> (main)->refresh();
+                    findChild<BlockPanel> (main)->refresh();
+                }
+
+                expect (! editors.exists(), "no editor was created: " + editors.loadFileAsString().quoted());
+
+                // Opening its window creates exactly one.
+               #if JUCE_WINDOWS
+                main.openPluginWindow (*plugin);
+                expectEquals (juce::StringArray::fromLines (editors.loadFileAsString().trim()).size(), 1);
+               #endif
+
+                setEnvironment ("ENCORE_TEST_PLUGIN_EDITORS", "");
+            }
 
             beginTest ("The inspector's Stomp switch menu sets the stomp, even with a refresh before its change arrives");
             {
