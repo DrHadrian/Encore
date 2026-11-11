@@ -88,14 +88,11 @@ namespace
             const auto svg = juce::String::fromUTF8 (encorewordmarkui_svg, encorewordmarkui_svgSize);
             drawable = juce::Drawable::createFromSVGString (svg);
 
-            // Place it by its viewBox (the designed 98 x 17 box), not by its ink.
-            if (auto xml = juce::parseXML (svg))
-            {
-                const auto values = juce::StringArray::fromTokens (xml->getStringAttribute ("viewBox"), " ,", {});
-
-                if (values.size() == 4)
-                    box = { values[0].getFloatValue(), values[1].getFloatValue(), values[2].getFloatValue(), values[3].getFloatValue() };
-            }
+            // Place it by its viewBox (the designed 98 x 17 box), not by its
+            // ink: the parsed drawable reports the viewBox in its own
+            // coordinates (JUCE may move the origin), so ask it.
+            if (drawable != nullptr)
+                box = drawable->getContentBounds();
 
             if (box.isEmpty() && drawable != nullptr)
                 box = drawable->getDrawableBounds();

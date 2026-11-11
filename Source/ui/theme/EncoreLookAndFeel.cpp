@@ -3,6 +3,9 @@
 
 #include "ui/theme/EncoreLookAndFeel.h"
 
+#include <optional>
+#include <tuple>
+
 #include "ui/theme/Icons.h"
 #include "ui/theme/Paint.h"
 
@@ -84,6 +87,32 @@ void setVariant (juce::Component& c, Variant v)        { c.getProperties().set (
 Variant getVariant (const juce::Component& c)          { return (Variant) (int) c.getProperties().getWithDefault (variantId, 0); }
 void setSegment (juce::Component& c, Segment s)        { c.getProperties().set (segmentId, (int) s); c.repaint(); }
 Segment getSegment (const juce::Component& c)          { return (Segment) (int) c.getProperties().getWithDefault (segmentId, 0); }
+
+namespace
+{
+    const juce::Identifier iconId { "encoreIcon" }, iconSizeId { "encoreIconSize" }, iconAfterId { "encoreIconAfter" };
+    constexpr int iconGap = 6;
+
+    /** The button's icon, if it has one: icon, size, after the text. */
+    std::optional<std::tuple<Icon, float, bool>> buttonIcon (const juce::Component& c)
+    {
+        const auto& p = c.getProperties();
+
+        if (! p.contains (iconId))
+            return std::nullopt;
+
+        return std::tuple<Icon, float, bool> { (Icon) (int) p[iconId], (float) p[iconSizeId], (bool) p[iconAfterId] };
+    }
+}
+
+void setButtonIcon (juce::Button& b, Icon icon, float iconSize, bool afterText)
+{
+    auto& p = b.getProperties();
+    p.set (iconId, (int) icon);
+    p.set (iconSizeId, iconSize);
+    p.set (iconAfterId, afterText);
+    b.repaint();
+}
 
 std::pair<juce::String, juce::String> EncoreLookAndFeel::splitShortcut (const juce::String& text)
 {
@@ -223,7 +252,12 @@ juce::Font EncoreLookAndFeel::getTextButtonFont (juce::TextButton& button, int b
 
 int EncoreLookAndFeel::getTextButtonWidthToFitText (juce::TextButton& b, int buttonHeight)
 {
-    return juce::roundToInt (textWidth (getTextButtonFont (b, buttonHeight), b.getButtonText())) + size::buttonPadX * 2 + 2;
+    auto w = juce::roundToInt (textWidth (getTextButtonFont (b, buttonHeight), b.getButtonText())) + size::buttonPadX * 2 + 2;
+
+    if (const auto icon = buttonIcon (b))
+        w += juce::roundToInt (std::get<1> (*icon)) + iconGap;
+
+    return w;
 }
 
 void EncoreLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button, const juce::Colour&,
@@ -300,10 +334,27 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
     if (! button.isEnabled())
         colourToUse = colourToUse.withMultipliedAlpha (state::disabledAlpha);
 
-    g.setFont (getTextButtonFont (button, button.getHeight()));
+    const auto f = getTextButtonFont (button, button.getHeight());
+    const auto area = button.getLocalBounds().withTrimmedBottom (getSegment (button) == Segment::none ? 1 : 0).reduced (6, 0);
+    g.setFont (f);
     g.setColour (colourToUse);
-    g.drawFittedText (button.getButtonText(), button.getLocalBounds().withTrimmedBottom (1).reduced (6, 0),
-                      juce::Justification::centred, 2, 0.9f);
+
+    if (const auto icon = buttonIcon (button))
+    {
+        // Text and icon centred together (single line).
+        const auto [which, iconSize, after] = *icon;
+        const auto textW = juce::jmin ((float) area.getWidth() - iconSize - (float) iconGap, textWidth (f, button.getButtonText()) + 1.0f);
+        const auto groupW = textW + (float) iconGap + iconSize;
+        auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (groupW, (float) area.getWidth()), (float) area.getHeight());
+        const auto iconBox = (after ? row.removeFromRight (iconSize) : row.removeFromLeft (iconSize))
+                                 .withSizeKeepingCentre (iconSize, iconSize);
+        drawIcon (g, which, iconBox, colourToUse);
+        g.drawText (button.getButtonText(), after ? row.withTrimmedRight ((float) iconGap) : row.withTrimmedLeft ((float) iconGap),
+                    juce::Justification::centred, true);
+        return;
+    }
+
+    g.drawFittedText (button.getButtonText(), area, juce::Justification::centred, 2, 0.9f);
 }
 
 void EncoreLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& button, bool highlighted, bool down)
@@ -536,6 +587,49 @@ void EncoreLookAndFeel::drawScrollbar (juce::Graphics& g, juce::ScrollBar&, int 
 int EncoreLookAndFeel::getSliderThumbRadius (juce::Slider& s)
 {
     return s.isRotary() ? 0 : 6;
+}
+
+juce::Label* EncoreLookAndFeel::createSliderTextBox (juce::Slider& slider)
+{
+    // The value box is an inset field with the value right-aligned
+    // (the Out volume: "−12.0 dB").
+    auto* label = juce::LookAndFeel_V4::createSliderTextBox (slider);
+    setVariant (*label, Variant::field);
+    label->setFont (font (type::bodySmall));
+    label->setJustificationType (juce::Justification::centredRight);
+    // Right-aligned with 8 px on the right; on the left the text may use the
+    // padding (the board's "−12.0 dB" is wider than 66 − 2 × 8).
+    label->setBorderSize ({ 0, size::fieldPadX / 4, 0, size::fieldPadX });
+    label->setColour (juce::Label::textColourId, c (colour::fieldText));
+    label->setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    label->setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
+    label->setColour (juce::TextEditor::textColourId, c (colour::fieldText));
+    label->setColour (juce::TextEditor::backgroundColourId, c (colour::fieldFill));
+    label->setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
+    label->setColour (juce::TextEditor::focusedOutlineColourId, c (colour::accent));
+    label->setColour (juce::TextEditor::highlightColourId, c (colour::textSelection));
+    return label;
+}
+
+void EncoreLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
+{
+    if (getVariant (label) != Variant::field)
+    {
+        juce::LookAndFeel_V4::drawLabel (g, label);
+        return;
+    }
+
+    paint::inset (g, label.getLocalBounds().toFloat(), colour::fieldFill, colour::fieldBorder, (float) size::fieldRadius, colour::fieldShadow);
+
+    if (! label.isBeingEdited())
+    {
+        const auto alpha = label.isEnabled() ? 1.0f : state::disabledAlpha;
+        g.setColour (label.findColour (juce::Label::textColourId).withMultipliedAlpha (alpha));
+        g.setFont (getLabelFont (label));
+        // Never an ellipsis in a number: squeeze it a little instead.
+        g.drawFittedText (label.getText(), label.getBorderSize().subtractedFrom (label.getLocalBounds()),
+                          label.getJustificationType(), 1, 0.8f);
+    }
 }
 
 void EncoreLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height, float pos, float, float,

@@ -21,6 +21,9 @@ class AppSettings
 public:
     AppSettings();
 
+    /** Settings kept in `folder` instead of the user's app-data folder (tests). */
+    explicit AppSettings (const juce::File& folder);
+
     /** %APPDATA%\Encore: settings, logs, the crash recovery file. */
     juce::File getFolder() const;
 

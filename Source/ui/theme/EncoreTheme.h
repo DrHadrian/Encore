@@ -245,6 +245,7 @@ namespace size
     // Window
     constexpr int referenceWidth    = 1440, referenceHeight = 900;
     constexpr int minEditWidth      = 1180, minEditHeight = 720;   // below this the edit view scrolls
+    constexpr int screenMargin      = 40;    // first window: this much smaller than the screen, at most
 
     // Toolbars and strips
     constexpr int toolbarEdit       = 44;    // Edit and Layout (+ 1 px bottom line = 45)
@@ -265,6 +266,18 @@ namespace size
     constexpr int layoutInspectorWidth = 280; // layout editor widget inspector
     constexpr int bottomRow         = 104;   // Edit: input / meters / health row
 
+    // Edit toolbar (SCREENS.md §4.1): padding 10, gaps 10
+    constexpr int toolbarPadX = 10, toolbarGap = 10, logoMargin = 4, logoW = 98, logoH = 17;
+    constexpr int modeSegmentW = 64, modeSwitchGap = 10;    // the switch sits 10 + 10 after the show name
+    constexpr int outGap = 6, volumeTrackW = 70, valueFieldW = 66, muteButtonW = 74, outMargin = 4;
+    constexpr int buttonDrop = 1;                           // the 1 px drop line under a raised button
+
+    // Edit centre column and bottom row
+    constexpr int centreHeaderH = 28, chainPaneH = 139;
+    constexpr int inputPadX = 10, inputPadY = 8, inputGap = 6, inputLabelH = 14, deviceLineH = 14;
+    constexpr int metersPadX = 12, meterRowH = 14, meterRowGap = 8, meterScaleGap = 7;
+    constexpr int healthPadX = 10, healthPadY = 8, healthGap = 3, healthHeaderH = 18, healthLineH = 14;
+
     // Panes
     constexpr int paneRadius        = 6;
     constexpr int paneHeader        = 24;
@@ -280,6 +293,7 @@ namespace size
     constexpr int stageModeButtonH  = 30;
     constexpr int fieldHeight       = 22;
     constexpr int fieldRadius       = 4;
+    constexpr int fieldPadX         = 8;
     constexpr int iconButton        = 20;
     constexpr int iconSize          = 12;
     constexpr int rowHeight         = 26;    // pane lists
@@ -396,6 +410,7 @@ namespace type
     constexpr Style rowTrailing     { 11.0f, Weight::regular };             // patch name at the end of a row
     constexpr Style saveState       { 10.5f, Weight::regular };             // "Saved 23:28"
     constexpr Style headerLine      { 14.0f, Weight::semibold };            // "Cue 1 of 8: Clean"
+    constexpr Style healthTitle     { 11.5f, Weight::semibold };            // "System health"
     constexpr Style gearKind        {  8.0f, Weight::bold, 0.08f, true };   // AMP on chain tiles
     constexpr Style gearGroup       { 10.0f, Weight::extraBold, 0.16f, true }; // PREAMP / EQ / OUTPUT
     constexpr Style knobLabel       { 10.0f, Weight::extraBold, 0.12f, true }; // INPUT, BASS...

@@ -252,8 +252,6 @@ target_sources(Encore PRIVATE
     Source/ui/BlockPanel.h
     Source/ui/ChainStrip.cpp
     Source/ui/ChainStrip.h
-    Source/ui/LevelMeter.cpp
-    Source/ui/LevelMeter.h
     Source/ui/MidiSettings.cpp
     Source/ui/MidiSettings.h
     Source/ui/CueDialogs.cpp
@@ -327,7 +325,17 @@ if(ENCORE_BUILD_TESTS)
         Tests/KitGallery.h
         Tests/UiSnapshot.h
         Tests/UiSnapshotTests.cpp
+        Tests/EditViewTests.cpp
         # Screens tested off-screen (rendered into images, no window).
+        Source/app/AppSettings.cpp
+        Source/app/EventLog.cpp
+        Source/app/MainComponent.cpp
+        Source/ui/BlockPanel.cpp
+        Source/ui/ChainStrip.cpp
+        Source/ui/MidiSettings.cpp
+        Source/ui/PatchList.cpp
+        Source/ui/PreShowCheckView.cpp
+        Source/ui/SetList.cpp
         Source/ui/CueDialogs.cpp
         Source/ui/CueListEditor.cpp
         Source/ui/StageView.cpp
@@ -354,6 +362,7 @@ if(ENCORE_BUILD_TESTS)
             EncoreUi
             nam_core
             juce::juce_audio_basics
+            juce::juce_audio_utils
             juce::juce_audio_devices
             juce::juce_audio_formats
             juce::juce_dsp

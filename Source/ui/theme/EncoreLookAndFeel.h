@@ -7,6 +7,7 @@
 
 #include "ui/theme/EncoreFonts.h"
 #include "ui/theme/EncoreTheme.h"
+#include "ui/theme/Icons.h"
 
 namespace encore::theme
 {
@@ -30,6 +31,10 @@ void setVariant (juce::Component&, Variant);
 Variant getVariant (const juce::Component&);
 void setSegment (juce::Component&, Segment);
 Segment getSegment (const juce::Component&);
+
+/** An icon in a text button: before the text ("Control panel") or after it
+    (the chevron of "Show ▾"), 6 px from the text. */
+void setButtonIcon (juce::Button&, Icon, float iconSize, bool afterText);
 
 /** Encore's look for every stock JUCE control: buttons, checkboxes, combo
     boxes, menus, scrollbars, sliders, text fields, tooltips and alert boxes.
@@ -82,6 +87,8 @@ public:
 
     // Sliders
     int getSliderThumbRadius (juce::Slider&) override;
+    juce::Label* createSliderTextBox (juce::Slider&) override;
+    void drawLabel (juce::Graphics&, juce::Label&) override;
     void drawLinearSlider (juce::Graphics&, int x, int y, int width, int height, float pos, float minPos, float maxPos,
                            juce::Slider::SliderStyle, juce::Slider&) override;
     void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height, float proportion,

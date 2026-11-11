@@ -18,11 +18,14 @@ namespace keys
     static constexpr auto midiOut     = "midiOutput";
 }
 
-AppSettings::AppSettings()
+AppSettings::AppSettings() : AppSettings (juce::File()) {}
+
+AppSettings::AppSettings (const juce::File& folder)
 {
     juce::PropertiesFile::Options options;
     options.applicationName     = "Encore";
-    options.folderName          = "Encore";
+    // An absolute folder name is used as it is (JUCE's getChildFile).
+    options.folderName          = folder == juce::File() ? juce::String ("Encore") : folder.getFullPathName();
     options.filenameSuffix      = ".settings";
     options.osxLibrarySubFolder = "Application Support";
     options.storageFormat       = juce::PropertiesFile::storeAsXML;   // human-readable for support

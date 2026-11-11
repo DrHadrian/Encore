@@ -18,6 +18,8 @@ namespace
     constexpr float floorDb = -60.0f;
     constexpr float fallDbPerFrame = 1.5f;   // ~45 dB/s at 30 fps (as LevelMeter)
     constexpr int holdFramesMax = 45;        // ~1.5 s
+    constexpr int clipFramesMax = 60;        // ~2 s
+    constexpr float clipLevel = 0.99f;       // as LevelMeter
 
     const juce::String& minus()
     {
@@ -111,6 +113,16 @@ void MeterBar::setPeak (float linearPeak)
         holdFrames = holdFramesMax;
     }
 
+    const auto wasClipping = clipFrames > 0;
+
+    if (linearPeak >= clipLevel)
+        clipFrames = clipFramesMax;
+    else if (clipFrames > 0)
+        --clipFrames;
+
+    if (wasClipping != (clipFrames > 0))
+        repaint();
+
     const auto track = getTrackBounds();
 
     // Repaint the track only when the fill or the mark moved by a pixel or more.
@@ -163,7 +175,8 @@ void MeterBar::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat();
     paint::text (g, label, r.removeFromLeft ((float) size::meterLabelW), type::label, colour::textTertiary);
-    paint::text (g, valueText, valueBounds(), type::meterValue, muted ? colour::danger : colour::text,
+    const auto clipping = clipFrames > 0;
+    paint::text (g, valueText, valueBounds(), type::meterValue, muted || clipping ? colour::danger : colour::text,
                  juce::Justification::centredRight);
 
     const auto track = getTrackBounds();
@@ -190,7 +203,7 @@ void MeterBar::paint (juce::Graphics& g)
     if (holdDb > floorDb)
     {
         const auto x = juce::jmin (track.getRight() - (float) size::meterPeakW, track.getX() + track.getWidth() * toProportion (holdDb));
-        g.setColour (paint::c (colour::meterPeak));
+        g.setColour (paint::c (clipping ? colour::danger : colour::meterPeak));
         g.fillRect (juce::Rectangle<float> (x, track.getY(), (float) size::meterPeakW, track.getHeight()));
     }
 }

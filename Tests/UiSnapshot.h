@@ -21,9 +21,9 @@ struct ScopedEncoreLook
 
 /** Renders a component off-screen; with ENCORE_UI_SNAPSHOTS set, also writes
     <folder>/<name>.png (the names match docs/design/reference/target). */
-inline juce::Image renderSnapshot (juce::Component& c, const juce::String& name)
+inline juce::Image renderSnapshot (juce::Component& c, const juce::String& name, float scale = 1.0f)
 {
-    auto image = c.createComponentSnapshot (c.getLocalBounds(), false, 1.0f);
+    auto image = c.createComponentSnapshot (c.getLocalBounds(), false, scale);
 
     if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ENCORE_UI_SNAPSHOTS", {}); folder.isNotEmpty())
     {

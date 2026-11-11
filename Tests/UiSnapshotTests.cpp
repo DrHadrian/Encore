@@ -67,6 +67,24 @@ public:
             }
 
             expectWithinAbsoluteError (theme::logoAspect(), 98.0f / 17.0f, 0.3f);
+
+            // Drawn into its 98 x 17 box, the ink stays inside it.
+            juce::Image logo (juce::Image::ARGB, 120, 60, true);
+            {
+                juce::Graphics g (logo);
+                theme::drawLogo (g, { 10.0f, 20.0f, 98.0f, 17.0f });
+            }
+            int top = logo.getHeight(), bottom = -1;
+
+            for (int y = 0; y < logo.getHeight(); ++y)
+                for (int x = 0; x < logo.getWidth(); ++x)
+                    if (logo.getPixelAt (x, y).getAlpha() > 64)
+                    {
+                        top = juce::jmin (top, y);
+                        bottom = juce::jmax (bottom, y);
+                    }
+
+            expect (top >= 19 && bottom <= 38, "logo ink inside its box: rows " + juce::String (top) + ".." + juce::String (bottom));
         }
 
         beginTest ("Inter everywhere, also for fonts made without a typeface");
