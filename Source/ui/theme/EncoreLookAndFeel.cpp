@@ -389,14 +389,18 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
     {
         // Text and icon centred together (single line).
         const auto [which, iconSize, after] = *icon;
-        const auto textW = juce::jmin ((float) area.getWidth() - iconSize - (float) iconGap, textWidth (f, button.getButtonText()) + 1.0f);
-        const auto groupW = textW + (float) iconGap + iconSize;
+        const auto hasText = button.getButtonText().isNotEmpty();   // icon-only buttons centre the icon
+        const auto gapW = hasText ? (float) iconGap : 0.0f;
+        const auto textW = hasText ? juce::jmin ((float) area.getWidth() - iconSize - gapW, textWidth (f, button.getButtonText()) + 1.0f) : 0.0f;
+        const auto groupW = textW + gapW + iconSize;
         auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (groupW, (float) area.getWidth()), (float) area.getHeight());
         const auto iconBox = (after ? row.removeFromRight (iconSize) : row.removeFromLeft (iconSize))
                                  .withSizeKeepingCentre (iconSize, iconSize);
         drawIcon (g, which, iconBox, colourToUse);
-        g.drawText (button.getButtonText(), after ? row.withTrimmedRight ((float) iconGap) : row.withTrimmedLeft ((float) iconGap),
-                    juce::Justification::centred, true);
+
+        if (hasText)
+            g.drawText (button.getButtonText(), after ? row.withTrimmedRight (gapW) : row.withTrimmedLeft (gapW),
+                        juce::Justification::centred, true);
         return;
     }
 

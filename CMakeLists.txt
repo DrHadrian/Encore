@@ -329,7 +329,9 @@ if(ENCORE_BUILD_TESTS)
         Tests/KitGallery.h
         Tests/UiSnapshot.h
         Tests/UiSnapshotTests.cpp
+        Tests/BoardFixtures.h
         Tests/EditViewTests.cpp
+        Tests/StageBoardTests.cpp
         # Screens tested off-screen (rendered into images, no window).
         Source/app/AppSettings.cpp
         Source/app/EventLog.cpp

@@ -70,9 +70,14 @@ juce::Font fontOfSize (type::Weight weight, float px, float tracking)
     if (cache.size() > 1024)   // fitted text can ask for many sizes; never grow without bound
         cache.clear();
 
-    juce::Font f (juce::FontOptions (EncoreFonts::get().typeface (weight))
-                      .withPointHeight ((float) std::get<1> (key) / 100.0f)
-                      .withKerningFactor (tracking));
+    const auto em = (float) std::get<1> (key) / 100.0f;
+    juce::Font f (juce::FontOptions (EncoreFonts::get().typeface (weight)).withPointHeight (em));
+
+    // CSS letter-spacing is a share of the em; JUCE's kerning factor is a
+    // share of the font's height (ascent + descent, about 1.21 em for Inter).
+    if (std::abs (tracking) > 0.0f && f.getHeight() > 0.0f)
+        f = f.withExtraKerningFactor (tracking * em / f.getHeight());
+
     cache.emplace (key, f);
     return f;
 }

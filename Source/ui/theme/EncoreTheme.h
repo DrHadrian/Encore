@@ -130,6 +130,14 @@ namespace colour
     constexpr juce::uint32 widgetTagText   = 0xffD8D8DC;
     constexpr juce::uint32 widgetTitle     = 0xff6E7480;   // "SONG 3   SET 1"
     constexpr juce::uint32 widgetTrack     = 0xff2A2D33;   // empty meter / pedal track
+    constexpr juce::uint32 expressionTop   = 0xff6EA5FA;   // EXP bar gradient, top (bottom: expressionBot)
+    constexpr juce::uint32 stageMeterLow   = 0xff2BC24F;   // stage level bars: green to half way...
+    constexpr juce::uint32 stageMeterHigh  = 0xffE8CF3A;   // ...then towards yellow
+    constexpr juce::uint32 stageMeterClip  = 0xffE5484D;   // a stage level bar while the input clips
+    constexpr juce::uint32 stageBoardShadow= 0xBF000000;   // inset shadow of the stomp board (black 75 %)
+    constexpr juce::uint32 tunerTick       = 0xff25303C;   // tuner scale ticks
+    constexpr juce::uint32 tunerTickCentre = 0xff55657A;
+    constexpr juce::uint32 tunerDetail     = 0xffA5B8D2;   // "−2 cents · 109.8 Hz · A = 440 Hz"
 
     // Meters
     constexpr juce::uint32 meterTrack      = 0xff0E0E10;
@@ -359,6 +367,37 @@ namespace size
     constexpr int widgetTagInset    = 6;     // name tag at (6, 6)
     constexpr int stageListRow      = 48;    // set list widget rows at text scale 1
     constexpr int stageHeadingRow   = 30;
+    // Read from the Stage board (V3Stage.dc.html; content sizes at the
+    // reference size, scaled with the window and the widget's text size).
+    constexpr int widgetTagPadX = 6, widgetTagH = 15;
+    constexpr int stageGridPad = 8;          // around the widget grid (gap between widgets: `gap`)
+    constexpr int stageToolbarPadX = 12, stageToolbarGap = 12, stageModeSegmentW = 72, stageButtonPadX = 14, stageMuteMinW = 84;
+    constexpr int miniMetersW = 80, miniMeterBarH = 4, miniMeterGap = 3;
+    constexpr int stageFooterPadX = 12, stageFooterGap = 16;
+    constexpr int widgetTitleX = 22, widgetTitleY = 34;                       // "SONG 3   SET 1"
+    constexpr int currentNameX = 18, currentNameBottom = 22;
+    constexpr int widgetTextX = 16, widgetTextBottom = 10;                    // Patch, Next cue (Cue note: bottom 12)
+    constexpr int cueNoteBottom = 12, cueNoteGap = 2, nextCueGap = 16;
+    constexpr int healthX = 12, healthBottom = 8, clockBottom = 8;
+    constexpr int lockGap = 6, lockPadTop = 14, lockIcon = 34, panicPadTop = 12, stageButtonPadTop = 10;
+    constexpr int stageTriangleGap = 0;      // ◂ Back, NEXT ▸: the triangle's own box leaves the space
+    constexpr float stageTriangle = 0.85f;    // the triangle's box, of the font's ascent
+    constexpr float stageCapCentre = 0.375f; // the middle of the capitals above the baseline, of the ascent
+    constexpr float stagePedalScale = 0.7f;  // stomp pedals: 0.7 of 160 x 210 at the reference size
+    constexpr int widgetTagRadius = 3, stageEmptyPadX = 8;
+    constexpr int stompsX = 14, stompsRight = 10, stompsBottom = 10, stompsGap = 22, stageShadowH = 8;
+    constexpr int barsTop = 34, barsBottom = 30, barsLabelBottom = 8, meterBarsGap = 8;
+    constexpr int pedalTrackRadius = 4, meterBarRadius = 3;
+    constexpr float pedalTrackInset = 0.30f, meterBarsInset = 0.18f;        // of the widget's width, each side
+    constexpr int stageListX = 6, stageListTop = 30, stageListBottom = 6, stageListGap = 2;
+    constexpr int stageListPadX = 12, stageListNumberW = 20, stageListCellGap = 12, stageHeadingPadBottom = 3;
+    constexpr int stageCurrentBase = 140;    // the current cue's name at text size 1 (168 at the board's 1.2)
+    // Tuner overlay (the board's tuner pane)
+    constexpr int tunerPaneW = 900, tunerPad = 24, tunerGap = 18, tunerLcdPad = 22, tunerLcdGap = 16;
+    constexpr int tunerNote = 180, tunerTicksH = 52, tunerTickMid = 38, tunerTickShort = 26, tunerTickGap = 6, tunerTickRadius = 3;
+    constexpr int tunerTicks = 21, tunerCentsPerTick = 5, tunerOctaveGap = 4;
+    constexpr float tunerOctave = 0.3f, tunerOctaveRaise = 0.45f;   // the octave: size and top, of the note's
+    constexpr int tunerButtonH = 60, tunerButtonPadX = 44, tunerButtonRadius = 8;
 
     // Notices
     constexpr int noticeBadge = 16, noticePadX = 12, noticeGap = 10;          // Edit notice bar (+ 1 px line = 31)
@@ -397,6 +436,8 @@ namespace type
     struct Style { float px; Weight weight; float tracking = 0.0f; bool uppercase = false; };
 
     constexpr float lcdLineHeight = 1.05f;   // LCD value / label lines (em)
+    constexpr float normalLine = 1.21f;      // Inter's "normal" line height (ascent + descent), em
+    constexpr float minTextPx = 8.0f, shrinkStep = 0.9f;   // text that shrinks to fit: not below 8 px, 10 % a step
 
     // UI chrome
     constexpr Style body            { 12.5f, Weight::regular };             // rows, values
@@ -465,6 +506,32 @@ namespace type
     constexpr Style currentName     { 168.0f, Weight::extraBold, -0.04f };  // fits the widget; shrink to fit
     constexpr Style stageListName   { 20.0f, Weight::bold };
     constexpr Style stageListHeading{ 13.0f, Weight::extraBold, 0.06f, true };
+    constexpr Style stageListNumber { 13.0f, Weight::regular };
+    constexpr Style stageListPatch  { 15.0f, Weight::regular };
+    constexpr Style clock           { 52.0f, Weight::extraBold };
+    constexpr Style healthMain      { 30.0f, Weight::extraBold };            // "CPU 7%", "AUDIO LOST"
+    constexpr Style healthSub       { 12.0f, Weight::bold };                 // "OK · 0 dropouts · 5.3 ms"
+    constexpr Style lockLabel       { 38.0f, Weight::extraBold };
+    constexpr Style lockHint        { 14.0f, Weight::regular };
+    constexpr Style panicLabel      { 50.0f, Weight::extraBold };
+    constexpr Style panicHint       { 13.0f, Weight::regular };
+    constexpr Style patchName       { 40.0f, Weight::extraBold };
+    constexpr Style cueNote         { 18.0f, Weight::semibold };
+    constexpr Style cueBar          { 13.0f, Weight::regular };
+    constexpr Style nextCueName     { 44.0f, Weight::extraBold };
+    constexpr Style nextCuePatch    { 18.0f, Weight::regular };
+    constexpr Style backButton      { 26.0f, Weight::bold };
+    constexpr Style nextButton      { 30.0f, Weight::extraBold };
+    constexpr Style barLabel        { 12.0f, Weight::regular };              // "EXP 1 · 72%", IN, OUT
+    constexpr Style stageEmpty      { 16.0f, Weight::regular };              // "No stomp switches in this patch"
+    constexpr Style stageText       { 40.0f, Weight::semibold };             // Text widget (shrinks to fit)
+    constexpr Style stageFooter     { 11.0f, Weight::regular };
+    constexpr Style stageFooterAlert{ 11.0f, Weight::semibold };             // the lost text in the footer
+    constexpr Style layoutName      { 11.0f, Weight::regular };              // "Layout “Default”" in the toolbar
+    constexpr Style tunerCaption    { 11.0f, Weight::bold, 0.08f, true };
+    constexpr Style tunerNote       { 180.0f, Weight::semibold };
+    constexpr Style tunerDetail     { 18.0f, Weight::regular };
+    constexpr Style tunerButton     { 16.0f, Weight::semibold };
 }
 
 //==============================================================================
@@ -472,6 +539,7 @@ namespace type
 namespace state
 {
     constexpr float hoverLighten  = 0.06f;   // raised controls get 6 % lighter on hover
+    constexpr float activeLighten = 0.15f;   // a stage button widget while it acts (panic silencing)
     constexpr float disabledAlpha = 0.45f;
     constexpr float cutAlpha      = 0.35f;   // cut items in the full list
     // Summary badge for warning / ok (the boards only draw the problem one):

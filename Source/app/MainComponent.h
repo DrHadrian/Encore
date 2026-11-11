@@ -171,6 +171,7 @@ private:
     juce::String warning, systemText;
     bool systemProblem = false;
     double roundTripMs = 0.0, sampleRate = 0.0;
+    juce::String stageDeviceLine, footswitchLine;   // the stage footer (SCREENS.md §3.4)
 
     // Open settings windows (closed before the things they edit go away).
     juce::Component::SafePointer<juce::DialogWindow> audioDialog, midiDialog, checkDialog;

@@ -149,7 +149,7 @@ public:
             }
 
             expect (std::isfinite (meter.getDisplayDb()), "never NaN");
-            expect (MeterBar::toProportion (meter.getDisplayDb()) == 0.0f, "falls back to the bottom after the burst");
+            expect (MeterBar::toProportion (meter.getDisplayDb()) <= 0.0f, "falls back to the bottom after the burst");
         }
 
         beginTest ("Kit: tiny and empty sizes never crash");

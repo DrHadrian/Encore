@@ -1314,6 +1314,7 @@ void MainComponent::refreshStatus()
         deviceLine.setTooltip ({});
         latencyLine.setText ({}, juce::dontSendNotification);
         latencyLine.setTooltip ({});
+        stageDeviceLine = deviceLine.getText();
         roundTripMs = 0.0;
         refreshLcd();
         return;
@@ -1325,6 +1326,7 @@ void MainComponent::refreshStatus()
         deviceLine.setTooltip ({});
         latencyLine.setText ({}, juce::dontSendNotification);
         latencyLine.setTooltip ({});
+        stageDeviceLine = deviceLine.getText();
         roundTripMs = sampleRate = 0.0;
         refreshLcd();
         return;
@@ -1359,6 +1361,7 @@ void MainComponent::refreshStatus()
                              + formatMs (inLatency + outLatency + chainLatency, rate) + " round trip",
                          juce::dontSendNotification);
     latencyLine.setTooltip (deviceStatus + "\n" + latency);
+    stageDeviceLine = typeName + sep() + latencyLine.getText();   // "ASIO · 48 kHz · 64 samples · 5.3 ms round trip"
 
     sampleRate = rate;
     roundTripMs = rate > 0.0 ? 1000.0 * (inLatency + outLatency + chainLatency) / rate : 0.0;
@@ -1477,6 +1480,11 @@ void MainComponent::timerCallback()
     if (deviceLost)
         snapshot.audioProblem = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + "...";
 
+    // The stage footer: the device line (the lost text while lost) and the footswitch.
+    snapshot.deviceLine = deviceLost ? snapshot.audioProblem + " (staying on the cue; check the cable)" : stageDeviceLine;
+    snapshot.footswitch = footswitchLine;
+    snapshot.roundTripMs = deviceLost ? 0.0 : roundTripMs;
+
     if (juce::Time::getMillisecondCounter() < noticeUntil)
         snapshot.notice = notice;
     else if (noticeBar.isVisible())
@@ -1517,10 +1525,18 @@ void MainComponent::timerCallback()
 
     updateRecoveryFile();
 
-    if (frameCounter % 60 == 0)   // power source, MIDI output reconnects etc. every 2 s
+    if (frameCounter % 60 == 0 || footswitchLine.isEmpty())   // power source, MIDI output reconnects etc. every 2 s
     {
         refreshSystemStatus();
         applyMidiOutput();
+
+        // A foot controller is any MIDI input that's plugged in and switched on.
+        bool footswitch = false;
+
+        for (const auto& input : juce::MidiInput::getAvailableDevices())
+            footswitch = footswitch || deviceManager.isMidiInputDeviceEnabled (input.identifier);
+
+        footswitchLine = footswitch ? "Footswitch connected" : "No footswitch connected";
     }
 
     juce::String health;
