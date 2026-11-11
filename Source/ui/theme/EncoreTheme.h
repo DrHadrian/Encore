@@ -107,6 +107,12 @@ namespace colour
     constexpr juce::uint32 problemText     = 0xffFF8A80;
     constexpr juce::uint32 problemBandTop  = 0xff2A1E1E;   // pre-show summary band when red
     constexpr juce::uint32 problemBandBot  = 0xff241C1D;
+    constexpr juce::uint32 warningBandTop  = 0xff2A251C;   // ... amber and green at the same darkness
+    constexpr juce::uint32 warningBandBot  = 0xff24211C;
+    constexpr juce::uint32 okBandTop       = 0xff1D2A21;
+    constexpr juce::uint32 okBandBot       = 0xff1C241E;
+    constexpr juce::uint32 problemRowTint  = 0x14D83A30;   // a problem line in the pre-show check (8 %)
+    constexpr juce::uint32 checkRowLine    = 0xff1A1A1C;   // between pre-show check lines
 
     // Fields
     constexpr juce::uint32 fieldFill       = 0xff141416;
@@ -422,6 +428,11 @@ namespace size
     constexpr int helpLineH = 18, helpGap = 10;
     constexpr int statusTitleH = 15, statusLineH = 14, statusTextH = 15, latencySplit = 2, tickTextGap = 10, defaultsValueX = 170;
     constexpr float tickStroke = 1.5f;
+    // Pre-show check (SCREENS.md §8, preshow-check.json)
+    constexpr int preShowW = 840, preShowH = 780, summaryBandH = 81, summaryBadgeX = 22, summaryBadgeY = 18, summaryTextX = 82;
+    constexpr int summaryTitleY = 19, summaryTitleH = 24, summarySubY = 46, summarySubH = 15, liveDot = 7, liveGap = 6;
+    constexpr int summaryBadge = 44, liveAreaW = 60, liveTop = 5, liveKeyGap = 3, rowLineGap = 2;
+    constexpr int checkListTop = 6, checkHeadingH = 26, preShowRowH = 59, rowBadge = 22, rowTextX = 62, checkPadX = 22, rowTitleH = 16;
     // Tuner overlay (the board's tuner pane)
     constexpr int tunerPaneW = 900, tunerPad = 24, tunerGap = 18, tunerLcdPad = 22, tunerLcdGap = 16;
     constexpr int tunerNote = 180, tunerTicksH = 52, tunerTickMid = 38, tunerTickShort = 26, tunerTickGap = 6, tunerTickRadius = 3;
@@ -488,6 +499,9 @@ namespace type
     constexpr Style menuShortcut    { 11.0f, Weight::regular };
     constexpr Style dialogTitle     { 12.5f, Weight::semibold };
     constexpr Style summaryLarge    { 20.0f, Weight::bold };                // pre-show summary
+    constexpr Style checkHeading    { 10.0f, Weight::bold, 0.08f, true };   // PROBLEMS, TO LOOK AT, FINE
+    constexpr Style checkTitle      { 13.0f, Weight::semibold };
+    constexpr Style checkDetail     { 12.0f, Weight::regular };
     constexpr Style noticeText      { 12.5f, Weight::semibold };
     constexpr Style bannerText      { 15.0f, Weight::bold };                // stage banners
 

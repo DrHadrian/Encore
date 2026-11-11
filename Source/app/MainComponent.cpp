@@ -352,9 +352,7 @@ MainComponent::~MainComponent()
 
     // Settings windows hold references to the engine, devices and session.
     settingsWindow = nullptr;
-
-    for (auto* dialog : { checkDialog.getComponent() })
-        delete dialog;
+    checkDialog = nullptr;
 
     stageView = nullptr;
     cueEditor = nullptr;
@@ -406,6 +404,11 @@ void MainComponent::openInitialShow()
 
 void MainComponent::showMenu()
 {
+    buildShowMenu().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&showButton));
+}
+
+juce::PopupMenu MainComponent::buildShowMenu()
+{
     juce::PopupMenu menu;
     menu.addItem ("New show...", [this] { askForNewShow(); });
     menu.addItem ("Open show...", [this] { chooseShowToOpen(); });
@@ -434,7 +437,7 @@ void MainComponent::showMenu()
     menu.addItem ("Open backups folder", session->getFolder().isValid(), false,
                   [this] { session->getFolder().getBackupsFolder().startAsProcess(); });
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&showButton));
+    return menu;
 }
 
 void MainComponent::askForNewShow()
@@ -868,23 +871,41 @@ void MainComponent::reconnectAudioDevice()
 
 void MainComponent::openPreShowCheck()
 {
+    // Over the window (SCREENS.md §8); its fixes open the settings on top of it.
     if (checkDialog != nullptr)
-    {
-        checkDialog->toFront (true);
         return;
-    }
 
-    auto content = std::make_unique<PreShowCheckView> ([this] { return gatherPreShowFacts(); },
-                                                       [this] (PreShowCheckResult::Fix f) { applyFix (f); });
+    checkDialog = std::make_unique<PreShowCheckDialog> (
+        [this] { return gatherPreShowFacts(); },
+        [this] (PreShowCheckResult::Fix f) { applyFix (f); },
+        [this]
+        {
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
+            {
+                if (safe != nullptr)
+                    safe->closePreShowCheck();
+            });
+        });
 
-    juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned (content.release());
-    options.dialogTitle = "Pre-show check";
-    options.dialogBackgroundColour = paint::c (colour::window);
-    options.escapeKeyTriggersCloseButton = true;
-    options.useNativeTitleBar = true;
-    options.resizable = true;
-    checkDialog = options.launchAsync();
+    auto& overlay = checkDialog->getOverlay();
+    addAndMakeVisible (overlay);
+    overlay.setBounds (getLocalBounds());
+    overlay.enterModalState (isShowing());
+
+    if (settingsWindow != nullptr)
+        settingsWindow->getOverlay().toFront (isShowing());
+}
+
+void MainComponent::closePreShowCheck()
+{
+    if (checkDialog == nullptr)
+        return;
+
+    checkDialog->getOverlay().exitModalState (0);
+    checkDialog = nullptr;
+
+    if (isShowing())
+        grabKeyboardFocus();
 }
 
 void MainComponent::applyFix (PreShowCheckResult::Fix fix)
@@ -1750,6 +1771,9 @@ void MainComponent::resized()
 
     if (stageView != nullptr)
         stageView->setBounds (area);
+
+    if (checkDialog != nullptr)
+        checkDialog->getOverlay().setBounds (area);
 
     if (settingsWindow != nullptr)
         settingsWindow->getOverlay().setBounds (area);

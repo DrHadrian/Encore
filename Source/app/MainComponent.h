@@ -64,6 +64,14 @@ public:
     void closeSettings();
     bool isShowingSettings() const noexcept { return settingsWindow != nullptr; }
 
+    /** The Show menu (the Show ▾ button opens it). */
+    juce::PopupMenu buildShowMenu();
+
+    /** The pre-show check (F9, Show → Pre-show check...). */
+    void openPreShowCheck();
+    void closePreShowCheck();
+    bool isShowingPreShowCheck() const noexcept { return checkDialog != nullptr; }
+
 private:
     // Audio
     void openAudioSettings();
@@ -91,7 +99,6 @@ private:
     void updateRecoveryFile();
     void watchAudioDevice();
     void reconnectAudioDevice();
-    void openPreShowCheck();
     PreShowFacts gatherPreShowFacts();
     void applyFix (PreShowCheckResult::Fix);
     void showNotice (const juce::String& text, int seconds, bool logged = false);
@@ -180,7 +187,7 @@ private:
     juce::String stageDeviceLine, footswitchLine;   // the stage footer (SCREENS.md §3.4)
 
     // Open settings windows (closed before the things they edit go away).
-    juce::Component::SafePointer<juce::DialogWindow> checkDialog;
+    std::unique_ptr<PreShowCheckDialog> checkDialog;
     std::unique_ptr<SettingsWindow> settingsWindow;
     AudioSettingsView::Status audioStatus;
 
