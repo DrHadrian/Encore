@@ -9,6 +9,8 @@
 #include "app/AppSettings.h"
 #include "engine/midi/MidiRouter.h"
 #include "session/ShowSession.h"
+#include "ui/kit/Group.h"
+#include "ui/kit/IconButton.h"
 
 namespace encore
 {
@@ -27,8 +29,11 @@ public:
                   std::function<void()> applyBindings, std::function<void()> applyOutput);
     ~MidiSettings() override;
 
-    void paint (juce::Graphics&) override;
+    /** Height the content needs (the window scrolls when smaller). */
+    int getIdealHeight() const;
+
     void resized() override;
+    void paintOverChildren (juce::Graphics&) override;
 
 private:
     class Row;
@@ -49,14 +54,31 @@ private:
     ShowSession& session;
     std::function<void()> applyBindings, applyOutput;
 
-    juce::Label inputsLabel { {}, "Listen to" }, outputLabel { {}, "Send cue messages to" },
-                mappingsLabel { {}, "Mappings" }, lastLabel;
+    kit::Group listenGroup { "Listen to" }, outputGroup { "Send cue messages to" }, mappingsGroup { "Mappings" },
+               howGroup { "How mappings work" }, defaultsGroup { "Defaults" };
+    juce::String lastReceived;
+    float lastReceivedW = 0.0f;
+    const juce::String noInputs { "No MIDI inputs found" };
+
+    struct Fill final : juce::Component
+    {
+        explicit Fill (bool line) : lineOnTop (line) {}
+        void paint (juce::Graphics&) override;
+        const bool lineOnTop;
+    };
+
+    Fill headerFill { false }, barFill { true };
+    const juce::String lastLabel { "Last received" }, doesHead { "DOES" }, controlHead { "FOOTSWITCH / PEDAL" },
+                       outputHelp { juce::String (juce::CharPointer_UTF8 ("Program and control changes each cue sends \xe2\x80\x94 to other gear, "
+                                                                         "or your controller's LEDs. Set them per cue in Edit.")) };
     juce::OwnedArray<juce::ToggleButton> inputButtons;
     juce::Array<juce::MidiDeviceInfo> shownInputs;
     juce::ComboBox outputChoice;
     juce::Array<juce::MidiDeviceInfo> shownOutputs;
     juce::ToggleButton showOwnMappings { "This show has its own mappings (instead of this computer's)" };
     juce::TextButton addButton { "+ Add mapping" }, resetButton { "Reset to defaults" };
+    juce::Rectangle<int> mappingsBox;
+    juce::TextLayout howText;
 
     juce::Viewport rowsViewport;
     juce::Component rowsHolder;

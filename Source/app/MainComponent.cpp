@@ -4,25 +4,34 @@
 #include "app/MainComponent.h"
 #include "app/EventLog.h"
 
+#include "engine/blocks/CabIrBlock.h"
+#include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
 #include "engine/core/Realtime.h"
+#include "ui/theme/EncoreFonts.h"
+#include "ui/theme/EncoreLookAndFeel.h"
+#include "ui/theme/Paint.h"
 
 namespace encore
 {
 
 namespace
 {
-    const auto background = juce::Colour (0xff121417);
-    const auto barColour  = juce::Colour (0xff181b20);
-    const auto mutedRed   = juce::Colour (0xffc62f35);
-    const auto liveGreen  = juce::Colour (0xff2e9e5b);
-    const auto amber      = juce::Colour (0xfff0b429);
+    using namespace theme;
 
-    void styleLabel (juce::Label& label, float size, float alpha = 0.85f)
+    void styleLabel (juce::Label& label, const type::Style& style, juce::uint32 colourToken)
     {
-        label.setFont (juce::FontOptions (size));
-        label.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (alpha));
+        label.setFont (font (style));
+        label.setColour (juce::Label::textColourId, paint::c (colourToken));
         label.setJustificationType (juce::Justification::centredLeft);
+        label.setBorderSize ({});
+        label.setMinimumHorizontalScale (1.0f);
+    }
+
+    const juce::String& sep()
+    {
+        static const juce::String dot (juce::CharPointer_UTF8 (" \xc2\xb7 "));   // " · "
+        return dot;
     }
 
     juce::String formatMs (int samples, double sampleRate)
@@ -56,69 +65,132 @@ namespace
 }
 
 //==============================================================================
-MainComponent::MainComponent (AppSettings& s) : settings (s)
+/** The show name over the save state, in the toolbar (two lines, one tooltip:
+    the show's folder). */
+class MainComponent::ShowTitle final : public juce::Component,
+                                       public juce::SettableTooltipClient
+{
+public:
+    ShowTitle() { setInterceptsMouseClicks (true, false); }
+
+    void set (const juce::String& newName, const juce::String& newState)
+    {
+        if (newName != name || newState != state)
+        {
+            name = newName;
+            state = newState;
+            width = (int) std::ceil (juce::jmax (textWidth (font (type::toolbarTitle), name), textWidth (font (type::saveState), state)));
+            setTitle (name);
+            repaint();
+        }
+    }
+
+    int getIdealWidth() const noexcept { return width; }
+
+    void paint (juce::Graphics& g) override
+    {
+        // 12.5 / 600 over 10.5, line height 1.15, the pair centred on the bar.
+        const auto nameH = type::toolbarTitle.px * type::titleLineHeight, stateH = type::saveState.px * type::titleLineHeight;
+        auto r = getLocalBounds().toFloat().withSizeKeepingCentre ((float) getWidth(), nameH + stateH);
+        paint::text (g, name, r.removeFromTop (nameH), type::toolbarTitle, colour::text);
+        paint::text (g, state, r, type::saveState, colour::textMuted);
+    }
+
+private:
+    juce::String name, state;
+    int width = 0;
+};
+
+//==============================================================================
+MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODeviceType> deviceType) : settings (s)
 {
     // What DAWs do so Windows never slows the audio down (see SystemTuning.h).
     tuning = system::applyLiveProcessSettings();
 
     setWantsKeyboardFocus (true);
 
-    // Top bar
-    title.setText ("Encore", juce::dontSendNotification);
-    title.setFont (juce::FontOptions (26.0f, juce::Font::bold));
-    title.setColour (juce::Label::textColourId, juce::Colours::white);
-    addAndMakeVisible (title);
+    // Toolbar (SCREENS.md §4.1)
+    addAndMakeVisible (toolbar);
+    showTitle = std::make_unique<ShowTitle>();
+    toolbar.addAndMakeVisible (*showTitle);
 
-    showName.setFont (juce::FontOptions (18.0f, juce::Font::bold));
-    showName.setColour (juce::Label::textColourId, juce::Colours::white);
-    addAndMakeVisible (showName);
-
-    styleLabel (saveState, 14.0f, 0.6f);
-    addAndMakeVisible (saveState);
-
+    setButtonIcon (showButton, Icon::chevronDown, 9.0f, true);
     showButton.onClick = [this] { showMenu(); };
-    addAndMakeVisible (showButton);
+    toolbar.addAndMakeVisible (showButton);
 
-    audioSettingsButton.onClick = [this] { openAudioSettings(); };
-    addAndMakeVisible (audioSettingsButton);
+    modeSwitch.setSegments ({ "Stage", "Edit", "Layout" });
+    modeSwitch.setTooltips ({ "The performance screen (F5)", {}, "Move, resize, add and remove what this screen shows" });
+    modeSwitch.setTitle ("Mode");
+    modeSwitch.setSelected (1);
+    modeSwitch.onClick = [this] (int index)
+    {
+        modeSwitch.setSelected (1);   // this switch lives in the edit view: Edit stays lit here
 
-    stageButton.setTooltip ("The performance screen (F5)");
-    stageButton.onClick = [this] { setStageVisible (true); };
-    addAndMakeVisible (stageButton);
+        if (index == 0)
+            setStageVisible (true);
+        else if (index == 2)
+        {
+            setStageVisible (true);
+            stageView->setEditingLayout (true);
+        }
+    };
+    toolbar.addAndMakeVisible (modeSwitch);
+
+    toolbar.addAndMakeVisible (lcd);
 
     tunerButton.setTooltip ("Tuner (T)");
     tunerButton.setClickingTogglesState (false);
     tunerButton.onClick = [this] { engine.setTunerOpen (! engine.isTunerOpen()); };
-    addAndMakeVisible (tunerButton);
-
-    panicButton.setTooltip ("Silence everything at once and clear all tails (see Show > Stage settings)");
-    panicButton.setColour (juce::TextButton::buttonColourId, mutedRed.darker (0.5f));
-    panicButton.onClick = [this] { engine.panic(); };
-    addAndMakeVisible (panicButton);
-
-    editTuner.onClick = [this] { engine.setTunerOpen (false); };
-    addChildComponent (editTuner);
+    toolbar.addAndMakeVisible (tunerButton);
 
     midiSettingsButton.onClick = [this] { openMidiSettings(); };
     midiSettingsButton.setTooltip ("Foot controller, expression pedals, MIDI learn and MIDI out");
-    addAndMakeVisible (midiSettingsButton);
+    toolbar.addAndMakeVisible (midiSettingsButton);
+
+    audioSettingsButton.onClick = [this] { openAudioSettings(); };
+    audioSettingsButton.setTooltip ("Audio settings: interface, driver, buffer and channels");
+    toolbar.addAndMakeVisible (audioSettingsButton);
+
+    styleLabel (outLabel, type::label, colour::textTertiary);
+    toolbar.addAndMakeVisible (outLabel);
 
     volume.setRange (-60.0, 12.0, 0.1);
     volume.setTextValueSuffix (" dB");
     volume.setDoubleClickReturnValue (true, 0.0);
-    volume.setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 22);
+    volume.setTextBoxStyle (juce::Slider::TextBoxRight, false, size::valueFieldW, size::fieldHeight);
+    volume.textFromValueFunction = [] (double value)
+    {
+        // A real minus sign, as everywhere in the displays: "−12.0" (the
+        // slider adds the " dB" suffix).
+        const auto rounded = std::round (value * 10.0) / 10.0;
+        return (rounded < 0.0 ? juce::String (juce::CharPointer_UTF8 ("\xe2\x88\x92")) : juce::String())
+               + juce::String (std::abs (rounded), 1);
+    };
+    volume.valueFromTextFunction = [] (const juce::String& text)
+    {
+        // Typed values: "-6", "−6", "-6 dB" all work.
+        return text.replace (juce::String (juce::CharPointer_UTF8 ("\xe2\x88\x92")), "-").retainCharacters ("-+.0123456789").getDoubleValue();
+    };
     volume.setTooltip ("Master volume");
+    volume.setTitle ("Master volume");
     volume.setValue (settings.getMasterGainDecibels(), juce::dontSendNotification);
+    volume.updateText();
     engine.setMasterGainDecibels ((float) volume.getValue());
     volume.onValueChange = [this]
     {
         engine.setMasterGainDecibels ((float) volume.getValue());
         settings.setMasterGainDecibels ((float) volume.getValue());
     };
-    addAndMakeVisible (volume);
+    toolbar.addAndMakeVisible (volume);
+
+    setVariant (panicButton, Variant::danger);
+    panicButton.setTooltip ("Silence everything at once and clear all tails (see Show > Stage settings)");
+    panicButton.onClick = [this] { engine.panic(); };
+    toolbar.addAndMakeVisible (panicButton);
 
     // Encore always starts muted: a laptop booting next to a hot PA must not
     // blast. Unmuting is one deliberate click (a footswitch, from milestone 6).
+    setVariant (muteButton, Variant::muted);
     muteButton.setClickingTogglesState (true);
     muteButton.setToggleState (true, juce::dontSendNotification);
     muteButton.onClick = [this]
@@ -127,27 +199,23 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
         engine.setMuted (isMuted);
         muteButton.setButtonText (isMuted ? "MUTED" : "LIVE");
     };
-    muteButton.setColour (juce::TextButton::buttonOnColourId, mutedRed);
-    muteButton.setColour (juce::TextButton::buttonColourId, liveGreen);
-    addAndMakeVisible (muteButton);
+    toolbar.addAndMakeVisible (muteButton);
 
-    // Audio status
-    for (auto* label : { &deviceStatus, &latencyStatus, &healthStatus })
-    {
-        styleLabel (*label, 14.0f, 0.75f);
-        addAndMakeVisible (label);
-    }
+    editTuner.onClick = [this] { engine.setTunerOpen (false); };
+    addChildComponent (editTuner);
 
-    styleLabel (systemStatus, 13.0f, 0.55f);
-    addAndMakeVisible (systemStatus);
+    // Notice bar (SCREENS.md §4.2): shown while a notice is.
+    addChildComponent (noticeBar);
 
-    styleLabel (warning, 14.0f);
-    warning.setColour (juce::Label::textColourId, amber);
-    addAndMakeVisible (warning);
+    // Bottom row (SCREENS.md §4.4)
+    for (auto* pane : { &inputPane, &metersPane, &healthPane })
+        addAndMakeVisible (pane);
 
-    styleLabel (inputLabel, 14.0f);
-    addAndMakeVisible (inputLabel);
+    styleLabel (inputLabel, type::label, colour::textTertiary);
+    inputPane.addAndMakeVisible (inputLabel);
 
+    setVariant (inputChoice, Variant::field);
+    inputChoice.setTitle ("Guitar input");
     inputChoice.onChange = [this]
     {
         const auto index = inputChoice.getSelectedId() - 1;   // ids are 1-based
@@ -158,24 +226,50 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
             settings.setGuitarInputChannel (index);
         }
     };
-    addAndMakeVisible (inputChoice);
+    inputPane.addAndMakeVisible (inputChoice);
 
+    styleLabel (deviceLine, type::caption, colour::textMuted);
+    inputPane.addAndMakeVisible (deviceLine);
+
+    metersPane.addAndMakeVisible (inputMeter);
+    metersPane.addAndMakeVisible (outputMeter);
+    metersPane.addAndMakeVisible (meterScale);
+
+    styleLabel (healthTitle, type::healthTitle, colour::textTertiary);
+    healthPane.addAndMakeVisible (healthTitle);
+
+    setVariant (resetCountersButton, Variant::small);
+    resetCountersButton.setTooltip ("Start the overrun, dropout and clip counts again from zero");
     resetCountersButton.onClick = [this] { engine.resetCounters(); };
-    addAndMakeVisible (resetCountersButton);
+    healthPane.addAndMakeVisible (resetCountersButton);
 
-    addAndMakeVisible (inputMeter);
-    addAndMakeVisible (outputMeter);
+    for (auto* line : { &healthLine, &latencyLine, &warningLine })
+    {
+        styleLabel (*line, type::caption, colour::textSecondary);
+        healthPane.addAndMakeVisible (line);
+    }
 
-    styleLabel (chainLabel, 17.0f, 1.0f);
-    chainLabel.setFont (juce::FontOptions (17.0f, juce::Font::bold));
+    warningLine.setJustificationType (juce::Justification::topLeft);
+
+    styleLabel (chainLabel, type::headerLine, colour::text);
     addAndMakeVisible (chainLabel);
 
-    styleLabel (problemsLabel, 14.0f);
-    problemsLabel.setColour (juce::Label::textColourId, amber);
+    setVariant (patchPicker, Variant::field);
+    patchPicker.onClick = [this] { showPatchPicker(); };
+    addChildComponent (patchPicker);
+
+    styleLabel (loadingLabel, type::label, colour::textMuted);
+    addChildComponent (loadingLabel);
+
+    styleLabel (problemsLabel, type::label, colour::amber);
+    problemsLabel.setJustificationType (juce::Justification::centredRight);
     addAndMakeVisible (problemsLabel);
 
     // Open the audio device: the saved one if possible, else a sensible default.
     // Prefer ASIO on first run because it gives the lowest, most stable latency.
+    if (deviceType != nullptr)
+        deviceManager.addAudioDeviceType (std::move (deviceType));   // the system's types are then never scanned
+
     auto savedState = settings.getAudioDeviceState();
     auto error = deviceManager.initialise (2, 2, savedState.get(), true);
     eventlog::write ("Audio: " + (error.isEmpty() ? deviceManager.getCurrentAudioDeviceType() + " / "
@@ -192,7 +286,7 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
             }
 
     if (error.isNotEmpty())
-        warning.setText ("Audio device problem: " + error, juce::dontSendNotification);
+        setWarning ("Audio device problem: " + error);
 
     engine.setGuitarInputChannel (settings.getGuitarInputChannel());
     deviceManager.addAudioCallback (&engine);
@@ -216,6 +310,10 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     patchList = std::make_unique<PatchList> (*session);
     addAndMakeVisible (*patchList);
 
+    inspector = std::make_unique<Inspector> (*session);
+    inspector->onEdited = [this] { session->markEdited(); };
+    addAndMakeVisible (*inspector);
+
     chainStrip = std::make_unique<ChainStrip> (*session);
     chainStrip->onSelectionChanged = [this] (int) { showSelectedBlock(); };
     addAndMakeVisible (*chainStrip);
@@ -230,6 +328,8 @@ MainComponent::MainComponent (AppSettings& s) : settings (s)
     stageView = std::make_unique<StageView> (engine, *session);
     stageView->setOpaque (true);
     stageView->onLeave = [this] { setStageVisible (false); };
+    stageView->setLayoutInspectorShown (settings.getLayoutInspectorShown());
+    stageView->onLayoutInspectorChanged = [this] (bool shown) { settings.setLayoutInspectorShown (shown); };
     addChildComponent (*stageView);
 
     recoverAfterUncleanExit();
@@ -251,12 +351,13 @@ MainComponent::~MainComponent()
     stopTimer();
 
     // Settings windows hold references to the engine, devices and session.
-    for (auto* dialog : { audioDialog.getComponent(), midiDialog.getComponent(), checkDialog.getComponent() })
-        delete dialog;
+    settingsWindow = nullptr;
+    checkDialog = nullptr;
 
     stageView = nullptr;
     cueEditor = nullptr;
     blockPanel = nullptr;
+    inspector = nullptr;
     chainStrip = nullptr;
     patchList = nullptr;
     setList = nullptr;
@@ -296,12 +397,17 @@ void MainComponent::openInitialShow()
             starters[type] = f;
 
     if (const auto r = session->newShow (folder, "My Show", starters); r.failed())
-        warning.setText ("Couldn't create a show: " + r.getErrorMessage(), juce::dontSendNotification);
+        setWarning ("Couldn't create a show: " + r.getErrorMessage());
     else
         settings.setLastShowFolder (folder);
 }
 
 void MainComponent::showMenu()
+{
+    buildShowMenu().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&showButton));
+}
+
+juce::PopupMenu MainComponent::buildShowMenu()
 {
     juce::PopupMenu menu;
     menu.addItem ("New show...", [this] { askForNewShow(); });
@@ -331,7 +437,7 @@ void MainComponent::showMenu()
     menu.addItem ("Open backups folder", session->getFolder().isValid(), false,
                   [this] { session->getFolder().getBackupsFolder().startAsProcess(); });
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&showButton));
+    return menu;
 }
 
 void MainComponent::askForNewShow()
@@ -409,30 +515,64 @@ void MainComponent::chooseFolderForCopy()
 void MainComponent::refreshShowStatus()
 {
     const auto& show = session->getShow();
-    showName.setText (show.name, juce::dontSendNotification);
-    showName.setTooltip (session->getFolder().getFolder().getFullPathName());
+    const auto oldTitleWidth = showTitle->getIdealWidth();
+    showTitle->set (show.name, session->hasUnsavedChanges() ? juce::String ("Unsaved changes (autosaves)")
+                                                            : "Saved " + session->getLastSaveTime().formatted ("%H:%M:%S"));
+    showTitle->setTooltip (session->getFolder().getFolder().getFullPathName());
 
-    if (session->hasUnsavedChanges())
-        saveState.setText ("Unsaved changes (autosaves)", juce::dontSendNotification);
-    else
-        saveState.setText ("Saved " + session->getLastSaveTime().formatted ("%H:%M:%S"), juce::dontSendNotification);
+    if (showTitle->getIdealWidth() != oldTitleWidth)
+        layoutToolbar (toolbar.getLocalBounds());
 
-    // "Cue 3 of 12: Solo  ->  Lead" when playing from the set list, else the patch name.
+    refreshLcd();
+
+    // "Cue 3 of 12: Solo  →  [Patch: Lead ▾]" when playing from the set list,
+    // else the patch name (SCREENS.md §4.3, the centre header line).
     juce::String text;
     const auto cues = session->getCues();
     const auto cue = session->getCurrentCue();
+    const auto playing = juce::isPositiveAndBelow (cue, (int) cues.size());
+    const auto* patch = show.findPatch (session->getActivePatchId());
 
-    if (juce::isPositiveAndBelow (cue, (int) cues.size()))
+    if (playing)
         text << "Cue " << (cue + 1) << " of " << (int) cues.size()
-             << (cues[(size_t) cue]->name.isNotEmpty() ? ": " + cues[(size_t) cue]->name : juce::String()) << "   ->   ";
-
-    if (const auto* patch = show.findPatch (session->getActivePatchId()))
+             << (cues[(size_t) cue]->name.isNotEmpty() ? ": " + cues[(size_t) cue]->name : juce::String());
+    else if (patch != nullptr)
         text << patch->name;
 
-    if (session->isBuilding())
-        text << "   (loading patches...)";
+    const auto pickerText = "Patch: " + (patch != nullptr ? patch->name : juce::String ("(none)"));
+    const auto changed = text != chainLabel.getText() || playing != patchPicker.isVisible()
+                         || pickerText != patchPicker.getButtonText() || session->isBuilding() != loadingLabel.isVisible();
 
     chainLabel.setText (text, juce::dontSendNotification);
+    patchPicker.setButtonText (pickerText);
+    patchPicker.setTooltip ("The patch this " + session->getWords().item + " plays");
+    patchPicker.setVisible (playing);
+    loadingLabel.setVisible (session->isBuilding());
+
+    if (changed)
+        resized();
+}
+
+void MainComponent::showPatchPicker()
+{
+    const auto cue = session->getCurrentCue();
+    const auto cues = session->getCues();
+
+    if (! juce::isPositiveAndBelow (cue, (int) cues.size()))
+        return;
+
+    const auto& item = *cues[(size_t) cue];
+    juce::Component::SafePointer<MainComponent> safeThis (this);
+    juce::PopupMenu menu;
+
+    for (auto& p : session->getShow().patches)
+        menu.addItem (p.name, true, ! item.uniquePatch && p.id == item.patchId, [safeThis, cue, id = p.id]
+        {
+            if (safeThis != nullptr)
+                safeThis->session->setCuePatch (cue, id);
+        });
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&patchPicker));
 }
 
 void MainComponent::reportProblems()
@@ -460,6 +600,7 @@ void MainComponent::showSelectedBlock()
     shownChain = chain;
     shownBlockIndex = index;
     blockPanel = nullptr;
+    inspector->setBlock (chain, index);
 
     if (chain != nullptr && juce::isPositiveAndBelow (index, (int) chain->getBlocks().size()))
     {
@@ -477,6 +618,21 @@ void MainComponent::showSelectedBlock()
             refreshStatus();   // latency may have changed
         };
         blockPanel->onEdited = [this] { session->markEdited(); };
+
+        // The amp with a cab right after it: the cab stands beside it (a click selects it).
+        if (block.getTypeId() == NamAmpBlock::typeId && index + 1 < (int) chain->getBlocks().size()
+            && chain->getBlocks()[(size_t) index + 1]->getTypeId() == CabIrBlock::typeId)
+        {
+            blockPanel->setCabBeside (chain->getBlocks()[(size_t) index + 1].get());
+            blockPanel->onCabClicked = [this, index]
+            {
+                juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this), index]
+                {
+                    if (safe != nullptr)
+                        safe->chainStrip->selectBlock (index + 1);
+                });
+            };
+        }
         blockPanel->getExpressionPedal = [this, index] (const juce::String& id) { return session->getExpressionPedal (index, id); };
         blockPanel->onExpressionChosen = [this, index] (const juce::String& id, int pedal)
         {
@@ -540,7 +696,7 @@ void MainComponent::recoverAfterUncleanExit()
     eventlog::write ("Recovered after an unclean exit" + where + (goLive ? ", live" : ", muted (repeated crashes)"));
     showNotice ("Encore restarted after an unexpected exit - back" + where
                     + (goLive ? juce::String() : juce::String (". MUTED: it happened again soon after, check before unmuting.")),
-                30);
+                30, true);
 }
 
 void MainComponent::updateRecoveryFile()
@@ -555,11 +711,73 @@ void MainComponent::updateRecoveryFile()
     recovery->update (state);   // only writes when something changed
 }
 
-void MainComponent::showNotice (const juce::String& text, int seconds)
+void MainComponent::showNotice (const juce::String& text, int seconds, bool logged)
 {
     notice = text;
     noticeUntil = juce::Time::getMillisecondCounter() + (juce::uint32) seconds * 1000u;
-    warning.setText (text, juce::dontSendNotification);
+    noticeBar.setText (text, logged ? "shows for " + juce::String (seconds) + " s" + sep() + "written to the event log" : juce::String());
+
+    const auto show = text.isNotEmpty() && seconds > 0;
+
+    if (show != noticeBar.isVisible())
+    {
+        noticeBar.setVisible (show);
+        resized();
+    }
+}
+
+void MainComponent::setWarning (const juce::String& text)
+{
+    if (text != warning)
+    {
+        warning = text;
+        refreshWarningLine();
+    }
+}
+
+void MainComponent::refreshWarningLine()
+{
+    // One line, the most important first; the tooltip has everything.
+    juce::StringArray all;
+    juce::String shown;
+    auto colourToken = colour::textSecondary;
+
+    if (deviceLost)
+    {
+        shown = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + "... (staying on the cue; check the cable)";
+        colourToken = colour::danger;
+        all.add (shown);
+    }
+
+    const auto warn = juce::String (juce::CharPointer_UTF8 ("\xe2\x9a\xa0 "));   // "⚠ "
+
+    if (warning.isNotEmpty())
+    {
+        all.add (warning);
+
+        if (shown.isEmpty())
+        {
+            shown = warning.startsWith ("Not using ASIO")
+                        ? warn + "Not using ASIO" + juce::String (juce::CharPointer_UTF8 (" \xe2\x80\x94 ")) + "pick an ASIO driver for the stage"
+                        : warn + warning;
+            colourToken = colour::amber;
+        }
+    }
+
+    if (systemText.isNotEmpty())
+    {
+        all.add (systemText);
+
+        if (shown.isEmpty())
+        {
+            shown = systemProblem ? warn + systemText : systemText;
+            colourToken = systemProblem ? colour::amber : colour::textSecondary;
+        }
+    }
+
+    warningLine.setText (shown, juce::dontSendNotification);
+    warningLine.setTooltip (all.joinIntoString ("\n"));
+    warningLine.setColour (juce::Label::textColourId, paint::c (colourToken));
 }
 
 void MainComponent::watchAudioDevice()
@@ -569,7 +787,7 @@ void MainComponent::watchAudioDevice()
     auto* device = deviceManager.getCurrentAudioDevice();
 
     // Changing settings in the dialog may close the device on purpose.
-    const auto dialogOpen = audioDialog != nullptr;
+    const auto dialogOpen = settingsWindow != nullptr;
 
     if (audioDialogWasOpen && ! dialogOpen)
         haveGoodSetup = device != nullptr && device->isOpen();
@@ -585,7 +803,7 @@ void MainComponent::watchAudioDevice()
         {
             deviceLost = false;
             eventlog::write ("Audio interface back after " + juce::String (reconnectAttempts) + " attempt(s)");
-            showNotice ("Audio interface reconnected", 10);
+            showNotice ("Audio interface reconnected", 10, true);
             refreshStatus();
         }
 
@@ -653,23 +871,41 @@ void MainComponent::reconnectAudioDevice()
 
 void MainComponent::openPreShowCheck()
 {
+    // Over the window (SCREENS.md §8); its fixes open the settings on top of it.
     if (checkDialog != nullptr)
-    {
-        checkDialog->toFront (true);
         return;
-    }
 
-    auto content = std::make_unique<PreShowCheckView> ([this] { return gatherPreShowFacts(); },
-                                                       [this] (PreShowCheckResult::Fix f) { applyFix (f); });
+    checkDialog = std::make_unique<PreShowCheckDialog> (
+        [this] { return gatherPreShowFacts(); },
+        [this] (PreShowCheckResult::Fix f) { applyFix (f); },
+        [this]
+        {
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
+            {
+                if (safe != nullptr)
+                    safe->closePreShowCheck();
+            });
+        });
 
-    juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned (content.release());
-    options.dialogTitle = "Pre-show check";
-    options.dialogBackgroundColour = background;
-    options.escapeKeyTriggersCloseButton = true;
-    options.useNativeTitleBar = true;
-    options.resizable = true;
-    checkDialog = options.launchAsync();
+    auto& overlay = checkDialog->getOverlay();
+    addAndMakeVisible (overlay);
+    overlay.setBounds (getLocalBounds());
+    overlay.enterModalState (isShowing());
+
+    if (settingsWindow != nullptr)
+        settingsWindow->getOverlay().toFront (isShowing());
+}
+
+void MainComponent::closePreShowCheck()
+{
+    if (checkDialog == nullptr)
+        return;
+
+    checkDialog->getOverlay().exitModalState (0);
+    checkDialog = nullptr;
+
+    if (isShowing())
+        grabKeyboardFocus();
 }
 
 void MainComponent::applyFix (PreShowCheckResult::Fix fix)
@@ -822,7 +1058,9 @@ void MainComponent::setCueListVisible (bool shouldShow)
     }
 
     resized();
-    grabKeyboardFocus();
+
+    if (isShowing())   // (off-screen in tests)
+        grabKeyboardFocus();
 }
 
 void MainComponent::showStageSettingsMenu (juce::PopupMenu& menu)
@@ -867,7 +1105,9 @@ void MainComponent::setStageVisible (bool shouldShow)
         onViewChanged();   // the window resizes us: full window for the stage
 
     resized();
-    grabKeyboardFocus();
+
+    if (isShowing())   // (off-screen in tests)
+        grabKeyboardFocus();
 }
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)
@@ -899,6 +1139,13 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
     if (key == juce::KeyPress ('t') || key == juce::KeyPress ('T'))
     {
         engine.setTunerOpen (! engine.isTunerOpen());
+        return true;
+    }
+
+    // I: the layout editor's widget inspector.
+    if ((key == juce::KeyPress ('i') || key == juce::KeyPress ('I')) && isShowingStage() && stageView->isEditingLayout())
+    {
+        stageView->setLayoutInspectorShown (! stageView->isLayoutInspectorShown());
         return true;
     }
 
@@ -957,48 +1204,49 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
 }
 
 //==============================================================================
-void MainComponent::openAudioSettings()
-{
-    auto selector = std::make_unique<juce::AudioDeviceSelectorComponent> (
-        deviceManager,
-        1, 16,      // inputs: at least the guitar, up to 16
-        1, 16,      // outputs
-        false,      // MIDI inputs: own page from milestone 6
-        false,      // MIDI output
-        false,      // list channels individually, not as stereo pairs: guitar is mono
-        false);     // show buffer size / sample rate without an extra click
-    selector->setSize (560, 480);
+void MainComponent::openAudioSettings()   { openSettings (SettingsWindow::Tab::audio); }
+void MainComponent::openMidiSettings()    { openSettings (SettingsWindow::Tab::midi); }
 
-    juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned (selector.release());
-    options.dialogTitle = "Audio settings";
-    options.dialogBackgroundColour = background;
-    options.escapeKeyTriggersCloseButton = true;
-    options.useNativeTitleBar = true;
-    options.resizable = true;
-    audioDialog = options.launchAsync();
-}
-
-void MainComponent::openMidiSettings()
+void MainComponent::openSettings (SettingsWindow::Tab tab)
 {
-    if (midiDialog != nullptr)
+    // One dialog with two tabs, over the window (SCREENS.md §7).
+    if (settingsWindow == nullptr)
     {
-        midiDialog->toFront (true);
-        return;
+        settingsWindow = std::make_unique<SettingsWindow> (
+            deviceManager, tuning, [this] { engine.resetCounters(); },
+            engine.getMidiRouter(), settings, *session,
+            [this] { applyMidiBindings(); }, [this] { applyMidiOutput(); },
+            [this]
+            {
+                // Closed from one of its own buttons: let the click return first.
+                juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
+                {
+                    if (safe != nullptr)
+                        safe->closeSettings();
+                });
+            });
+
+        auto& overlay = settingsWindow->getOverlay();
+        addAndMakeVisible (overlay);
+        overlay.setBounds (getLocalBounds());
+        overlay.toFront (true);
+        overlay.enterModalState (isShowing());   // focus only when on screen (not in off-screen tests)
     }
 
-    auto content = std::make_unique<MidiSettings> (deviceManager, engine.getMidiRouter(), settings, *session,
-                                                   [this] { applyMidiBindings(); },
-                                                   [this] { applyMidiOutput(); });
+    settingsWindow->showTab (tab);
+    settingsWindow->setAudioStatus (audioStatus);
+}
 
-    juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned (content.release());
-    options.dialogTitle = "MIDI settings";
-    options.dialogBackgroundColour = background;
-    options.escapeKeyTriggersCloseButton = true;
-    options.useNativeTitleBar = true;
-    options.resizable = true;
-    midiDialog = options.launchAsync();
+void MainComponent::closeSettings()
+{
+    if (settingsWindow == nullptr)
+        return;
+
+    settingsWindow->getOverlay().exitModalState (0);
+    settingsWindow = nullptr;
+
+    if (isShowing())
+        grabKeyboardFocus();
 }
 
 void MainComponent::applyMidiBindings()
@@ -1054,8 +1302,7 @@ void MainComponent::refreshInputChoices()
 
     if (activeIndex == 0)
     {
-        warning.setText ("No input channels enabled: open Audio settings and tick your guitar input.",
-                         juce::dontSendNotification);
+        setWarning ("No input channels enabled: open Audio settings and tick your guitar input.");
         return;
     }
 
@@ -1080,30 +1327,41 @@ void MainComponent::refreshSystemStatus()
         problem = true;
     }
 
-    systemStatus.setText (text, juce::dontSendNotification);
-    systemStatus.setColour (juce::Label::textColourId, problem ? amber : juce::Colours::white.withAlpha (0.55f));
+    if (text != systemText || problem != systemProblem)
+    {
+        systemText = text;
+        systemProblem = problem;
+        refreshWarningLine();
+    }
    #endif
 }
 
 void MainComponent::refreshStatus()
 {
     auto* device = deviceManager.getCurrentAudioDevice();
+    refreshWarningLine();   // lost, or back
 
     if (deviceLost)
     {
-        deviceStatus.setText ("AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName
-                                  + "... (staying on the cue; check the cable)", juce::dontSendNotification);
-        deviceStatus.setColour (juce::Label::textColourId, mutedRed.brighter (0.3f));
-        latencyStatus.setText ({}, juce::dontSendNotification);
+        deviceLine.setText ("Reconnecting to " + lastGoodSetup.outputDeviceName + "...", juce::dontSendNotification);
+        deviceLine.setTooltip ({});
+        latencyLine.setText ({}, juce::dontSendNotification);
+        latencyLine.setTooltip ({});
+        stageDeviceLine = deviceLine.getText();
+        roundTripMs = 0.0;
+        refreshLcd();
         return;
     }
 
-    deviceStatus.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.75f));
-
     if (device == nullptr || ! device->isOpen())
     {
-        deviceStatus.setText ("No audio device open", juce::dontSendNotification);
-        latencyStatus.setText ({}, juce::dontSendNotification);
+        deviceLine.setText ("No audio device open", juce::dontSendNotification);
+        deviceLine.setTooltip ({});
+        latencyLine.setText ({}, juce::dontSendNotification);
+        latencyLine.setTooltip ({});
+        stageDeviceLine = deviceLine.getText();
+        roundTripMs = sampleRate = 0.0;
+        refreshLcd();
         return;
     }
 
@@ -1111,11 +1369,11 @@ void MainComponent::refreshStatus()
     const auto buffer = device->getCurrentBufferSizeSamples();
     const auto typeName = device->getTypeName();
 
-    deviceStatus.setText (typeName + "  |  " + device->getName()
+    // Today's full status lines live on in the tooltips.
+    const auto deviceStatus = typeName + "  |  " + device->getName()
                               + "  |  " + juce::String (rate / 1000.0, 1) + " kHz"
                               + "  |  buffer " + juce::String (buffer) + " samples ("
-                              + formatMs (buffer, rate) + ")",
-                          juce::dontSendNotification);
+                              + formatMs (buffer, rate) + ")";
 
     // ASIO drivers report their full input and output latency (buffers plus
     // converters), so the sum is the time from string to speaker.
@@ -1129,13 +1387,53 @@ void MainComponent::refreshStatus()
         latency << " + chain " << formatMs (chainLatency, rate);
 
     latency << " = " << formatMs (inLatency + outLatency + chainLatency, rate) << " round trip";
-    latencyStatus.setText (latency, juce::dontSendNotification);
+
+    deviceLine.setText (device->getName() + sep() + typeName, juce::dontSendNotification);
+    deviceLine.setTooltip (deviceStatus);
+    latencyLine.setText (juce::String (rate / 1000.0, 1) + " kHz" + sep() + juce::String (buffer) + " samples" + sep()
+                             + formatMs (inLatency + outLatency + chainLatency, rate) + " round trip",
+                         juce::dontSendNotification);
+    latencyLine.setTooltip (deviceStatus + "\n" + latency);
+    stageDeviceLine = typeName + sep() + latencyLine.getText();   // "ASIO · 48 kHz · 64 samples · 5.3 ms round trip"
+
+    sampleRate = rate;
+    roundTripMs = rate > 0.0 ? 1000.0 * (inLatency + outLatency + chainLatency) / rate : 0.0;
+    refreshLcd();
 
     if (typeName != "ASIO")
-        warning.setText ("Not using ASIO: expect higher latency. Pick an ASIO driver in Audio settings for the stage.",
-                         juce::dontSendNotification);
-    else if (warning.getText().startsWith ("Not using ASIO"))
-        warning.setText ({}, juce::dontSendNotification);
+        setWarning ("Not using ASIO: expect higher latency. Pick an ASIO driver in Audio settings for the stage.");
+    else if (warning.startsWith ("Not using ASIO"))
+        setWarning ({});
+}
+
+void MainComponent::refreshLcd()
+{
+    if (session == nullptr)
+        return;
+
+    // n / N and the item word; the playing item's name and its patch; round
+    // trip; rate (SCREENS.md §4.1). A dash where there's nothing to show.
+    const auto dash = juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x93"));
+    const auto& words = session->getWords();
+    const auto cues = session->getCues();
+    const auto cue = session->getCurrentCue();
+    const auto* patch = session->getShow().findPatch (session->getActivePatchId());
+    const auto playing = juce::isPositiveAndBelow (cue, (int) cues.size());
+
+    juce::String name = playing ? cues[(size_t) cue]->name : juce::String();
+
+    if (name.isEmpty() && patch != nullptr)
+        name = patch->name;
+
+    lcd.setItems ({
+        { (playing ? juce::String (cue + 1) : dash) + " / " + juce::String ((int) cues.size()), words.item, 0 },
+        { name.isNotEmpty() ? name : dash, "Patch " + (patch != nullptr ? patch->name : dash), size::lcdMinPatch, size::lcdNameMaxW },
+        { roundTripMs > 0.0 ? juce::String (roundTripMs, 1) + " ms" : dash, "Round trip", 0 },
+        { sampleRate > 0.0 ? juce::String (sampleRate / 1000.0, 1) + "k" : dash, "Rate", 0 },
+    });
+
+    if (lcd.getIdealWidth() != lcd.getWidth())
+        layoutToolbar (toolbar.getLocalBounds());
 }
 
 //==============================================================================
@@ -1158,8 +1456,8 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
     if (auto state = deviceManager.createStateXml())
         settings.setAudioDeviceState (state.get());
 
-    if (warning.getText().startsWith ("No input") || warning.getText().startsWith ("Audio device problem"))
-        warning.setText ({}, juce::dontSendNotification);
+    if (warning.startsWith ("No input") || warning.startsWith ("Audio device problem"))
+        setWarning ({});
 
     refreshInputChoices();
     refreshStatus();
@@ -1190,6 +1488,8 @@ void MainComponent::timerCallback()
     if (blockPanel != nullptr)
         blockPanel->refresh();
 
+    inspector->refresh();
+
     // A footswitch can mute too: the button follows the engine.
     if (const auto isMuted = engine.isMuted(); muteButton.getToggleState() != isMuted)
     {
@@ -1213,8 +1513,17 @@ void MainComponent::timerCallback()
     if (deviceLost)
         snapshot.audioProblem = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + "...";
 
+    // The stage footer: the device line (the lost text while lost) and the footswitch.
+    snapshot.deviceLine = deviceLost ? snapshot.audioProblem + " (staying on the cue; check the cable)" : stageDeviceLine;
+    snapshot.footswitch = footswitchLine;
+    snapshot.roundTripMs = deviceLost ? 0.0 : roundTripMs;
+
     if (juce::Time::getMillisecondCounter() < noticeUntil)
         snapshot.notice = notice;
+    else if (noticeBar.isVisible())
+        showNotice ({}, 0);   // the notice ran out
+
+    outputMeter.setMuted (engine.isMuted());
 
     const auto tunerOpen = engine.isTunerOpen();
 
@@ -1222,7 +1531,6 @@ void MainComponent::timerCallback()
         snapshot.tuner = engine.getTuner().analyse();
 
     tunerButton.setToggleState (tunerOpen, juce::dontSendNotification);
-    tunerButton.setColour (juce::TextButton::buttonOnColourId, amber.darker (0.4f));
     panicButton.setButtonText (engine.getPanicState() == AudioEngine::PanicState::none ? "PANIC" : "SILENT");
 
     if (isShowingStage())
@@ -1250,10 +1558,18 @@ void MainComponent::timerCallback()
 
     updateRecoveryFile();
 
-    if (frameCounter % 60 == 0)   // power source, MIDI output reconnects etc. every 2 s
+    if (frameCounter % 60 == 0 || footswitchLine.isEmpty())   // power source, MIDI output reconnects etc. every 2 s
     {
         refreshSystemStatus();
         applyMidiOutput();
+
+        // A foot controller is any MIDI input that's plugged in and switched on.
+        bool footswitch = false;
+
+        for (const auto& input : juce::MidiInput::getAvailableDevices())
+            footswitch = footswitch || deviceManager.isMidiInputDeviceEnabled (input.identifier);
+
+        footswitchLine = footswitch ? "Footswitch connected" : "No footswitch connected";
     }
 
     juce::String health;
@@ -1285,105 +1601,245 @@ void MainComponent::timerCallback()
     if (rt::isAllocationTripwireInstalled())
         health << "   |   RT violations " << rt::getViolationCount();
 
-    healthStatus.setText (health, juce::dontSendNotification);
+    // The settings window's status values (the same data).
+    {
+        AudioSettingsView::Status st;
+        st.cpu = juce::String (juce::roundToInt (engine.getCpuLoad() * 100.0)) + "%";
+        st.overruns = juce::String (engine.getOverrunCount());
+        auto* device = deviceManager.getCurrentAudioDevice();
+        st.driverDropouts = device != nullptr && device->getXRunCount() >= 0 ? juce::String (device->getXRunCount()) : juce::String ("-");
+        st.limiter = limiting < -0.1f ? juce::String (limiting, 1) + " dB" : juce::String ("idle");
+
+        if (const auto bytes = system::getProcessMemoryBytes(); bytes > 0)
+            st.memory = juce::String ((int) (bytes / (1024 * 1024))) + " MB of " + juce::String (juce::SystemStats::getMemorySizeInMegabytes() / 1024) + " GB";
+        else
+            st.memory = "-";
+
+        if (device != nullptr && device->isOpen() && sampleRate > 0.0)
+            st.latency = "in " + juce::String (1000.0 * device->getInputLatencyInSamples() / sampleRate, 1) + " + out "
+                         + juce::String (1000.0 * device->getOutputLatencyInSamples() / sampleRate, 1) + " = " + juce::String (roundTripMs, 1) + " ms";
+        else
+            st.latency = "-";
+
+        audioStatus = st;
+
+        if (settingsWindow != nullptr)
+            settingsWindow->setAudioStatus (audioStatus);
+    }
+
+    // Short line in the pane, today's full line in the tooltip.
+    juce::String shortHealth;
+    shortHealth << "CPU " << juce::roundToInt (engine.getCpuLoad() * 100.0) << "%" << sep() << "overruns " << engine.getOverrunCount();
+
+    if (auto* device = deviceManager.getCurrentAudioDevice(); device != nullptr && device->getXRunCount() >= 0)
+        shortHealth << sep() << "dropouts " << device->getXRunCount();
+
+    shortHealth << sep() << "limiter " << (limiting < -0.1f ? juce::String (limiting, 1) + " dB" : juce::String ("idle"));
+
+    if (engine.getClipCount() > 0)
+        shortHealth << sep() << "clips " << engine.getClipCount();
+
+    healthLine.setText (shortHealth, juce::dontSendNotification);
+    healthLine.setTooltip (health);
 }
 
 //==============================================================================
 void MainComponent::paint (juce::Graphics& g)
 {
-    g.fillAll (background);
-    g.setColour (barColour);
-    g.fillRect (getLocalBounds().removeFromTop (64));
+    g.fillAll (paint::c (colour::window));
+
+    if (! headerArrow.isEmpty() && ! isShowingStage())
+        drawIcon (g, Icon::arrowRight, headerArrow.toFloat(), paint::c (colour::textMuted));
+}
+
+juce::Point<int> MainComponent::getMinimumEditSize() const
+{
+    // The reference minimum (SCREENS.md §1); the block stage scales the gear
+    // to whatever room it gets.
+    return { size::minEditWidth, size::minEditHeight };
+}
+
+void MainComponent::layoutToolbar (juce::Rectangle<int> bar)
+{
+    // Padding 10, gaps 10; the LCD centred in what's left (SCREENS.md §4.1).
+    const auto buttonH = size::buttonHeight + size::buttonDrop;
+    const auto buttonY = (bar.getHeight() - 1 - size::buttonHeight) / 2;
+    const auto place = [&] (juce::Component& c, int x, int w, int h, int y) { c.setBounds (x, y, w, h); };
+    const auto widthOf = [buttonH] (juce::TextButton& b) { return b.getBestWidthForHeight (buttonH); };
+
+    auto left = bar.getX() + size::toolbarPadX;
+    toolbar.setLogoBounds ({ left + size::logoMargin, (bar.getHeight() - 1 - size::logoH) / 2, size::logoW, size::logoH });
+    left += size::logoMargin + size::logoW + size::logoMargin + size::toolbarGap;
+
+    place (showButton, left, widthOf (showButton), buttonH, buttonY);
+    left = showButton.getRight() + size::toolbarGap;
+
+    place (*showTitle, left, juce::jmin (showTitle->getIdealWidth(), size::showTitleMaxW), bar.getHeight() - 1, 0);   // long names are cut
+    left = showTitle->getRight() + size::toolbarGap + size::modeSwitchGap;
+
+    const auto modeH = size::toolbarButtonH + 2;
+    place (modeSwitch, left, size::modeSegmentW * 3 + 2, modeH, (bar.getHeight() - 1 - modeH) / 2);
+    left = modeSwitch.getRight() + size::toolbarGap;
+
+    auto right = bar.getRight() - size::toolbarPadX;
+    const auto fromRight = [&] (juce::Component& c, int w, int h, int y, int gapAfter)
+    {
+        right -= w;
+        place (c, right, w, h, y);
+        right -= gapAfter;
+    };
+
+    fromRight (muteButton, size::muteButtonW, buttonH, buttonY, size::toolbarGap);
+    fromRight (panicButton, widthOf (panicButton), buttonH, buttonY, size::toolbarGap);
+
+    // Out: label, 6, [thumb room 6, 70 track, 6, 66 field]
+    const auto volumeW = getLookAndFeel().getSliderThumbRadius (volume) * 2 + size::volumeTrackW + size::valueFieldW;
+    fromRight (volume, volumeW, bar.getHeight() - 1, 0, 0);
+    right += getLookAndFeel().getSliderThumbRadius (volume) - size::outGap;   // the track starts 6 after "Out"
+    const auto outW = (int) std::ceil (textWidth (font (type::label), outLabel.getText()));
+    fromRight (outLabel, outW, bar.getHeight() - 1, 0, size::outMargin + size::toolbarGap);
+
+    fromRight (audioSettingsButton, widthOf (audioSettingsButton), buttonH, buttonY, size::toolbarGap);
+    fromRight (midiSettingsButton, widthOf (midiSettingsButton), buttonH, buttonY, size::toolbarGap);
+    fromRight (tunerButton, widthOf (tunerButton), buttonH, buttonY, size::toolbarGap);
+
+    // The LCD centred between the two groups; hidden if it doesn't fit.
+    const auto space = right + size::toolbarGap - left;
+    lcd.setAvailableWidth (space);
+    const auto lcdW = lcd.getIdealWidth(), lcdH = kit::Lcd::heightFor (false);
+    lcd.setVisible (lcdW <= space);
+    place (lcd, left + (space - lcdW) / 2, lcdW, lcdH, (bar.getHeight() - 1 - (lcdH - 1)) / 2);
+}
+
+void MainComponent::layoutBottomRow (juce::Rectangle<int> row)
+{
+    inputPane.setBounds (row.removeFromLeft (size::sidebarWidth));
+    row.removeFromLeft (size::gap);
+    healthPane.setBounds (row.removeFromRight (size::inspectorWidth));
+    row.removeFromRight (size::gap);
+    metersPane.setBounds (row);
+
+    // Guitar input: label, field, device line, centred (gap 6).
+    {
+        auto r = inputPane.getLocalBounds().reduced (1 + size::inputPadX, 0);
+        const auto h = size::inputLabelH + size::inputGap + size::fieldHeight + size::inputGap + size::deviceLineH;
+        r = r.withSizeKeepingCentre (r.getWidth(), h);
+        inputLabel.setBounds (r.removeFromTop (size::inputLabelH));
+        r.removeFromTop (size::inputGap);
+        inputChoice.setBounds (r.removeFromTop (size::fieldHeight));
+        r.removeFromTop (size::inputGap);
+        deviceLine.setBounds (r);
+    }
+
+    // Meters: two rows, the scale under them (painted by paint()).
+    {
+        auto r = metersPane.getLocalBounds().reduced (1 + size::metersPadX, 0);
+        const auto h = size::meterRowH * 2 + size::meterRowGap + size::meterScaleGap + size::meterScaleH;
+        r = r.withSizeKeepingCentre (r.getWidth(), h);
+        inputMeter.setBounds (r.removeFromTop (size::meterRowH));
+        r.removeFromTop (size::meterRowGap);
+        outputMeter.setBounds (r.removeFromTop (size::meterRowH));
+        r.removeFromTop (size::meterScaleGap);
+        meterScale.setBounds (r.removeFromTop (size::meterScaleH));
+
+        // The scale lines up with the meters' tracks.
+        const auto track = inputMeter.getTrackBounds();
+        meterScale.setTrack (track.getX() + (float) (inputMeter.getX() - meterScale.getX()), track.getWidth());
+    }
+
+    // System health: title and Reset counters, then three lines (gap 3).
+    {
+        auto r = healthPane.getLocalBounds().reduced (1 + size::healthPadX, 1 + size::healthPadY);
+        auto header = r.removeFromTop (size::healthHeaderH);
+        const auto resetW = resetCountersButton.getBestWidthForHeight (size::buttonSmallHeight);
+        resetCountersButton.setBounds (header.removeFromRight (resetW).withHeight (size::buttonSmallHeight + size::buttonDrop));
+        healthTitle.setBounds (header);
+
+        for (auto* line : { &healthLine, &latencyLine })
+        {
+            r.removeFromTop (size::healthGap);
+            line->setBounds (r.removeFromTop (size::healthLineH));
+        }
+
+        r.removeFromTop (size::healthGap);
+        warningLine.setBounds (r);   // may wrap to two lines
+    }
 }
 
 void MainComponent::resized()
 {
-    layoutContent (getWidth(), true);
+    auto area = getLocalBounds();
 
     if (stageView != nullptr)
-        stageView->setBounds (getLocalBounds());
-}
+        stageView->setBounds (area);
 
-int MainComponent::getRequiredHeight (int width)
-{
-    return isShowingStage() ? 0 : layoutContent (width, false);
-}
+    if (checkDialog != nullptr)
+        checkDialog->getOverlay().setBounds (area);
 
-int MainComponent::layoutContent (int width, bool apply)
-{
-    constexpr int margin = 16, gap = 16, sidebarWidth = 250;
-    const auto place = [apply] (juce::Component* c, juce::Rectangle<int> r) { if (apply && c != nullptr) c->setBounds (r); };
+    if (settingsWindow != nullptr)
+        settingsWindow->getOverlay().setBounds (area);
 
-    // Top bar
-    auto bar = juce::Rectangle<int> (0, 0, width, 64).reduced (margin, 10);
-    place (&title, bar.removeFromLeft (110));
-    place (&showButton, bar.removeFromLeft (70).reduced (0, 4));
-    bar.removeFromLeft (12);
-    place (&muteButton, bar.removeFromRight (110).reduced (0, 2));
-    bar.removeFromRight (8);
-    place (&volume, bar.removeFromRight (200));
-    bar.removeFromRight (8);
-    place (&audioSettingsButton, bar.removeFromRight (150).reduced (0, 4));
-    bar.removeFromRight (8);
-    place (&midiSettingsButton, bar.removeFromRight (80).reduced (0, 4));
-    bar.removeFromRight (8);
-    place (&panicButton, bar.removeFromRight (80).reduced (0, 4));
-    bar.removeFromRight (8);
-    place (&tunerButton, bar.removeFromRight (70).reduced (0, 4));
-    bar.removeFromRight (8);
-    place (&stageButton, bar.removeFromRight (70).reduced (0, 4));
+    toolbar.setBounds (area.removeFromTop (size::toolbarEdit + 1));
+    layoutToolbar (toolbar.getLocalBounds());
 
-    bar.removeFromRight (12);
-    auto names = bar;
-    place (&showName, names.removeFromTop (names.getHeight() / 2 + 2));
-    place (&saveState, names);
+    if (noticeBar.isVisible())
+        noticeBar.setBounds (area.removeFromTop (size::noticeBar + 1));
 
-    auto area = juce::Rectangle<int> (0, 64, width, 100000).reduced (margin, 0);
-    area.removeFromTop (margin);
+    area.reduce (size::outerPadding, size::outerPadding);
+    layoutBottomRow (area.removeFromBottom (size::bottomRow));
+    area.removeFromBottom (size::outerPadding);
 
-    // Body: patches left, chain + block right.
-    const auto panelHeight = blockPanel != nullptr ? blockPanel->getPreferredHeight() : 200;
-    const auto bodyHeight = juce::jmax (560, 30 + 120 + gap + panelHeight + 30);
-    auto body = area.removeFromTop (bodyHeight);
+    // Main grid: sidebar 250 | centre | inspector 272 (SCREENS.md §4.3).
+    // The full list covers all three columns.
+    if (cueEditor != nullptr)
+        cueEditor->setBounds (area);
 
-    // The cue list covers the patch editing area (sidebar, chain, block).
-    place (cueEditor.get(), body);
+    auto sidebar = area.removeFromLeft (size::sidebarWidth);
+    area.removeFromLeft (size::gap);
+    if (inspector != nullptr)
+        inspector->setBounds (area.removeFromRight (size::inspectorWidth));
+    else
+        area.removeFromRight (size::inspectorWidth);
+    area.removeFromRight (size::gap);
 
-    auto sidebar = body.removeFromLeft (sidebarWidth);
-    place (setList.get(), sidebar.removeFromTop (sidebar.getHeight() / 2 - gap / 2));
-    sidebar.removeFromTop (gap);
-    place (patchList.get(), sidebar);
-    body.removeFromLeft (gap);
+    if (setList != nullptr && patchList != nullptr)
+    {
+        setList->setBounds (sidebar.removeFromTop ((sidebar.getHeight() - size::gap) / 2));
+        sidebar.removeFromTop (size::gap);
+        patchList->setBounds (sidebar);
+    }
 
-    place (&editTuner, body.withHeight (juce::jmin (body.getHeight(), 320)));
-    place (&chainLabel, body.removeFromTop (30));
-    place (chainStrip.get(), body.removeFromTop (120));
-    body.removeFromTop (gap);
+    // Centre: header line, chain, block. The tuner covers the centre column.
+    editTuner.setBounds (area);
+    auto header = area.removeFromTop (size::centreHeaderH);
+    const auto problemsW = problemsLabel.getText().isEmpty() ? 0
+                               : juce::jmin (header.getWidth() / 2, (int) std::ceil (textWidth (font (type::label), problemsLabel.getText())) + 1);
+    problemsLabel.setBounds (header.removeFromRight (problemsW));
+
+    // "Cue 1 of 8: Clean" → [Patch: Clean ▾] (loading patches...)
+    const auto labelW = juce::jmin (header.getWidth(), (int) std::ceil (textWidth (font (type::headerLine), chainLabel.getText())) + 1);
+    chainLabel.setBounds (header.removeFromLeft (labelW));
+    headerArrow = {};
+
+    if (patchPicker.isVisible())
+    {
+        header.removeFromLeft (size::toolbarGap);
+        headerArrow = header.removeFromLeft (size::headerArrow).withSizeKeepingCentre (size::headerArrow, size::headerArrow);
+        header.removeFromLeft (size::toolbarGap);
+        patchPicker.setBounds (header.removeFromLeft (size::patchPickerW).withSizeKeepingCentre (size::patchPickerW, size::fieldHeight));
+    }
+
+    header.removeFromLeft (size::toolbarGap);
+    loadingLabel.setBounds (header);
+    area.removeFromTop (size::gap);
+
+    if (chainStrip != nullptr)
+        chainStrip->setBounds (area.removeFromTop (size::chainPaneH));
+
+    area.removeFromTop (size::gap);
 
     if (blockPanel != nullptr)
-        place (blockPanel.get(), body.removeFromTop (panelHeight)
-                                     .withWidth (juce::jmin (body.getWidth(), blockPanel->getPreferredWidth())));
-
-    place (&problemsLabel, body.removeFromBottom (26));
-
-    // Audio: input, meters, status lines.
-    area.removeFromTop (gap);
-    auto inputRow = area.removeFromTop (32);
-    place (&inputLabel, inputRow.removeFromLeft (110));
-    place (&inputChoice, inputRow.removeFromLeft (300).reduced (0, 2));
-    inputRow.removeFromLeft (gap);
-    place (&resetCountersButton, inputRow.removeFromRight (140).reduced (0, 2));
-
-    area.removeFromTop (8);
-    place (&inputMeter, area.removeFromTop (28));
-    area.removeFromTop (6);
-    place (&outputMeter, area.removeFromTop (28));
-    area.removeFromTop (8);
-
-    for (auto* label : { &healthStatus, &deviceStatus, &latencyStatus, &systemStatus, &warning })
-        place (label, area.removeFromTop (22));
-
-    return area.getY() + margin;
+        blockPanel->setBounds (area);   // the block stage fills the rest
 }
 
 } // namespace encore

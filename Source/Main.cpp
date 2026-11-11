@@ -6,6 +6,8 @@
 #include "app/AppSettings.h"
 #include "app/EventLog.h"
 #include "app/MainComponent.h"
+#include "ui/theme/EncoreLookAndFeel.h"
+#include "ui/theme/EncoreTheme.h"
 #include "engine/core/Realtime.h"
 
 namespace encore
@@ -19,13 +21,14 @@ public:
         : content (std::make_unique<MainComponent> (settings))
     {
         setViewedComponent (content.get(), false);
-        setScrollBarsShown (true, false);
-        setScrollBarThickness (12);
+        setScrollBarsShown (true, true);
+        setScrollBarThickness (theme::size::scrollbar);
 
         content->onViewChanged = [this]
         {
             // The stage view fills the window exactly; the edit view scrolls.
-            setScrollBarsShown (! content->isShowingStage(), false);
+            const auto stage = content->isShowingStage();
+            setScrollBarsShown (! stage, ! stage);
             setViewPosition (0, 0);
             resized();
         };
@@ -34,8 +37,18 @@ public:
     void resized() override
     {
         Viewport::resized();
-        const auto width = getMaximumVisibleWidth();
-        content->setSize (width, juce::jmax (getMaximumVisibleHeight(), content->getRequiredHeight (width)));
+
+        if (content->isShowingStage())
+        {
+            content->setSize (getWidth(), getHeight());
+            return;
+        }
+
+        // Below the minimum the edit view keeps its size and scrolls.
+        const auto minimum = content->getMinimumEditSize();
+        const auto w = juce::jmax (minimum.x, getMaximumVisibleWidth());
+        const auto h = juce::jmax (minimum.y, getMaximumVisibleHeight());
+        content->setSize (w, h);
     }
 
 private:
@@ -46,7 +59,7 @@ class MainWindow final : public juce::DocumentWindow
 {
 public:
     MainWindow (const juce::String& name, AppSettings& settings)
-        : DocumentWindow (name, juce::Colour (0xff121417), DocumentWindow::allButtons)
+        : DocumentWindow (name, juce::Colour (theme::colour::window), DocumentWindow::allButtons)
     {
         setUsingNativeTitleBar (true);
         setContentOwned (new ScrollingContent (settings), false);
@@ -55,7 +68,8 @@ public:
 
         // Fit the screen we open on (laptops are often 768 px tall).
         auto screen = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()->userBounds.toNearestInt();
-        centreWithSize (juce::jmin (1100, screen.getWidth() - 40), juce::jmin (900, screen.getHeight() - 40));
+        centreWithSize (juce::jmin (theme::size::referenceWidth, screen.getWidth() - theme::size::screenMargin),
+                        juce::jmin (theme::size::referenceHeight, screen.getHeight() - theme::size::screenMargin));
         setVisible (true);
     }
 
@@ -83,6 +97,10 @@ public:
         // Debug builds: count any allocation made on the audio thread.
         rt::installAllocationTripwire();
 
+        // The look comes first and goes last: every window and menu uses it.
+        lookAndFeel = std::make_unique<theme::EncoreLookAndFeel>();
+        juce::LookAndFeel::setDefaultLookAndFeel (lookAndFeel.get());
+
         settings = std::make_unique<AppSettings>();
         eventlog::start (settings->getFolder().getChildFile ("Logs"), getApplicationVersion());
 
@@ -95,6 +113,9 @@ public:
         settings->save();
         settings = nullptr;
         eventlog::stop();
+
+        juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+        lookAndFeel = nullptr;
     }
 
     void systemRequestedQuit() override { quit(); }
@@ -106,6 +127,7 @@ public:
     }
 
 private:
+    std::unique_ptr<theme::EncoreLookAndFeel> lookAndFeel;
     std::unique_ptr<AppSettings> settings;
     std::unique_ptr<MainWindow> mainWindow;
 };

@@ -12,14 +12,38 @@ int main()
 
     juce::UnitTestRunner runner;
     runner.setAssertOnFailure (false);
-    runner.runTestsInCategory ("Encore");
+    // ENCORE_TEST_ONLY=<test name>: run just that one (e.g. the showcase tour).
+    if (const auto only = juce::SystemStats::getEnvironmentVariable ("ENCORE_TEST_ONLY", {}); only.isNotEmpty())
+    {
+        juce::Array<juce::UnitTest*> chosen;
+
+        for (auto* test : juce::UnitTest::getTestsInCategory ("Encore"))
+            if (test->getName() == only)
+                chosen.add (test);
+
+        runner.runTests (chosen);
+    }
+    else
+    {
+        runner.runTestsInCategory ("Encore");
+    }
 
     int failures = 0, passes = 0;
 
     for (int i = 0; i < runner.getNumResults(); ++i)
     {
-        failures += runner.getResult (i)->failures;
-        passes += runner.getResult (i)->passes;
+        const auto* result = runner.getResult (i);
+        failures += result->failures;
+        passes += result->passes;
+
+        // JUCE logs to the debugger on Windows: print failures where CI sees them.
+        if (result->failures > 0)
+        {
+            std::cout << "FAILED: " << result->unitTestName << " / " << result->subcategoryName << "\n";
+
+            for (const auto& message : result->messages)
+                std::cout << "    " << message << "\n";
+        }
     }
 
     std::cout << "\nEncore tests: " << passes << " passed, " << failures << " failed\n";

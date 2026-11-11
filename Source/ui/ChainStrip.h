@@ -7,14 +7,18 @@
 
 #include "engine/core/Chain.h"
 #include "session/ShowSession.h"
+#include "ui/kit/GearPlaceholder.h"
+#include "ui/kit/Pane.h"
 
 namespace encore
 {
 
 /** The patch's signal chain as a row of tiles, left to right (Helix/MainStage
     style). Click a tile to edit it below; right-click to move, insert or
-    remove; the "+" tile adds a block at the end. Message thread only. */
-class ChainStrip final : public juce::Component
+    remove; the "+" tile adds a block at the end. Message thread only.
+    Looks: docs/design/SCREENS.md §4.3 (the Signal chain pane): gear
+    placeholders on a board, bottom-aligned, the selected one outlined. */
+class ChainStrip final : public kit::Pane
 {
 public:
     explicit ChainStrip (ShowSession& session);
@@ -24,16 +28,24 @@ public:
     Chain* getChain() const noexcept { return chain; }
 
     int getSelectedIndex() const noexcept { return selected; }
+    void selectBlock (int index);   // as if clicked
     std::function<void (int)> onSelectionChanged;
 
     /** Call from a UI timer: tile states (on/off, loaded file) can change anywhere. */
     void refresh();
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
+    /** What a block shows as gear (shape, kind label, name, on). */
+    static kit::BlockInfo describe (const Block&);
+
 private:
+    void rebuildTiles();
+    juce::Rectangle<int> getBoardBounds() const;
+
     void select (int index);
     void showBlockMenu (int index);
     void showAddMenu (int insertAt);
@@ -43,7 +55,9 @@ private:
     Chain* chain = nullptr;
     int selected = 0;
     std::vector<juce::Rectangle<int>> tiles;
+    juce::OwnedArray<kit::GearPlaceholder> gear;
     juce::Rectangle<int> addTile;
+    juce::Path addTileOutline;
     juce::String lastState;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainStrip)
