@@ -18,7 +18,12 @@ KeyCap::KeyCap (const juce::String& k) : key (k)
 
 int KeyCap::getIdealWidth() const
 {
-    return (int) std::ceil (textWidth (font (type::keyCap), key)) + size::keyCapPadX * 2 + 2;   // padding + border
+    return widthFor (key);
+}
+
+int KeyCap::widthFor (const juce::String& k)
+{
+    return (int) std::ceil (textWidth (font (type::keyCap), k)) + size::keyCapPadX * 2 + 2;   // padding + border
 }
 
 void KeyCap::paint (juce::Graphics& g)

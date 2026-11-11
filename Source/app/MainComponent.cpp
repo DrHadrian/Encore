@@ -1033,7 +1033,9 @@ void MainComponent::setCueListVisible (bool shouldShow)
     }
 
     resized();
-    grabKeyboardFocus();
+
+    if (isShowing())   // (off-screen in tests)
+        grabKeyboardFocus();
 }
 
 void MainComponent::showStageSettingsMenu (juce::PopupMenu& menu)
@@ -1078,7 +1080,9 @@ void MainComponent::setStageVisible (bool shouldShow)
         onViewChanged();   // the window resizes us: full window for the stage
 
     resized();
-    grabKeyboardFocus();
+
+    if (isShowing())   // (off-screen in tests)
+        grabKeyboardFocus();
 }
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)

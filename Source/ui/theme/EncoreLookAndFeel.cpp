@@ -8,6 +8,7 @@
 
 #include "ui/theme/Icons.h"
 #include "ui/theme/Paint.h"
+#include "ui/kit/KeyCap.h"
 
 namespace encore::theme
 {
@@ -103,6 +104,12 @@ namespace
 
         return std::tuple<Icon, float, bool> { (Icon) (int) p[iconId], (float) p[iconSizeId], (bool) p[iconAfterId] };
     }
+}
+
+void setButtonKeyCap (juce::Button& b, const juce::String& key)
+{
+    b.getProperties().set ("encoreKeyCap", key);
+    b.repaint();
 }
 
 void setButtonIcon (juce::Button& b, Icon icon, float iconSize, bool afterText)
@@ -257,6 +264,9 @@ int EncoreLookAndFeel::getTextButtonWidthToFitText (juce::TextButton& b, int but
     if (const auto icon = buttonIcon (b))
         w += juce::roundToInt (std::get<1> (*icon)) + iconGap;
 
+    if (const auto key = b.getProperties()["encoreKeyCap"].toString(); key.isNotEmpty())
+        w += kit::KeyCap::widthFor (key) + size::keyCapGap;
+
     return w;
 }
 
@@ -360,6 +370,20 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
     const auto area = button.getLocalBounds().withTrimmedBottom (getSegment (button) == Segment::none ? 1 : 0).reduced (6, 0);
     g.setFont (f);
     g.setColour (colourToUse);
+
+    if (const auto key = button.getProperties()["encoreKeyCap"].toString(); key.isNotEmpty())
+    {
+        // Text and key cap centred together.
+        const auto capW = (float) kit::KeyCap::widthFor (key);
+        const auto textW = juce::jmin ((float) area.getWidth() - capW - (float) size::keyCapGap, textWidth (f, button.getButtonText()) + 1.0f);
+        auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (textW + (float) size::keyCapGap + capW, (float) area.getWidth()), (float) area.getHeight());
+        const auto cap = row.removeFromRight (capW).withSizeKeepingCentre (capW, (float) size::keyCapH);
+        kit::paintKeyCap (g, cap, key);
+        g.setFont (f);
+        g.setColour (colourToUse);
+        g.drawText (button.getButtonText(), row.withTrimmedRight ((float) size::keyCapGap), juce::Justification::centred, true);
+        return;
+    }
 
     if (const auto icon = buttonIcon (button))
     {

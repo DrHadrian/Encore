@@ -184,6 +184,75 @@ inline juce::File makeBoardShow (const juce::File& parent)
     return folder;
 }
 
+/** The full-list board's show (a musical): two acts, scenes, bar marks,
+    notes, a cut cue, a cue with its own patch, program changes and MIDI out. */
+inline juce::File makeMusicalShow (const juce::File& parent)
+{
+    auto show = makeDefaultShow (juce::String (juce::CharPointer_UTF8 ("Phantom \xe2\x80\x94 tour 2027")));
+    show.showTemplate = ShowTemplate::musical;
+    std::map<juce::String, juce::String> ids;
+    show.patches[0].name = "Clean";
+    ids["Clean"] = show.patches[0].id;
+
+    for (auto name : { "Clean 2", "Edge of breakup", "Lead", "Crunch" })
+    {
+        auto p = duplicatePatch (show.patches[0], name);
+        ids[name] = p.id;
+        show.patches.push_back (std::move (p));
+    }
+
+    auto cue = [&] (const char* name, const char* bar, const char* note, const char* patch, int pc = -1, bool out = false)
+    {
+        auto c = RunItem::makeCue ({}, name, ids[patch]);
+        c.barMark = bar;
+        c.note = note;
+        c.programChange = pc;
+
+        if (out)
+            c.midiOut.push_back ({ MidiOutMessage::Kind::programChange, 1, 7, 0 });
+
+        return c;
+    };
+
+    auto prologue = RunItem::makeSection ("Prologue", "scene");
+    prologue.children = { cue ("Overture", "bar 1", "Wait for the MD", "Clean"),
+                          cue ("Auction", "bar 34 / B", "Swell on the chandelier", "Clean 2", 2) };
+    auto rehearsal = RunItem::makeSection ("Rehearsal", "scene");
+    auto reprise = cue ("Reprise", "bar 64", "Cut in rehearsal 3", "Edge of breakup");
+    reprise.cut = true;
+    rehearsal.children = { cue ("Think of Me", "bar 1", "", "Clean"), cue ("Angel of Music", "bar 17 / C", "Capo 2", "Edge of breakup"),
+                           reprise, cue ("Title Song", "bar 1 / A", "Big entrance, fade in", "Lead", 5, true),
+                           cue ("Title Song coda", "", "", "Lead") };
+    auto rooftop = RunItem::makeSection ("Rooftop", "scene");
+    auto finale = cue ("Act 1 finale", "bar 88 / F", "Hold for the blackout", "Crunch", -1, true);
+    finale.uniquePatch = duplicatePatch (show.patches.back(), "Crunch");
+    finale.patchId.clear();
+    rooftop.children = { cue ("All I Ask", "bar 1", "Soft, neck pickup", "Clean 2"), finale };
+    auto act1 = RunItem::makeSection ("Act 1", "act");
+    act1.children = { prologue, rehearsal, rooftop };
+
+    auto masquerade = RunItem::makeSection ("Masquerade", "scene");
+    masquerade.children = { cue ("Entr'acte", "", "", "Crunch"), cue ("Masquerade", "bar 1", "", "Lead", 9) };
+    auto act2 = RunItem::makeSection ("Act 2", "act");
+    act2.children = { masquerade };
+    show.runningOrder.children = { act1, act2 };
+
+    const auto folder = parent.getChildFile ("Phantom");
+    ShowFolder::create (folder, show);
+    return folder;
+}
+
+inline juce::XmlElement boardDeviceSetup()
+{
+    juce::XmlElement setup ("DEVICESETUP");
+    setup.setAttribute ("deviceType", "Windows Audio");
+    setup.setAttribute ("audioOutputDeviceName", "Headset (2- EarPods)");
+    setup.setAttribute ("audioInputDeviceName", "Headset (2- EarPods)");
+    setup.setAttribute ("audioDeviceRate", 48000);
+    setup.setAttribute ("audioDeviceBufferSize", 480);
+    return setup;
+}
+
 class EditViewTests final : public juce::UnitTest
 {
 public:
@@ -244,6 +313,32 @@ public:
                 const auto minimum = main.getMinimumEditSize();
                 expect (minimum.x >= theme::size::minEditWidth && minimum.y >= theme::size::minEditHeight);
             }
+        }
+
+        beginTest ("Full list: typing a name (full-list-typing.png)");
+        {
+            AppSettings settings (root.getChildFile ("Settings musical"));
+            settings.setLastShowFolder (makeMusicalShow (root));
+            const auto setup = boardDeviceSetup();
+            settings.setAudioDeviceState (&setup);
+
+            MainComponent main (settings, std::make_unique<BoardDeviceType>());
+            main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            pump (1000);
+
+            // Go to cue 5 (digits + Enter), open the full list (F6), select
+            // "Title Song coda" (Down from the top) and start typing (Enter).
+            main.keyPressed (juce::KeyPress ('5', juce::ModifierKeys(), '5'));
+            main.keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
+            main.keyPressed (juce::KeyPress (juce::KeyPress::F6Key));
+            pump (300);
+
+            for (int i = 0; i < 10; ++i)
+                main.keyPressed (juce::KeyPress (juce::KeyPress::downKey));
+
+            main.keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
+            pump (300);
+            expect (hasContent (renderSnapshot (main, "full-list-typing")));
         }
 
         beginTest ("Edit view: no audio device at all");

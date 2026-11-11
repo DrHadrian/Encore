@@ -377,6 +377,9 @@ namespace size
     // Full list columns (CueListEditor): number, name 45 % of flex, bar, note (rest), patch, MIDI
     constexpr int colNumber = 64, colBar = 150, colPatch = 190, colMidi = 90;
     constexpr int indentPerLevel = 18;
+    constexpr int cellPadX = 6, sectionPadX = 10, sectionKindW = 70, cellEditorPadX = 6, cellEditorH = 24, cellEditorInsetR = 4;
+    constexpr int subToolbarPadX = 12, subToolbarGap = 6, subToolbarTitleW = 98, subToolbarButton = 70, subToolbarWideButton = 90;
+    constexpr int backButtonW = 130, keyCapGap = 6, keyCapH = 14;
     constexpr int playingBar = 4;            // green bar on the playing row (3 px in pane lists)
 }
 
@@ -409,6 +412,7 @@ namespace type
     constexpr Style tableRow        { 13.5f, Weight::regular };
     constexpr Style tableSection    { 14.0f, Weight::bold };
     constexpr Style tableKind       { 11.0f, Weight::bold, 0.06f, true };
+    constexpr Style tableMidi       { 12.0f, Weight::regular };             // "PC 5  OUT"
     constexpr Style menuItem        { 12.5f, Weight::regular };
     constexpr Style menuShortcut    { 11.0f, Weight::regular };
     constexpr Style dialogTitle     { 12.5f, Weight::semibold };

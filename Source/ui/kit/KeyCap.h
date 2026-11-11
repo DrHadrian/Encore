@@ -15,6 +15,7 @@ public:
     explicit KeyCap (const juce::String& key);
 
     int getIdealWidth() const;
+    static int widthFor (const juce::String& key);
     void paint (juce::Graphics&) override;
 
 private:

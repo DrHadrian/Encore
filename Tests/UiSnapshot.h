@@ -40,9 +40,13 @@ inline juce::Image renderSnapshot (juce::Component& c, const juce::String& name,
 /** Something brighter than the background was drawn. */
 inline bool hasContent (const juce::Image& image)
 {
-    for (int y = 0; y < image.getHeight(); y += 7)
-        for (int x = 0; x < image.getWidth(); x += 7)
-            if (image.getPixelAt (x, y).getBrightness() > 0.6f)
+    // Every pixel of small images (a 14 px meter: text is easily missed by a
+    // sparse grid, and font rendering differs between platforms).
+    const auto step = image.getWidth() * image.getHeight() > 400000 ? 3 : 1;
+
+    for (int y = 0; y < image.getHeight(); y += step)
+        for (int x = 0; x < image.getWidth(); x += step)
+            if (const auto c = image.getPixelAt (x, y); c.getAlpha() > 64 && c.getBrightness() > 0.6f)
                 return true;
 
     return false;

@@ -36,6 +36,9 @@ Segment getSegment (const juce::Component&);
     (the chevron of "Show ▾"), 6 px from the text. */
 void setButtonIcon (juce::Button&, Icon, float iconSize, bool afterText);
 
+/** A key cap after the text ("Back to patches  F6"). */
+void setButtonKeyCap (juce::Button&, const juce::String& key);
+
 /** Encore's look for every stock JUCE control: buttons, checkboxes, combo
     boxes, menus, scrollbars, sliders, text fields, tooltips and alert boxes.
     One instance, created before the first window and destroyed after the
