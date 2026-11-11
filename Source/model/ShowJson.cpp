@@ -92,6 +92,21 @@ namespace
         if (b.stomp > 0)
             set (o, "stomp", b.stomp);
 
+        if (b.type == pluginBlockType || ! b.plugin.isEmpty())
+        {
+            auto plugin = object();
+            set (plugin, "format", b.plugin.format);
+            set (plugin, "name", b.plugin.name);
+            set (plugin, "maker", b.plugin.maker);
+            set (plugin, "uid", b.plugin.uid);
+            set (plugin, "version", b.plugin.version);
+            set (plugin, "file", b.plugin.file);
+            set (o, "plugin", plugin);
+
+            if (b.state.isNotEmpty())
+                set (o, "state", b.state);
+        }
+
         if (! b.expression.empty())
         {
             auto expression = object();
@@ -119,6 +134,17 @@ namespace
         b.enabled = flag (o, "enabled", true);
         b.file = str (o, "file");
         b.stomp = juce::jlimit (0, maxStomps, integer (o, "stomp", 0));
+        b.state = str (o, "state");
+
+        if (const auto plugin = get (o, "plugin"); plugin.isObject())
+        {
+            b.plugin.format = str (plugin, "format");
+            b.plugin.name = str (plugin, "name");
+            b.plugin.maker = str (plugin, "maker");
+            b.plugin.uid = integer (plugin, "uid", 0);
+            b.plugin.version = str (plugin, "version");
+            b.plugin.file = str (plugin, "file");
+        }
 
         if (auto* expression = get (o, "expression").getDynamicObject())
             for (auto& e : expression->getProperties())
@@ -290,7 +316,7 @@ juce::String toJson (const ShowModel& show)
 {
     auto root = object();
     set (root, "format", "encore-show");
-    set (root, "schemaVersion", ShowModel::currentSchemaVersion);
+    set (root, "schemaVersion", show.requiredSchemaVersion());
     set (root, "id", show.id);
     set (root, "name", show.name);
     set (root, "template", toString (show.showTemplate));

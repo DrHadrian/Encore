@@ -5,10 +5,21 @@
 #include <juce_events/juce_events.h>
 #include <iostream>
 
-int main()
+#include "session/PluginCatalog.h"
+
+int main (int argc, char* argv[])
 {
     // Creates the message manager and shuts it (and other singletons) down cleanly.
     const juce::ScopedJuceInitialiser_GUI juceRuntime;
+
+    // The plugin tests start this program as the plugin scanner, like Encore.
+    juce::StringArray args;
+
+    for (int i = 1; i < argc; ++i)
+        args.add (juce::String::fromUTF8 (argv[i]));
+
+    if (encore::PluginCatalog::isScannerCommandLine (args))
+        return encore::PluginCatalog::runScanner (args);
 
     juce::UnitTestRunner runner;
     runner.setAssertOnFailure (false);

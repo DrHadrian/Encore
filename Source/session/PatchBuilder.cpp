@@ -8,6 +8,9 @@
 #include "engine/blocks/EqBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
+#include "engine/blocks/PluginBlock.h"
+#include "engine/core/MessageThread.h"
+#include "session/PluginCatalog.h"
 
 namespace encore
 {
@@ -34,14 +37,73 @@ std::unique_ptr<Block> createBlock (const juce::String& typeId)
     return nullptr;
 }
 
+std::unique_ptr<Block> createPluginBlock (const BlockModel& model, const ProcessSpec& spec,
+                                          const PluginContext& plugins, juce::String& error)
+{
+    std::unique_ptr<Block> block;
+    const auto& ref = model.plugin;
+    const auto name = ref.name.isNotEmpty() ? ref.name : juce::String ("A plugin");
+
+    // Created, set up and wrapped on the message thread (VST3 plugins expect it).
+    const auto done = runOnMessageThread ([&]
+    {
+        std::unique_ptr<juce::AudioPluginInstance> instance;
+
+        if (plugins.catalog == nullptr)
+            error = name + " can't be loaded here";
+        else if (const auto description = plugins.catalog->find (ref))
+            instance = plugins.catalog->createInstance (*description,
+                                                        spec.isValid() ? spec.sampleRate : 48000.0,
+                                                        spec.isValid() ? spec.maxBlockSize : 512, error);
+        else if (const auto blocked = plugins.catalog->findBlocked (ref))
+            error = name + " is blocked (" + blocked->reason.toLowerCase() + ")";
+        else
+            error = name + " isn't installed on this computer";
+
+        if (instance != nullptr)
+            PluginBlock::setUp (*instance, model.state);
+        else if (error.isEmpty())
+            error = name + " couldn't be loaded";
+
+        block = std::make_unique<PluginBlock> (ref, std::move (instance), model.state, model.id);
+    }, plugins.keepWaiting);
+
+    if (! done)
+    {
+        error = "Cancelled";
+        block = std::make_unique<PluginBlock> (ref, nullptr, model.state, model.id);
+    }
+
+    static_cast<PluginBlock&> (*block).setKeepWaiting (plugins.keepWaiting);
+
+    return block;
+}
+
 std::unique_ptr<Chain> buildChain (const PatchModel& patch, const ShowFolder& folder,
-                                   const ProcessSpec& spec, juce::StringArray& problems)
+                                   const ProcessSpec& spec, juce::StringArray& problems,
+                                   const PluginContext& plugins)
 {
     auto chain = std::make_unique<Chain>();
 
     for (const auto& model : patch.mainLane().blocks)
     {
-        auto block = createBlock (model.type);
+        std::unique_ptr<Block> block;
+
+        if (model.type == PluginBlock::typeId)
+        {
+            juce::String error;
+            block = createPluginBlock (model, spec, plugins, error);
+
+            if (error.isNotEmpty())
+                problems.add (patch.name + ": " + error + " (the signal passes through)");
+
+            if (plugins.crashedLastTime.contains (model.id))
+                static_cast<PluginBlock&> (*block).markCrashedLastTime();
+        }
+        else
+        {
+            block = createBlock (model.type);
+        }
 
         if (block == nullptr)
         {
@@ -116,6 +178,25 @@ void captureChain (const Chain& chain, PatchModel& patch, const ShowFolder& fold
 
         if (previous != nullptr)
             model.expression = previous->expression;   // not represented live: carry it over
+
+        if (auto* plugin = dynamic_cast<PluginBlock*> (block.get()))
+        {
+            // The plugin's own state holds its settings. Only knobs on a pedal
+            // are kept apart, at their saved value (as below).
+            model.plugin = plugin->getPluginRef();
+            model.state = plugin->getState();
+
+            for (const auto& [id, assignment] : model.expression)
+            {
+                if (previous != nullptr && previous->params.count (id) > 0)
+                    model.params[id] = previous->params.at (id);
+                else if (auto* p = plugin->findParameter (id))
+                    model.params[id] = p->getValue();
+            }
+
+            blocks.push_back (std::move (model));
+            continue;
+        }
 
         for (const auto& p : block->getParameters())
         {

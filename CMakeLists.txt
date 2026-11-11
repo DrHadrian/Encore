@@ -116,12 +116,16 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/blocks/NamAmpBlock.h
     Source/engine/blocks/NoiseGateBlock.cpp
     Source/engine/blocks/NoiseGateBlock.h
+    Source/engine/blocks/PluginBlock.cpp
+    Source/engine/blocks/PluginBlock.h
     Source/engine/core/BackgroundJobs.h
     Source/engine/core/Block.cpp
     Source/engine/core/Block.h
     Source/engine/core/Chain.cpp
     Source/engine/core/Chain.h
     Source/engine/core/LockFreeFifo.h
+    Source/engine/core/MessageThread.cpp
+    Source/engine/core/MessageThread.h
     Source/engine/core/PatchPlayer.cpp
     Source/engine/core/PatchPlayer.h
     Source/engine/core/Parameter.cpp
@@ -153,6 +157,8 @@ target_sources(EncoreEngine INTERFACE
     Source/platform/SystemTuning.cpp
     Source/platform/SystemTuning.h
     Source/session/PatchBuilder.cpp
+    Source/session/PluginCatalog.cpp
+    Source/session/PluginCatalog.h
     Source/session/PreShowCheck.cpp
     Source/session/PreShowCheck.h
     Source/session/RecoveryFile.cpp
@@ -285,6 +291,7 @@ target_compile_definitions(Encore PRIVATE
     JUCE_ASIO=1
     JUCE_WASAPI=1
     JUCE_USE_WINRT_MIDI=1          # Bluetooth MIDI pedals (Windows 10+)
+    JUCE_PLUGINHOST_VST3=1         # VST3 plugins as blocks (milestone 10)
     JUCE_DIRECTSOUND=0
     # Features we don't use: keep the binary lean and avoid network code.
     JUCE_WEB_BROWSER=0
@@ -317,7 +324,34 @@ option(ENCORE_BUILD_TESTS "Build the engine unit tests" ON)
 if(ENCORE_BUILD_TESTS)
     enable_testing()
 
+    # A tiny VST3 the tests host (gain + ways to misbehave), never shipped.
+    juce_add_plugin(EncoreTestPlugin
+        PRODUCT_NAME "Encore Test Plugin"
+        COMPANY_NAME "Encore"
+        PLUGIN_MANUFACTURER_CODE Enco
+        PLUGIN_CODE Etst
+        FORMATS VST3
+        IS_SYNTH FALSE
+        NEEDS_MIDI_INPUT FALSE
+        NEEDS_MIDI_OUTPUT FALSE
+        COPY_PLUGIN_AFTER_BUILD FALSE)
+
+    target_sources(EncoreTestPlugin PRIVATE Tests/plugin/EncoreTestPlugin.cpp)
+
+    target_compile_definitions(EncoreTestPlugin PUBLIC
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_VST3_CAN_REPLACE_VST2=0)
+
+    target_link_libraries(EncoreTestPlugin
+        PRIVATE
+            juce::juce_audio_processors
+        PUBLIC
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags)
+
     juce_add_console_app(EncoreTests PRODUCT_NAME "EncoreTests")
+    add_dependencies(EncoreTests EncoreTestPlugin_VST3)
 
     target_sources(EncoreTests PRIVATE
         Tests/TestMain.cpp
@@ -359,6 +393,7 @@ if(ENCORE_BUILD_TESTS)
         Source/ui/TunerDisplay.cpp
         Tests/PatchBuilderTests.cpp
         Tests/PatchPlayerTests.cpp
+        Tests/PluginTests.cpp
         Tests/ResamplerTests.cpp
         Tests/SessionTests.cpp
         Tests/TestSignals.h)
@@ -367,11 +402,14 @@ if(ENCORE_BUILD_TESTS)
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_UNIT_TESTS=1
+        JUCE_PLUGINHOST_VST3=1
         JUCE_MODAL_LOOPS_PERMITTED=1     # tests pump the message loop themselves
         JUCE_ALSA=0                      # no audio hardware needed (or headers, on Linux CI)
         JUCE_JACK=0
         # Real captures shipped with NeuralAmpModelerCore, used as test fixtures.
-        ENCORE_NAM_EXAMPLE_MODELS="${nam_SOURCE_DIR}/example_models")
+        ENCORE_NAM_EXAMPLE_MODELS="${nam_SOURCE_DIR}/example_models"
+        # The test plugin's .vst3 bundle.
+        ENCORE_TEST_PLUGIN="$<GENEX_EVAL:$<TARGET_PROPERTY:EncoreTestPlugin_VST3,JUCE_PLUGIN_ARTEFACT_FILE>>")
 
     target_link_libraries(EncoreTests
         PRIVATE

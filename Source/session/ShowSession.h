@@ -4,11 +4,15 @@
 #pragma once
 
 #include <juce_events/juce_events.h>
+#include <atomic>
 #include <map>
+#include <memory>
+#include <set>
 
 #include "engine/AudioEngine.h"
 #include "engine/core/BackgroundJobs.h"
 #include "model/ShowFolder.h"
+#include "session/PatchBuilder.h"
 
 namespace encore
 {
@@ -81,8 +85,21 @@ public:
     /** How many cues use a patch. */
     int countCuesUsing (const juce::String& patchId) const;
 
+    //== Plugins ===============================================================
+    /** The plugins this computer has (null: plugin blocks pass the signal through). */
+    void setPluginCatalog (std::shared_ptr<PluginCatalog>);
+    const std::shared_ptr<PluginCatalog>& getPluginCatalog() const noexcept { return pluginCatalog; }
+
+    /** Plugin blocks (by block ID) that were running when Encore crashed: they
+        start switched off, with a notice, until turned back on. */
+    void setCrashedPlugins (const juce::StringArray& blockIds);
+
+    /** Tries a plugin block of the active patch that the crash guard switched off again. */
+    void turnPluginBackOn (int blockIndex);
+
     //== Blocks in the active patch ============================================
     void addBlock (const juce::String& typeId, int index);
+    void addPluginBlock (const PluginRef& plugin, int index);
     void removeBlock (int index);
     void moveBlock (int from, int to);
 
@@ -232,6 +249,16 @@ private:
     juce::StringArray problems;
 
     juce::SharedResourcePointer<BackgroundJobs> jobs;
+
+    // Plugins. `buildsWanted` changes when a show is replaced or the session
+    // ends, which tells plugin creation still waiting to give up.
+    PluginContext makePluginContext() const;
+    void checkPluginFaults();
+    std::shared_ptr<PluginCatalog> pluginCatalog;
+    std::shared_ptr<std::atomic<int>> buildsWanted = std::make_shared<std::atomic<int>> (0);
+    juce::StringArray crashedPlugins;
+    int lastFaultCount = 0;
+    std::set<juce::String> reportedFaults;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE (ShowSession)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShowSession)

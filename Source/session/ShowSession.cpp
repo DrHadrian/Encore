@@ -3,6 +3,8 @@
 
 #include "session/ShowSession.h"
 #include "session/PatchBuilder.h"
+#include "session/PluginCatalog.h"
+#include "engine/blocks/PluginBlock.h"
 
 namespace encore
 {
@@ -109,6 +111,7 @@ ShowSession::ShowSession (AudioEngine& e) : engine (e), player (e.getPlayer())
 ShowSession::~ShowSession()
 {
     stopTimer();
+    buildsWanted->fetch_add (1);   // plugin creation still waiting gives up
 
     if (dirty && folder.isValid())
         writeToDisk (true);   // never lose edits on quit
@@ -169,6 +172,8 @@ void ShowSession::adoptShow (ShowModel newShow, const ShowFolder& newFolder)
     dirty = false;
     lastSave = lastBackup = juce::Time::getCurrentTime();
     ++showGeneration;
+    buildsWanted->fetch_add (1);
+    reportedFaults.clear();
     currentCue = -1;
     lastSeenActive = nullptr;
 
@@ -360,16 +365,17 @@ void ShowSession::buildAll()
     const auto folderCopy = folder;
     const auto spec = engine.getCurrentSpec();
     const auto startAtFirstCue = ! getCues().empty();
+    const auto plugins = makePluginContext();
     juce::WeakReference<ShowSession> weakThis (this);
     ++pendingBuilds;
 
-    jobs->add ([toBuild, generation, folderCopy, spec, startAtFirstCue, weakThis]
+    jobs->add ([toBuild, generation, folderCopy, spec, startAtFirstCue, plugins, weakThis]
     {
         for (size_t i = 0; i < toBuild.size(); ++i)
         {
             const auto& [key, patch] = toBuild[i];
             juce::StringArray buildProblems;
-            auto chain = buildChain (patch, folderCopy, spec, buildProblems);
+            auto chain = buildChain (patch, folderCopy, spec, buildProblems, plugins);
             chain->label = patch.name;
             chain->setTailMode (toTailMode (patch.spillover));
             chain->setSwitchFades (patch.fadeInMs * 0.001, patch.ringOutMs * 0.001);
@@ -419,13 +425,14 @@ void ShowSession::rebuildPatch (const juce::String& key)
     const auto patchCopy = *patch;
     const auto folderCopy = folder;
     const auto spec = engine.getCurrentSpec();
+    const auto plugins = makePluginContext();
     juce::WeakReference<ShowSession> weakThis (this);
     ++pendingBuilds;
 
-    jobs->add ([key, patchCopy, folderCopy, spec, generation, showGen, weakThis]
+    jobs->add ([key, patchCopy, folderCopy, spec, generation, showGen, plugins, weakThis]
     {
         juce::StringArray buildProblems;
-        auto chain = buildChain (patchCopy, folderCopy, spec, buildProblems);
+        auto chain = buildChain (patchCopy, folderCopy, spec, buildProblems, plugins);
         chain->label = patchCopy.name;
         chain->setTailMode (toTailMode (patchCopy.spillover));
         chain->setSwitchFades (patchCopy.fadeInMs * 0.001, patchCopy.ringOutMs * 0.001);
@@ -494,6 +501,8 @@ void ShowSession::publishRunningOrder()
 
 void ShowSession::syncWithAudio()
 {
+    checkPluginFaults();
+
     auto* active = player.getActiveChain();
     const auto cue = player.getCurrentCue();
 
@@ -720,6 +729,23 @@ void ShowSession::addBlock (const juce::String& typeId, int index)
         BlockModel block;
         block.id = newId();
         block.type = typeId;
+        blocks.insert (blocks.begin() + juce::jlimit (0, (int) blocks.size(), index), block);
+        changed (true);
+        rebuildPatch (activePatchId);
+    }
+}
+
+void ShowSession::addPluginBlock (const PluginRef& plugin, int index)
+{
+    captureAll();
+
+    if (auto* patch = findPatchForKey (activePatchId))
+    {
+        auto& blocks = patch->mainLane().blocks;
+        BlockModel block;
+        block.id = newId();
+        block.type = pluginBlockType;
+        block.plugin = plugin;
         blocks.insert (blocks.begin() + juce::jlimit (0, (int) blocks.size(), index), block);
         changed (true);
         rebuildPatch (activePatchId);
@@ -1345,6 +1371,87 @@ void ShowSession::timerCallback()
     if (dirty && folder.isValid()
         && juce::Time::getCurrentTime() - lastEdit >= juce::RelativeTime::milliseconds (autosaveDelayMs))
         writeToDisk (false);
+}
+
+//==============================================================================
+void ShowSession::setPluginCatalog (std::shared_ptr<PluginCatalog> catalog)
+{
+    pluginCatalog = std::move (catalog);
+}
+
+PluginContext ShowSession::makePluginContext() const
+{
+    PluginContext context;
+    context.catalog = pluginCatalog;
+    context.crashedLastTime = crashedPlugins;
+
+    const auto wanted = buildsWanted;
+    const auto now = wanted->load();
+    context.keepWaiting = [wanted, now] { return wanted->load() == now; };
+    return context;
+}
+
+void ShowSession::setCrashedPlugins (const juce::StringArray& blockIds)
+{
+    crashedPlugins = blockIds;
+}
+
+void ShowSession::turnPluginBackOn (int blockIndex)
+{
+    const auto it = chains.find (activePatchId);
+
+    if (it == chains.end() || ! juce::isPositiveAndBelow (blockIndex, (int) it->second->getBlocks().size()))
+        return;
+
+    if (auto* plugin = dynamic_cast<PluginBlock*> (it->second->getBlocks()[(size_t) blockIndex].get()))
+    {
+        crashedPlugins.removeString (plugin->getModelId());
+
+        if (plugin->getFault() == PluginBlock::Fault::crashed)
+        {
+            rebuildPatch (activePatchId);   // a crashed plugin is never touched again: load a new one
+        }
+        else
+        {
+            plugin->turnBackOn();
+            sendChangeMessage();
+        }
+    }
+}
+
+void ShowSession::checkPluginFaults()
+{
+    // Cheap until a plugin actually faults: one atomic read per call.
+    const auto count = PluginBlock::getFaultCount();
+
+    if (count == lastFaultCount)
+        return;
+
+    lastFaultCount = count;
+
+    for (const auto& [key, chain] : chains)
+    {
+        for (const auto& block : chain->getBlocks())
+        {
+            const auto* plugin = dynamic_cast<const PluginBlock*> (block.get());
+
+            if (plugin == nullptr || plugin->getFault() == PluginBlock::Fault::none
+                || plugin->getFault() == PluginBlock::Fault::crashedLastTime)
+                continue;
+
+            const auto id = juce::String::toHexString ((juce::pointer_sized_int) plugin) + "/" + juce::String ((int) plugin->getFault());
+
+            if (reportedFaults.insert (id).second)
+            {
+                const auto* patch = findPatchForKey (key);
+                problems.add ((patch != nullptr ? patch->name + ": " : juce::String())
+                              + plugin->getName() + " " + plugin->getFaultText().substring (0, 1).toLowerCase()
+                              + plugin->getFaultText().substring (1));
+            }
+        }
+    }
+
+    sendChangeMessage();
 }
 
 } // namespace encore

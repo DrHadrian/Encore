@@ -423,3 +423,55 @@ interface, at the exact boxes of the future artwork, so real gear art can
 replace them without touching a screen. Snapshot tests render every screen
 and `docs/design/tools/ui-compare.py` compares them with the design targets.
 
+
+## 0045 — Plugins are scanned, and tried, in a separate process (milestone 10)
+
+Encore never loads an unknown plugin into itself. A scan lists the VST3 files
+in the chosen folders (default: the standard VST3 folder) and starts a copy of
+Encore for each new or changed file (`Encore --scan-plugin <file> <result>`).
+That copy lists the plugins in the file **and loads and plays each one
+briefly** (VST3 can list from `moduleinfo.json` without loading anything, which
+would prove nothing). If the copy crashes, or doesn't finish within 60 s, the
+file goes on a blocklist with the reason, and Encore carries on; a full scan
+(or "try again") retries it. The plugin list, the blocklist and the folders
+belong to the computer, not the show (0006), in one XML file in the app-data
+folder. Known, unchanged files aren't scanned again. Instruments without an
+audio input aren't offered.
+
+## 0046 — Plugin blocks: created on the message thread, guarded while playing (milestone 10)
+
+A plugin is a block like the built-in ones (stomps, expression pedals,
+gapless switching, tails). VST3 plugins are created, set up (buses, saved
+state), prepared, reset and closed on the message thread; a loader thread asks
+the message thread and waits, giving up if the show closes or Encore quits.
+Encore is mono until routing (milestone 11): the guitar feeds every input of
+the plugin and a stereo output is averaged back to mono.
+
+In-process crash guard (process isolation is milestone 12):
+- a plugin that crashes inside its audio processing (Windows: a structured
+  exception), outputs NaN/inf, or takes longer than the whole buffer three
+  callbacks in a row is switched off at once; the dry signal passes and the
+  fault is reported. A crashed plugin is never called again, not even to be
+  closed, because it may still hold its own locks: it stays in memory until
+  Encore quits. The other faults can be turned back on.
+- the crash handler records which plugin the crashing thread was inside; after
+  such a crash that block starts switched off, with a notice, until turned back
+  on.
+- a reset (panic, a patch finished ringing) is done on the message thread,
+  since a plugin's reset may allocate. Switched off, a plugin is fed silence
+  until its tail has died away, so switching it back on doesn't replay an old
+  tail. Plugins always count as having a tail (many report none).
+
+## 0047 — The plugin's own state holds its settings; shows with plugins are schema 2 (milestone 10)
+
+A plugin block saves which plugin it is (format, name, maker, unique ID,
+version and where it was installed, as a hint) and the plugin's own state
+(base64). Its parameters aren't saved one by one, except knobs on an
+expression pedal, which keep their own saved value like any block's. The
+state is read from the plugin only when something changed (parameters,
+programs, the plugin saying so), so autosave stays cheap. On a computer
+without the plugin (or with it blocked) the block passes the signal through
+and keeps everything it saved. A show that contains a plugin is written as
+schema 2; a show without one stays schema 1, so older Encore versions keep
+opening it. Adding, removing or moving a block reloads the patch's plugins
+(their settings carry over).

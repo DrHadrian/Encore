@@ -136,6 +136,14 @@ protected:
                                const ProcessContext& context) noexcept = 0;
     virtual void resetBlock() noexcept = 0;
 
+    /** Audio thread: the block starts processing again after being fully
+        bypassed. Default: a clean state (resetBlock). */
+    virtual void wakeBlock() noexcept { resetBlock(); }
+
+    /** Audio thread: called instead of processBlock while fully bypassed
+        (e.g. a plugin finishing its tail silently). Default: nothing. */
+    virtual void idleBlock (int numSamples) noexcept { juce::ignoreUnused (numSamples); }
+
 private:
     const juce::String typeId, name;
     juce::String modelId, requestedFile;
