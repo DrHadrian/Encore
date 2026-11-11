@@ -23,21 +23,23 @@ int main (int argc, char* argv[])
 
     juce::UnitTestRunner runner;
     runner.setAssertOnFailure (false);
-    // ENCORE_TEST_ONLY=<test name>: run just that one (e.g. the showcase tour).
-    if (const auto only = juce::SystemStats::getEnvironmentVariable ("ENCORE_TEST_ONLY", {}); only.isNotEmpty())
+    // ENCORE_TEST_ONLY=<name>|<name>...: run just those (e.g. the showcase tour).
+    // ENCORE_TEST_SKIP=<name>|<name>...: run all but those. ctest uses both to
+    // run the tests as several processes in parallel (CMakeLists.txt).
+    const auto names = [] (const char* variable)
     {
-        juce::Array<juce::UnitTest*> chosen;
+        return juce::StringArray::fromTokens (juce::SystemStats::getEnvironmentVariable (variable, {}), "|", {});
+    };
 
-        for (auto* test : juce::UnitTest::getTestsInCategory ("Encore"))
-            if (test->getName() == only)
-                chosen.add (test);
+    const auto only = names ("ENCORE_TEST_ONLY");
+    const auto skip = names ("ENCORE_TEST_SKIP");
+    juce::Array<juce::UnitTest*> chosen;
 
-        runner.runTests (chosen);
-    }
-    else
-    {
-        runner.runTestsInCategory ("Encore");
-    }
+    for (auto* test : juce::UnitTest::getTestsInCategory ("Encore"))
+        if ((only.isEmpty() || only.contains (test->getName())) && ! skip.contains (test->getName()))
+            chosen.add (test);
+
+    runner.runTests (chosen);
 
     int failures = 0, passes = 0;
 

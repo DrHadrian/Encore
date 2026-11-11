@@ -88,6 +88,16 @@ cmake --build --preset debug --target EncoreTests
 ctest --preset debug
 ```
 
+The tests run as four processes side by side (robustness and its soak,
+plugins, screens, everything else). `ENCORE_TEST_ONLY=<name>|<name>` runs
+just those, `ENCORE_TEST_SKIP` all but those.
+
+Build speed: Encore's own sources compile against a precompiled JUCE header
+(`ENCORE_PCH`, on by default; parsing JUCE is ~95 % of compiling a typical
+file). CI uses a compiler cache instead, skips link-time optimisation on pull
+requests (`ENCORE_LTO=OFF`) and runs the 4-hour soak every night instead of
+on every change.
+
 ## Live performance settings (Windows)
 
 At start-up Encore opts out of Windows power throttling, raises its priority,

@@ -500,3 +500,30 @@ plugin's editor. That window closes before its plugin does and comes back
 when the patch is rebuilt (an edit reloads the patch's plugins); the
 main window doesn't pull keyboard focus away from it (decision 0025 still
 holds otherwise). Encore's own on/off replaces the plugin's bypass parameter.
+
+## 0049 — Build and test speed: compiler cache, precompiled JUCE, parallel tests, nightly soak
+
+CI took about 17 minutes a run, ~14 of them compiling (MSBuild, every file
+from scratch each time); the tests took ~1.5. Now:
+- CI builds with **Ninja** (as the CMake presets do) and **sccache**, the
+  compiler cache that works with MSVC (it needs debug info embedded in the
+  objects, `/Z7`). Only what changed compiles. Debug and Release run side by side.
+- Encore's own sources compile against a **precompiled header** of JUCE
+  (`ENCORE_PCH`, on by default): parsing JUCE's headers is ~95 % of compiling
+  a typical Encore file (measured: 5.2 s of 5.5 s). JUCE's module sources
+  keep compiling as they were. CI turns it off: sccache can't reuse files
+  compiled against a precompiled header, and building without it proves every
+  file includes what it uses.
+- The tests run as **four processes in parallel** (robustness, plugins,
+  screens, the rest); together they run exactly the full suite.
+- **Link-time optimisation** (`ENCORE_LTO`) stays on for the app players use;
+  pull requests skip it.
+- The **4-hour soak** runs every night (and on demand); every change runs a
+  2-minute one. Documentation-only changes don't build.
+- Not adopted (yet): C++20 modules / `import std` (still behind an
+  experimental switch in CMake, and JUCE is built from headers and macros);
+  CMake unity builds (JUCE's modules already are one, and they would merge
+  Encore's files); another linker (MSVC's is needed with LTO, and linking
+  isn't the slow step here). The app and the tests compile the shared sources
+  twice on purpose (different JUCE settings); sharing a library is the next
+  step if builds grow.

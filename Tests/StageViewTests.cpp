@@ -58,6 +58,8 @@ public:
 
     void runTest() override
     {
+        beginTest ("Set-up: a show with two cues, playing");
+
         const auto temp = juce::File::getSpecialLocation (juce::File::tempDirectory)
                               .getChildFile ("encore-stage-" + juce::String (juce::Random::getSystemRandom().nextInt()));
         temp.createDirectory();

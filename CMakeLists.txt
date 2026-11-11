@@ -22,6 +22,7 @@ set(ENCORE_JUCE_DIR "" CACHE PATH "Optional local JUCE checkout (skips download)
 
 if(ENCORE_JUCE_DIR)
     add_subdirectory("${ENCORE_JUCE_DIR}" "${CMAKE_BINARY_DIR}/juce" EXCLUDE_FROM_ALL)
+    set(juce_SOURCE_DIR "${ENCORE_JUCE_DIR}")   # where JUCE's module sources are (see ENCORE_PCH)
 else()
     include(FetchContent)
     FetchContent_Declare(juce
@@ -244,6 +245,28 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/Toolbar.h)
 target_link_libraries(EncoreUi INTERFACE EncoreUiAssets)
 
+# ------------------------------------------------------------------------------
+# Build speed (decision 0049). Parsing JUCE's headers is ~95 % of compiling a
+# typical Encore file: precompile them once per target. JUCE's own module
+# sources (each one big file, configured by macros) and generated files keep
+# compiling as before.
+# ------------------------------------------------------------------------------
+option(ENCORE_PCH "Precompile the JUCE headers for Encore's own sources" ON)
+
+function(encore_precompile_headers target)
+    if(NOT ENCORE_PCH)
+        return()
+    endif()
+
+    # C++ only (the target also compiles a few C files).
+    target_precompile_headers(${target} PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/Source/EncorePrecompiled.h>")
+
+    file(GLOB_RECURSE juce_module_sources CONFIGURE_DEPENDS
+        "${juce_SOURCE_DIR}/modules/*.cpp" "${juce_SOURCE_DIR}/modules/*.mm" "${juce_SOURCE_DIR}/modules/*.c")
+    set_source_files_properties(${juce_module_sources} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+endfunction()
+
 juce_add_gui_app(Encore
     PRODUCT_NAME "Encore"
     COMPANY_NAME "Encore"
@@ -317,8 +340,17 @@ target_link_libraries(Encore
         juce::juce_gui_basics
     PUBLIC
         juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+# Link-time optimisation for the app players use; CI's quick checks skip it
+# (it makes linking the slowest step and isn't needed to test behaviour).
+option(ENCORE_LTO "Link-time optimisation for Encore (Release)" ON)
+
+if(ENCORE_LTO)
+    target_link_libraries(Encore PUBLIC juce::juce_recommended_lto_flags)
+endif()
+
+encore_precompile_headers(Encore)
 
 # ------------------------------------------------------------------------------
 # Tests: a console app that runs every engine unit test.
@@ -436,7 +468,23 @@ if(ENCORE_BUILD_TESTS)
             juce::juce_recommended_config_flags
             juce::juce_recommended_warning_flags)
 
-    add_test(NAME EncoreTests COMMAND EncoreTests)
+    encore_precompile_headers(EncoreTests)
+
+    # The tests run as four processes in parallel (ctest -j): the long ones
+    # (robustness and its soak, plugins, screens) each on their own, the
+    # rest together. ENCORE_TEST_ONLY / ENCORE_TEST_SKIP take names joined by |.
+    set(encore_slow_tests "Robustness" "Plugins|Plugins in the UI"
+        "Edit view (design v3)|Stage view (design v3)|Design v3 hardening|UI design system|Stage view")
+    set(encore_test_groups robustness plugins screens)
+
+    foreach(name tests IN ZIP_LISTS encore_test_groups encore_slow_tests)
+        add_test(NAME EncoreTests.${name} COMMAND EncoreTests)
+        set_tests_properties(EncoreTests.${name} PROPERTIES ENVIRONMENT "ENCORE_TEST_ONLY=${tests}")
+    endforeach()
+
+    list(JOIN encore_slow_tests "|" encore_all_slow)
+    add_test(NAME EncoreTests.engine COMMAND EncoreTests)
+    set_tests_properties(EncoreTests.engine PROPERTIES ENVIRONMENT "ENCORE_TEST_SKIP=${encore_all_slow}")
 endif()
 
 if(MSVC)

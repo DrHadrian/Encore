@@ -73,6 +73,8 @@ public:
 
     void runTest() override
     {
+        beginTest ("Set-up: the board's show, playing cue 3");
+
         ScopedEncoreLook look;
         const juce::TemporaryFile temp;
         const auto root = temp.getFile();
