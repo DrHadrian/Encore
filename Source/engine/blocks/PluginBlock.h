@@ -8,6 +8,8 @@
 #include <atomic>
 #include <functional>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "engine/core/Block.h"
 #include "model/ShowModel.h"
@@ -102,11 +104,18 @@ public:
     static void setBeforeClosing (std::function<void (PluginBlock&)>);
 
     /** For the crash handler: "<block id>\t<plugin name>" of the plugin this
-        thread is calling right now, or null. Parse it with parseCrashLabel. */
+        thread is calling right now, or null. */
     static const char* getPluginInUseOnThisThread() noexcept;
 
-    /** Splits a crash label into the block ID and the plugin's name. */
-    static std::pair<juce::String, juce::String> parseCrashLabel (const juce::String&);
+    /** For the crash handler: the labels ("<block id>\t<plugin name>", one
+        per line) of every loaded plugin block whose plugin lives in the given
+        module (a DLL path, e.g. inside a .vst3 bundle). Catches crashes on
+        threads Encore doesn't call plugins from (their windows, their own
+        threads). Empty if none, or if the list is being changed right now. */
+    static juce::String getCrashLabelsForModule (const juce::String& modulePath);
+
+    /** Splits crash labels into (block ID, plugin name) pairs. */
+    static std::vector<std::pair<juce::String, juce::String>> parseCrashLabels (const juce::String&);
 
     //== Block =================================================================
     int getLatencySamples() const noexcept override;

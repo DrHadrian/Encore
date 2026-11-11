@@ -10,12 +10,23 @@
 #include "engine/blocks/PluginBlock.h"
 #include "engine/core/Realtime.h"
 #include "model/ShowJson.h"
+#include "platform/CrashReport.h"
 #include "session/PatchBuilder.h"
 #include "session/PluginCatalog.h"
 #include "session/PreShowCheck.h"
 #include "session/ShowSession.h"
 
 #include <cstdlib>
+
+#if JUCE_WINDOWS
+ #ifndef NOMINMAX
+  #define NOMINMAX
+ #endif
+ #ifndef WIN32_LEAN_AND_MEAN
+  #define WIN32_LEAN_AND_MEAN
+ #endif
+ #include <windows.h>
+#endif
 
 namespace encore::test
 {
@@ -402,9 +413,47 @@ public:
         beginTest ("The crash handler can tell which plugin was running");
         {
             expect (PluginBlock::getPluginInUseOnThisThread() == nullptr);
-            const auto [blockId, pluginName] = PluginBlock::parseCrashLabel ("p1\tEncore Test Plugin\n");
-            expectEquals (blockId, juce::String ("p1"));
-            expectEquals (pluginName, juce::String ("Encore Test Plugin"));
+            const auto labels = PluginBlock::parseCrashLabels ("p1\tEncore Test Plugin\np7\tShimmer\n");
+            expectEquals ((int) labels.size(), 2);
+            expectEquals (labels[0].first, juce::String ("p1"));
+            expectEquals (labels[0].second, juce::String ("Encore Test Plugin"));
+            expectEquals (labels[1].second, juce::String ("Shimmer"));
+
+            // A crash on a thread Encore doesn't call plugins from (the
+            // plugin's window, its own threads): found by the file it's in.
+            const auto bundle = description.fileOrIdentifier;
+            const auto dllInside = bundle + juce::File::getSeparatorString() + "Contents" + juce::File::getSeparatorString() + "x.dll";
+            expect (PluginBlock::getCrashLabelsForModule (dllInside).isEmpty(), "nothing loaded yet");
+
+            {
+                juce::String error;
+                auto block = createPluginBlock (model, spec, context, error);
+                expectEquals (PluginBlock::getCrashLabelsForModule (dllInside), juce::String ("p1\tEncore Test Plugin"));
+                expectEquals (PluginBlock::getCrashLabelsForModule (bundle), juce::String ("p1\tEncore Test Plugin"));
+                expect (PluginBlock::getCrashLabelsForModule (bundle + "-other.dll").isEmpty(), "only that plugin's files");
+                expect (PluginBlock::getCrashLabelsForModule (juce::File::getSpecialLocation (juce::File::currentExecutableFile)
+                                                                  .getFullPathName()).isEmpty());
+            }
+
+            expect (PluginBlock::getCrashLabelsForModule (dllInside).isEmpty(), "closed plugins are forgotten");
+
+           #if JUCE_WINDOWS
+            // What Windows hands the crash handler, made by hand.
+            EXCEPTION_RECORD record {};
+            record.ExceptionCode = EXCEPTION_ACCESS_VIOLATION;
+            record.ExceptionAddress = reinterpret_cast<void*> (&PluginBlock::parseCrashLabels);
+            record.NumberParameters = 2;
+            record.ExceptionInformation[0] = 1;
+            record.ExceptionInformation[1] = 0x10;
+            EXCEPTION_POINTERS pointers {};
+            pointers.ExceptionRecord = &record;
+
+            const auto facts = system::describeCrash (&pointers);
+            expectEquals (facts.what, juce::String ("Access violation writing address 0x10 (0xC0000005)"));
+            expect (juce::File (facts.module) == juce::File::getSpecialLocation (juce::File::currentExecutableFile), facts.module);
+            expect (facts.moduleOffset.startsWith ("0x"));
+            expect (facts.stack.size() > 2 && facts.stack.size() == facts.stackModules.size());
+           #endif
         }
 
         beginTest ("A plugin that crashed Encore last time starts switched off");

@@ -86,10 +86,63 @@ const char* PluginBlock::getPluginInUseOnThisThread() noexcept
     return pluginInUse;
 }
 
-std::pair<juce::String, juce::String> PluginBlock::parseCrashLabel (const juce::String& label)
+std::vector<std::pair<juce::String, juce::String>> PluginBlock::parseCrashLabels (const juce::String& labels)
 {
-    const auto line = label.upToFirstOccurrenceOf ("\n", false, false).trim();
-    return { line.upToFirstOccurrenceOf ("\t", false, false), line.fromFirstOccurrenceOf ("\t", false, false) };
+    std::vector<std::pair<juce::String, juce::String>> parsed;
+
+    for (const auto& line : juce::StringArray::fromLines (labels))
+        if (const auto l = line.trim(); l.containsChar ('\t'))
+            parsed.push_back ({ l.upToFirstOccurrenceOf ("\t", false, false), l.fromFirstOccurrenceOf ("\t", false, false) });
+
+    return parsed;
+}
+
+//==============================================================================
+namespace
+{
+    /** Which plugin file each loaded plugin block plays, for the crash
+        handler. Changed on the message thread; read by the crash handler with
+        a try-lock (a crash may happen while it's held). */
+    struct LoadedPlugin
+    {
+        const PluginBlock* block;
+        juce::String file;
+        juce::String label;
+    };
+
+    juce::SpinLock loadedLock;
+    std::vector<LoadedPlugin> loadedPlugins;
+
+    /** The .vst3 a path belongs to: a VST3 is usually a folder with its DLL
+        inside, sometimes the DLL itself, and either may be reported. */
+    juce::String vst3Root (const juce::String& path)
+    {
+        const auto at = path.indexOfIgnoreCase (".vst3");
+
+        if (at < 0)
+            return path;
+
+        const auto end = at + 5;
+        return end == path.length() || path[end] == '/' || path[end] == '\\' ? path.substring (0, end) : path;
+    }
+}
+
+juce::String PluginBlock::getCrashLabelsForModule (const juce::String& modulePath)
+{
+    const juce::SpinLock::ScopedTryLockType lock (loadedLock);
+
+    if (! lock.isLocked() || modulePath.isEmpty())
+        return {};
+
+    juce::StringArray labels;
+
+    const auto root = vst3Root (modulePath);
+
+    for (const auto& p : loadedPlugins)
+        if (p.file.isNotEmpty() && vst3Root (p.file).equalsIgnoreCase (root))
+            labels.addIfNotAlreadyThere (p.label);
+
+    return labels.joinIntoString ("\n");
 }
 
 //==============================================================================
@@ -105,6 +158,11 @@ PluginBlock::PluginBlock (const PluginRef& refToUse, std::unique_ptr<juce::Audio
         return;
 
     instance->addListener (this);
+
+    {
+        const juce::SpinLock::ScopedLockType lock (loadedLock);
+        loadedPlugins.push_back ({ this, instance->getPluginDescription().fileOrIdentifier, juce::String (crashLabel) });
+    }
 
     const auto& all = instance->getParameters();
     encoreByIndex.assign ((size_t) all.size(), nullptr);
@@ -164,6 +222,13 @@ PluginBlock::~PluginBlock()
 {
     if (instance == nullptr)
         return;
+
+    {
+        const juce::SpinLock::ScopedLockType lock (loadedLock);
+        loadedPlugins.erase (std::remove_if (loadedPlugins.begin(), loadedPlugins.end(),
+                                             [this] (const LoadedPlugin& p) { return p.block == this; }),
+                             loadedPlugins.end());
+    }
 
     // Its window (the plugin's editor) goes before the plugin.
     if (beforeClosing != nullptr && juce::MessageManager::existsAndIsCurrentThread())

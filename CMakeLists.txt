@@ -155,6 +155,8 @@ target_sources(EncoreEngine INTERFACE
     Source/model/StageLayout.cpp
     Source/model/StageLayout.h
     Source/model/ShowModel.h
+    Source/platform/CrashReport.cpp
+    Source/platform/CrashReport.h
     Source/platform/SystemTuning.cpp
     Source/platform/SystemTuning.h
     Source/session/PatchBuilder.cpp

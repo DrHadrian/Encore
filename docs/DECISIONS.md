@@ -463,9 +463,14 @@ In-process crash guard (process isolation is milestone 12):
   fault is reported. A crashed plugin is never called again, not even to be
   closed, because it may still hold its own locks: it stays in memory until
   Encore quits. The other faults can be turned back on.
-- the crash handler records which plugin the crashing thread was inside; after
-  such a crash that block starts switched off, with a notice, until turned back
-  on.
+- the crash handler records which plugin the crash was in; after such a
+  crash that plugin's blocks start switched off, with a notice, until turned
+  back on. It's the plugin Encore was calling on that thread, or else the
+  plugin whose file the crashing code (or a caller further down the stack)
+  is in: plugins also crash in their own windows and threads, where Encore
+  isn't calling them. The crash report names what happened (e.g. an access
+  violation), the file and offset, the thread, and every frame by file,
+  since plugins and a Release Encore have no symbols.
 - a reset (panic, a patch finished ringing) is done on the message thread,
   since a plugin's reset may allocate. Switched off, a plugin is fed silence
   until its tail has died away, so switching it back on doesn't replay an old

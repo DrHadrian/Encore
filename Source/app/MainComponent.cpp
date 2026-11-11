@@ -315,14 +315,23 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     // Crashed inside a plugin last time? That block starts switched off.
     if (const auto crashFile = settings.getFolder().getChildFile ("plugin-crash.txt"); crashFile.existsAsFile())
     {
-        const auto [blockId, pluginName] = PluginBlock::parseCrashLabel (crashFile.loadFileAsString());
+        const auto crashed = PluginBlock::parseCrashLabels (crashFile.loadFileAsString());
         crashFile.deleteFile();
 
-        if (uncleanExit && blockId.isNotEmpty())
+        if (uncleanExit && ! crashed.empty())
         {
-            session->setCrashedPlugins ({ blockId });
-            crashedPluginNote = ". " + pluginName + " was running: it starts switched off";
-            eventlog::write ("Crashed inside the plugin " + pluginName + ": it starts switched off");
+            juce::StringArray blockIds, names;
+
+            for (const auto& [blockId, pluginName] : crashed)
+            {
+                blockIds.add (blockId);
+                names.addIfNotAlreadyThere (pluginName);
+            }
+
+            session->setCrashedPlugins (blockIds);
+            crashedPluginNote = ". " + names.joinIntoString (", ") + (names.size() == 1 ? " was" : " were")
+                                + " the cause: switched off for now";
+            eventlog::write ("Crashed inside the plugin " + names.joinIntoString (", ") + ": it starts switched off");
         }
     }
 
