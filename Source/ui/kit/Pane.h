@@ -5,6 +5,10 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <optional>
+
+#include "ui/theme/EncoreTheme.h"
+
 namespace encore::kit
 {
 
@@ -21,6 +25,12 @@ public:
     void setHeader (const juce::String& label, const juce::String& rightText = {});
     void setHeaderRightText (const juce::String& rightText);
     void setHeaderHeight (int height);   // 24 (Edit), 22 (Stage)
+
+    /** The block stage's header: another gradient, a status dot before the
+        label (none: no dot), room on the right for header buttons. */
+    void setHeaderColours (juce::uint32 top, juce::uint32 bottom);
+    void setHeaderDot (std::optional<juce::uint32> dotColour);
+    void setHeaderRightInset (int px);
     bool hasHeader() const noexcept { return headerHeight > 0; }
 
     /** Space for header actions: the header minus its padding and label. */
@@ -33,8 +43,11 @@ public:
 private:
     void updateHeaderShape();
 
-    juce::String label, rightText;   // label already in capitals
-    int headerHeight = 0;
+    juce::String headerText, rightText;   // headerText already in capitals
+    int headerHeight = 0, rightInset = 0;
+    float rightTextW = 0.0f;
+    juce::uint32 headerTop = theme::colour::paneHeaderTop, headerBot = theme::colour::paneHeaderBot;
+    std::optional<juce::uint32> headerDot;
     juce::Path headerShape;
     juce::ColourGradient headerFill;
 };

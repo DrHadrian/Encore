@@ -4,28 +4,60 @@
 #include "ui/ChainStrip.h"
 #include "session/PatchBuilder.h"
 
+#include "engine/blocks/CabIrBlock.h"
+#include "engine/blocks/NamAmpBlock.h"
+#include "engine/blocks/NoiseGateBlock.h"
+#include "ui/theme/Paint.h"
+
 namespace encore
 {
 
-namespace
-{
-    constexpr int tileWidth = 132, tileGap = 28, addWidth = 56;
+using namespace theme;
 
-    const auto tileColour = juce::Colour (0xff1b1e23);
-    const auto onColour   = juce::Colour (0xff2e9e5b);
-    const auto offColour  = juce::Colour (0xff3a3f47);
-    const auto accent     = juce::Colour (0xff4f9dff);
+ChainStrip::ChainStrip (ShowSession& s) : session (s)
+{
+    setHeader ("Signal chain", juce::String (juce::CharPointer_UTF8 ("Click a block to edit it \xc2\xb7 right-click to move, insert, remove or give it a stomp switch")));
+    setTitle ("Signal chain");
 }
 
-ChainStrip::ChainStrip (ShowSession& s) : session (s) {}
+kit::BlockInfo ChainStrip::describe (const Block& block)
+{
+    using Shape = kit::BlockInfo::Shape;
+    const auto& type = block.getTypeId();
+    kit::BlockInfo info;
+    info.shape = type == NamAmpBlock::typeId ? Shape::amp : type == CabIrBlock::typeId ? Shape::cab : Shape::pedal;
+    info.kindLabel = type == NamAmpBlock::typeId    ? juce::String ("Amp")
+                   : type == CabIrBlock::typeId     ? juce::String ("Cab")
+                   : type == NoiseGateBlock::typeId ? juce::String ("Gate")
+                                                    : block.getName();   // "EQ", "Delay"
+    info.name = block.getName();
+    info.on = block.isEnabled();
+    return info;
+}
 
 void ChainStrip::setChain (Chain* newChain)
 {
     chain = newChain;
     const auto count = chain != nullptr ? (int) chain->getBlocks().size() : 0;
     selected = juce::jlimit (0, juce::jmax (0, count - 1), selected);
+    rebuildTiles();
     resized();
     repaint();
+}
+
+void ChainStrip::rebuildTiles()
+{
+    gear.clear();
+
+    if (chain == nullptr)
+        return;
+
+    for (auto& b : chain->getBlocks())
+    {
+        auto* tile = gear.add (new kit::GearPlaceholder (kit::GearView::Size::chainTile, describe (*b)));
+        tile->setTitle (b->getName());
+        addAndMakeVisible (tile);
+    }
 }
 
 void ChainStrip::refresh()
@@ -40,8 +72,19 @@ void ChainStrip::refresh()
     if (state != lastState)
     {
         lastState = state;
+
+        if (chain != nullptr)
+            for (size_t i = 0; i < chain->getBlocks().size() && (int) i < gear.size(); ++i)
+                gear[(int) i]->setBlock (describe (*chain->getBlocks()[i]));
+
         repaint();
     }
+}
+
+void ChainStrip::selectBlock (int index)
+{
+    if (juce::isPositiveAndBelow (index, (int) tiles.size()))
+        select (index);
 }
 
 void ChainStrip::select (int index)
@@ -53,81 +96,76 @@ void ChainStrip::select (int index)
         onSelectionChanged (index);
 }
 
+juce::Rectangle<int> ChainStrip::getBoardBounds() const
+{
+    return getContentBounds();
+}
+
 void ChainStrip::resized()
 {
-    tiles.clear();
-    const auto count = chain != nullptr ? (int) chain->getBlocks().size() : 0;
-    auto area = getLocalBounds().reduced (0, 8);
-    int x = 0;
+    Pane::resized();
 
-    for (int i = 0; i < count; ++i)
+    // Bottom-aligned on the board, 6 px apart, 14 × 12 padding.
+    tiles.clear();
+    const auto board = getBoardBounds().reduced (size::chainPadX, size::chainPadY);
+    auto x = board.getX();
+
+    for (int i = 0; i < gear.size(); ++i)
     {
-        tiles.push_back ({ x, area.getY(), tileWidth, area.getHeight() });
-        x += tileWidth + tileGap;
+        const auto r = kit::GearView::idealBounds (kit::GearView::Size::chainTile, gear[i]->getBlock().shape);
+        tiles.push_back (r.withPosition (x, board.getBottom() - r.getHeight()));
+        gear[i]->setBounds (tiles.back());
+        x += r.getWidth() + size::tileGap;
     }
 
-    addTile = { x, area.getY() + area.getHeight() / 2 - addWidth / 2, addWidth, addWidth };
+    addTile = { x, board.getBottom() - size::tileH, size::plusTileW, size::tileH };
+    addTileOutline.clear();
+
+    // The "+" tile: 2 px dashed border, radius 8.
+    juce::Path rounded;
+    rounded.addRoundedRectangle (addTile.toFloat().reduced (1.0f), (float) size::plusTileRadius - 1.0f);
+    const float dashes[] = { (float) size::dash, (float) size::dash };
+    juce::PathStrokeType (2.0f).createDashedStroke (addTileOutline, rounded, dashes, 2);
 }
 
 void ChainStrip::paint (juce::Graphics& g)
 {
+    Pane::paint (g);
+
+    const auto board = getBoardBounds();
+    g.setColour (paint::c (colour::chainBoard));
+    g.fillRect (board);
+
+    // Inset shadow along the top (0 2px 6px black 70 %).
+    g.setGradientFill (juce::ColourGradient::vertical (paint::c (colour::chainBoardShadow), (float) board.getY(),
+                                                       paint::c (colour::chainBoardShadow).withAlpha (0.0f), (float) (board.getY() + size::chainShadowH)));
+    g.fillRect (board.withHeight (size::chainShadowH));
+
     if (chain == nullptr)
     {
-        g.setColour (juce::Colours::white.withAlpha (0.5f));
-        g.setFont (juce::FontOptions (15.0f));
-        g.drawText ("Loading patch...", getLocalBounds(), juce::Justification::centredLeft);
+        paint::text (g, "Loading patch...", board.reduced (size::chainPadX, 0).toFloat(), type::body, colour::textMuted);
         return;
     }
 
-    const auto& blocks = chain->getBlocks();
+    // Shadows under the pedals, then the selection outline (3 px, 3 px away).
+    for (auto* tile : gear)
+        if (tile->getBlock().shape == kit::BlockInfo::Shape::pedal)
+            kit::GearPlaceholder::paintPedalShadow (g, tile->getBounds().toFloat());
 
-    for (size_t i = 0; i < tiles.size() && i < blocks.size(); ++i)
+    // The "+" tile.
+    g.setColour (paint::c (colour::dashedTile));
+    g.fillPath (addTileOutline);
+    paint::text (g, "+", addTile.toFloat(), type::plusGlyph, colour::plusTile, juce::Justification::centred);
+}
+
+void ChainStrip::paintOverChildren (juce::Graphics& g)
+{
+    if (juce::isPositiveAndBelow (selected, (int) tiles.size()))
     {
-        const auto& block = *blocks[i];
-        const auto r = tiles[i].toFloat();
-        const auto isSelected = (int) i == selected;
-
-        // Arrow to the next tile (or to "+").
-        const auto arrowY = r.getCentreY();
-        g.setColour (juce::Colours::white.withAlpha (0.35f));
-        g.drawArrow ({ r.getRight() + 4.0f, arrowY, r.getRight() + tileGap - 4.0f, arrowY }, 1.5f, 8.0f, 8.0f);
-
-        g.setColour (tileColour);
-        g.fillRoundedRectangle (r, 8.0f);
-        g.setColour (isSelected ? accent : (block.isEnabled() ? onColour : offColour));
-        g.drawRoundedRectangle (r.reduced (1.0f), 8.0f, isSelected ? 3.0f : 2.0f);
-
-        auto text = tiles[i].reduced (12, 10);
-        g.setColour (juce::Colours::white.withAlpha (block.isEnabled() ? 1.0f : 0.45f));
-        g.setFont (juce::FontOptions (17.0f, juce::Font::bold));
-        g.drawText (block.getName(), text.removeFromTop (24), juce::Justification::centredLeft, true);
-
-        g.setFont (juce::FontOptions (13.0f));
-        g.setColour (juce::Colours::white.withAlpha (0.6f));
-        const auto file = block.getLoadedFile();
-        const auto detail = file != juce::File() ? file.getFileNameWithoutExtension()
-                                                  : (block.getFileSlot() != nullptr ? juce::String ("(empty)") : juce::String());
-        g.drawFittedText (detail, text.removeFromTop (34), juce::Justification::topLeft, 2);
-
-        g.setColour (block.isEnabled() ? onColour : offColour);
-        g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
-        auto bottom = text.removeFromBottom (16);
-        g.drawText (block.isEnabled() ? "ON" : "OFF", bottom, juce::Justification::bottomLeft);
-
-        if (const auto stomp = block.getStomp(); stomp > 0)
-        {
-            g.setColour (juce::Colours::white.withAlpha (0.75f));
-            g.drawText ("STOMP " + juce::String (stomp), bottom, juce::Justification::bottomRight);
-        }
+        const auto r = tiles[(size_t) selected].toFloat().expanded ((float) size::selectionOffset + (float) size::selectionWidth * 0.5f);
+        g.setColour (paint::c (colour::tileSelection));
+        g.drawRoundedRectangle (r, (float) size::selectionRadius, (float) size::selectionWidth);
     }
-
-    // "+" to add a block at the end.
-    g.setColour (tileColour);
-    g.fillEllipse (addTile.toFloat());
-    g.setColour (juce::Colours::white.withAlpha (0.7f));
-    g.drawEllipse (addTile.toFloat().reduced (1.0f), 1.5f);
-    g.setFont (juce::FontOptions (28.0f));
-    g.drawText ("+", addTile, juce::Justification::centred);
 }
 
 void ChainStrip::mouseDown (const juce::MouseEvent& e)

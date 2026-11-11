@@ -21,11 +21,38 @@ void Pane::setHeader (const juce::String& newLabel, const juce::String& newRight
 
     const auto shown = paint::caps (type::paneHeader, newLabel);
 
-    if (shown != label || newRightText != rightText)
+    if (shown != headerText || newRightText != rightText)
     {
-        label = shown;
+        headerText = shown;
         rightText = newRightText;
+        rightTextW = rightText.isEmpty() ? 0.0f : textWidth (font (type::paneHeaderNote), rightText) + 1.0f;
         repaint (0, 0, getWidth(), headerHeight);
+    }
+}
+
+void Pane::setHeaderColours (juce::uint32 top, juce::uint32 bottom)
+{
+    headerTop = top;
+    headerBot = bottom;
+    updateHeaderShape();
+    repaint (0, 0, getWidth(), headerHeight + 2);
+}
+
+void Pane::setHeaderDot (std::optional<juce::uint32> newDot)
+{
+    if (newDot != headerDot)
+    {
+        headerDot = newDot;
+        repaint (0, 0, getWidth(), headerHeight + 2);
+    }
+}
+
+void Pane::setHeaderRightInset (int px)
+{
+    if (px != rightInset)
+    {
+        rightInset = px;
+        repaint (0, 0, getWidth(), headerHeight + 2);
     }
 }
 
@@ -34,6 +61,7 @@ void Pane::setHeaderRightText (const juce::String& newRightText)
     if (newRightText != rightText)
     {
         rightText = newRightText;
+        rightTextW = rightText.isEmpty() ? 0.0f : textWidth (font (type::paneHeaderNote), rightText) + 1.0f;
         repaint (0, 0, getWidth(), headerHeight);
     }
 }
@@ -64,8 +92,7 @@ void Pane::updateHeaderShape()
     const auto radius = (float) size::paneRadius - 1.0f;
     headerShape.addRoundedRectangle (header.getX(), header.getY(), header.getWidth(), header.getHeight(),
                                      radius, radius, true, true, false, false);
-    headerFill = juce::ColourGradient::vertical (paint::c (colour::paneHeaderTop), header.getY(),
-                                                 paint::c (colour::paneHeaderBot), header.getBottom());
+    headerFill = juce::ColourGradient::vertical (paint::c (headerTop), header.getY(), paint::c (headerBot), header.getBottom());
 }
 
 juce::Rectangle<int> Pane::getHeaderBounds() const
@@ -92,12 +119,28 @@ void Pane::paint (juce::Graphics& g)
         g.setColour (paint::c (colour::paneHeaderLine));
         paint::hline (g, 1.0f, (float) headerHeight + 1.0f, bounds.getWidth() - 2.0f);
 
-        const auto text = getHeaderBounds().toFloat().withTrimmedLeft ((float) size::paneHeaderPadL)
-                                                     .withTrimmedRight ((float) size::paneHeaderPadR);
-        paint::text (g, label, text, type::paneHeader, colour::textMuted);
+        auto text = getHeaderBounds().toFloat().withTrimmedLeft ((float) size::paneHeaderPadL)
+                                               .withTrimmedRight ((float) (size::paneHeaderPadR + rightInset));
+
+        if (headerDot.has_value())
+        {
+            // A 7 px status dot before the label (the block stage: on / off).
+            const auto d = text.removeFromLeft ((float) size::headerDot).withSizeKeepingCentre ((float) size::headerDot, (float) size::headerDot);
+            g.setColour (paint::c (*headerDot).withMultipliedAlpha (0.35f));
+            g.fillEllipse (d.expanded (2.0f));
+            g.setColour (paint::c (*headerDot));
+            g.fillEllipse (d);
+            text.removeFromLeft ((float) size::rowGap);
+        }
 
         if (rightText.isNotEmpty())
-            paint::text (g, rightText, text, type::paneHeaderNote, colour::textMuted, juce::Justification::centredRight);
+        {
+            paint::text (g, rightText, text.removeFromRight (juce::jmin (rightTextW, text.getWidth() * 0.6f)),
+                         type::paneHeaderNote, colour::textMuted, juce::Justification::centredRight);
+            text.removeFromRight ((float) size::rowGap);
+        }
+
+        paint::text (g, headerText, text, type::paneHeader, colour::textMuted);
     }
 }
 

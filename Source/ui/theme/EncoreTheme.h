@@ -209,6 +209,9 @@ namespace colour
     constexpr juce::uint32 dashedTile      = 0xff3E3E42;   // "+" tile border in the chain
     constexpr juce::uint32 plusTile        = 0xffA5A5AB;   // "+" glyph, cab help text
     constexpr juce::uint32 cabCaption      = 0xffE8C27A;   // "Cab · <IR>" caption
+    constexpr juce::uint32 stageHeaderTop  = 0xff2A2A2E;   // block stage pane header
+    constexpr juce::uint32 stageHeaderBot  = 0xff222225;
+    constexpr juce::uint32 dotOff          = 0xff5A5A60;   // header dot while the block is off
     constexpr juce::uint32 tileSelection   = 0xff4FA3FF;   // selected chain tile outline
     constexpr juce::uint32 chainBoardShadow= 0xB3000000;   // inset shadow of the chain board (black 70 %)
     constexpr juce::uint32 stageFooter     = 0xff1B1B1E;   // Stage footer strip
@@ -293,13 +296,15 @@ namespace size
     constexpr int stageModeButtonH  = 30;
     constexpr int fieldHeight       = 22;
     constexpr int fieldRadius       = 4;
-    constexpr int fieldPadX         = 8;
+    constexpr int fieldPadX         = 8, fieldChevron = 9;
+    constexpr int patchPickerW      = 130, headerArrow = 14;   // the centre header line
     constexpr int iconButton        = 20;
     constexpr int iconSize          = 12;
     constexpr int rowHeight         = 26;    // pane lists
     constexpr int tableRowHeight    = 28;    // full list
     constexpr int tableHeaderHeight = 24;
     constexpr int sectionHeadingH   = 24;    // sidebar section heading (22 in the CSS; the target renders 24)
+    constexpr int headerDot = 7;
     constexpr int listPad = 4, listGap = 1, rowPadX = 8, rowGap = 8, rowNumberW = 18, paneBarW = 3, paneBarH = 16;
     constexpr int swatch = 9, swatchRadius = 2, rowRadius = 4, headingPadBottom = 2;
     constexpr int paneFooterPadX = 10, paneFooterPadY = 8, headerButtonGap = 1, headerSmallButtonMargin = 4;
@@ -326,6 +331,13 @@ namespace size
     constexpr int ampPanelW = 600, ampPanelH = 430, blockPanelH = 300, cabPanelW = 230, cabPanelH = 300;
     constexpr int ampStripX = 22, ampStripY = 44, ampStripW = 556, ampStripH = 138;
     constexpr int gearRadius = 10, pedalRadius = 14, pedalBorder = 2, stripRadius = 6, plusTileRadius = 8;
+    constexpr int chainPadX = 12, chainPadY = 14, chainShadowH = 8, dash = 4;            // the chain board
+    constexpr int stagePadTop = 6, stagePadBottom = 14, stagePadX = 12, cabGap = 22;     // the block stage
+    constexpr int stripPadTop = 8, stripPadBottom = 6, stripPadX = 18;                   // the amp's control strip
+    constexpr int groupLabelH = 12, groupLabelGap = 2, groupLabelPadX = 10, outputGroupW = 170;
+    constexpr int powerColumn = 40, statusLed = 8;
+    constexpr int cabColumnW = 238, cabCaptionGap = 10, cabCaptionH = 15, cabHelpH = 30;
+    constexpr int selectionOffset = 3, selectionWidth = 3, selectionRadius = 9;          // selected tile outline
     constexpr int pedalInset = 15, pedalLed = 16, pedalLedY = 48, pedalNameY = 85, pedalNameH = 25;
     constexpr int footswitch = 55, footswitchY = 138, footswitchBorderW = 2;
     constexpr int pedalShadowY = 6, pedalShadowBlur = 10;
@@ -414,6 +426,8 @@ namespace type
     constexpr Style saveState       { 10.5f, Weight::regular };             // "Saved 23:28"
     constexpr Style headerLine      { 14.0f, Weight::semibold };            // "Cue 1 of 8: Clean"
     constexpr Style healthTitle     { 11.5f, Weight::semibold };            // "System health"
+    constexpr Style plusGlyph       { 22.0f, Weight::regular };             // "+" tile in the chain
+    constexpr Style cabCaption      { 12.0f, Weight::bold };                // "Cab · <IR> (IR)" under the cab
     constexpr Style gearKind        {  8.0f, Weight::bold, 0.08f, true };   // AMP on chain tiles
     constexpr Style gearGroup       { 10.0f, Weight::extraBold, 0.16f, true }; // PREAMP / EQ / OUTPUT
     constexpr Style knobLabel       { 10.0f, Weight::extraBold, 0.12f, true }; // INPUT, BASS...

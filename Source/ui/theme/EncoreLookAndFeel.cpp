@@ -271,6 +271,13 @@ void EncoreLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
     const auto lighten = (highlighted && enabled && ! down) ? state::hoverLighten : 0.0f;
     const auto on = button.getToggleState() || down;
 
+    // A button that looks like a popup field (the patch picker): inset, no drop line.
+    if (variant == Variant::field)
+    {
+        paint::inset (g, r, colour::fieldFill, colour::fieldBorder, (float) size::fieldRadius, colour::fieldShadow);
+        return;
+    }
+
     // Leave room for the 1 px drop line under raised buttons.
     if (segment == Segment::none)
         r = r.withTrimmedBottom (1.0f);
@@ -321,6 +328,21 @@ void EncoreLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
 void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button, bool, bool)
 {
     const auto variant = effectiveVariant (button);
+
+    if (variant == Variant::field)
+    {
+        // Text left, chevron right, as a combo box field.
+        auto area = button.getLocalBounds().toFloat().reduced ((float) size::fieldPadX, 0.0f);
+        const auto alpha = button.isEnabled() ? 1.0f : state::disabledAlpha;
+        drawIcon (g, Icon::chevronDown, area.removeFromRight ((float) size::fieldChevron).withSizeKeepingCentre ((float) size::fieldChevron, (float) size::fieldChevron),
+                  c (colour::textSecondary).withMultipliedAlpha (alpha));
+        area.removeFromRight ((float) size::outGap);
+        g.setFont (font (type::bodySmall));
+        g.setColour (c (colour::fieldText).withMultipliedAlpha (alpha));
+        g.drawText (button.getButtonText(), area, juce::Justification::centredLeft, true);
+        return;
+    }
+
     const auto on = button.getToggleState();
     auto colourToUse = c (colour::text);
 

@@ -56,19 +56,21 @@ private:
 /** An LED: red with a glow when on, dark red when off. `scale` 1 = 16 px. */
 void paintLed (juce::Graphics&, juce::Rectangle<float> led, bool on, float scale = 1.0f);
 
-/** The amp panel's power LED (28 px with a halo). Paints only. */
-class PowerLed final : public juce::Component
+/** The panel's power LED (28 px with a halo): lit while the block is on.
+    A toggle button: clicking it turns the block on or off (the old ON/OFF
+    button's job). */
+class PowerLed final : public juce::Button
 {
 public:
     PowerLed();
 
     void setOn (bool);
+    bool isOn() const noexcept { return getToggleState(); }
 
-    void paint (juce::Graphics&) override;
+    void paintButton (juce::Graphics&, bool highlighted, bool down) override;
     void resized() override;
 
 private:
-    bool on = true;
     juce::ColourGradient halo;
 };
 

@@ -4,6 +4,8 @@
 #include "app/MainComponent.h"
 #include "app/EventLog.h"
 
+#include "engine/blocks/CabIrBlock.h"
+#include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
 #include "engine/core/Realtime.h"
 #include "ui/theme/EncoreFonts.h"
@@ -255,6 +257,13 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
 
     styleLabel (chainLabel, type::headerLine, colour::text);
     addAndMakeVisible (chainLabel);
+
+    setVariant (patchPicker, Variant::field);
+    patchPicker.onClick = [this] { showPatchPicker(); };
+    addChildComponent (patchPicker);
+
+    styleLabel (loadingLabel, type::label, colour::textMuted);
+    addChildComponent (loadingLabel);
 
     styleLabel (problemsLabel, type::label, colour::amber);
     problemsLabel.setJustificationType (juce::Justification::centredRight);
@@ -508,22 +517,54 @@ void MainComponent::refreshShowStatus()
 
     refreshLcd();
 
-    // "Cue 3 of 12: Solo  ->  Lead" when playing from the set list, else the patch name.
+    // "Cue 3 of 12: Solo  →  [Patch: Lead ▾]" when playing from the set list,
+    // else the patch name (SCREENS.md §4.3, the centre header line).
     juce::String text;
     const auto cues = session->getCues();
     const auto cue = session->getCurrentCue();
+    const auto playing = juce::isPositiveAndBelow (cue, (int) cues.size());
+    const auto* patch = show.findPatch (session->getActivePatchId());
 
-    if (juce::isPositiveAndBelow (cue, (int) cues.size()))
+    if (playing)
         text << "Cue " << (cue + 1) << " of " << (int) cues.size()
-             << (cues[(size_t) cue]->name.isNotEmpty() ? ": " + cues[(size_t) cue]->name : juce::String()) << "   ->   ";
-
-    if (const auto* patch = show.findPatch (session->getActivePatchId()))
+             << (cues[(size_t) cue]->name.isNotEmpty() ? ": " + cues[(size_t) cue]->name : juce::String());
+    else if (patch != nullptr)
         text << patch->name;
 
-    if (session->isBuilding())
-        text << "   (loading patches...)";
+    const auto pickerText = "Patch: " + (patch != nullptr ? patch->name : juce::String ("(none)"));
+    const auto changed = text != chainLabel.getText() || playing != patchPicker.isVisible()
+                         || pickerText != patchPicker.getButtonText() || session->isBuilding() != loadingLabel.isVisible();
 
     chainLabel.setText (text, juce::dontSendNotification);
+    patchPicker.setButtonText (pickerText);
+    patchPicker.setTooltip ("The patch this " + session->getWords().item + " plays");
+    patchPicker.setVisible (playing);
+    loadingLabel.setVisible (session->isBuilding());
+
+    if (changed)
+        resized();
+}
+
+void MainComponent::showPatchPicker()
+{
+    const auto cue = session->getCurrentCue();
+    const auto cues = session->getCues();
+
+    if (! juce::isPositiveAndBelow (cue, (int) cues.size()))
+        return;
+
+    const auto& item = *cues[(size_t) cue];
+    juce::Component::SafePointer<MainComponent> safeThis (this);
+    juce::PopupMenu menu;
+
+    for (auto& p : session->getShow().patches)
+        menu.addItem (p.name, true, ! item.uniquePatch && p.id == item.patchId, [safeThis, cue, id = p.id]
+        {
+            if (safeThis != nullptr)
+                safeThis->session->setCuePatch (cue, id);
+        });
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&patchPicker));
 }
 
 void MainComponent::reportProblems()
@@ -568,6 +609,21 @@ void MainComponent::showSelectedBlock()
             refreshStatus();   // latency may have changed
         };
         blockPanel->onEdited = [this] { session->markEdited(); };
+
+        // The amp with a cab right after it: the cab stands beside it (a click selects it).
+        if (block.getTypeId() == NamAmpBlock::typeId && index + 1 < (int) chain->getBlocks().size()
+            && chain->getBlocks()[(size_t) index + 1]->getTypeId() == CabIrBlock::typeId)
+        {
+            blockPanel->setCabBeside (chain->getBlocks()[(size_t) index + 1].get());
+            blockPanel->onCabClicked = [this, index]
+            {
+                juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this), index]
+                {
+                    if (safe != nullptr)
+                        safe->chainStrip->selectBlock (index + 1);
+                });
+            };
+        }
         blockPanel->getExpressionPedal = [this, index] (const juce::String& id) { return session->getExpressionPedal (index, id); };
         blockPanel->onExpressionChosen = [this, index] (const juce::String& id, int pedal)
         {
@@ -1508,18 +1564,16 @@ void MainComponent::timerCallback()
 void MainComponent::paint (juce::Graphics& g)
 {
     g.fillAll (paint::c (colour::window));
+
+    if (! headerArrow.isEmpty() && ! isShowingStage())
+        drawIcon (g, Icon::arrowRight, headerArrow.toFloat(), paint::c (colour::textMuted));
 }
 
 juce::Point<int> MainComponent::getMinimumEditSize() const
 {
-    // The reference minimum (SCREENS.md §1), taller if the block panel needs
-    // it, so its controls never end up out of reach (the block stage, design
-    // v3 step 5, scales them instead).
-    const auto panelHeight = blockPanel != nullptr ? blockPanel->getPreferredHeight() : 0;
-    const auto chrome = size::toolbarEdit + 1 + (noticeBar.isVisible() ? size::noticeBar + 1 : 0)
-                        + size::outerPadding * 3 + size::bottomRow
-                        + size::centreHeaderH + size::gap + size::chainPaneH + size::gap;
-    return { size::minEditWidth, juce::jmax (size::minEditHeight, chrome + panelHeight) };
+    // The reference minimum (SCREENS.md §1); the block stage scales the gear
+    // to whatever room it gets.
+    return { size::minEditWidth, size::minEditHeight };
 }
 
 void MainComponent::layoutToolbar (juce::Rectangle<int> bar)
@@ -1668,7 +1722,22 @@ void MainComponent::resized()
     const auto problemsW = problemsLabel.getText().isEmpty() ? 0
                                : juce::jmin (header.getWidth() / 2, (int) std::ceil (textWidth (font (type::label), problemsLabel.getText())) + 1);
     problemsLabel.setBounds (header.removeFromRight (problemsW));
-    chainLabel.setBounds (header);
+
+    // "Cue 1 of 8: Clean" → [Patch: Clean ▾] (loading patches...)
+    const auto labelW = juce::jmin (header.getWidth(), (int) std::ceil (textWidth (font (type::headerLine), chainLabel.getText())) + 1);
+    chainLabel.setBounds (header.removeFromLeft (labelW));
+    headerArrow = {};
+
+    if (patchPicker.isVisible())
+    {
+        header.removeFromLeft (size::toolbarGap);
+        headerArrow = header.removeFromLeft (size::headerArrow).withSizeKeepingCentre (size::headerArrow, size::headerArrow);
+        header.removeFromLeft (size::toolbarGap);
+        patchPicker.setBounds (header.removeFromLeft (size::patchPickerW).withSizeKeepingCentre (size::patchPickerW, size::fieldHeight));
+    }
+
+    header.removeFromLeft (size::toolbarGap);
+    loadingLabel.setBounds (header);
     area.removeFromTop (size::gap);
 
     if (chainStrip != nullptr)
@@ -1677,8 +1746,7 @@ void MainComponent::resized()
     area.removeFromTop (size::gap);
 
     if (blockPanel != nullptr)
-        blockPanel->setBounds (area.withHeight (juce::jmin (area.getHeight(), blockPanel->getPreferredHeight()))
-                                   .withWidth (juce::jmin (area.getWidth(), blockPanel->getPreferredWidth())));
+        blockPanel->setBounds (area);   // the block stage fills the rest
 }
 
 } // namespace encore

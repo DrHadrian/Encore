@@ -161,19 +161,20 @@ void paintLed (juce::Graphics& g, juce::Rectangle<float> led, bool on, float sca
     g.fillEllipse (led);
 }
 
-PowerLed::PowerLed()
+PowerLed::PowerLed() : juce::Button ("Power")
 {
-    setInterceptsMouseClicks (false, false);
+    setClickingTogglesState (true);
+    setToggleState (true, juce::dontSendNotification);
+    setWantsKeyboardFocus (false);
+    setMouseClickGrabsKeyboardFocus (false);
+    setTitle ("Power");
+    setTooltip ("Turn the block on or off");
 }
 
 void PowerLed::setOn (bool shouldBeOn)
 {
-    if (shouldBeOn != on)
-    {
-        on = shouldBeOn;
-        setTitle (on ? "Power on" : "Power off");
-        repaint();
-    }
+    if (shouldBeOn != getToggleState())
+        setToggleState (shouldBeOn, juce::dontSendNotification);
 }
 
 void PowerLed::resized()
@@ -183,13 +184,13 @@ void PowerLed::resized()
     const auto r = (float) size::ledHalo * 0.5f;
     halo = juce::ColourGradient (paint::c (colour::ledHaloCore), centre, paint::c (colour::ledHaloEdge), centre.translated (r * 0.7f, 0.0f), true);
     halo.addColour (0.5, paint::c (colour::ledHaloMid));
-    setTitle (on ? "Power on" : "Power off");
 }
 
-void PowerLed::paint (juce::Graphics& g)
+void PowerLed::paintButton (juce::Graphics& g, bool highlighted, bool)
 {
     const auto bounds = getLocalBounds().toFloat();
     const auto led = juce::Rectangle<float> ((float) size::powerLed, (float) size::powerLed).withCentre (bounds.getCentre());
+    const auto on = getToggleState();
 
     if (on)
     {
@@ -198,6 +199,12 @@ void PowerLed::paint (juce::Graphics& g)
     }
 
     paintLed (g, led, on);   // the 8 px glow, as on the pedals
+
+    if (highlighted)
+    {
+        g.setColour (paint::c (colour::iconButtonHover));
+        g.drawEllipse (led.expanded (2.0f), 1.0f);
+    }
 }
 
 //==============================================================================

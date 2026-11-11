@@ -76,6 +76,7 @@ private:
     void chooseShowToOpen();
     void chooseFolderForCopy();
     void refreshShowStatus();
+    void showPatchPicker();
     void reportProblems();
 
     // Robustness
@@ -147,6 +148,9 @@ private:
     std::unique_ptr<ChainStrip> chainStrip;
     std::unique_ptr<BlockPanel> blockPanel;
     juce::Label chainLabel, problemsLabel;
+    juce::TextButton patchPicker;
+    juce::Label loadingLabel { {}, "(loading patches...)" };
+    juce::Rectangle<int> headerArrow;
     Chain* shownChain = nullptr;
     int shownBlockIndex = -1;
 
