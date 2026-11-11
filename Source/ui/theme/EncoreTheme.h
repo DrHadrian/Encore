@@ -141,6 +141,7 @@ namespace colour
     constexpr juce::uint32 parameterFill   = 0xff8E8E95;
     constexpr juce::uint32 expChipFill     = 0xff1B2C45;   // "EXP 1" chip
     constexpr juce::uint32 expChipText     = 0xff7FC4FF;
+    constexpr juce::uint32 pedalBar        = 0xff6EA5FA;   // inspector value bar of a parameter a pedal moves
 
     // Menus, dialogs, scrollbars
     constexpr juce::uint32 menu            = 0xF72C2C30;   // rgba(44,44,48,.97)
@@ -305,6 +306,9 @@ namespace size
     constexpr int tableHeaderHeight = 24;
     constexpr int sectionHeadingH   = 24;    // sidebar section heading (22 in the CSS; the target renders 24)
     constexpr int headerDot = 7;
+    constexpr int inspectorPadX = 10, inspectorPadTop = 6, inspectorPadBottom = 10, inspectorKeyW = 74, inspectorColGap = 8;
+    constexpr int inspectorRowGap = 6, inspectorTextH = 15, inspectorListPadX = 6, inspectorNameW = 60, inspectorChipW = 44;
+    constexpr int inspectorBarH = 4, assignKeyW = 62, assignArrowW = 12;
     constexpr int listPad = 4, listGap = 1, rowPadX = 8, rowGap = 8, rowNumberW = 18, paneBarW = 3, paneBarH = 16;
     constexpr int swatch = 9, swatchRadius = 2, rowRadius = 4, headingPadBottom = 2;
     constexpr int paneFooterPadX = 10, paneFooterPadY = 8, headerButtonGap = 1, headerSmallButtonMargin = 4;

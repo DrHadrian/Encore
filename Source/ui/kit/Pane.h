@@ -55,6 +55,7 @@ private:
 /** A section title inside a pane ("PARAMETERS" + right text), with a line
     above it: the inspector's subheaders. Paint helper, no component; pass
     the label through paint::caps (type::paneHeader, ...) when it changes. */
-void paintSubheader (juce::Graphics&, juce::Rectangle<int> area, const juce::String& label, const juce::String& rightText);
+void paintSubheader (juce::Graphics&, juce::Rectangle<int> area, const juce::String& label, const juce::String& rightText,
+                     bool lineAbove = true);
 
 } // namespace encore::kit

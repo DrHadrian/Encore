@@ -207,10 +207,6 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     // Notice bar (SCREENS.md §4.2): shown while a notice is.
     addChildComponent (noticeBar);
 
-    // Inspector column (filled in by the inspector, design v3 step 6).
-    inspectorPane.setHeader ("Inspector");
-    addAndMakeVisible (inspectorPane);
-
     // Bottom row (SCREENS.md §4.4)
     for (auto* pane : { &inputPane, &metersPane, &healthPane })
         addAndMakeVisible (pane);
@@ -314,6 +310,10 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     patchList = std::make_unique<PatchList> (*session);
     addAndMakeVisible (*patchList);
 
+    inspector = std::make_unique<Inspector> (*session);
+    inspector->onEdited = [this] { session->markEdited(); };
+    addAndMakeVisible (*inspector);
+
     chainStrip = std::make_unique<ChainStrip> (*session);
     chainStrip->onSelectionChanged = [this] (int) { showSelectedBlock(); };
     addAndMakeVisible (*chainStrip);
@@ -355,6 +355,7 @@ MainComponent::~MainComponent()
     stageView = nullptr;
     cueEditor = nullptr;
     blockPanel = nullptr;
+    inspector = nullptr;
     chainStrip = nullptr;
     patchList = nullptr;
     setList = nullptr;
@@ -592,6 +593,7 @@ void MainComponent::showSelectedBlock()
     shownChain = chain;
     shownBlockIndex = index;
     blockPanel = nullptr;
+    inspector->setBlock (chain, index);
 
     if (chain != nullptr && juce::isPositiveAndBelow (index, (int) chain->getBlocks().size()))
     {
@@ -1446,6 +1448,8 @@ void MainComponent::timerCallback()
     if (blockPanel != nullptr)
         blockPanel->refresh();
 
+    inspector->refresh();
+
     // A footswitch can mute too: the button follows the engine.
     if (const auto isMuted = engine.isMuted(); muteButton.getToggleState() != isMuted)
     {
@@ -1706,7 +1710,10 @@ void MainComponent::resized()
 
     auto sidebar = area.removeFromLeft (size::sidebarWidth);
     area.removeFromLeft (size::gap);
-    inspectorPane.setBounds (area.removeFromRight (size::inspectorWidth));
+    if (inspector != nullptr)
+        inspector->setBounds (area.removeFromRight (size::inspectorWidth));
+    else
+        area.removeFromRight (size::inspectorWidth);
     area.removeFromRight (size::gap);
 
     if (setList != nullptr && patchList != nullptr)

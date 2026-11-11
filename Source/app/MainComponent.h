@@ -11,6 +11,7 @@
 #include "session/ShowSession.h"
 #include "ui/BlockPanel.h"
 #include "ui/ChainStrip.h"
+#include "ui/Inspector.h"
 #include "ui/MidiSettings.h"
 #include "session/RecoveryFile.h"
 #include "ui/CueListEditor.h"
@@ -155,7 +156,8 @@ private:
     int shownBlockIndex = -1;
 
     // Bottom row (SCREENS.md §4.4): guitar input, meters, system health.
-    kit::Pane inputPane, metersPane, healthPane, inspectorPane;
+    kit::Pane inputPane, metersPane, healthPane;
+    std::unique_ptr<Inspector> inspector;
     juce::Label inputLabel { {}, "Guitar input" }, deviceLine;
     juce::ComboBox inputChoice;
     kit::MeterBar inputMeter { "Input" }, outputMeter { "Output" };

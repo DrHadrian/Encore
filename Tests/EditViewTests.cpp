@@ -125,6 +125,27 @@ inline juce::File makeBoardShow (const juce::File& parent)
         { "Clean", 0xff4C8DF6 }, { "Clean 2", 0xff4C8DF6 }, { "Crunch", 0xffFF9F0A }, { "Edge", 0xff30C25A }, { "Lead", 0xffFF6B4A },
     };
 
+    // As on the board: stomp 1 turns the amp on and off, EXP 1 moves its
+    // output; gate and EQ bypassed, a bypassed delay at the end.
+    for (auto& b : show.patches[0].mainLane().blocks)
+    {
+        if (b.type == "nam")
+        {
+            b.stomp = 1;
+            b.expression["output"] = { 1, -40.0f, 12.0f };
+        }
+        else if (b.type == "gate" || b.type == "eq")
+        {
+            b.enabled = false;
+        }
+    }
+
+    BlockModel delay;
+    delay.id = juce::Uuid().toDashedString();
+    delay.type = "delay";
+    delay.enabled = false;
+    show.patches[0].mainLane().blocks.push_back (delay);
+
     std::map<juce::String, juce::String> ids;
     show.patches[0].name = patches[0].first;
     show.patches[0].colour = patches[0].second;

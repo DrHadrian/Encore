@@ -254,6 +254,8 @@ target_sources(Encore PRIVATE
     Source/ui/BlockPanel.h
     Source/ui/ChainStrip.cpp
     Source/ui/ChainStrip.h
+    Source/ui/Inspector.cpp
+    Source/ui/Inspector.h
     Source/ui/MidiSettings.cpp
     Source/ui/MidiSettings.h
     Source/ui/CueDialogs.cpp
@@ -334,6 +336,7 @@ if(ENCORE_BUILD_TESTS)
         Source/app/MainComponent.cpp
         Source/ui/BlockPanel.cpp
         Source/ui/ChainStrip.cpp
+        Source/ui/Inspector.cpp
         Source/ui/MidiSettings.cpp
         Source/ui/PatchList.cpp
         Source/ui/PreShowCheckView.cpp

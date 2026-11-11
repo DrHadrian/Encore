@@ -144,11 +144,17 @@ void Pane::paint (juce::Graphics& g)
     }
 }
 
-void paintSubheader (juce::Graphics& g, juce::Rectangle<int> area, const juce::String& label, const juce::String& rightText)
+void paintSubheader (juce::Graphics& g, juce::Rectangle<int> area, const juce::String& label, const juce::String& rightText,
+                     bool lineAbove)
 {
-    const auto r = area.toFloat();
-    g.setColour (paint::c (colour::paneHeaderLine));
-    paint::hline (g, r.getX(), r.getY(), r.getWidth());
+    auto r = area.toFloat();
+
+    if (lineAbove)
+    {
+        g.setColour (paint::c (colour::paneHeaderLine));
+        paint::hline (g, r.getX(), r.getY(), r.getWidth());
+        r.removeFromTop (1.0f);
+    }
 
     const auto text = r.withTrimmedLeft ((float) size::paneHeaderPadL).withTrimmedRight ((float) size::paneHeaderPadR);
     paint::text (g, label, text, type::paneHeader, colour::textMuted);
