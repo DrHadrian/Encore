@@ -248,6 +248,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/MeterBar.h
     Source/ui/kit/NoticeBar.cpp
     Source/ui/kit/NoticeBar.h
+    Source/ui/kit/ParameterList.cpp
+    Source/ui/kit/ParameterList.h
     Source/ui/kit/Pane.cpp
     Source/ui/kit/Pane.h
     Source/ui/kit/ProgressBar.cpp

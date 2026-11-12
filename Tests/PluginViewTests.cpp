@@ -21,6 +21,7 @@
 #include "ui/ChainStrip.h"
 #include "ui/Inspector.h"
 #include "ui/kit/FaultCard.h"
+#include "ui/kit/ParameterList.h"
 #include "ui/PluginSettings.h"
 #include "ui/theme/EncoreTheme.h"
 
@@ -401,6 +402,65 @@ public:
                 pump (200);
                 card = findChild<kit::FaultCard> (main);
                 expect (card == nullptr || ! card->isVisible());
+            }
+        }
+
+        beginTest ("A plugin without a window of its own: the parameter list (plugin-window.png)");
+        {
+            FixturePlugin room (describe ({ "ValhallaRoom", "Valhalla DSP", "2.0.0" }), valhallaRoomParams());
+            kit::ParameterList list (room, "VST3", "ValhallaRoom");
+            expectEquals (list.getWidth(), theme::size::paramListW);
+            list.setVisible (true);
+            pump (50);
+
+            // The window region of the board (its native title bar is the system's): the list at
+            // the window's content position, on the window colour.
+            const auto content = list.createComponentSnapshot (list.getLocalBounds());
+            juce::Image image (juce::Image::RGB, theme::size::referenceWidth, theme::size::referenceHeight, true);
+            {
+                juce::Graphics g (image);
+                g.fillAll (juce::Colour (theme::colour::window));
+                g.drawImageAt (content, 431, 144);
+            }
+
+            writeSnapshot (image, "plugin-window");
+            writeSnapshot (content, "plugin-window-content");
+            expect (hasContent (content));
+
+            beginTest ("The parameter list sets a parameter, and shows a change made elsewhere after refresh()");
+            {
+                std::vector<juce::Slider*> sliders;
+                std::function<void (juce::Component&)> collect = [&] (juce::Component& c)
+                {
+                    for (auto* child : c.getChildren())
+                    {
+                        if (auto* sl = dynamic_cast<juce::Slider*> (child))
+                            sliders.push_back (sl);
+
+                        collect (*child);
+                    }
+                };
+                collect (list);
+                expect (sliders.size() >= 13, "a slider per row: " + juce::String ((int) sliders.size()));
+
+                auto* mix = room.getParameters()[0];
+                juce::Slider* mixSlider = nullptr;
+
+                for (auto* sl : sliders)
+                    if (sl->getTitle() == "Mix")
+                        mixSlider = sl;
+
+                expect (mixSlider != nullptr);
+
+                if (mixSlider != nullptr)
+                {
+                    mixSlider->setValue (0.8, juce::sendNotificationSync);
+                    expectWithinAbsoluteError (mix->getValue(), 0.8f, 0.0001f);
+
+                    mix->setValue (0.1f);
+                    list.refresh();
+                    expectWithinAbsoluteError ((float) mixSlider->getValue(), 0.1f, 0.0001f);
+                }
             }
         }
 

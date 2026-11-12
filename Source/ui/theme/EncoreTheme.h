@@ -472,6 +472,10 @@ namespace size
     // FaultCard (a plugin switched off or not loaded, over its dimmed plate; edit-plugin-switched-off.json)
     constexpr int faultCardW = 460, faultCardTop = 128, faultCardRadius = 8, faultCardPadX = 17, faultCardPadY = 15;
     constexpr int faultCardIconW = 10, faultCardIconH = 18, faultCardIconGap = 10, faultCardLineGap = 3, faultCardGap = 10;
+    // ParameterList (a plugin's window when it has none of its own; plugin-window.json)
+    constexpr int paramListW = 580, paramListHeaderH = 41, paramListRowH = 33, paramListH = 455, paramListFooterH = 31;
+    constexpr int paramListPadX = 16, paramListNameW = 130, paramListSliderX = 158, paramListSliderW = 304, paramListValueW = 90;
+    constexpr int paramListChipH = 18, paramListGap = 10, paramListCountW = 120, paramListThumb = 12;
     constexpr int faultCardButtonGap = 8, faultCardShadowY = 14, faultCardShadowBlur = 30;
     // The plugin plate on the block stage (edit-plugin.json): 600 x 370, 22 below the stage header
     constexpr int pluginPlateW = 600, pluginPlateH = 370, pluginPlateTop = 22, pluginPlatePadX = 22;
@@ -649,6 +653,8 @@ namespace type
     constexpr Style utilityLabel    {  8.5f, Weight::extraBold, 0.08f, true }; // VST3, IN, OUT, SPLIT on a chain tile
     constexpr Style utilityName     { 10.5f, Weight::bold };                // the plugin's name on its tile
     constexpr Style utilityCaption  {  9.0f, Weight::regular };             // its maker
+    constexpr Style paramListName   { 13.0f, Weight::bold };                // the plugin's name over its parameter list
+    constexpr Style paramListNote   { 12.0f, Weight::regular };             // "has no window of its own: its parameters"
     constexpr Style faultText       { 12.5f, Weight::regular };             // the FaultCard's message
     constexpr Style faultStrong     { 12.5f, Weight::bold };                // "Switched off:"
     constexpr Style knobValue       { 10.5f, Weight::regular };             // "35 %" under a plugin plate knob

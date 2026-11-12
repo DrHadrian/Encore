@@ -1683,6 +1683,10 @@ void MainComponent::timerCallback()
 
     inspector->refresh();
 
+    // Plugin windows without an editor of their own: their parameter lists.
+    for (const auto& [id, window] : pluginWindows)
+        window->refresh();
+
     // Outputs muted from Stage or a footswitch: kept in this computer's routing.
     if (engine.syncOutputMutes())
         settings.setRouting (engine.getRouting());

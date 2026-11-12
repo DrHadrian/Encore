@@ -23,17 +23,31 @@ PluginWindow::PluginWindow (PluginBlock& b, const juce::String& patchName, std::
         // twice (crashing some plugins): create it once, fall back if none.
         editor.reset (plugin->createEditorAndMakeActive());
 
-        if (editor == nullptr)
-            editor = std::make_unique<juce::GenericAudioProcessorEditor> (*plugin);
-
-        setContentNonOwned (editor.get(), true);
-        setResizable (editor->isResizable(), false);
+        if (editor != nullptr)
+        {
+            setContentNonOwned (editor.get(), true);
+            setResizable (editor->isResizable(), false);
+        }
+        else
+        {
+            const auto& ref = block.getPluginRef();
+            parameterList = std::make_unique<kit::ParameterList> (*plugin, ref.format, ref.name.isNotEmpty() ? ref.name : block.getName());
+            setContentNonOwned (parameterList.get(), true);
+            setResizable (false, false);
+        }
     }
+}
+
+void PluginWindow::refresh()
+{
+    if (parameterList != nullptr && block.getFault() != PluginBlock::Fault::crashed)
+        parameterList->refresh();
 }
 
 PluginWindow::~PluginWindow()
 {
     clearContentComponent();
+    parameterList = nullptr;
 
     // A crashed plugin is never called again, not even its editor's destructor.
     if (block.getFault() == PluginBlock::Fault::crashed)
