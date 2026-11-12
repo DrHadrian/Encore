@@ -61,6 +61,7 @@ namespace
                 { Icon::sidebarRight, { sidebarright_svg, sidebarright_svgSize } },
                 { Icon::sliders,      { sliders_svg,      sliders_svgSize } },
                 { Icon::trash,        { trash_svg,        trash_svgSize } },
+                { Icon::warn,         { warn_svg,         warn_svgSize } },
                 { Icon::window,       { window_svg,       window_svgSize } },
             };
 

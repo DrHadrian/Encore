@@ -96,6 +96,7 @@ public:
             addChildComponent (b);
         }
 
+        setVariant (pluginActionButton, Variant::primary);   // Turn back on: the fix (18 px: small text)
         openWindowButton.setButtonText ("Open plugin window...");
         setButtonIcon (openWindowButton, Icon::window, (float) size::smallButtonIcon, false);
         openWindowButton.onClick = [this]

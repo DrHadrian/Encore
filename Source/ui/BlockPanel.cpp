@@ -82,6 +82,7 @@ public:
             strip.setBounds (size::pluginPlatePadX, size::pluginPlatePanelTop, size::pluginPlateW - 2 * size::pluginPlatePadX,
                              size::pluginPlatePanelH);
             makePluginTexts();
+            addChildComponent (card);
         }
         else
         {
@@ -215,6 +216,7 @@ public:
         power.setBounds (juce::Rectangle<int> (size::ledHalo, size::ledHalo)
                              .withCentre ({ getWidth() - size::pluginPlatePadX - size::powerColumn / 2,
                                             size::pluginPlateNameTop + size::pluginPlateNameH / 2 }));
+        layOutCard();
         repaint();
     }
 
@@ -247,6 +249,9 @@ public:
             return;
 
         // The plate: gear box gradient, 1 px border, inner top highlight; the recessed panel.
+        if (dimmed)
+            g.beginTransparencyLayer (size::pluginPlateDimmed);
+
         const auto r = getLocalBounds().toFloat();
         const auto radius = (float) size::gearRadius;
         g.setGradientFill (juce::ColourGradient::vertical (paint::c (colour::gearTop), 0.0f, paint::c (colour::gearBot), r.getBottom()));
@@ -280,6 +285,9 @@ public:
                                                   r.getWidth() - 2.0f * (float) size::pluginPlatePadX, (float) size::pluginPlateFootH);
         paint::text (g, kindCaps, foot, type::gearPanelKind, colour::gearLabel, juce::Justification::centredRight);
         paint::text (g, moreText, foot, type::plateMore, colour::textMuted);
+
+        if (dimmed)
+            g.endTransparencyLayer();
     }
 
     void paintOverChildren (juce::Graphics& g) override
@@ -316,6 +324,32 @@ private:
     kit::PowerLed power;
     juce::String formatText, formatCaps, nameText, makerText, kindCaps, moreText;
     float nameWidth = 0.0f;
+    bool dimmed = false;
+
+public:
+    kit::FaultCard card;
+
+    /** A plugin with a problem: the plate at 45 % under the card. */
+    void setDimmed (bool shouldDim)
+    {
+        if (shouldDim == dimmed)
+            return;
+
+        dimmed = shouldDim;
+        const auto alpha = dimmed ? size::pluginPlateDimmed : 1.0f;
+        strip.setAlpha (alpha);
+        power.setAlpha (alpha);
+        card.setVisible (dimmed);
+        card.toFront (false);   // over the knobs
+        repaint();
+    }
+
+    void layOutCard()
+    {
+        const auto w = size::faultCardW;
+        const auto body = juce::Rectangle<int> ((getWidth() - w) / 2, size::faultCardTop, w, card.getBodyHeight (w));
+        card.setBounds (kit::FaultCard::boundsFor (body));
+    }
     juce::Rectangle<int> labelsRow;
     std::vector<Group> groups;
 };
@@ -474,6 +508,17 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
                 onOpenPluginWindow();
         };
         addAndMakeVisible (loadButton);
+
+        gear->card.getSecondaryButton().onClick = loadButton.onClick;
+        gear->card.getPrimaryButton().onClick = [this]
+        {
+            // Turning it back on may rebuild the patch (and this panel): after the click.
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<BlockPanel> (this)]
+            {
+                if (safe != nullptr && safe->onTurnPluginBackOn != nullptr)
+                    safe->onTurnPluginBackOn();
+            });
+        };
     }
 
     refresh();
@@ -684,6 +729,8 @@ void BlockPanel::refresh()
         if (problem)
             cpuText.clear();
 
+        updateFaultCard();
+
         if (problem != shownProblem)
         {
             shownProblem = problem;
@@ -715,6 +762,71 @@ void BlockPanel::refresh()
             gear->repaint();
         }
     }
+}
+
+void BlockPanel::updateFaultCard()
+{
+    auto* plugin = dynamic_cast<PluginBlock*> (&block);
+
+    if (plugin == nullptr)
+        return;
+
+    // What the card says, by state; -1 = no problem. The words are the code's facts:
+    // the guard's count, and a switched-off plugin passes the dry signal.
+    const auto fault = ! plugin->isLoaded() ? 100 : (int) plugin->getFault();
+    const auto canOpen = plugin->getInstance() != nullptr;
+    const auto key = fault * 2 + (canOpen ? 1 : 0);
+
+    if (key == shownFault)
+        return;
+
+    shownFault = key;
+
+    if (fault == (int) PluginBlock::Fault::none)
+    {
+        gear->setDimmed (false);
+        return;
+    }
+
+    static const juce::String dry = " The signal passes through it dry, so the show goes on.";
+    juce::String lead = "Switched off:", rest, action;
+
+    switch ((PluginBlock::Fault) fault)
+    {
+        case PluginBlock::Fault::crashed:
+            rest = "it crashed.";
+            action = "Load again";
+            break;
+        case PluginBlock::Fault::badOutput:
+            rest = "it sent broken audio.";
+            break;
+        case PluginBlock::Fault::tooSlow:
+            rest = "it took longer than the audio buffer " + juce::String (PluginBlock::overrunsBeforeSwitchingOff) + " times in a row.";
+            break;
+        case PluginBlock::Fault::crashedLastTime:
+            rest = "it crashed Encore last time.";
+            break;
+        case PluginBlock::Fault::none:
+            break;
+    }
+
+    if (fault == 100)
+    {
+        lead = "Not loaded:";
+        rest = plugin->getLoadError().isNotEmpty() ? plugin->getLoadError() : juce::String ("it couldn't be loaded");
+
+        if (! rest.endsWithChar ('.'))
+            rest << ".";
+    }
+    else if (action.isEmpty() && plugin->canTurnBackOn())
+    {
+        action = "Turn back on";
+    }
+
+    gear->card.setMessage (lead, rest + dry);
+    gear->card.setActions (action, canOpen ? juce::String ("Open plugin window...") : juce::String());
+    gear->layOutCard();
+    gear->setDimmed (true);
 }
 
 //==============================================================================

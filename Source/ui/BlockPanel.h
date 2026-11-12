@@ -7,6 +7,7 @@
 
 #include "engine/core/Block.h"
 #include "model/MidiMapping.h"
+#include "ui/kit/FaultCard.h"
 #include "ui/kit/GearPlaceholder.h"
 #include "ui/kit/KnobView.h"
 #include "ui/kit/Pane.h"
@@ -51,8 +52,11 @@ public:
     std::function<int (const juce::String& paramId)> getExpressionPedal;
     std::function<void (const juce::String& paramId, int pedal)> onExpressionChosen;
 
-    /** Plugin blocks: "Open plugin window..." in the header. */
+    /** Plugin blocks: "Open plugin window..." in the header (and on the fault card). */
     std::function<void()> onOpenPluginWindow;
+
+    /** Plugin blocks switched off: "Turn back on" / "Load again" on the fault card. */
+    std::function<void()> onTurnPluginBackOn;
 
     /** Loads a file into the block as if picked in the chooser. */
     void loadFile (const juce::File& file);
@@ -98,6 +102,7 @@ private:
     void updateHeader();
     juce::uint32 headerDot() const;
     void layOutGear();
+    void updateFaultCard();
     juce::String headerLabel() const;
 
     Block& block;
@@ -111,6 +116,7 @@ private:
     std::unique_ptr<juce::FileChooser> chooser;
     bool loading = false;
     bool shownProblem = false;   // a plugin not loaded or switched off by the guard
+    int shownFault = -1;         // the fault the card shows (-1: none yet)
     juce::String shownFile, shownInfo, shownCpu;
 
     juce::String statusLabel, statusLabelCaps;

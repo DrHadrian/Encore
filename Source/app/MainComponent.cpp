@@ -690,7 +690,10 @@ void MainComponent::showSelectedBlock()
         blockPanel->onEdited = [this] { session->markEdited(); };
 
         if (auto* plugin = dynamic_cast<PluginBlock*> (&block))
+        {
             blockPanel->onOpenPluginWindow = [this, plugin] { openPluginWindow (*plugin); };
+            blockPanel->onTurnPluginBackOn = [this, index] { session->turnPluginBackOn (index); };
+        }
 
         // The amp with a cab right after it: the cab stands beside it (a click selects it).
         if (block.getTypeId() == NamAmpBlock::typeId && index + 1 < (int) chain->getBlocks().size()

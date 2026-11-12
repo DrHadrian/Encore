@@ -210,6 +210,7 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/icons/sidebar-right.svg
         Resources/ui/icons/sliders.svg
         Resources/ui/icons/trash.svg
+        Resources/ui/icons/warn.svg
         Resources/ui/icons/window.svg)
 
 # The UI's look (theme) and kit: shared by the app and the UI snapshot tests.
@@ -226,6 +227,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/theme/Paint.h
     Source/ui/kit/DialogFrame.cpp
     Source/ui/kit/DialogFrame.h
+    Source/ui/kit/FaultCard.cpp
+    Source/ui/kit/FaultCard.h
     Source/ui/kit/Group.cpp
     Source/ui/kit/Group.h
     Source/ui/kit/GearPlaceholder.cpp

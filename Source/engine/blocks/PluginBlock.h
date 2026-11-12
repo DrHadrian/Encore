@@ -57,6 +57,9 @@ public:
 
     enum class Fault { none, crashed, badOutput, tooSlow, crashedLastTime };
 
+    /** Overruns of the audio buffer in a row before the guard switches it off. */
+    static constexpr int overrunsBeforeSwitchingOff = 3;
+
     /** instance may be null (the plugin couldn't be loaded). savedState is the
         base64 state the show had, already restored into the instance. */
     PluginBlock (const PluginRef& ref, std::unique_ptr<juce::AudioPluginInstance> instance,

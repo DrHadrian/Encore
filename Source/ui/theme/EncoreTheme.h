@@ -284,6 +284,7 @@ namespace colour
     constexpr juce::uint32 faultCardBorder = 0xff3D2F12;
     constexpr juce::uint32 faultCardText   = 0xffFFD27A;
     constexpr juce::uint32 statusRunning   = 0xff4CD964;   // inspector Status "Running" (a plugin playing)
+    constexpr juce::uint32 faultCardShadow = 0x80000000;   // its drop shadow (0, 14, 30 px, black 50 %)
     constexpr juce::uint32 utilityShadow   = 0x73000000;   // chain tile drop shadow (0, 6, 6 px, black 45 %)
     constexpr juce::uint32 groupRowLine    = 0xff1F1F22;   // 1 px under each row of the Plugins, Folders and Blocked lists
 }
@@ -468,10 +469,15 @@ namespace size
     constexpr int utilityNameTop = 25, utilityNameLineH = 12, utilityCaptionTop = 50, utilityCaptionH = 11;
     constexpr int utilityFootW = 22, utilityFootH = 16, utilityFootTop = 62, utilityFootRadius = 7;
     constexpr int utilityShadowY = 6, utilityShadowBlur = 6;
+    // FaultCard (a plugin switched off or not loaded, over its dimmed plate; edit-plugin-switched-off.json)
+    constexpr int faultCardW = 460, faultCardTop = 128, faultCardRadius = 8, faultCardPadX = 17, faultCardPadY = 15;
+    constexpr int faultCardIconW = 10, faultCardIconH = 18, faultCardIconGap = 10, faultCardLineGap = 3, faultCardGap = 10;
+    constexpr int faultCardButtonGap = 8, faultCardShadowY = 14, faultCardShadowBlur = 30;
     // The plugin plate on the block stage (edit-plugin.json): 600 x 370, 22 below the stage header
     constexpr int pluginPlateW = 600, pluginPlateH = 370, pluginPlateTop = 22, pluginPlatePadX = 22;
     constexpr int pluginPlateChipTop = 26, pluginPlateChipH = 18, pluginPlateNameTop = 25, pluginPlateNameH = 20, pluginPlateTextGap = 10;
     constexpr int pluginPlatePanelTop = 66, pluginPlatePanelH = 250, pluginPlatePanelPadX = 21, pluginPlatePanelPadTop = 15;
+    constexpr float pluginPlateDimmed = 0.45f;   // the plate under a FaultCard
     constexpr int pluginPlateColumns = 4, pluginPlateRowPitch = 115, pluginPlateFootTop = 340, pluginPlateFootH = 16;
     // (the power LED sits top right, on the name line: not on the board, but the panel's on/off stays)
     constexpr int triggerX = 222, learnW = 76, learnH = 22, removeW = 22, removeRight = 18, lastValueW = 117, lastValueH = 21;
@@ -643,6 +649,8 @@ namespace type
     constexpr Style utilityLabel    {  8.5f, Weight::extraBold, 0.08f, true }; // VST3, IN, OUT, SPLIT on a chain tile
     constexpr Style utilityName     { 10.5f, Weight::bold };                // the plugin's name on its tile
     constexpr Style utilityCaption  {  9.0f, Weight::regular };             // its maker
+    constexpr Style faultText       { 12.5f, Weight::regular };             // the FaultCard's message
+    constexpr Style faultStrong     { 12.5f, Weight::bold };                // "Switched off:"
     constexpr Style knobValue       { 10.5f, Weight::regular };             // "35 %" under a plugin plate knob
     constexpr Style plateName       { 16.0f, Weight::bold };                // ValhallaRoom on the plugin plate
     constexpr Style plateMaker      { 12.0f, Weight::regular };             // "Valhalla DSP · v2.0.0"

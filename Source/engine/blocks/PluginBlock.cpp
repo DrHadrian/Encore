@@ -29,7 +29,6 @@ namespace
 
     std::function<void (PluginBlock&)> beforeClosing;   // message thread
 
-    constexpr int overrunsBeforeSwitchingOff = 3;
     constexpr double maxDrainSeconds = 10.0;
     constexpr float drainedLevel = 1.0e-5f;   // -100 dB
 

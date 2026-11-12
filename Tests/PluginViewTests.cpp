@@ -20,6 +20,7 @@
 #include "session/RecoveryFile.h"
 #include "ui/ChainStrip.h"
 #include "ui/Inspector.h"
+#include "ui/kit/FaultCard.h"
 #include "ui/PluginSettings.h"
 #include "ui/theme/EncoreTheme.h"
 
@@ -124,7 +125,7 @@ public:
 
     /** The board's show as on V3EditPlugin: patch Clean is Noise gate, Amp,
         Cab, ValhallaRoom (stomp 3, EXP 1 on Mix from 0 to 60 %), Delay. */
-    juce::File makeEditPluginShow (const juce::File& parent, const juce::String& pluginId)
+    juce::File makeEditPluginShow (const juce::File& parent, const juce::String& pluginId, bool withShimmer = false)
     {
         const auto folder = makeBoardShow (parent);
         const auto showFile = folder.getChildFile ("show.json");
@@ -157,6 +158,15 @@ public:
         plugin.stomp = 3;
         plugin.expression["p0"] = { 1, 0.0f, 0.6f };
         chain.push_back (plugin);
+
+        if (withShimmer)
+        {
+            BlockModel shimmer;
+            shimmer.id = pluginId + "-shimmer";
+            shimmer.type = pluginBlockType;
+            shimmer.plugin = PluginCatalog::toRef (describe ({ "H9 Shimmer", "Eventide", "3.7.2" }));
+            chain.push_back (shimmer);
+        }
 
         for (auto& b : blocks)
         {
@@ -342,6 +352,56 @@ public:
 
             writeSnapshot (image, "edit-plugin");
             expect (hasContent (image));
+        }
+
+        beginTest ("A plugin switched off by the guard, another not installed: notice, amber tiles, fault card (edit-plugin-switched-off.png)");
+        {
+            const ScopedBoardPlugins boardPlugins (19);
+            const auto boardFolder = root.getChildFile ("Edit plugin switched off");
+            writeBoardCatalog (boardFolder.getChildFile ("plugins.xml"), false, { "H9 Shimmer" });
+            AppSettings boardSettings (boardFolder);
+            boardSettings.setLastShowFolder (makeEditPluginShow (boardFolder, "valhalla-room", true));
+            boardSettings.setAudioDeviceState (&setup);
+
+            MainComponent main (boardSettings, std::make_unique<BoardDeviceType>());
+            main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+
+            auto* strip = findChild<ChainStrip> (main);
+            expect (strip != nullptr);
+            pumpUntil ([&] { return strip->getChain() != nullptr && strip->getChain()->getBlocks().size() == 6; }, 10000);
+            strip->selectBlock (3);
+
+            auto* room = strip->getChain() != nullptr ? dynamic_cast<PluginBlock*> (strip->getChain()->getBlocks()[3].get()) : nullptr;
+            auto* shimmer = strip->getChain() != nullptr ? dynamic_cast<PluginBlock*> (strip->getChain()->getBlocks()[4].get()) : nullptr;
+            expect (room != nullptr && room->isLoaded());
+            expect (shimmer != nullptr && ! shimmer->isLoaded(), "H9 Shimmer isn't installed");
+
+            // Too slow for the buffer: the guard switches it off after a few buffers.
+            FixturePlugin::slow = true;
+            pumpUntil ([&] { return room == nullptr || room->getFault() == PluginBlock::Fault::tooSlow; }, 10000);
+            FixturePlugin::slow = false;
+            expect (room != nullptr && room->getFault() == PluginBlock::Fault::tooSlow);
+            pump (400);
+
+            expect (hasContent (renderSnapshot (main, "edit-plugin-switched-off")));
+
+            beginTest ("The fault card's Turn back on turns the plugin back on, and the card goes");
+            {
+                auto* card = findChild<kit::FaultCard> (main);
+                expect (card != nullptr && card->isVisible());
+                expectEquals (card != nullptr ? card->getPrimaryButton().getButtonText() : juce::String(), juce::String ("Turn back on"));
+
+                if (card != nullptr)
+                    card->getPrimaryButton().triggerClick();
+
+                pumpUntil ([&] { auto* b = strip->getChain() != nullptr ? dynamic_cast<PluginBlock*> (strip->getChain()->getBlocks()[3].get()) : nullptr;
+                                 return b != nullptr && b->getFault() == PluginBlock::Fault::none; }, 5000);
+                auto* now = dynamic_cast<PluginBlock*> (strip->getChain()->getBlocks()[3].get());
+                expect (now != nullptr && now->getFault() == PluginBlock::Fault::none);
+                pump (200);
+                card = findChild<kit::FaultCard> (main);
+                expect (card == nullptr || ! card->isVisible());
+            }
         }
 
         beginTest ("A plugin block in the edit view: block stage and inspector (edit-plugin-test-plugin.png)");

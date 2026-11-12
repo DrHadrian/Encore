@@ -143,9 +143,9 @@ inline juce::PluginDescription describe (const FixtureCatalogEntry& e)
     return d;
 }
 
-/** Writes plugins.xml as a scan would have left it: the board's plugins,
-    its two folders and its three blocked files. */
-inline void writeBoardCatalog (const juce::File& listFile, bool everyMakerKnown = true)
+/** Writes plugins.xml as a scan would have left it: the board's plugins
+    (but those `notInstalled`), its two folders and its three blocked files. */
+inline void writeBoardCatalog (const juce::File& listFile, bool everyMakerKnown = true, const juce::StringArray& notInstalled = {})
 {
     juce::XmlElement root ("ENCORE_PLUGINS");
     root.createNewChildElement ("FOLDERS")->setAttribute ("paths", "C:\\Program Files\\Common Files\\VST3;D:\\Plugins\\VST3");
@@ -167,7 +167,8 @@ inline void writeBoardCatalog (const juce::File& listFile, bool everyMakerKnown 
     juce::KnownPluginList known;
 
     for (const auto& e : boardPlugins (everyMakerKnown))
-        known.addType (describe (e));
+        if (! notInstalled.contains (e.name))
+            known.addType (describe (e));
 
     if (auto xml = known.createXml())
         root.addChildElement (xml.release());
