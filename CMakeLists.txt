@@ -230,6 +230,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/GearPlaceholder.cpp
     Source/ui/kit/GearPlaceholder.h
     Source/ui/kit/GearView.h
+    Source/ui/kit/Chip.cpp
+    Source/ui/kit/Chip.h
     Source/ui/kit/IconButton.cpp
     Source/ui/kit/IconButton.h
     Source/ui/kit/KeyCap.cpp
@@ -244,6 +246,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/NoticeBar.h
     Source/ui/kit/Pane.cpp
     Source/ui/kit/Pane.h
+    Source/ui/kit/ProgressBar.cpp
+    Source/ui/kit/ProgressBar.h
     Source/ui/kit/RowList.cpp
     Source/ui/kit/RowList.h
     Source/ui/kit/SegmentedControl.cpp
@@ -416,6 +420,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/UiSnapshot.h
         Tests/UiSnapshotTests.cpp
         Tests/BoardFixtures.h
+        Tests/PluginFixtures.h
         Tests/EditViewTests.cpp
         Tests/HardeningTests.cpp
         Tests/ShowcaseTests.cpp

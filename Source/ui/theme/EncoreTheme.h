@@ -168,6 +168,7 @@ namespace colour
     constexpr juce::uint32 dialogFooter    = 0xff262629;
     constexpr juce::uint32 dimmer          = 0x73000000;   // behind modal dialogs (black 45 %)
     constexpr juce::uint32 dialogHighlight = 0x14FFFFFF;   // inner top highlight (white 8 %)
+    constexpr juce::uint32 groupHighlight  = 0x08FFFFFF;   // a group box's inner top line (white 3 %)
     constexpr juce::uint32 dialogShadow    = 0xB3000000;   // 0, 30, 80 px, black 70 %
     constexpr juce::uint32 tabStripTop     = 0xff2E2E31;   // settings tab strip
     constexpr juce::uint32 tabStripBot     = 0xff28282B;
@@ -261,6 +262,28 @@ namespace colour
     constexpr juce::uint32 patchOrange     = 0xffFF9F0A;
     constexpr juce::uint32 patchGreen      = 0xff30C25A;
     constexpr juce::uint32 patchRed        = 0xffFF6B4A;
+
+    // Milestones 10 and 11 (NEW-FEATURES-M10-M11 §C)
+    constexpr juce::uint32 chipMuteBg      = 0xff5A1A16;   // OUTPUT MUTED
+    constexpr juce::uint32 chipMuteText    = 0xffFFB4AD;
+    constexpr juce::uint32 chipAmberBg     = 0xff3D2F12;   // NOT HERE, counts
+    constexpr juce::uint32 chipAmberText   = 0xffFFD27A;
+    constexpr juce::uint32 chipExpBg       = 0xff1B2C45;   // EXP n, THIS COMPUTER
+    constexpr juce::uint32 chipExpText     = 0xff7FC4FF;
+    constexpr juce::uint32 chipOffBg       = 0xff2C2C30;   // OFF
+    constexpr juce::uint32 chipOffText     = 0xff85858C;
+    constexpr juce::uint32 chipGreenBg     = 0xff1E3A24;   // THIS SHOW
+    constexpr juce::uint32 chipGreenText   = 0xff4CD964;
+    constexpr juce::uint32 chipPlainBg     = 0xff2A2A2E;   // VST3, THIS COMPUTER
+    constexpr juce::uint32 chipPlainText   = 0xff8E8E95;
+    constexpr juce::uint32 utilityTileTop  = 0xff2C2C30;
+    constexpr juce::uint32 utilityTileBottom = 0xff1F1F22;
+    constexpr juce::uint32 utilityTileBorder = 0xff3A3A3F;
+    constexpr juce::uint32 selectionOutline = 0xff4FA3FF;
+    constexpr juce::uint32 faultCardBg     = 0xff2A251C;
+    constexpr juce::uint32 faultCardBorder = 0xff3D2F12;
+    constexpr juce::uint32 faultCardText   = 0xffFFD27A;
+    constexpr juce::uint32 groupRowLine    = 0xff1F1F22;   // 1 px under each row of the Plugins, Folders and Blocked lists
 }
 
 //==============================================================================
@@ -430,7 +453,12 @@ namespace size
     constexpr int mappingHeaderH = 27, mappingRowH = 31, mappingBarH = 37, mappingPadX = 12, actionW = 200;
     // Settings > Plugins (milestone 10): the plugin list where the MIDI tab has
     // its mappings (same header, rows and bar), folders and the blocklist on the right.
-    constexpr int pluginsMakerW = 160, pluginsVersionW = 72, pluginsFolderRows = 4, pluginsBlockedRowH = 44, pluginsTryAgainW = 76;
+    constexpr int pluginsMakerW = 190, pluginsVersionW = 90, pluginsColumnGap = 10, pluginsFoldersBoxH = 147, pluginsBlockedRowH = 45;
+    constexpr int pluginsRowH = 27, pluginsBarH = 41, pluginsTitleRowH = 20, pluginsStatusTop = 10, pluginsProgressTop = 29;
+    constexpr int pluginsCountLift = 5, pluginsBlockedNameTop = 7, pluginsBlockedReasonTop = 24, pluginsTryAgainGap = 10, pluginsHelpPadTop = 10;
+    // Milestones 10 and 11 (NEW-FEATURES-M10-M11 §C)
+    constexpr int tagChipH = 16, tagChipRadius = 3, tagChipPadX = 6;
+    constexpr int progressH = 4, progressRadius = 2;
     constexpr int triggerX = 222, learnW = 76, learnH = 22, removeW = 22, removeRight = 18, lastValueW = 117, lastValueH = 21;
     constexpr int helpLineH = 18, helpGap = 10, groupPadTight = 13;   // (help groups: 13 above and below the text)
     constexpr int statusTitleH = 15, statusLineH = 14, statusTextH = 15, latencySplit = 2, tickTextGap = 10, defaultsValueX = 170;
@@ -596,6 +624,7 @@ namespace type
     constexpr Style noteText        { 11.5f, Weight::regular };             // notes under groups, the latency line
     constexpr Style noteStrong      { 11.5f, Weight::bold };
     constexpr Style columnHead      { 10.5f, Weight::bold, 0.06f, true };   // DOES, FOOTSWITCH / PEDAL
+    constexpr Style tagChip         { 9.5f, Weight::bold, 0.02f, true };    // NOT HERE, OUTPUT MUTED, counts
     constexpr Style tunerCaption    { 11.0f, Weight::bold, 0.08f, true };
     constexpr Style tunerNote       { 180.0f, Weight::semibold };
     constexpr Style tunerDetail     { 18.0f, Weight::regular };

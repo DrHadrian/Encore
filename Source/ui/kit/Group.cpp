@@ -28,6 +28,11 @@ void Group::paint (juce::Graphics& g)
     g.fillRoundedRectangle (box, (float) size::groupRadius);
     g.setColour (paint::c (colour::paneBorder));
     g.drawRoundedRectangle (box.reduced (0.5f), (float) size::groupRadius, 1.0f);
+
+    // The inner top line, between the corners.
+    const auto r = (float) size::groupRadius;
+    g.setColour (paint::c (colour::groupHighlight));
+    g.fillRect (box.getX() + r, box.getY() + 1.0f, box.getWidth() - 2.0f * r, 1.0f);
 }
 
 } // namespace encore::kit

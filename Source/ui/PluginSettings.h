@@ -6,7 +6,9 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "session/PluginCatalog.h"
+#include "ui/kit/Chip.h"
 #include "ui/kit/Group.h"
+#include "ui/kit/ProgressBar.h"
 
 namespace encore
 {
@@ -38,6 +40,7 @@ private:
     void refresh();
     void addFolder();
     void removeFolder();
+    void layOutCount();
 
     PluginCatalog& catalog;
 
@@ -56,6 +59,9 @@ private:
     juce::StringArray folders;
     std::vector<PluginCatalog::Blocked> blocked;
     juce::String status;
+    bool statusOverProgress = false;
+    kit::ProgressBar progress;
+    kit::Chip blockedCount { kit::ChipStyle::amber };
 
     std::unique_ptr<PluginRows> pluginRows;
     std::unique_ptr<FolderRows> folderRows;
@@ -69,7 +75,9 @@ private:
     juce::Rectangle<int> pluginsBox, statusArea;
     const juce::String nameHead { "NAME" }, makerHead { "MAKER" }, versionHead { "VERSION" },
                        noPlugins { "No plugins yet. Scan looks in the folders on the right." },
-                       nothingBlocked { "Nothing blocked" };
+                       nothingBlocked { "Nothing blocked" },
+                       hint { juce::String (juce::CharPointer_UTF8 ("Add one to a patch with the + in the signal chain \xe2\x80\xba Plugin")) },
+                       blockedHelp { "Scan skips blocked files. Try again unblocks one, so the next Scan tries it in a separate process." };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginSettings)
 };

@@ -5,6 +5,7 @@
 // edit view (block stage and inspector), its window, and the crash notice.
 
 #include "BoardFixtures.h"
+#include "PluginFixtures.h"
 #include "UiSnapshot.h"
 
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -19,6 +20,7 @@
 #include "session/RecoveryFile.h"
 #include "ui/ChainStrip.h"
 #include "ui/Inspector.h"
+#include "ui/PluginSettings.h"
 #include "ui/theme/EncoreTheme.h"
 
 namespace encore::test
@@ -149,7 +151,7 @@ public:
             main.openSettings (SettingsWindow::Tab::plugins);
             expect (main.isShowingSettings());
             pump (100);
-            expect (hasContent (renderSnapshot (main, "settings-plugins")));
+            expect (hasContent (renderSnapshot (main, "settings-plugins-scanned")));
 
             for (auto size : { juce::Point<int> (640, 480), juce::Point<int> (3840, 2160), juce::Point<int> (1440, 900) })
             {
@@ -157,6 +159,66 @@ public:
                 pump (30);
             }
 
+            main.closeSettings();
+        }
+
+        beginTest ("Settings > Plugins as on the board: scanning, a plugin and a folder selected, 3 blocked (settings-plugins.png)");
+        {
+            const auto boardFolder = root.getChildFile ("Settings board catalog");
+            writeBoardCatalog (boardFolder.getChildFile ("plugins.xml"));
+            AppSettings boardSettings (boardFolder);
+            boardSettings.setLastShowFolder (makeBoardShow (boardFolder));
+            boardSettings.setAudioDeviceState (&setup);
+
+            MainComponent main (boardSettings, std::make_unique<BoardDeviceType>());
+            main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            pump (800);
+
+            auto& catalog = main.getPluginCatalog();
+            expectEquals (catalog.getPlugins().size(), 12);
+            expectEquals ((int) catalog.getBlocked().size(), 3);
+
+            main.openSettings (SettingsWindow::Tab::plugins);
+            catalog.showScanProgressForTesting (13, 62, "C:\\Program Files\\Common Files\\VST3\\ValhallaSupermassive.vst3");
+            expect (catalog.isScanning());
+            expectEquals (catalog.getScanProgress().current, 14);
+            pump (100);
+
+            // ValhallaRoom and the second folder selected.
+            std::vector<juce::ListBox*> lists;
+            std::function<void (juce::Component&)> collect = [&] (juce::Component& c)
+            {
+                for (auto* child : c.getChildren())
+                {
+                    if (auto* list = dynamic_cast<juce::ListBox*> (child))
+                        lists.push_back (list);
+                    else
+                        collect (*child);
+                }
+            };
+
+            if (auto* view = findChild<PluginSettings> (main))
+                collect (*view);
+
+            expectEquals ((int) lists.size(), 3, "plugins, folders, blocked");
+
+            if (lists.size() >= 2)
+            {
+                const auto plugins = catalog.getPlugins();
+
+                for (int i = 0; i < plugins.size(); ++i)
+                    if (plugins[i].name == "ValhallaRoom")
+                        lists[0]->selectRow (i);
+
+                lists[1]->selectRow (1);
+            }
+
+            pump (100);
+            expect (hasContent (renderSnapshot (main, "settings-plugins")));
+
+            catalog.cancelScan();
+            pump (100);
+            expect (! catalog.isScanning());
             main.closeSettings();
         }
 

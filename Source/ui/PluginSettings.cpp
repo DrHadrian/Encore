@@ -31,11 +31,30 @@ namespace
 
     juce::String fileName (const juce::String& path)
     {
-        return juce::File::createFileWithoutCheckingPath (path).getFileName();
+        // Either separator: a catalog may come from another system.
+        return path.fromLastOccurrenceOf ("\\", false, false).fromLastOccurrenceOf ("/", false, false);
     }
 }
 
 //==============================================================================
+namespace
+{
+    struct Columns { juce::Rectangle<float> name, maker, version; };
+
+    /** NAME | MAKER | VERSION across a row (or the head). */
+    Columns columnsIn (juce::Rectangle<int> row)
+    {
+        auto r = row.reduced (size::mappingPadX, 0).toFloat();
+        Columns c;
+        c.version = r.removeFromRight ((float) size::pluginsVersionW);
+        r.removeFromRight ((float) size::pluginsColumnGap);
+        c.maker = r.removeFromRight ((float) size::pluginsMakerW);
+        r.removeFromRight ((float) size::pluginsColumnGap);
+        c.name = r;
+        return c;
+    }
+}
+
 /** NAME | MAKER | VERSION, alternate rows like the MIDI mappings. */
 class PluginSettings::PluginRows final : public juce::ListBoxModel
 {
@@ -44,22 +63,25 @@ public:
 
     int getNumRows() override { return owner.plugins.size(); }
 
-    void paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool) override
+    void paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected) override
     {
         if (! juce::isPositiveAndBelow (row, owner.plugins.size()))
             return;
 
-        if (row % 2 == 1)
+        if (selected)
+            g.fillAll (paint::c (colour::selectedRow));
+        else if (row % 2 == 1)
             g.fillAll (paint::c (colour::mappingRowAlt));
 
-        const auto& d = owner.plugins.getReference (row);
-        auto r = juce::Rectangle<int> (0, 0, width, height).reduced (size::mappingPadX, 0).toFloat();
-        const auto version = r.removeFromRight ((float) size::pluginsVersionW);
-        const auto maker = r.removeFromRight ((float) size::pluginsMakerW);
+        g.setColour (paint::c (colour::groupRowLine));
+        g.fillRect (0, height - 1, width, 1);
 
-        paint::text (g, d.name, r.withTrimmedRight ((float) size::mappingPadX), type::body, colour::text);
-        paint::text (g, d.manufacturerName, maker.withTrimmedRight ((float) size::mappingPadX), type::body, colour::textSoft);
-        paint::text (g, d.version, version, type::body, colour::textTertiary);
+        const auto& d = owner.plugins.getReference (row);
+        const auto c = columnsIn ({ 0, 0, width, height });
+
+        paint::text (g, d.name, c.name, type::body, colour::text);
+        paint::text (g, d.manufacturerName, c.maker, type::body, selected ? colour::text : colour::textSecondary);
+        paint::text (g, d.version, c.version, type::body, selected ? colour::text : colour::textMuted);
     }
 
 private:
@@ -80,10 +102,13 @@ public:
             return;
 
         if (selected)
-            g.fillAll (paint::c (colour::tableSelection));
+            g.fillAll (paint::c (colour::selectedRow));
 
-        const auto r = juce::Rectangle<int> (0, 0, width, height).reduced (size::groupPad, 0).toFloat();
-        paint::text (g, owner.folders[row], r, type::body, selected ? colour::textStrong : colour::textSoft);
+        g.setColour (paint::c (colour::groupRowLine));
+        g.fillRect (0, height - 1, width, 1);
+
+        const auto r = juce::Rectangle<int> (0, 0, width, height).reduced (size::mappingPadX, 0).toFloat();
+        paint::text (g, owner.folders[row], r, type::body, colour::text);
     }
 
     void selectedRowsChanged (int) override { owner.removeFolderButton.setEnabled (owner.folderList.getSelectedRow() >= 0); }
@@ -130,17 +155,21 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        auto r = getLocalBounds().reduced (size::groupPad, 0).withTrimmedRight (size::pluginsTryAgainW).toFloat();
-        const auto top = r.removeFromTop (r.getHeight() * 0.5f);
-        paint::text (g, name, top.withTrimmedTop ((float) size::listPad), type::body, colour::text);
-        paint::text (g, reason, r.withTrimmedBottom ((float) size::listPad), type::caption, colour::amber);
+        const auto textW = (float) (tryAgain.getX() - size::pluginsTryAgainGap - size::mappingPadX);
+        const auto x = (float) size::mappingPadX;
+        const auto lineH = (float) size::statusTextH;
+        paint::text (g, name, { x, (float) size::pluginsBlockedNameTop, textW, lineH }, type::body, colour::text);
+        paint::text (g, reason, { x, (float) size::pluginsBlockedReasonTop, textW, lineH }, type::caption, colour::amber);
+
+        g.setColour (paint::c (colour::groupRowLine));
+        g.fillRect (0, getHeight() - 1, getWidth(), 1);
     }
 
     void resized() override
     {
         const auto buttonH = size::buttonSmallHeight;
-        tryAgain.setBounds (getWidth() - size::groupPad - size::pluginsTryAgainW + size::listPad, (getHeight() - buttonH) / 2,
-                            size::pluginsTryAgainW - size::listPad, buttonH);
+        const auto w = tryAgain.getBestWidthForHeight (buttonH);
+        tryAgain.setBounds (getWidth() - size::mappingPadX - w, (getHeight() - buttonH) / 2, w, buttonH);
     }
 
 private:
@@ -209,12 +238,15 @@ PluginSettings::PluginSettings (PluginCatalog& c)
     pluginList.setModel (pluginRows.get());
     folderList.setModel (folderRows.get());
     blockedList.setModel (blockedRows.get());
-    setUpList (pluginList, size::tableRowHeight);
-    setUpList (folderList, size::rowHeight);
+    setUpList (pluginList, size::pluginsRowH);
+    setUpList (folderList, size::pluginsRowH);
     setUpList (blockedList, size::pluginsBlockedRowH);
 
     for (auto* l : { &pluginList, &folderList, &blockedList })
         addAndMakeVisible (l);
+
+    addChildComponent (progress);
+    addChildComponent (blockedCount);
 
     scanButton.setTooltip ("Look for new, changed and removed plugins (each new one is tried in a separate process)");
     scanButton.onClick = [this]
@@ -304,11 +336,21 @@ void PluginSettings::refresh()
     rescanButton.setEnabled (! scanning);
     removeFolderButton.setEnabled (folderList.getSelectedRow() >= 0);
 
-    if (newStatus != status)
+    const auto scan = catalog.getScanProgress();
+    const auto showProgress = scanning && scan.total > 0;
+    progress.setVisible (showProgress);
+    progress.setProgress (showProgress ? (double) scan.current / (double) scan.total : 0.0);
+
+    if (newStatus != status || showProgress != statusOverProgress)
     {
         status = newStatus;
+        statusOverProgress = showProgress;
         repaint (statusArea);
     }
+
+    blockedCount.setText (blocked.empty() ? juce::String() : juce::String ((int) blocked.size()));
+    blockedCount.setVisible (! blocked.empty());
+    layOutCount();
 
     if (! samePlugins || ! sameBlocked)
         repaint();
@@ -350,67 +392,106 @@ void PluginSettings::resized()
     const auto y = size::midiPadTop;
     const auto buttonH = size::buttonHeight + size::buttonDrop;
 
+    // Buttons centred under the bar's 1 px top line.
+    auto layOutBar = [] (juce::Rectangle<int> bar) { return bar.getY() + 1 + (bar.getHeight() - 1 - size::buttonHeight) / 2; };
+
     // PLUGINS: as wide and tall as the MIDI tab's mappings.
     const auto leftW = 2 * size::midiColumnW + size::settingsColumnGap - 2;
-    pluginsGroup.setBounds (pad, y, leftW, juce::jmax (kit::Group::heightFor (size::mappingHeaderH + 4 * size::tableRowHeight + size::mappingBarH),
-                                                       getHeight() - y - size::groupGap));
+    // Its title line also carries the hint: a little taller than the others.
+    const auto lift = size::pluginsTitleRowH - size::groupTitleH;
+    pluginsGroup.setBounds (pad, y + lift, leftW, juce::jmax (kit::Group::heightFor (size::mappingHeaderH + 4 * size::pluginsRowH + size::pluginsBarH),
+                                                              getHeight() - y - lift - size::groupGap));
     pluginsBox = pluginsGroup.getBoxBounds() + pluginsGroup.getPosition();
 
     auto table = pluginsBox.reduced (1);
     headerFill.setBounds (table.removeFromTop (size::mappingHeaderH));
-    auto bar = table.removeFromBottom (size::mappingBarH);
+    auto bar = table.removeFromBottom (size::pluginsBarH);
     barFill.setBounds (bar);
     pluginList.setBounds (table);
 
-    const auto barY = bar.getY() + (bar.getHeight() - size::buttonHeight) / 2;
-    scanButton.setBounds (bar.getX() + size::mappingPadX - 1, barY, juce::jmax (scanButton.getBestWidthForHeight (buttonH),
-                                                                                 size::dialogButtonW), buttonH);
+    const auto barY = layOutBar (bar);
+    scanButton.setBounds (bar.getX() + size::mappingPadX, barY, juce::jmax (scanButton.getBestWidthForHeight (buttonH),
+                                                                             size::dialogButtonW), buttonH);
     rescanButton.setBounds (scanButton.getRight() + size::layoutToolbarGap, barY, rescanButton.getBestWidthForHeight (buttonH), buttonH);
     statusArea = bar.withLeft (rescanButton.getRight() + size::mappingPadX).withTrimmedRight (size::mappingPadX);
+    progress.setBounds (statusArea.getX(), bar.getY() + size::pluginsProgressTop, statusArea.getWidth(), size::progressH);
 
     // FOLDERS and BLOCKED on the right.
     const auto rightX = pluginsGroup.getRight() + size::settingsColumnGap;
-    const auto foldersBoxH = size::pluginsFolderRows * size::rowHeight + size::mappingBarH;
+    const auto foldersBoxH = size::pluginsFoldersBoxH;   // about four rows above its bar
     foldersGroup.setBounds (rightX, y, size::midiRightW, kit::Group::heightFor (foldersBoxH));
     {
         auto box = (foldersGroup.getBoxBounds() + foldersGroup.getPosition()).reduced (1);
-        auto folderBar = box.removeFromBottom (size::mappingBarH);
+        auto folderBar = box.removeFromBottom (size::pluginsBarH);
         folderBarFill.setBounds (folderBar);
         folderList.setBounds (box);
 
-        const auto fy = folderBar.getY() + (folderBar.getHeight() - size::buttonHeight) / 2;
-        addFolderButton.setBounds (folderBar.getX() + size::mappingPadX - 1, fy, addFolderButton.getBestWidthForHeight (buttonH), buttonH);
+        const auto fy = layOutBar (folderBar);
+        addFolderButton.setBounds (folderBar.getX() + size::mappingPadX, fy, addFolderButton.getBestWidthForHeight (buttonH), buttonH);
         removeFolderButton.setBounds (addFolderButton.getRight() + size::layoutToolbarGap, fy, removeFolderButton.getBestWidthForHeight (buttonH), buttonH);
         defaultFoldersButton.setBounds (removeFolderButton.getRight() + size::layoutToolbarGap, fy,
                                         defaultFoldersButton.getBestWidthForHeight (buttonH), buttonH);
     }
 
-    const auto blockedY = foldersGroup.getBottom() + size::groupGap;
+    // Its title line carries the count: as tall as the Plugins one.
+    const auto blockedY = foldersGroup.getBottom() + size::groupGap + lift;
     blockedGroup.setBounds (rightX, blockedY, size::midiRightW,
                             juce::jmax (kit::Group::heightFor (2 * size::pluginsBlockedRowH), pluginsGroup.getBottom() - blockedY));
     blockedList.setBounds ((blockedGroup.getBoxBounds() + blockedGroup.getPosition()).reduced (1));
+    layOutCount();
+}
+
+void PluginSettings::layOutCount()
+{
+    // The count sits at the right end of the Blocked title line.
+    const auto w = blockedCount.getIdealWidth();
+    const auto titleCentre = blockedGroup.getY() + size::groupTitleH / 2 - size::pluginsCountLift;
+    blockedCount.setBounds (blockedGroup.getRight() - w, titleCentre - size::tagChipH / 2, w, size::tagChipH);
 }
 
 void PluginSettings::paintOverChildren (juce::Graphics& g)
 {
-    // Column heads, the status line, and the empty states.
+    // Column heads, the hint, the status line, the help and the empty states.
     {
-        auto r = headerFill.getBounds().reduced (size::mappingPadX, 0).toFloat();
-        const auto version = r.removeFromRight ((float) size::pluginsVersionW);
-        const auto maker = r.removeFromRight ((float) size::pluginsMakerW);
-        paint::text (g, nameHead, r, type::columnHead, colour::textDisabled);
-        paint::text (g, makerHead, maker, type::columnHead, colour::textDisabled);
-        paint::text (g, versionHead, version, type::columnHead, colour::textDisabled);
+        const auto head = headerFill.getBounds();
+        g.setColour (paint::c (colour::paneHeaderLine));
+        g.fillRect (head.withTop (head.getBottom() - 1));
+
+        const auto c = columnsIn (head);
+        paint::text (g, nameHead, c.name, type::columnHead, colour::textDisabled);
+        paint::text (g, makerHead, c.maker, type::columnHead, colour::textDisabled);
+        paint::text (g, versionHead, c.version, type::columnHead, colour::textDisabled);
     }
 
-    paint::text (g, status, statusArea.toFloat(), type::body, colour::textTertiary);
+    const auto titleRow = pluginsGroup.getBounds().withHeight (size::groupTitleH).toFloat()
+                              .translated (0.0f, (float) (size::groupTitleH - size::pluginsTitleRowH));
+    paint::text (g, hint, titleRow, type::noteText, colour::textMuted, juce::Justification::centredRight);
+
+    if (statusOverProgress)
+        paint::text (g, status, statusArea.toFloat().withTop ((float) (barFill.getY() + size::pluginsStatusTop))
+                                                     .withHeight ((float) size::statusTextH),
+                     type::bodySmall, colour::textSecondary);
+    else
+        paint::text (g, status, statusArea.toFloat(), type::bodySmall, colour::textSecondary);
 
     if (plugins.isEmpty())
         paint::text (g, noPlugins, pluginList.getBounds().toFloat(), type::body, colour::textTertiary, juce::Justification::centred);
 
+    // Under the blocked rows (or "Nothing blocked"): what blocking means.
+    auto rest = blockedList.getBounds();
+    rest.removeFromTop (blocked.empty() ? size::pluginsRowH : (int) blocked.size() * size::pluginsBlockedRowH);
+
     if (blocked.empty())
-        paint::text (g, nothingBlocked, blockedList.getBounds().reduced (size::groupPad, 0).toFloat().withHeight ((float) size::rowHeight),
+        paint::text (g, nothingBlocked, blockedList.getBounds().reduced (size::mappingPadX, 0).toFloat().withHeight ((float) size::pluginsRowH),
                      type::body, colour::textTertiary);
+
+    if (rest.getHeight() > size::pluginsHelpPadTop)
+    {
+        g.setFont (theme::font (type::noteText));
+        g.setColour (paint::c (colour::textMuted));
+        g.drawFittedText (blockedHelp, rest.reduced (size::mappingPadX, 0).withTrimmedTop (size::pluginsHelpPadTop),
+                          juce::Justification::topLeft, 3, 1.0f);
+    }
 }
 
 } // namespace encore

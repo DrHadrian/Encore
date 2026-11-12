@@ -66,6 +66,9 @@ public:
     void closeSettings();
     bool isShowingSettings() const noexcept { return settingsWindow != nullptr; }
 
+    /** This computer's plugin catalog (Settings › Plugins). */
+    PluginCatalog& getPluginCatalog() noexcept { return *plugins; }
+
     /** The first start (no plugin list yet): scan for plugins in the background. */
     void startFirstPluginScanIfNeeded();
 
