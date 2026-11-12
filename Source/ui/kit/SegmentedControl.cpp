@@ -55,10 +55,31 @@ void SegmentedControl::setSelected (int index)
             buttons[i]->setToggleState (i == index, juce::dontSendNotification);
 }
 
+void SegmentedControl::setSegmentWidths (std::vector<int> newWidths)
+{
+    widths = std::move (newWidths);
+    resized();
+}
+
 void SegmentedControl::resized()
 {
     if (buttons.isEmpty())
         return;
+
+    // Fixed widths when given (the rest of the width goes to the last), else equal shares.
+    if ((int) widths.size() == buttons.size())
+    {
+        auto x = 0;
+
+        for (int i = 0; i < buttons.size(); ++i)
+        {
+            const auto w = i == buttons.size() - 1 ? getWidth() - x : widths[(size_t) i];
+            buttons[i]->setBounds (x, 0, w, getHeight());
+            x += w;
+        }
+
+        return;
+    }
 
     const auto w = (float) getWidth() / (float) buttons.size();
 

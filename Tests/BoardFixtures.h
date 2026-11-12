@@ -8,6 +8,10 @@
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
+#include <cmath>
+#include <vector>
+
+#include "model/Routing.h"
 #include "model/ShowFolder.h"
 #include "model/ShowModel.h"
 #include "model/StageLayout.h"
@@ -15,21 +19,48 @@
 namespace encore::test
 {
 
-/** An audio interface that plays silence from its own thread: like the
+/** What a board's audio interface looks like. */
+struct BoardDeviceSpec
+{
+    juce::String name = "Headset (2- EarPods)", type = "Windows Audio";
+    juce::StringArray inputs { "Input channel 1", "Input channel 2" };
+    juce::StringArray outputs { "Output 1", "Output 2" };
+    int bufferSize = 480, latency = 480, xruns = 1;
+    float toneLevel = 0.0f;   // a 220 Hz sine on every input (0 = silence), so meters move
+};
+
+/** The M11 boards' interface: Focusrite USB ASIO, 4 in and 4 out, 64
+    samples, 5.3 ms round trip, a guitar-like tone on the inputs. */
+inline BoardDeviceSpec focusriteSpec()
+{
+    BoardDeviceSpec spec;
+    spec.name = "Focusrite USB ASIO";
+    spec.type = "ASIO";
+    spec.inputs = { "Input 1 (Mic/Inst)", "Input 2 (Inst)", "Input 3", "Input 4" };
+    spec.outputs = { "Output 1", "Output 2", "Output 3", "Output 4" };
+    spec.bufferSize = 64;
+    spec.latency = 128;
+    spec.xruns = 0;
+    spec.toneLevel = 0.34f;   // about -9.4 dBFS
+    return spec;
+}
+
+/** An audio interface that plays from its own thread: by default like the
     reference board's "Headset (2- EarPods)" on Windows Audio, 48 kHz,
-    480 samples, 10 ms in and out (20.0 ms round trip). */
+    480 samples, 10 ms in and out (20.0 ms round trip), silent. */
 class BoardDevice final : public juce::AudioIODevice,
                           private juce::Thread
 {
 public:
-    BoardDevice() : juce::AudioIODevice ("Headset (2- EarPods)", "Windows Audio"), juce::Thread ("Board device") {}
+    explicit BoardDevice (const BoardDeviceSpec& s = {})
+        : juce::AudioIODevice (s.name, s.type), juce::Thread ("Board device"), spec (s) {}
     ~BoardDevice() override { close(); }
 
-    juce::StringArray getOutputChannelNames() override       { return { "Output 1", "Output 2" }; }
-    juce::StringArray getInputChannelNames() override        { return { "Input channel 1", "Input channel 2" }; }
+    juce::StringArray getOutputChannelNames() override       { return spec.outputs; }
+    juce::StringArray getInputChannelNames() override        { return spec.inputs; }
     juce::Array<double> getAvailableSampleRates() override   { return { 48000.0 }; }
-    juce::Array<int> getAvailableBufferSizes() override      { return { 480 }; }
-    int getDefaultBufferSize() override                      { return 480; }
+    juce::Array<int> getAvailableBufferSizes() override      { return { spec.bufferSize }; }
+    int getDefaultBufferSize() override                      { return spec.bufferSize; }
 
     juce::String open (const juce::BigInteger& ins, const juce::BigInteger& outs, double, int) override
     {
@@ -67,31 +98,54 @@ public:
 
     bool isPlaying() override                                { return callback != nullptr; }
     juce::String getLastError() override                     { return {}; }
-    int getCurrentBufferSizeSamples() override               { return 480; }
+    int getCurrentBufferSizeSamples() override               { return spec.bufferSize; }
     double getCurrentSampleRate() override                   { return 48000.0; }
     int getCurrentBitDepth() override                        { return 32; }
     juce::BigInteger getActiveOutputChannels() const override { return activeOuts; }
     juce::BigInteger getActiveInputChannels() const override  { return activeIns; }
-    int getOutputLatencyInSamples() override                 { return 480; }
-    int getInputLatencyInSamples() override                  { return 480; }
-    int getXRunCount() const noexcept override               { return 1; }
+    int getOutputLatencyInSamples() override                 { return spec.latency; }
+    int getInputLatencyInSamples() override                  { return spec.latency; }
+    int getXRunCount() const noexcept override               { return spec.xruns; }
 
 private:
     void run() override
     {
-        juce::AudioBuffer<float> in (2, 480), out (2, 480);
+        const auto n = spec.bufferSize;
+        const auto numIns = juce::jmax (1, spec.inputs.size()), numOuts = juce::jmax (1, spec.outputs.size());
+        juce::AudioBuffer<float> in (numIns, n), out (numOuts, n);
         in.clear();
+        double phase = 0.0;
+        const auto step = juce::MathConstants<double>::twoPi * 220.0 / 48000.0;
+        const auto period = juce::jmax (1, juce::roundToInt (1000.0 * n / 48000.0));
 
         while (! threadShouldExit())
         {
+            if (spec.toneLevel > 0.0f)
+            {
+                for (int i = 0; i < n; ++i, phase += step)
+                    for (int ch = 0; ch < numIns; ++ch)
+                        in.setSample (ch, i, spec.toneLevel * (float) std::sin (phase));
+            }
+
+            // Only the active channels, packed, as a real device hands them over.
+            std::vector<const float*> ins;
+            std::vector<float*> outs;
+
+            for (int ch = 0; ch < numIns; ++ch)
+                if (activeIns[ch])
+                    ins.push_back (in.getReadPointer (ch));
+
+            for (int ch = 0; ch < numOuts; ++ch)
+                if (activeOuts[ch])
+                    outs.push_back (out.getWritePointer (ch));
+
             out.clear();
-            callback->audioDeviceIOCallbackWithContext (in.getArrayOfReadPointers(), activeIns.countNumberOfSetBits(),
-                                                        out.getArrayOfWritePointers(), activeOuts.countNumberOfSetBits(),
-                                                        480, {});
-            wait (10);
+            callback->audioDeviceIOCallbackWithContext (ins.data(), (int) ins.size(), outs.data(), (int) outs.size(), n, {});
+            wait (period);
         }
     }
 
+    BoardDeviceSpec spec;
     juce::BigInteger activeIns, activeOuts;
     juce::AudioIODeviceCallback* volatile callback = nullptr;
     bool opened = false;
@@ -100,18 +154,155 @@ private:
 class BoardDeviceType final : public juce::AudioIODeviceType
 {
 public:
-    BoardDeviceType() : juce::AudioIODeviceType ("Windows Audio") {}
+    explicit BoardDeviceType (const BoardDeviceSpec& s = {}) : juce::AudioIODeviceType (s.type), spec (s) {}
     void scanForDevices() override {}
-    juce::StringArray getDeviceNames (bool) const override  { return { "Headset (2- EarPods)" }; }
+    juce::StringArray getDeviceNames (bool) const override  { return { spec.name }; }
     int getDefaultDeviceIndex (bool) const override         { return 0; }
     int getIndexOfDevice (juce::AudioIODevice* d, bool) const override { return d != nullptr ? 0 : -1; }
     bool hasSeparateInputsAndOutputs() const override       { return false; }
 
     juce::AudioIODevice* createDevice (const juce::String&, const juce::String&) override
     {
-        return new BoardDevice();
+        return new BoardDevice (spec);
     }
+
+private:
+    BoardDeviceSpec spec;
 };
+
+/** The M11 boards' computer (REFERENCES.md §4): inputs Guitar (1) and
+    Acoustic (2); outputs Front of house (1/2), In-ear (3/4, -6 dB, its EQ
+    with a low cut at 80 Hz) and Amp DI (5, muted: the interface has 4). */
+inline RoutingConfig makeBoardRouting()
+{
+    RoutingConfig r;
+    r.inputs = { { "Guitar", 1 }, { "Acoustic", 2 } };
+
+    RoutingOutput front;
+    front.name = "Front of house";
+    front.channels = { 1, 2 };
+
+    RoutingOutput inEar;
+    inEar.name = "In-ear";
+    inEar.channels = { 3, 4 };
+    inEar.levelDb = -6.0f;
+    inEar.eq.lowCut = 80.0f;
+    inEar.eq.mid = 1.5f;
+    inEar.eq.treble = -2.0f;
+
+    RoutingOutput amp;
+    amp.name = "Amp DI";
+    amp.channels = { 5 };
+    amp.mute = true;
+
+    r.outputs = { front, inEar, amp };
+    return r;
+}
+
+/** The M11 boards' show: Dual amp listens to "Mic" (not on the computer) and
+    splits into two amps (path B 3 dB down, EXP 1 on Level B, stomp 2 path B
+    on/off); every patch sends to the outputs as on M11RoutingSends,
+    including "Monitor wedge", which isn't on the computer. */
+inline juce::File makeRoutingShow (const juce::File& parent)
+{
+    auto show = makeDefaultShow ("My Show");
+    show.showTemplate = ShowTemplate::band;
+
+    auto base = show.patches[0];
+
+    for (auto& b : base.mainLane().blocks)
+        if (b.type == "gate" || b.type == "eq")
+            b.enabled = false;
+
+    auto block = [] (const char* type, bool enabled = true)
+    {
+        BlockModel b;
+        b.id = juce::Uuid().toDashedString();
+        b.type = type;
+        b.enabled = enabled;
+        return b;
+    };
+
+    struct Send { const char* output; float db; bool on; };
+
+    auto makePatch = [&] (const char* name, juce::uint32 colour, const char* input, std::vector<Send> sends)
+    {
+        auto p = duplicatePatch (base, name);
+        p.colour = colour;
+        p.mainLane().input = input;
+
+        for (auto& snd : sends)
+            p.setSend (snd.output, snd.db, snd.on);
+
+        return p;
+    };
+
+    const auto off = routing::silentDb;
+    std::vector<PatchModel> patches;
+    patches.push_back (makePatch ("Clean", 0xff4C8DF6, "Guitar",
+                                  { { "Front of house", 0, true }, { "In-ear", 0, true }, { "Amp DI", off, false }, { "Monitor wedge", off, false } }));
+
+    // Dual amp: gate, split, amp + cab over amp + cab, merge, delay.
+    auto dual = makePatch ("Dual amp", 0xffFF6B4A, "Mic",
+                           { { "Front of house", 0, true }, { "In-ear", -6, true }, { "Amp DI", 0, true }, { "Monitor wedge", -3, true } });
+    {
+        auto& lanes = dual.lanes;
+        lanes.clear();
+        lanes.resize (2);
+        lanes[0].input = "Mic";
+        auto split = block (splitBlockType);
+        split.stomp = 2;
+        auto merge = block (mergeBlockType);
+        merge.params[mergeParams::panA] = -100.0f;
+        merge.params[mergeParams::levelB] = -3.0f;
+        merge.params[mergeParams::panB] = 100.0f;
+        merge.expression[mergeParams::levelB] = { 1, routing::silentDb, 0.0f };
+        auto delay = block ("delay");
+        lanes[0].blocks = { block ("gate"), split, block ("nam"), block ("cab"), merge, delay };
+        lanes[1].blocks = { block ("nam"), block ("cab") };
+        normaliseSplit (dual);
+    }
+    patches.push_back (dual);
+
+    patches.push_back (makePatch ("Crunch", 0xffFF9F0A, "Guitar",
+                                  { { "Front of house", 0, true }, { "In-ear", -3, true }, { "Amp DI", 0, true }, { "Monitor wedge", off, false } }));
+    patches.push_back (makePatch ("Acoustic", 0xff30C25A, "Acoustic",
+                                  { { "Front of house", -3, true }, { "In-ear", 0, true }, { "Amp DI", off, false }, { "Monitor wedge", off, false } }));
+    patches.push_back (makePatch ("Edge", 0xff30C25A, "Guitar",
+                                  { { "Front of house", 0, true }, { "In-ear", 0, true }, { "Amp DI", 0, true }, { "Monitor wedge", off, false } }));
+    patches.push_back (makePatch ("Lead", 0xffFF6B4A, "Guitar",
+                                  { { "Front of house", 0, true }, { "In-ear", -6, true }, { "Amp DI", 0, true }, { "Monitor wedge", 0, true } }));
+    show.patches = patches;
+
+    std::map<juce::String, juce::String> ids;
+
+    for (auto& p : show.patches)
+        ids[p.name] = p.id;
+
+    auto cue = [&] (const char* number, const char* name, const char* patch, int pc = -1, bool out = false)
+    {
+        auto c = RunItem::makeCue (number, name, ids[patch]);
+        c.programChange = pc;
+
+        if (out)
+            c.midiOut.push_back ({ MidiOutMessage::Kind::programChange, 1, 7, 0 });
+
+        return c;
+    };
+
+    auto set1 = RunItem::makeSection ("Set 1", "set");
+    set1.children = { cue ("1", "Clean", "Clean"), cue ("2", "Dual amp intro", "Dual amp", 2), cue ("3", "Opener", "Crunch"),
+                      cue ("4", "Ballad in D", "Acoustic") };
+    auto set2 = RunItem::makeSection ("Set 2", "set");
+    set2.children = { cue ("5", "Shuffle", "Edge"), cue ("6", "Rock Medley", "Lead", 7, true), cue ("7", "Closer", "Dual amp") };
+    auto encoreSet = RunItem::makeSection ("Encore", "set");
+    encoreSet.children = { cue ("8", "Last Call", "Lead") };
+    show.runningOrder.children = { set1, set2, encoreSet };
+
+    const auto folder = parent.getChildFile ("My Show");
+    ShowFolder::create (folder, show);
+    return folder;
+}
 
 /** The reference board's show: three sets, eight songs, five patches. */
 inline juce::File makeBoardShow (const juce::File& parent)
@@ -366,14 +557,14 @@ inline juce::File makeMusicalShow (const juce::File& parent)
     return folder;
 }
 
-inline juce::XmlElement boardDeviceSetup()
+inline juce::XmlElement boardDeviceSetup (const BoardDeviceSpec& spec = {})
 {
     juce::XmlElement setup ("DEVICESETUP");
-    setup.setAttribute ("deviceType", "Windows Audio");
-    setup.setAttribute ("audioOutputDeviceName", "Headset (2- EarPods)");
-    setup.setAttribute ("audioInputDeviceName", "Headset (2- EarPods)");
+    setup.setAttribute ("deviceType", spec.type);
+    setup.setAttribute ("audioOutputDeviceName", spec.name);
+    setup.setAttribute ("audioInputDeviceName", spec.name);
     setup.setAttribute ("audioDeviceRate", 48000);
-    setup.setAttribute ("audioDeviceBufferSize", 480);
+    setup.setAttribute ("audioDeviceBufferSize", spec.bufferSize);
     return setup;
 }
 

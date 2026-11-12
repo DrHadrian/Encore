@@ -284,6 +284,16 @@ namespace colour
     constexpr juce::uint32 faultCardBorder = 0xff3D2F12;
     constexpr juce::uint32 faultCardText   = 0xffFFD27A;
     constexpr juce::uint32 statusRunning   = 0xff4CD964;   // inspector Status "Running" (a plugin playing)
+    constexpr juce::uint32 outputStripBg   = 0xff18181B;   // an output's strip in the bottom row
+    constexpr juce::uint32 muteOffText     = 0xffC4C4C9;   // the M button while the output plays
+    constexpr juce::uint32 smallKnobArc    = 0xff8E8E95;   // a small knob's value arc
+    constexpr juce::uint32 smallKnobCap    = 0xff3A3A3E;
+    constexpr juce::uint32 eqWell          = 0xff121214;   // behind the EQ curve
+    constexpr juce::uint32 eqGrid          = 0xff26262A;
+    constexpr juce::uint32 eqZero          = 0xff3A3A3F;
+    constexpr juce::uint32 eqCurve         = 0xff6EA5FA;
+    constexpr juce::uint32 eqCurveFill     = 0x1A6EA5FA;   // 10 %
+    constexpr juce::uint32 faderTick       = 0xff3A3A3F;
     constexpr juce::uint32 faultCardShadow = 0x80000000;   // its drop shadow (0, 14, 30 px, black 50 %)
     constexpr juce::uint32 utilityShadow   = 0x73000000;   // chain tile drop shadow (0, 6, 6 px, black 45 %)
     constexpr juce::uint32 groupRowLine    = 0xff1F1F22;   // 1 px under each row of the Plugins, Folders and Blocked lists
@@ -469,6 +479,18 @@ namespace size
     constexpr int utilityNameTop = 25, utilityNameLineH = 12, utilityCaptionTop = 50, utilityCaptionH = 11;
     constexpr int utilityFootW = 22, utilityFootH = 16, utilityFootTop = 62, utilityFootRadius = 7;
     constexpr int utilityShadowY = 6, utilityShadowBlur = 6;
+    // Routing (milestone 11; NEW-FEATURES-M10-M11 §B, §C)
+    constexpr int outputMuteW = 24, outputMuteH = 20, outputMuteRadius = 4, stageMuteW = 52;
+    constexpr int levelBarH = 4, levelBarGap = 2;
+    constexpr int outputStripFullW = 170, outputStripH = 71, outputStripRadius = 5, outputStripPadX = 9, outputStripNameTop = 7;
+    constexpr int outputStripBarsTop = 31, outputStripValueTop = 51, outputStripGap = 6, outputStripMuteTop = 26;
+    constexpr int outputsPaneTop = 30, outputsHeaderTop = 10, outputsSegmentW = 89, outputsSegmentCompactW = 57, outputsSegmentH = 18;
+    constexpr int inputSummaryNameTop = 47, inputSummaryLabelTop = 28, inputSummaryMeterTop = 68, inputSummaryMeterH = 8;
+    constexpr int smallKnob = 36, smallKnobColumn = 70, smallKnobLabelGap = 2, smallKnobLabelH = 11, smallKnobValueGap = 3, smallKnobValueH = 14;
+    constexpr float smallKnobArcR = 15.0f, smallKnobArcW = 3.0f, smallKnobCapR = 10.0f, smallKnobPointerW = 2.0f;
+    constexpr int eqCurvePadX = 11, eqCurveLabelPad = 5;
+    constexpr int faderTrackW = 4, faderThumbW = 28, faderThumbH = 14, faderThumbRadius = 3, sendFaderTrackH = 196;
+    constexpr int faderScaleW = 26, faderTickW = 6, faderTickGap = 4, faderHThumb = 12;
     // FaultCard (a plugin switched off or not loaded, over its dimmed plate; edit-plugin-switched-off.json)
     constexpr int faultCardW = 460, faultCardTop = 128, faultCardRadius = 8, faultCardPadX = 17, faultCardPadY = 15;
     constexpr int faultCardIconW = 10, faultCardIconH = 18, faultCardIconGap = 10, faultCardLineGap = 3, faultCardGap = 10;
@@ -653,6 +675,16 @@ namespace type
     constexpr Style utilityLabel    {  8.5f, Weight::extraBold, 0.08f, true }; // VST3, IN, OUT, SPLIT on a chain tile
     constexpr Style utilityName     { 10.5f, Weight::bold };                // the plugin's name on its tile
     constexpr Style utilityCaption  {  9.0f, Weight::regular };             // its maker
+    constexpr Style muteLetter      { 10.0f, Weight::extraBold };           // "M"
+    constexpr Style outputName      { 11.5f, Weight::semibold };            // an output's name on its strip
+    constexpr Style outputChannels  {  9.5f, Weight::regular };             // "1/2"
+    constexpr Style outputValue     { 10.5f, Weight::regular };             // "-6.0 dB", "muted"
+    constexpr Style inputSummaryName{ 13.0f, Weight::semibold };            // the playing patch's input
+    constexpr Style stageMute       { 15.0f, Weight::bold };                // Mute / MUTED on the Outputs widget
+    constexpr Style smallKnobLabel  {  9.5f, Weight::extraBold, 0.08f, true }; // LOW CUT under a small knob
+    constexpr Style smallKnobValue  { 11.0f, Weight::regular };
+    constexpr Style eqScale         {  9.0f, Weight::regular };             // 20 Hz, 20 kHz, +12 dB
+    constexpr Style faderScale      {  9.0f, Weight::regular };             // +6 0 −6 … −∞ beside a fader
     constexpr Style paramListName   { 13.0f, Weight::bold };                // the plugin's name over its parameter list
     constexpr Style paramListNote   { 12.0f, Weight::regular };             // "has no window of its own: its parameters"
     constexpr Style faultText       { 12.5f, Weight::regular };             // the FaultCard's message

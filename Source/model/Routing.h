@@ -134,6 +134,12 @@ RoutingConfig makeDefaultRouting (int guitarChannel = 1);
 juce::String describeChannels (const RoutingOutput& output);
 
 /** "12.0 ms", "≈ 4.12 m". */
+/** "1/2", "5", "all" (the bottom row's strips). */
+juce::String describeShortChannels (const RoutingOutput& output);
+
+/** "0.0 dB", "−6.0 dB" (a real minus), "Off" when silent or switched off. */
+juce::String describeLevel (float dB, bool on = true);
+
 juce::String describeDelay (float ms);
 juce::String describeDistance (float ms);
 

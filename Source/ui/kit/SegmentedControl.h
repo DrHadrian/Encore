@@ -20,6 +20,9 @@ public:
     void setSegments (const juce::StringArray& labels);
     void setTooltips (const juce::StringArray& tooltips);
     void setSelected (int index);   // -1: none
+
+    /** Segment widths in px (as many as segments); empty = equal shares. */
+    void setSegmentWidths (std::vector<int>);
     int getSelected() const noexcept { return selected; }
     int getNumSegments() const noexcept { return buttons.size(); }
     juce::TextButton* getSegmentButton (int index) { return buttons[index]; }
@@ -30,6 +33,7 @@ public:
 
 private:
     juce::OwnedArray<juce::TextButton> buttons;
+    std::vector<int> widths;
     int selected = -1;
 };
 

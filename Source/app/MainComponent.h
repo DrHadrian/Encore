@@ -11,6 +11,7 @@
 #include "session/PluginCatalog.h"
 #include "session/ShowSession.h"
 #include "ui/BlockPanel.h"
+#include "ui/BottomRow.h"
 #include "ui/ChainStrip.h"
 #include "ui/Inspector.h"
 #include "ui/MidiSettings.h"
@@ -87,7 +88,7 @@ public:
 private:
     // Audio
     void openAudioSettings();
-    void refreshInputChoices();
+    void refreshInputChoices();   // warns when no input channel is on
     void refreshStatus();
     void refreshSystemStatus();
 
@@ -188,20 +189,20 @@ private:
     Chain* shownChain = nullptr;
     int shownBlockIndex = -1;
 
-    // Bottom row (SCREENS.md §4.4): guitar input, meters, system health.
+    // Bottom row (NEW-FEATURES-M10-M11 §B.4): the playing input, the outputs, system health.
     kit::Pane inputPane, metersPane, healthPane;
     std::unique_ptr<Inspector> inspector;
-    juce::Label inputLabel { {}, "Guitar input" }, deviceLine;
-    juce::ComboBox inputChoice;
-    kit::MeterBar inputMeter { "Input" }, outputMeter { "Output" };
-    kit::MeterScale meterScale;
+    juce::Label deviceLine;   // not shown: the stage footer and Routing read it
+    InputSummary inputSummary;
+    OutputsPane outputsPane;
+    void refreshBottomRow();
     juce::Label healthTitle { {}, "System health" };
     juce::TextButton resetCountersButton { "Reset counters" };
     juce::Label healthLine, latencyLine, warningLine;   // full text in their tooltips
 
     // What the warning line shows (the most important first: lost, a device
     // or input problem, not ASIO, then the Windows / power line).
-    juce::String warning, systemText;
+    juce::String warning, systemText, mutedOutputsText;
     bool systemProblem = false;
     double roundTripMs = 0.0, sampleRate = 0.0;
     juce::String stageDeviceLine, footswitchLine;   // the stage footer (SCREENS.md §3.4)

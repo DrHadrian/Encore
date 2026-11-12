@@ -22,6 +22,8 @@ namespace encore
 struct StageSnapshot
 {
     float inputPeak = 0.0f, outputPeak = 0.0f;
+    std::array<float, 8> inputSlotPeaks {};                    // by input slot (routing::maxInputs)
+    std::array<std::array<float, 2>, 8> outputSlotPeaks {};    // by output slot, left and right
     double cpu = 0.0;
     int overruns = 0;
     bool onBattery = false;

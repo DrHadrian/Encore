@@ -202,13 +202,17 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/icons/chevron-up.svg
         Resources/ui/icons/close.svg
         Resources/ui/icons/duplicate.svg
+        Resources/ui/icons/jack.svg
         Resources/ui/icons/lock.svg
+        Resources/ui/icons/merge.svg
         Resources/ui/icons/midi-port.svg
         Resources/ui/icons/minus.svg
         Resources/ui/icons/plug.svg
         Resources/ui/icons/plus.svg
+        Resources/ui/icons/route.svg
         Resources/ui/icons/sidebar-right.svg
         Resources/ui/icons/sliders.svg
+        Resources/ui/icons/split.svg
         Resources/ui/icons/trash.svg
         Resources/ui/icons/warn.svg
         Resources/ui/icons/window.svg)
@@ -242,6 +246,18 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/KeyCap.h
     Source/ui/kit/KnobView.cpp
     Source/ui/kit/KnobView.h
+    Source/ui/kit/MuteButton.cpp
+    Source/ui/kit/MuteButton.h
+    Source/ui/kit/LevelBars.cpp
+    Source/ui/kit/LevelBars.h
+    Source/ui/kit/OutputStrip.cpp
+    Source/ui/kit/OutputStrip.h
+    Source/ui/kit/SmallKnob.cpp
+    Source/ui/kit/SmallKnob.h
+    Source/ui/kit/EqCurve.cpp
+    Source/ui/kit/EqCurve.h
+    Source/ui/kit/Fader.cpp
+    Source/ui/kit/Fader.h
     Source/ui/kit/Lcd.cpp
     Source/ui/kit/Lcd.h
     Source/ui/kit/MeterBar.cpp
@@ -305,6 +321,8 @@ target_sources(Encore PRIVATE
     Source/app/MainComponent.h
     Source/ui/BlockPanel.cpp
     Source/ui/BlockPanel.h
+    Source/ui/BottomRow.cpp
+    Source/ui/BottomRow.h
     Source/ui/ChainStrip.cpp
     Source/ui/ChainStrip.h
     Source/ui/Inspector.cpp
@@ -438,6 +456,7 @@ if(ENCORE_BUILD_TESTS)
         Source/app/EventLog.cpp
         Source/app/MainComponent.cpp
         Source/ui/BlockPanel.cpp
+        Source/ui/BottomRow.cpp
         Source/ui/ChainStrip.cpp
         Source/ui/Inspector.cpp
         Source/ui/MidiSettings.cpp
@@ -459,6 +478,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/ResamplerTests.cpp
         Tests/RoutingEngineTests.cpp
         Tests/RoutingSessionTests.cpp
+        Tests/RoutingViewTests.cpp
         Tests/RoutingTests.cpp
         Tests/SessionTests.cpp
         Tests/SplitPathTests.cpp

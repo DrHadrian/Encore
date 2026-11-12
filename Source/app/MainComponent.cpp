@@ -211,31 +211,17 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     for (auto* pane : { &inputPane, &metersPane, &healthPane })
         addAndMakeVisible (pane);
 
-    styleLabel (inputLabel, type::label, colour::textTertiary);
-    inputPane.addAndMakeVisible (inputLabel);
-
-    setVariant (inputChoice, Variant::field);
-    inputChoice.setTitle ("Guitar input");
-    inputChoice.onChange = [this]
+    inputPane.addAndMakeVisible (inputSummary);
+    metersPane.addAndMakeVisible (outputsPane);
+    outputsPane.setFull (settings.getOutputStripsFull());
+    outputsPane.onFullChanged = [this] (bool full) { settings.setOutputStripsFull (full); };
+    outputsPane.onMuteClicked = [this] (int index, bool muted)
     {
-        // The item's id is the interface's channel (1-based): the first input's channel.
-        const auto channel = inputChoice.getSelectedId();
+        const auto& outputs = engine.getRouting().outputs;
 
-        if (channel > 0)
-        {
-            auto routing = engine.getRouting();
-            routing.inputs.front().channel = channel;
-            setRouting (routing);
-        }
+        if (juce::isPositiveAndBelow (index, (int) outputs.size()))
+            setOutputMuted (outputs[(size_t) index].name, muted);
     };
-    inputPane.addAndMakeVisible (inputChoice);
-
-    styleLabel (deviceLine, type::caption, colour::textMuted);
-    inputPane.addAndMakeVisible (deviceLine);
-
-    metersPane.addAndMakeVisible (inputMeter);
-    metersPane.addAndMakeVisible (outputMeter);
-    metersPane.addAndMakeVisible (meterScale);
 
     styleLabel (healthTitle, type::healthTitle, colour::textTertiary);
     healthPane.addAndMakeVisible (healthTitle);
@@ -840,6 +826,18 @@ void MainComponent::refreshWarningLine()
         }
     }
 
+    // An output muted on its own (the bottom row's M, Stage, a footswitch).
+    if (mutedOutputsText.isNotEmpty())
+    {
+        all.add (mutedOutputsText);
+
+        if (shown.isEmpty())
+        {
+            shown = warn + mutedOutputsText;
+            colourToken = colour::amber;
+        }
+    }
+
     if (systemText.isNotEmpty())
     {
         all.add (systemText);
@@ -1092,6 +1090,64 @@ void MainComponent::setRouting (const RoutingConfig& routing)
     session->refreshRouting();   // inputs and sends by name, to the new slots
     ensureRoutingChannelsActive();
     refreshInputChoices();
+}
+
+void MainComponent::refreshBottomRow()
+{
+    // Outputs: this computer's, in order, with their mutes as the engine has them.
+    const auto& routing = engine.getRouting();
+    std::vector<OutputsPane::Output> outputs;
+
+    for (const auto& o : routing.outputs)
+    {
+        const auto slot = engine.getOutputSlot (o.name);
+        const auto muted = slot >= 0 ? engine.isOutputMuted (slot) : o.mute;
+        outputs.push_back ({ o.name, describeShortChannels (o), describeLevel (o.levelDb), o.isStereo(), muted });
+    }
+
+    outputsPane.setOutputs (outputs);
+
+    juce::StringArray mutedNames;
+
+    for (const auto& o : outputs)
+        if (o.muted)
+            mutedNames.add (juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9c")) + o.name + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9d")));
+
+    const auto mutedText = mutedNames.isEmpty() ? juce::String()
+                         : (mutedNames.size() == 1 ? "Output " : "Outputs ") + mutedNames.joinIntoString (", ") + (mutedNames.size() == 1 ? " is muted" : " are muted");
+
+    if (mutedText != mutedOutputsText)
+    {
+        mutedOutputsText = mutedText;
+        refreshWarningLine();
+    }
+
+    // The playing patch's input: its name, or the one that plays instead.
+    const auto* patch = session->getPatch (session->getActivePatchId());
+    const auto wanted = patch != nullptr ? patch->inputName() : juce::String();
+    const auto slot = engine.getInputSlot (wanted);
+
+    if (juce::isPositiveAndBelow (slot, (int) routing.inputs.size()))
+    {
+        const auto& input = routing.inputs[(size_t) slot];
+        const auto missing = wanted.isNotEmpty() && routing.findInput (wanted) == nullptr;
+        juce::String caption;
+
+        if (missing)
+        {
+            caption = "instead of " + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9c")) + wanted + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9d"));
+        }
+        else
+        {
+            caption = juce::String (input.channel);
+
+            if (auto* device = deviceManager.getCurrentAudioDevice())
+                if (const auto names = device->getInputChannelNames(); juce::isPositiveAndBelow (input.channel - 1, names.size()))
+                    caption << juce::String (juce::CharPointer_UTF8 (" \xc2\xb7 ")) << names[input.channel - 1];
+        }
+
+        inputSummary.setInput (input.name, caption, missing);
+    }
 }
 
 void MainComponent::setOutputMuted (const juce::String& outputName, bool shouldBeMuted)
@@ -1453,35 +1509,14 @@ void MainComponent::applyMidiOutput()
 
 void MainComponent::refreshInputChoices()
 {
-    inputChoice.clear (juce::dontSendNotification);
-
     auto* device = deviceManager.getCurrentAudioDevice();
 
     if (device == nullptr)
         return;
 
-    // The switched-on input channels; an item's id is the channel (1-based).
-    const auto names = device->getInputChannelNames();
-    const auto active = device->getActiveInputChannels();
-
-    int count = 0;
-
-    for (int ch = 0; ch < names.size(); ++ch)
-        if (active[ch])
-        {
-            inputChoice.addItem (juce::String (ch + 1) + ": " + names[ch], ch + 1);
-            ++count;
-        }
-
-    if (count == 0)
-    {
+    // Inputs are picked in Routing; here only the warning when none is switched on.
+    if (device->getActiveInputChannels().isZero())
         setWarning ("No input channels enabled: open Audio settings and tick your guitar input.");
-        return;
-    }
-
-    // The first input's channel. One that isn't switched on shows nothing
-    // chosen (and plays silence) rather than quietly changing the routing.
-    inputChoice.setSelectedId (engine.getRouting().inputs.front().channel, juce::dontSendNotification);
 }
 
 void MainComponent::refreshSystemStatus()
@@ -1702,14 +1737,29 @@ void MainComponent::timerCallback()
     StageSnapshot snapshot;
     snapshot.inputPeak = engine.getInputMeter().take();
     snapshot.outputPeak = engine.getOutputMeter().take();
+    // Every input and output slot, taken once a frame for every view that shows them.
+    for (int slot = 0; slot < routing::maxInputs; ++slot)
+        snapshot.inputSlotPeaks[(size_t) slot] = engine.getInputSlotMeter (slot).take();
+
+    for (int slot = 0; slot < routing::maxOutputs; ++slot)
+        for (int ch = 0; ch < 2; ++ch)
+            snapshot.outputSlotPeaks[(size_t) slot][(size_t) ch] = engine.getOutputSlotMeter (slot, ch).take();
+
     snapshot.cpu = engine.getCpuLoad();
     snapshot.overruns = engine.getOverrunCount();
    #if JUCE_WINDOWS
     snapshot.onBattery = system::getPowerSource() == system::PowerSource::battery;
    #endif
 
-    inputMeter.setPeak (snapshot.inputPeak);
-    outputMeter.setPeak (snapshot.outputPeak);
+    inputSummary.setPeak (snapshot.inputPeak);
+
+    for (int i = 0; i < outputsPane.getNumStrips() && i < (int) engine.getRouting().outputs.size(); ++i)
+    {
+        const auto slot = engine.getOutputSlot (engine.getRouting().outputs[(size_t) i].name);
+
+        if (slot >= 0)
+            outputsPane.setPeaks (i, snapshot.outputSlotPeaks[(size_t) slot][0], snapshot.outputSlotPeaks[(size_t) slot][1]);
+    }
 
     if (deviceLost)
         snapshot.audioProblem = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + "...";
@@ -1724,7 +1774,7 @@ void MainComponent::timerCallback()
     else if (noticeBar.isVisible())
         showNotice ({}, 0);   // the notice ran out
 
-    outputMeter.setMuted (engine.isMuted());
+    refreshBottomRow();
 
     const auto tunerOpen = engine.isTunerOpen();
 
@@ -1920,33 +1970,8 @@ void MainComponent::layoutBottomRow (juce::Rectangle<int> row)
     row.removeFromRight (size::gap);
     metersPane.setBounds (row);
 
-    // Guitar input: label, field, device line, centred (gap 6).
-    {
-        auto r = inputPane.getLocalBounds().reduced (1 + size::inputPadX, 0);
-        const auto h = size::inputLabelH + size::inputGap + size::fieldHeight + size::inputGap + size::deviceLineH;
-        r = r.withSizeKeepingCentre (r.getWidth(), h);
-        inputLabel.setBounds (r.removeFromTop (size::inputLabelH));
-        r.removeFromTop (size::inputGap);
-        inputChoice.setBounds (r.removeFromTop (size::fieldHeight));
-        r.removeFromTop (size::inputGap);
-        deviceLine.setBounds (r);
-    }
-
-    // Meters: two rows, the scale under them (painted by paint()).
-    {
-        auto r = metersPane.getLocalBounds().reduced (1 + size::metersPadX, 0);
-        const auto h = size::meterRowH * 2 + size::meterRowGap + size::meterScaleGap + size::meterScaleH;
-        r = r.withSizeKeepingCentre (r.getWidth(), h);
-        inputMeter.setBounds (r.removeFromTop (size::meterRowH));
-        r.removeFromTop (size::meterRowGap);
-        outputMeter.setBounds (r.removeFromTop (size::meterRowH));
-        r.removeFromTop (size::meterScaleGap);
-        meterScale.setBounds (r.removeFromTop (size::meterScaleH));
-
-        // The scale lines up with the meters' tracks.
-        const auto track = inputMeter.getTrackBounds();
-        meterScale.setTrack (track.getX() + (float) (inputMeter.getX() - meterScale.getX()), track.getWidth());
-    }
+    inputSummary.setBounds (inputPane.getLocalBounds());
+    outputsPane.setBounds (metersPane.getLocalBounds().reduced (1));
 
     // System health: title and Reset counters, then three lines (gap 3).
     {

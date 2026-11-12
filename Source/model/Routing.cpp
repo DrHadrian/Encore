@@ -220,6 +220,30 @@ juce::String describeChannels (const RoutingOutput& output)
     return juce::String (output.channels[0]) + dot + "mono";
 }
 
+juce::String describeShortChannels (const RoutingOutput& output)
+{
+    if (output.isAllOutputs())
+        return "all";
+
+    juce::StringArray parts;
+
+    for (auto ch : output.channels)
+        parts.add (juce::String (ch));
+
+    return parts.joinIntoString ("/");
+}
+
+juce::String describeLevel (float dB, bool on)
+{
+    if (! on || dB <= routing::silentDb)
+        return "Off";
+
+    // A real minus sign, as the boards write levels; 0.0 never gets one.
+    const auto rounded = std::round (dB * 10.0f) / 10.0f;
+    const auto text = juce::String (std::abs (rounded), 1) + " dB";
+    return rounded < 0.0f ? juce::String (juce::CharPointer_UTF8 ("\xe2\x88\x92")) + text : text;
+}
+
 juce::String describeDelay (float ms)
 {
     return juce::String (ms, 1) + " ms";
