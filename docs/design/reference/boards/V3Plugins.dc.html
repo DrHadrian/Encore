@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Encore v3 — MIDI settings (current features)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#161618}
+*{scrollbar-width:thin;scrollbar-color:#4A4A4F transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#4A4A4F;border:2px solid transparent;border-radius:6px;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#5E5E64;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+a{color:#4C8DF6}a:hover{color:#82AEFA}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #4C8DF6;outline-offset:1px}
+.b{height:24px;padding:0 12px;border:1px solid #0E0E10;border-radius:5px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12),0 1px 0 rgba(0,0,0,0.4);color:#E8E8EB;font-size:12px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.b-on{background:linear-gradient(180deg,#252528,#2E2E31);box-shadow:inset 0 1px 3px rgba(0,0,0,0.7);color:#FFFFFF}
+.pri{border-color:#0B3E86;background:linear-gradient(180deg,#4C8DF6,#2E6FDC);color:#FFFFFF}
+.fld{height:24px;border:1px solid #0C0C0E;border-radius:5px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12);color:#E8E8EB;font-size:12px;padding:0 8px 0 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box}
+.k{font-size:12px;color:#A9A9AF;text-align:right}
+.grp{background:#1A1A1D;border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03)}
+.gt{font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#85858C;padding:0 2px 6px}
+.tab{width:78px;height:54px;border:0;border-radius:6px;background:transparent;color:#A9A9AF;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11px;font-weight:500}
+.tab-on{background:#3A3A3F;color:#FFFFFF;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08)}
+.ghost{position:absolute;background:#1D1D20;border:1px solid #0A0A0B;border-radius:6px}
+
+.pri{border-color:#0B3E86 !important;background:linear-gradient(180deg,#4C8DF6,#2E6FDC) !important;color:#FFFFFF !important}
+.sm{height:18px !important;font-size:10.5px !important;padding:0 7px !important;letter-spacing:0;text-transform:none}
+.ut{position:absolute;box-sizing:border-box;border-radius:8px;background:linear-gradient(180deg,#2C2C30,#1F1F22);border:1px solid #3A3A3F;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 6px 6px rgba(0,0,0,0.45);font-family:Inter,sans-serif;overflow:hidden}
+.ut .lb{position:absolute;left:7px;top:6px;font-size:8.5px;font-weight:800;letter-spacing:0.08em;color:#85858C}
+.ut .dot{position:absolute;right:7px;top:8px;width:6px;height:6px;border-radius:50%}
+.ut .nm{position:absolute;left:6px;right:6px;bottom:7px;font-size:10.5px;font-weight:600;color:#E8E8EB;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ut .sb{position:absolute;left:6px;right:6px;bottom:20px;font-size:9px;color:#85858C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ut .ic{position:absolute;left:0;right:0;top:22px;display:flex;justify-content:center;color:#C4C4C9}
+.sel{outline:3px solid #4FA3FF;outline-offset:3px}
+.chip{display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:3px;font-size:9.5px;font-weight:700;letter-spacing:0.02em;white-space:nowrap}
+.c-mute{background:#5A1A16;color:#FFB4AD}
+.c-amber{background:#3D2F12;color:#FFD27A}
+.c-exp{background:#1B2C45;color:#7FC4FF}
+.c-off{background:#2A2A2E;color:#8E8E95}
+.c-green{background:#1E3A24;color:#4CD964}
+.mb{width:24px;height:20px;border:1px solid #0E0E10;border-radius:4px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12);color:#C4C4C9;font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.mb-on{border-color:#6E120D;background:linear-gradient(180deg,#E8483E,#BF2C25);color:#FFFFFF}
+.meterh{height:4px;border-radius:2px;background:#0E0E10;position:relative;overflow:hidden}
+.meterh>i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#2BC24F 0,#2BC24F 80%,#E8CF3A)}
+.meterv{width:4px;border-radius:2px;background:#0E0E10;position:relative;overflow:hidden}
+.meterv>i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(0deg,#2BC24F 0,#2BC24F 70%,#E8CF3A)}
+.grp{background:#1A1A1D;border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03)}
+.gt{font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#85858C;padding:0 2px 6px}
+.th{font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#6E6E75}
+.pop{height:22px;border:1px solid #0C0C0E;border-radius:5px;background:linear-gradient(180deg,#46464B,#38383C);box-shadow:inset 0 1px 0 rgba(255,255,255,0.1);color:#E8E8EB;font-size:12px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box;white-space:nowrap;overflow:hidden}
+.menu{position:absolute;background:rgba(44,44,48,0.97);border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 14px 40px rgba(0,0,0,0.6);padding:5px;font-size:12.5px;color:#E8E8EB;z-index:10}
+.mi{height:24px;display:flex;align-items:center;gap:4px;padding:0 10px 0 6px;border-radius:4px;white-space:nowrap}
+.mi .tk{width:14px}
+.mi .sc{color:#85858C;font-size:11px;margin-left:auto;padding-left:16px}
+.mi.hi{background:#2E62C4;color:#FFFFFF}
+.mi.hi .sc{color:#D3E1FA}
+.mi.dim{color:#6E6E75}
+.msep{height:1px;background:#3A3A3F;margin:4px 6px}
+.mhd{height:22px;display:flex;align-items:center;padding:0 10px 0 20px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6E6E75}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #161618; color: #E8E8EB; font-family: Inter, -apple-system, system-ui, sans-serif; font-size: 12.5px; position: relative; overflow: hidden">
+  <div aria-hidden="true" style="position: absolute; inset: 0; filter: blur(2px); opacity: 0.55">
+    <div style="position: absolute; left: 0; right: 0; top: 0; height: 44px; background: linear-gradient(180deg, #333337, #28282B)"></div>
+    <div class="ghost" style="left: 8px; top: 52px; width: 250px; height: 728px"></div>
+    <div class="ghost" style="left: 266px; top: 88px; width: 888px; height: 136px"></div>
+    <div class="ghost" style="left: 266px; top: 232px; width: 888px; height: 548px"></div>
+    <div class="ghost" style="left: 1162px; top: 52px; width: 270px; height: 728px"></div>
+    <div class="ghost" style="left: 8px; top: 788px; width: 1424px; height: 104px"></div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.45)"></div>
+
+  <div role="dialog" aria-label="Settings" style="position: absolute; left: 200px; top: 70px; width: 1040px; height: 760px; border-radius: 10px; background: #232326; border: 1px solid #0A0A0B; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 30px 80px rgba(0,0,0,0.7); display: flex; flex-direction: column; overflow: hidden">
+    <div style="height: 30px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; position: relative; font-size: 12.5px; font-weight: 600; color: #C4C4C9; background: linear-gradient(180deg, #38383C, #2E2E31)">
+      Settings — Plugins
+      <button aria-label="Close settings" style="position: absolute; right: 8px; top: 5px; width: 20px; height: 20px; border: 0; border-radius: 4px; background: transparent; color: #A9A9AF; font-size: 14px">✕</button>
+    </div>
+    <div role="tablist" aria-label="Settings sections" style="height: 66px; flex-shrink: 0; display: flex; justify-content: center; gap: 4px; padding: 6px; background: linear-gradient(180deg, #2E2E31, #28282B); border-bottom: 1px solid #0A0A0B">
+      <button role="tab" class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0"></path></svg>Audio</button>
+      <button role="tab" class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><circle cx="8.5" cy="11" r="1"></circle><circle cx="15.5" cy="11" r="1"></circle><circle cx="12" cy="8.5" r="1"></circle><circle cx="10" cy="14.5" r="1"></circle><circle cx="14" cy="14.5" r="1"></circle></svg>MIDI</button>
+      
+      
+      
+      
+      <button role="tab" class="tab tab-on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v4M15 3v4"></path><path d="M7 7h10v4a5 5 0 0 1-10 0z"></path><path d="M12 16v5"></path></svg>Plugins</button>
+    </div>
+
+    <div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; padding: 16px 20px">
+      <div style="display: flex; flex-direction: column; min-width: 0; min-height: 0">
+        <div style="display: flex; align-items: flex-end; gap: 10px; padding-bottom: 6px"><div class="gt" style="padding-bottom: 0">Plugins</div><div style="flex-grow: 1"></div>
+          <span style="font-size: 11.5px; color: #85858C">Add one to a patch with the + in the signal chain › Plugin</span></div>
+        <div class="grp" style="flex-grow: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden">
+          <div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #6E6E75; border-bottom: 1px solid #111113; background: #1E1E21">
+            <span>Name</span><span>Maker</span><span>Version</span></div>
+          <div style="flex-grow: 1; overflow: auto; display: flex; flex-direction: column"><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: transparent; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">FabFilter Pro-Q 3</span><span style="color: #A9A9AF">FabFilter</span><span style="color: #85858C; font-variant-numeric: tabular-nums">3.24</span></div><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: #1C1C1F; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">FabFilter Pro-R 2</span><span style="color: #A9A9AF">FabFilter</span><span style="color: #85858C; font-variant-numeric: tabular-nums">2.10</span></div><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: transparent; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">FabFilter Saturn 2</span><span style="color: #A9A9AF">FabFilter</span><span style="color: #85858C; font-variant-numeric: tabular-nums">2.05</span></div><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: #1C1C1F; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Blackhole</span><span style="color: #A9A9AF">Eventide</span><span style="color: #85858C; font-variant-numeric: tabular-nums">3.7.2</span></div><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: transparent; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">H9 Shimmer</span><span style="color: #A9A9AF">Eventide</span><span style="color: #85858C; font-variant-numeric: tabular-nums">3.7.2</span></div><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: #1C1C1F; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">MicroPitch</span><span style="color: #A9A9AF">Eventide</span><span style="color: #85858C; font-variant-numeric: tabular-nums">3.7.2</span></div><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: transparent; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">ValhallaDelay</span><span style="color: #A9A9AF">Valhalla DSP</span><span style="color: #85858C; font-variant-numeric: tabular-nums">3.0.1</span></div><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: #2E62C4; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">ValhallaRoom</span><span style="color: #E8E8EB">Valhalla DSP</span><span style="color: #E8E8EB; font-variant-numeric: tabular-nums">2.0.0</span></div><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: transparent; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">ValhallaShimmer</span><span style="color: #A9A9AF">Valhalla DSP</span><span style="color: #85858C; font-variant-numeric: tabular-nums">1.4.0</span></div><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: #1C1C1F; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">ValhallaSupermassive</span><span style="color: #A9A9AF">Valhalla DSP</span><span style="color: #85858C; font-variant-numeric: tabular-nums">3.0.0</span></div><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: transparent; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">TAL-Chorus-LX</span><span style="color: #A9A9AF">TAL Software</span><span style="color: #85858C; font-variant-numeric: tabular-nums">1.8.4</span></div><div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px 90px; gap: 10px; align-items: center; padding: 0 12px; border-bottom: 1px solid #1F1F22; background: #1C1C1F; font-size: 12.5px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">OTT</span><span style="color: #A9A9AF">Xfer Records</span><span style="color: #85858C; font-variant-numeric: tabular-nums">1.37</span></div></div>
+          <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-top: 1px solid #111113; background: #1E1E21"><button class="b" style="width: 84px">Stop</button><button class="b" disabled style="opacity: 0.45">Scan all again</button><span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-left: 4px"><span style="font-size: 12px; color: #A9A9AF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums">Scanning 14 of 62: ValhallaSupermassive.vst3</span><span role="progressbar" aria-valuenow="14" aria-valuemax="62" style="position: relative; height: 4px; border-radius: 2px; background: #0E0E10; box-shadow: inset 0 1px 1px rgba(0,0,0,0.6)"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 22.6%; border-radius: 2px; background: #4C8DF6"></span></span></span></div>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 14px; min-height: 0">
+        <div>
+          <div class="gt">Folders</div>
+          <div class="grp" style="display: flex; flex-direction: column; overflow: hidden">
+            <div style="height: 104px; display: flex; flex-direction: column"><div style="height: 26px; display: flex; align-items: center; padding: 0 12px; font-size: 12.5px; border-bottom: 1px solid #1F1F22; background: transparent"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">C:\Program Files\Common Files\VST3</span></div><div style="height: 26px; display: flex; align-items: center; padding: 0 12px; font-size: 12.5px; border-bottom: 1px solid #1F1F22; background: #2E62C4"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">D:\Plugins\VST3</span></div></div>
+            <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-top: 1px solid #111113; background: #1E1E21"><button class="b">+ Add folder...</button><button class="b">Remove</button><button class="b">Defaults</button></div>
+          </div>
+        </div>
+        <div style="flex-grow: 1; min-height: 0; display: flex; flex-direction: column">
+          <div style="display: flex; align-items: flex-end; padding-bottom: 6px"><div class="gt" style="padding-bottom: 0">Blocked</div><div style="flex-grow: 1"></div><span class="chip c-amber">3</span></div>
+          <div class="grp" style="flex-grow: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden"><div style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid #1F1F22"><span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">CrashyVerb.vst3</span><span style="font-size: 11px; color: #FFB340; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Crashed while being scanned</span></span><button class="b sm" style="flex-shrink: 0">Try again</button></div><div style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid #1F1F22"><span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">OldSynth.vst3</span><span style="font-size: 11px; color: #FFB340; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Is an instrument (no audio input)</span></span><button class="b sm" style="flex-shrink: 0">Try again</button></div><div style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid #1F1F22"><span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">BigLoader.vst3</span><span style="font-size: 11px; color: #FFB340; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Didn't finish loading within 60 s while being scanned</span></span><button class="b sm" style="flex-shrink: 0">Try again</button></div>
+            <div style="padding: 10px 12px; font-size: 11.5px; color: #85858C; line-height: 1.45">Scan skips blocked files. Try again unblocks one, so the next Scan tries it in a separate process.</div></div>
+        </div>
+      </div>
+    </div>
+    <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 20px; border-top: 1px solid #0A0A0B; background: #262629">
+      <span style="flex-grow: 1; font-size: 11.5px; color: #85858C">Plugins belong to this computer. Each new one is tried in a separate process first, so a crash can't take Encore down.</span>
+      <button class="b" style="width: 84px">Cancel</button>
+      <button class="b pri" style="width: 84px">Done</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var maps = [
+      ['Next cue', 'CC 64, any channel', 0.0, false],
+      ['Previous cue', 'CC 65, channel 1', 0.0, false],
+      ['Program recall', 'Program change, any channel', 0.0, false],
+      ['Stomp 1', 'CC 80, channel 1', 0.0, false],
+      ['Stomp 2', 'CC 81, channel 1', 0.0, false],
+      ['Stomp 3', 'CC 82, channel 1', 1.0, false],
+      ['Stomp 4', '', 0.0, true],
+      ['Expression 1', 'CC 11, any channel', 0.72, false],
+      ['Expression 2', 'CC 1, any channel', 0.0, false],
+      ['Mute', 'Note C2, channel 10', 0.0, false],
+      ['Tuner', 'CC 69, channel 1', 0.0, false],
+      ['Panic', 'CC 70, channel 1', 0.0, false]
+    ];
+    var log = [
+      ['23:41:08', 'CC 82 = 127 · ch 1', 'Stomp 3'],
+      ['23:41:06', 'CC 11 = 92 · ch 1', 'Expression 1'],
+      ['23:41:06', 'CC 11 = 88 · ch 1', 'Expression 1'],
+      ['23:41:02', 'CC 64 = 127 · ch 1', 'Next cue'],
+      ['23:40:58', 'Note F#3 on · ch 1', 'not mapped'],
+      ['23:40:51', 'Program 5 · ch 1', 'Program recall']
+    ];
+    return {
+      inputs: [
+        { name: 'FCB1010 (USB)', on: true, fg: '#E8E8EB', led: '#30C25A', glow: '0 0 6px #30C25A' },
+        { name: 'Focusrite USB MIDI', on: true, fg: '#E8E8EB', led: '#2a2a2e', glow: 'none' },
+        { name: 'loopMIDI Port', on: false, fg: '#8E8E95', led: '#2a2a2e', glow: 'none' }
+      ],
+      maps: maps.map(function (m, i) {
+        var learning = m[3];
+        return {
+          action: m[0], trigger: learning ? 'Press the control now…' : m[1],
+          tfg: learning ? '#FFB340' : '#D5D5DA', tstyle: learning ? 'italic' : 'normal',
+          bg: learning ? 'rgba(255,159,10,0.08)' : (i % 2 ? '#1C1C1F' : 'transparent'),
+          act: Math.round(m[2] * 100) + '%', actc: m[2] >= 1 ? '#FFB340' : '#4C8DF6',
+          learn: learning ? 'Cancel' : 'Learn', lcls: learning ? 'b b-on' : 'b'
+        };
+      }),
+      stompNums: [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return { n: n, bg: n === 4 ? '#2E6FDC' : 'transparent' }; }),
+      stompLights: [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) {
+        var hit = n === 3; var mapped = n <= 4;
+        return { n: n, bg: hit ? '#3A2C14' : '#23252A', bd: hit ? '#FF9F0A' : '#33363D', fg: mapped ? '#E8E8EB' : '#6E6E75', led: hit ? '#FF9F0A' : '#3a3a3e', glow: hit ? '0 0 8px #FF9F0A' : 'none' };
+      }),
+      pedals: [{ n: 1, h: '72%', v: '72%' }, { n: 2, h: '0%', v: '0%' }, { n: 3, h: '0%', v: '—' }, { n: 4, h: '0%', v: '—' }],
+      log: log.map(function (l, i) { return { t: l[0], msg: l[1], map: l[2], fg: i === 0 ? '#FFFFFF' : '#C4C4C9', mapc: l[2] === 'not mapped' ? '#6E6E75' : '#4C8DF6' }; })
+    };
+  }
+}
+</script>
+</body>
+</html>

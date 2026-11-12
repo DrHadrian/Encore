@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Encore M11 — Pre-show check: routing lines</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#161618}
+*{scrollbar-width:thin;scrollbar-color:#4A4A4F transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#4A4A4F;border:2px solid transparent;border-radius:6px;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#5E5E64;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+a{color:#4C8DF6}a:hover{color:#82AEFA}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #4C8DF6;outline-offset:1px}
+.b{height:24px;padding:0 12px;border:1px solid #0E0E10;border-radius:5px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12),0 1px 0 rgba(0,0,0,0.4);color:#E8E8EB;font-size:12px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.pri{border-color:#0B3E86;background:linear-gradient(180deg,#4C8DF6,#2E6FDC);color:#FFFFFF}
+.ghost{position:absolute;background:#1D1D20;border:1px solid #0A0A0B;border-radius:6px}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #161618; color: #E8E8EB; font-family: Inter, -apple-system, system-ui, sans-serif; font-size: 12.5px; position: relative; overflow: hidden">
+  <div aria-hidden="true" style="position: absolute; inset: 0; filter: blur(2px); opacity: 0.55">
+    <div style="position: absolute; left: 0; right: 0; top: 0; height: 44px; background: linear-gradient(180deg, #333337, #28282B)"></div>
+    <div class="ghost" style="left: 8px; top: 52px; width: 250px; height: 728px"></div>
+    <div class="ghost" style="left: 266px; top: 88px; width: 888px; height: 136px"></div>
+    <div class="ghost" style="left: 266px; top: 232px; width: 888px; height: 548px"></div>
+    <div class="ghost" style="left: 1162px; top: 52px; width: 270px; height: 728px"></div>
+    <div class="ghost" style="left: 8px; top: 788px; width: 1424px; height: 104px"></div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.45)"></div>
+
+  <div role="dialog" aria-label="Pre-show check" style="position: absolute; left: 300px; top: 60px; width: 840px; height: 780px; border-radius: 10px; background: #232326; border: 1px solid #0A0A0B; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 30px 80px rgba(0,0,0,0.7); display: flex; flex-direction: column; overflow: hidden">
+    <div style="height: 30px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; position: relative; font-size: 12.5px; font-weight: 600; color: #C4C4C9; background: linear-gradient(180deg, #38383C, #2E2E31); border-bottom: 1px solid #0A0A0B">
+      Pre-show check
+      <button aria-label="Close pre-show check" style="position: absolute; right: 8px; top: 5px; width: 20px; height: 20px; border: 0; border-radius: 4px; background: transparent; color: #A9A9AF; font-size: 14px">✕</button>
+    </div>
+
+    <div style="flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 18px 22px; border-bottom: 1px solid #111113; background: linear-gradient(180deg, #2A1E1E, #241C1D)">
+      <span style="width: 44px; height: 44px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #FF7A70, #D83A30 60%, #8E1E18); box-shadow: 0 0 18px rgba(216,58,48,0.45); display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-size: 22px; font-weight: 800">!</span>
+      <span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+        <span style="font-size: 20px; font-weight: 700">{{summary}}</span>
+        <span style="font-size: 12px; color: #A9A9AF">{{counts}} · checks again every second, so you can fix things and watch them turn green</span>
+      </span>
+      <span style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 11px; color: #85858C">
+        <span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #30C25A; box-shadow: 0 0 6px #30C25A"></span>Live</span>
+        <span>F9</span>
+      </span>
+    </div>
+
+    <div style="flex-grow: 1; min-height: 0; overflow: auto; padding: 6px 0">
+      <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+        <div style="padding: 10px 22px 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {{g.color}}">{{g.name}}</div>
+        <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="4">
+          <div style="min-height: 46px; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 6px 22px; border-bottom: 1px solid #1C1C1F; background: {{r.bg}}">
+            <span style="width: 22px; height: 22px; border-radius: 50%; background: {{r.dot}}; color: {{r.ink}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800">{{r.icon}}</span>
+            <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+              <span style="font-size: 13px; font-weight: 600; color: {{r.titleColor}}">{{r.title}}</span>
+              <span style="font-size: 12px; color: #A9A9AF; line-height: 1.35">{{r.detail}}</span>
+            </span>
+            <sc-if value="{{r.hasFix}}" hint-placeholder-val="{{ false }}">
+              <button class="{{r.btnCls}}">{{r.fix}}</button>
+            </sc-if>
+          </div>
+        </sc-for>
+      </sc-for>
+    </div>
+
+    <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 20px; border-top: 1px solid #0A0A0B; background: #262629">
+      <span style="flex-grow: 1; font-size: 11.5px; color: #85858C">Worst first. Lines with a button can be fixed from here. The log is in Show → Open log folder.</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var problems = [
+      ['Output “Monitor wedge” isn\'t on this computer', 'Dual amp and Lead send to it. Add it in Routing, or send those patches somewhere else.', 'Routing...'],
+      ['Input “Mic” isn\'t on this computer', 'Dual amp plays Guitar (input 1) instead.', 'Routing...'],
+      ['Output “Amp DI” needs output 5', 'Focusrite USB ASIO has 4 outputs.', 'Routing...']
+    ];
+    var warnings = [
+      ['Output “Amp DI” is muted', 'Unmute it before the show if it should play.', 'Unmute'],
+      ['“Ambient” sends to nothing', 'Every send is off or goes to a muted output.', 'Routing...'],
+      ['Outputs share a channel', '“Main” and “In-ear” both use output 1.', 'Routing...']
+    ];
+    var oks = [
+      ['CPU 9 %', 'Headroom for switching and ringing tails', ''],
+      ['Driver: ASIO', 'Focusrite USB ASIO · 64 samples · 5.3 ms round trip', ''],
+      ['Show saved', '', '']
+    ];
+    var mk = function (list, kind) {
+      return list.map(function (r) {
+        var p = kind === 'problem', w = kind === 'warning';
+        return {
+          title: r[0], detail: r[1], fix: r[2], hasFix: r[2] !== '',
+          icon: p ? '✕' : (w ? '!' : '✓'),
+          dot: p ? '#D83A30' : (w ? '#FF9F0A' : '#1E3A24'),
+          ink: p ? '#FFFFFF' : (w ? '#1A1200' : '#4CD964'),
+          titleColor: p ? '#FF8A80' : '#E8E8EB',
+          bg: p ? 'rgba(216,58,48,0.08)' : 'transparent',
+          btnCls: p ? 'b pri' : 'b'
+        };
+      });
+    };
+    return {
+      summary: problems.length + ' problem(s) to fix before the show',
+      counts: problems.length + ' problem · ' + warnings.length + ' to look at · ' + oks.length + ' fine',
+      groups: [
+        { name: 'Problems', color: '#FF8A80', rows: mk(problems, 'problem') },
+        { name: 'To look at', color: '#FFB340', rows: mk(warnings, 'warning') },
+        { name: 'Fine', color: '#4CD964', rows: mk(oks, 'ok') }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
