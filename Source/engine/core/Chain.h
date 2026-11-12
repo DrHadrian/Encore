@@ -8,6 +8,9 @@
 #include <vector>
 
 #include "engine/core/Block.h"
+#include "model/Routing.h"
+
+#include <array>
 
 namespace encore
 {
@@ -31,7 +34,7 @@ public:
         fullChain    // the whole patch keeps processing its decaying signal
     };
 
-    Chain() = default;
+    Chain();
 
     /** Before handing over only. */
     Block& addBlock (std::unique_ptr<Block> block);
@@ -46,9 +49,24 @@ public:
     /** Message thread: lets blocks free what the audio thread released. */
     void collectGarbage();
 
-    /** Audio thread. numSamples <= spec.maxBlockSize. */
-    void process (float* const* channels, int numChannels, int numSamples) noexcept;
+    /** Audio thread. numSamples <= spec.maxBlockSize. The signal comes in mono
+        in channels[0]; channels must hold Block::maxChannels buffers. Returns
+        how many channels the result has (1, or 2 after a stereo block). */
+    int process (float* const* channels, int numSamples) noexcept;
     void reset() noexcept;
+
+    /** Channels at the end of the chain (1 or 2), known once prepared. */
+    int getOutputChannels() const noexcept { return outputChannels; }
+
+    //== Routing (any thread; the session sets them, the player reads them) ====
+    /** Which input (the engine's input slot) the patch plays. */
+    void setInputSlot (int slot) noexcept   { inputSlot.store (juce::jlimit (0, routing::maxInputs - 1, slot), std::memory_order_relaxed); }
+    int getInputSlot() const noexcept        { return inputSlot.load (std::memory_order_relaxed); }
+
+    /** How loud it plays into each output (by the engine's output slot), as a
+        gain (0 = off). Every output gets 0 dB (1.0) until told otherwise. */
+    void setSendGain (int outputSlot, float gain) noexcept;
+    float getSendGain (int outputSlot) const noexcept;
 
     int getLatencySamples() const noexcept;
 
@@ -76,8 +94,9 @@ public:
     int getFirstTailBlock() const noexcept { return firstTailBlock; }
 
     /** Audio thread: process starting at a given block (earlier blocks are
-        skipped: used to run only the tails of a patch that was switched away). */
-    void processFrom (int firstBlock, float* const* channels, int numChannels, int numSamples) noexcept;
+        skipped: used to run only the tails of a patch that was switched away).
+        Returns the channels of the result, as process(). */
+    int processFrom (int firstBlock, float* const* channels, int numSamples) noexcept;
 
     /** Message thread: remember every parameter and on/off state as "saved". */
     void saveSnapshot();
@@ -110,6 +129,13 @@ private:
     std::atomic<TailMode> tailMode { TailMode::tailsOnly };
     std::atomic<float> fadeIn { (float) defaultFadeInSeconds }, ringOut { (float) defaultRingOutSeconds };
     int firstTailBlock = -1;
+
+    // Channels into and out of each block (prepare()), and at the end.
+    std::vector<int> channelsIn, channelsOut;
+    int outputChannels = 1;
+
+    std::atomic<int> inputSlot { 0 };
+    std::array<std::atomic<float>, (size_t) routing::maxOutputs> sendGains;
 
     struct ExpressionTarget { int pedal; Parameter* parameter; float min, max; };
     std::vector<ExpressionTarget> expressionTargets;   // fixed once the chain plays

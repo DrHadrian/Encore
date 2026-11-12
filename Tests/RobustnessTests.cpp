@@ -272,12 +272,94 @@ public:
     void soakTest()
     {
         const auto seconds = juce::jmax (1, juce::SystemStats::getEnvironmentVariable ("ENCORE_SOAK_SECONDS", "120").getIntValue());
-        beginTest ("Soak: " + juce::String (seconds) + " s of audio with random cues, stomps, pedals, panic and edits");
+        beginTest ("Soak: " + juce::String (seconds) + " s of audio with random cues, stomps, pedals, panic, "
+                   "routing changes and edits, into several outputs");
 
-        Rig rig;
+        // A stage rig (milestone 11): two inputs, five outputs on a 6-out
+        // interface, each output with its own level, EQ or delay.
+        struct RoutedRig
+        {
+            MultiChannelDevice device { 2, 6 };
+            AudioEngine engine;
+            std::vector<std::vector<float>> outs = std::vector<std::vector<float>> (6, std::vector<float> ((size_t) blockSize));
+            std::vector<float> second = std::vector<float> ((size_t) blockSize);
+
+            RoutedRig()
+            {
+                engine.audioDeviceAboutToStart (&device);
+                engine.setMasterGainDecibels (0.0f);
+                engine.setMuted (false);
+            }
+
+            ~RoutedRig() { engine.audioDeviceStopped(); }
+
+            /** One callback; the loudest sample on any output (NaN/inf if one got through). */
+            float callback (const float* input)
+            {
+                // The second input: the same "instrument", quieter.
+                for (int i = 0; i < blockSize; ++i)
+                    second[(size_t) i] = std::isfinite (input[i]) ? input[i] * 0.5f : 0.0f;
+
+                const float* inputs[] = { input, second.data() };
+                float* outputs[6];
+
+                for (size_t o = 0; o < outs.size(); ++o)
+                    outputs[o] = outs[o].data();
+
+                engine.audioDeviceIOCallbackWithContext (inputs, 2, outputs, 6, blockSize, {});
+
+                float worst = 0.0f;
+                bool broken = false;
+
+                for (auto& out : outs)
+                    for (auto x : out)
+                    {
+                        if (std::isfinite (x))
+                            worst = juce::jmax (worst, std::abs (x));
+                        else
+                            broken = true;
+                    }
+
+                return broken ? std::numeric_limits<float>::quiet_NaN() : worst;
+            }
+        };
+
+        auto makeRouting = [] (juce::Random& r)
+        {
+            RoutingConfig config;
+            config.inputs = { { "Guitar", 1 }, { "Acoustic", 2 } };
+
+            RoutingOutput foh;
+            foh.name = "Front of house";
+            foh.channels = { 1, 2 };
+            foh.eq.lowCut = 40.0f + (float) r.nextInt (300);
+
+            RoutingOutput iem;
+            iem.name = "In-ear";
+            iem.channels = { 3, 4 };
+            iem.levelDb = -6.0f + (float) r.nextInt (12);
+            iem.eq.bass = (float) r.nextInt (25) - 12.0f;
+            iem.eq.midFreq = 200.0f + (float) r.nextInt (4800);
+            iem.eq.mid = (float) r.nextInt (25) - 12.0f;
+
+            RoutingOutput di;
+            di.name = "Amp DI";
+            di.channels = { 5 };
+            di.delayMs = (float) r.nextInt (1001) * 0.1f;
+
+            config.outputs = { foh, iem, di };
+
+            if (r.nextBool())
+                std::swap (config.outputs[0], config.outputs[2]);   // reordering moves nothing
+
+            return config;
+        };
+
+        RoutedRig rig;
         auto& player = rig.engine.getPlayer();
         auto& router = rig.engine.getMidiRouter();
         juce::Random random (42);
+        rig.engine.setRouting (makeRouting (random));
 
         router.setBindings ({ { MidiAction::nextCue,     1, { MidiTrigger::Kind::controlChange, 0, 64 } },
                               { MidiAction::previousCue, 1, { MidiTrigger::Kind::controlChange, 0, 65 } },
@@ -318,8 +400,23 @@ public:
 
         std::vector<Chain*> chains;
 
+        // Each kind of patch plays its own input into its own outputs.
+        auto applyRouting = [&] (Chain& chain, int kind)
+        {
+            rig.engine.applyPatchRouting (chain, kind == 3 ? "Acoustic" : "Guitar", [kind] (const juce::String& output)
+            {
+                if (kind == 1) return output == "Amp DI" ? 0.0f : 1.0f;
+                if (kind == 2) return output == "In-ear" ? routing::gainFor (-3.0f) : 0.0f;
+                if (kind == 3) return output == "In-ear" ? 0.0f : routing::gainFor (2.0f);
+                return 1.0f;
+            });
+        };
+
         for (int k = 0; k < 4; ++k)
+        {
             chains.push_back (player.adopt (makeChain (k)));
+            applyRouting (*chains.back(), k);
+        }
 
         auto publish = [&]
         {
@@ -386,16 +483,33 @@ public:
             maxRinging = juce::jmax (maxRinging, player.getNumRinging());
 
             // The UI timer, ~30 times a second: free garbage; sometimes an edit
-            // rebuilds a patch (new chain in, old one released).
+            // rebuilds a patch (new chain in, old one released), the routing
+            // changes, an output is muted or a send moves.
             if (block % 12 == 0)
             {
                 rig.engine.collectGarbage();
+
+                if (random.nextInt (100) == 0)
+                    rig.engine.setRouting (makeRouting (random));
+
+                if (random.nextInt (60) == 0)
+                {
+                    const auto slot = rig.engine.getOutputSlot (random.nextBool() ? "In-ear" : "Amp DI");
+                    rig.engine.setOutputMuted (slot, ! rig.engine.isOutputMuted (slot));
+                }
+
+                if (random.nextInt (50) == 0)
+                {
+                    const auto which = random.nextInt (4);
+                    applyRouting (*chains[(size_t) which], (which + random.nextInt (4)) % 4);
+                }
 
                 if (random.nextInt (200) == 0)
                 {
                     const auto which = (size_t) random.nextInt (4);
                     auto* old = chains[which];
                     chains[which] = player.adopt (makeChain ((int) which));
+                    applyRouting (*chains[which], (int) which);
                     player.release (old);   // before publishing: the next table leaves it out
                     publish();
 

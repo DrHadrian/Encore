@@ -5,9 +5,11 @@
 
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <atomic>
+#include <functional>
 
 #include "engine/PeakMeter.h"
 #include "engine/Tuner.h"
+#include "engine/core/OutputStrip.h"
 #include "engine/core/PatchPlayer.h"
 #include "engine/midi/MidiRouter.h"
 #include "engine/dsp/SafetyLimiter.h"
@@ -17,9 +19,12 @@ namespace encore
 
 /** The real-time heart of Encore.
 
-    Signal path: guitar input -> patch player (active patch + patches ringing
-    out) -> master gain/mute/tuner mute -> panic fade -> safety limiter ->
-    every active output. The tuner listens to the raw input.
+    Signal path (milestone 11, routing): this computer's named inputs -> patch
+    player (active patch + patches ringing out, each from its own input, into
+    every output through its own sends) -> per output: master gain/mute/tuner
+    mute and panic fade (shared), the output's level and mute, EQ, delay,
+    safety limiter, hard ceiling -> the output's channels on the interface.
+    The tuner listens to the playing patch's input.
 
     Threading contract (applies to every engine class):
       - audioDeviceIOCallbackWithContext() runs on the audio thread. It never
@@ -85,13 +90,57 @@ public:
 
     static constexpr double panicFadeSeconds = 0.005, panicHoldSeconds = 0.3, panicReturnSeconds = 0.5;
 
-    /** Which of the device's *active* input channels carries the guitar (0-based). */
-    void setGuitarInputChannel (int activeChannelIndex) noexcept;
-    int getGuitarInputChannel() const noexcept { return guitarInput.load (std::memory_order_relaxed); }
+    //== Routing (message thread) ==============================================
+    /** This computer's inputs and outputs. Takes effect on the next buffer,
+        without a click: levels and sends ramp, the EQ glides, a delay change
+        crossfades, a new output fades in. Outputs keep their slot (and state)
+        by name. The default routing plays exactly as before routing. */
+    void setRouting (const RoutingConfig& config);
+    const RoutingConfig& getRouting() const noexcept { return routingConfig; }
+
+    /** The slot of the input a patch asking for this name plays (that input,
+        or the first when the name isn't here). Always valid. */
+    int getInputSlot (const juce::String& inputName) const noexcept;
+
+    /** The slot of an output, -1 when this computer doesn't have it. */
+    int getOutputSlot (const juce::String& outputName) const noexcept;
+
+    /** Sets a chain's input and sends from its patch: the input by name, each
+        output's send as the patch says (0 dB when it doesn't mention it).
+        Call when a chain is built and whenever the routing or the patch's
+        sends change. */
+    void applyPatchRouting (Chain& chain, const juce::String& inputName,
+                            const std::function<float (const juce::String& outputName)>& sendGainFor) const;
+
+    /** An output's mute, any thread (Stage, the bottom row, a footswitch).
+        The output keeps it while the routing changes. */
+    void setOutputMuted (int outputSlot, bool shouldBeMuted) noexcept;
+    bool isOutputMuted (int outputSlot) const noexcept;
+
+    /** An output's level (dB, -inf..+6), any thread (a fader while it moves). */
+    void setOutputLevel (int outputSlot, float dB) noexcept;
+
+    /** The interface's channels, as the device last started: how many it has,
+        and whether a (1-based) channel can be used (it exists and is active). */
+    int getDeviceInputChannels() const noexcept   { return deviceInputs.load (std::memory_order_relaxed); }
+    int getDeviceOutputChannels() const noexcept  { return deviceOutputs.load (std::memory_order_relaxed); }
+    bool isInputChannelUsable (int channel) const noexcept;
+    bool isOutputChannelUsable (int channel) const noexcept;
 
     //== Monitoring (message thread) ===========================================
+    /** The playing patch's input, and every output together (loudest). */
     PeakMeter& getInputMeter() noexcept  { return inputMeter; }
     PeakMeter& getOutputMeter() noexcept { return outputMeter; }
+
+    /** Per input and output slot (outputs: left and right). */
+    PeakMeter& getInputSlotMeter (int slot) noexcept;
+    PeakMeter& getOutputSlotMeter (int slot, int channel) noexcept;
+
+    /** An output's deepest limiter gain reduction since the last call (dB). */
+    float takeOutputLimiterReductionDb (int slot) noexcept;
+
+    /** Buffers of broken audio silenced in the outputs (should stay 0). */
+    int getBadOutputBufferCount() const noexcept;
 
     /** Fraction of each buffer's time the whole callback needs (1.0 = 100 %). */
     double getCpuLoad() const noexcept { return loadMeasurer.getLoadAsProportion(); }
@@ -99,8 +148,9 @@ public:
     /** Callbacks that took longer than their buffer: an audible dropout risk. */
     int getOverrunCount() const noexcept { return loadMeasurer.getXRunCount(); }
 
-    /** Deepest safety-limiter gain reduction since the last call (dB, 0 = idle). */
-    float takeLimiterReductionDb() noexcept { return limiter.takeGainReductionDb(); }
+    /** Deepest safety-limiter gain reduction since the last call, over every
+        output (dB, 0 = idle). */
+    float takeLimiterReductionDb() noexcept;
 
     /** Blocks where the output still hit the final hard clamp (should stay 0). */
     int getClipCount() const noexcept { return clipCount.load (std::memory_order_relaxed); }
@@ -123,14 +173,29 @@ public:
 
 private:
     static void clearOutputs (float* const* outputs, int numOutputs, int numSamples) noexcept;
-    void renderChunk (const float* input, float* const* outputs, int numOutputs,
+    void adoptRoutingTable() noexcept;
+    void renderChunk (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs,
                       int offset, int numSamples) noexcept;
     void handlePanicAndTunerRequests() noexcept;
     void advancePanic (int numSamples) noexcept;
 
     std::atomic<float> masterGainDb { -12.0f };
     std::atomic<bool> muted { true };              // always start muted: safest on a stage
-    std::atomic<int> guitarInput { 0 };
+
+    // Routing, message-thread side: the config and which name has which slot.
+    RoutingConfig routingConfig;
+    std::array<juce::String, (size_t) routing::maxInputs> inputSlotNames;
+    std::array<juce::String, (size_t) routing::maxOutputs> outputSlotNames;
+    RealtimeHandover<RoutingTable, 8> routingTables;
+
+    // Per output slot, any thread.
+    std::array<std::atomic<float>, (size_t) routing::maxOutputs> outputLevelGain;
+    std::array<std::atomic<bool>, (size_t) routing::maxOutputs> outputMuted;
+
+    // The interface as it last started (written while audio is stopped).
+    std::atomic<int> deviceInputs { 0 }, deviceOutputs { 0 };
+    std::atomic<juce::uint64> usableInputs { 0 }, usableOutputs { 0 };   // bit n = channel n + 1
+    std::array<int, (size_t) routing::maxChannel> inputActiveIndex {}, outputActiveIndex {};   // -1 = not active
 
     PatchPlayer player;
     MidiRouter midi;
@@ -148,11 +213,14 @@ private:
     Chain* singleChain = nullptr;   // the chain set by setChain(), if used
 
     // Audio-thread-only state, (re)allocated only in audioDeviceAboutToStart().
-    juce::AudioBuffer<float> work;
+    RoutingTable* routingTable = nullptr;
+    juce::AudioBuffer<float> buses;                // per output slot: left, right
+    std::vector<float> sharedGain;                 // master x mute x tuner x panic, per sample
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> gain { 0.0f };
-    dsp::SafetyLimiter limiter;
+    std::array<OutputStrip, (size_t) routing::maxOutputs> strips;
 
     PeakMeter inputMeter, outputMeter;
+    std::array<PeakMeter, (size_t) routing::maxInputs> inputSlotMeters;
 
     // Its audio-side calls only *try* to lock and skip a measurement when busy,
     // so the UI may reset it while audio runs without risking a stall.

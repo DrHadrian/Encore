@@ -127,6 +127,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/core/LockFreeFifo.h
     Source/engine/core/MessageThread.cpp
     Source/engine/core/MessageThread.h
+    Source/engine/core/OutputStrip.cpp
+    Source/engine/core/OutputStrip.h
     Source/engine/core/PatchPlayer.cpp
     Source/engine/core/PatchPlayer.h
     Source/engine/core/Parameter.cpp
@@ -137,6 +139,7 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/midi/MidiRouter.cpp
     Source/engine/midi/MidiRouter.h
     Source/engine/dsp/Biquad.h
+    Source/engine/dsp/OutputEq.h
     Source/engine/dsp/PitchDetector.cpp
     Source/engine/dsp/PitchDetector.h
     Source/engine/dsp/SafetyLimiter.cpp
@@ -439,6 +442,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/PluginTests.cpp
         Tests/PluginViewTests.cpp
         Tests/ResamplerTests.cpp
+        Tests/RoutingEngineTests.cpp
         Tests/RoutingTests.cpp
         Tests/SessionTests.cpp
         Tests/TestSignals.h)

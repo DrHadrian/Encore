@@ -87,6 +87,13 @@ public:
     /** Smoothed share of the buffer's time this block used (0.01 = 1 %). */
     double getCpuLoad() const noexcept { return cpuLoad.load (std::memory_order_relaxed); }
 
+    /** How many channels (1 or 2) the block puts out when it gets
+        inputChannels: what it gets for most; a stereo plugin 2; an amp or a
+        cab 1 (an amp is mono, so a stereo signal is summed into it first).
+        The chain mixes up or down before the block, so process() always gets
+        this many channels. Asked when the chain is prepared, never while it plays. */
+    virtual int getOutputChannels (int inputChannels) const noexcept { return inputChannels; }
+
     /** Extra delay the block adds, in samples (0 for most). */
     virtual int getLatencySamples() const noexcept { return 0; }
 

@@ -3,8 +3,29 @@
 
 #include "engine/core/Chain.h"
 
+#include <cmath>
+
 namespace encore
 {
+
+Chain::Chain()
+{
+    for (auto& g : sendGains)
+        g.store (1.0f, std::memory_order_relaxed);
+}
+
+void Chain::setSendGain (int outputSlot, float gain) noexcept
+{
+    if (juce::isPositiveAndBelow (outputSlot, (int) sendGains.size()))
+        sendGains[(size_t) outputSlot].store (std::isfinite (gain) ? juce::jlimit (0.0f, 4.0f, gain) : 0.0f,
+                                              std::memory_order_relaxed);
+}
+
+float Chain::getSendGain (int outputSlot) const noexcept
+{
+    return juce::isPositiveAndBelow (outputSlot, (int) sendGains.size())
+               ? sendGains[(size_t) outputSlot].load (std::memory_order_relaxed) : 0.0f;
+}
 
 Block& Chain::addBlock (std::unique_ptr<Block> block)
 {
@@ -32,14 +53,24 @@ void Chain::prepare (const ProcessSpec& spec)
     chainInput.setSize (1, spec.maxBlockSize, false, true, false);
 
     firstTailBlock = -1;
+    channelsIn.assign (blocks.size(), 1);
+    channelsOut.assign (blocks.size(), 1);
+    int channels = 1;   // the guitar comes in mono
 
     for (int i = 0; i < (int) blocks.size(); ++i)
     {
-        blocks[(size_t) i]->prepare (spec);
+        auto& block = *blocks[(size_t) i];
+        block.prepare (spec);
 
-        if (firstTailBlock < 0 && blocks[(size_t) i]->hasTail())
+        if (firstTailBlock < 0 && block.hasTail())
             firstTailBlock = i;
+
+        channelsIn[(size_t) i] = channels;
+        channels = juce::jlimit (1, Block::maxChannels, block.getOutputChannels (channels));
+        channelsOut[(size_t) i] = channels;
     }
+
+    outputChannels = channels;
 
     if (snapshotValues == nullptr)
         saveSnapshot();
@@ -131,12 +162,12 @@ void Chain::collectGarbage()
         b->collectGarbage();
 }
 
-void Chain::process (float* const* channels, int numChannels, int numSamples) noexcept
+int Chain::process (float* const* channels, int numSamples) noexcept
 {
-    processFrom (0, channels, numChannels, numSamples);
+    return processFrom (0, channels, numSamples);
 }
 
-void Chain::processFrom (int firstBlock, float* const* channels, int numChannels, int numSamples) noexcept
+int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) noexcept
 {
     jassert (numSamples <= chainInput.getNumSamples());
 
@@ -144,8 +175,39 @@ void Chain::processFrom (int firstBlock, float* const* channels, int numChannels
     chainInput.copyFrom (0, 0, channels[0], numSamples);
     const ProcessContext context { chainInput.getReadPointer (0) };
 
-    for (size_t i = (size_t) juce::jmax (0, firstBlock); i < blocks.size(); ++i)
+    const auto first = (size_t) juce::jmax (0, firstBlock);
+
+    if (first >= blocks.size() || channelsIn.size() != blocks.size())
+        return first > 0 && ! channelsOut.empty() ? channelsOut.back() : 1;
+
+    // Starting part-way (tails only): the signal there is what the skipped
+    // blocks would have passed on, i.e. silence on every channel.
+    int numChannels = channelsIn[first];
+
+    if (numChannels > 1)
+        juce::FloatVectorOperations::copy (channels[1], channels[0], numSamples);
+
+    for (size_t i = first; i < blocks.size(); ++i)
+    {
+        const auto wanted = channelsOut[i];
+
+        // Mix up or down before the block, so it gets exactly what it puts out:
+        // mono into a stereo block on both sides, stereo into an amp summed.
+        if (wanted > numChannels)
+        {
+            juce::FloatVectorOperations::copy (channels[1], channels[0], numSamples);
+        }
+        else if (wanted < numChannels)
+        {
+            juce::FloatVectorOperations::add (channels[0], channels[1], numSamples);
+            juce::FloatVectorOperations::multiply (channels[0], 0.5f, numSamples);
+        }
+
+        numChannels = wanted;
         blocks[i]->process (channels, numChannels, numSamples, context);
+    }
+
+    return numChannels;
 }
 
 void Chain::reset() noexcept

@@ -133,6 +133,12 @@ public:
 
     //== Block =================================================================
     int getLatencySamples() const noexcept override;
+
+    /** Its main output's channels (1 or 2); the signal as it is while not loaded. */
+    int getOutputChannels (int inputChannels) const noexcept override
+    {
+        return numOuts >= 2 ? 2 : numOuts == 1 ? 1 : inputChannels;
+    }
     bool hasTail() const noexcept override;
 
 private:

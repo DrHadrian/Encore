@@ -41,6 +41,9 @@ public:
     RoutingConfig getRouting() const;
     void setRouting (const RoutingConfig& routing);
 
+    /** Whether routing was ever saved on this computer (false: before milestone 11). */
+    bool hasRouting() const;
+
     /** The bottom row's output strips: full width (scrolling) or compact. */
     bool getOutputStripsFull() const;
     void setOutputStripsFull (bool full);

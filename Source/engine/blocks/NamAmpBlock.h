@@ -38,6 +38,7 @@ public:
     juce::String getLoadedFileInfo() const override;
     void collectGarbage() override { models.collectGarbage(); }
     int getLatencySamples() const noexcept override;
+    int getOutputChannels (int) const noexcept override { return 1; }   // an amp is mono
 
     //== Message thread ========================================================
     /** Hands a loaded model to the audio thread (prepares it first if needed).

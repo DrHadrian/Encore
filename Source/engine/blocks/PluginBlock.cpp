@@ -530,13 +530,20 @@ void PluginBlock::processBlock (float* const* channels, int numChannels, int num
         || getFault() != Fault::none || numChannels <= 0)
         return;
 
-    // The guitar into every input channel; output-only channels start silent.
+    // The signal into the main input: channel for channel, a stereo signal
+    // summed into a mono input, a mono one into both sides of a stereo input.
+    // Output-only channels start silent.
     for (int ch = 0; ch < work.getNumChannels(); ++ch)
     {
-        if (ch < numIns)
-            work.copyFrom (ch, 0, channels[juce::jmin (ch, numChannels - 1)], numSamples);
-        else
+        if (ch >= numIns)
             work.clear (ch, 0, numSamples);
+        else if (numIns == 1 && numChannels > 1)
+        {
+            work.copyFrom (ch, 0, channels[0], numSamples, 0.5f);
+            work.addFrom (ch, 0, channels[1], numSamples, 0.5f);
+        }
+        else
+            work.copyFrom (ch, 0, channels[juce::jmin (ch, numChannels - 1)], numSamples);
     }
 
     pushParameters();

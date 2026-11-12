@@ -95,6 +95,11 @@ void AppSettings::setRouting (const RoutingConfig& routing)
     setGuitarInputChannel (clean.inputs.front().channel - 1);
 }
 
+bool AppSettings::hasRouting() const
+{
+    return file().containsKey (keys::routing);
+}
+
 bool AppSettings::getOutputStripsFull() const        { return file().getBoolValue (keys::outputStrips, false); }
 void AppSettings::setOutputStripsFull (bool full)    { file().setValue (keys::outputStrips, full); }
 

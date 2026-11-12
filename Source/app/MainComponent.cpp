@@ -218,12 +218,15 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     inputChoice.setTitle ("Guitar input");
     inputChoice.onChange = [this]
     {
-        const auto index = inputChoice.getSelectedId() - 1;   // ids are 1-based
+        // The item's id is the interface's channel (1-based): the first input's channel.
+        const auto channel = inputChoice.getSelectedId();
 
-        if (index >= 0)
+        if (channel > 0)
         {
-            engine.setGuitarInputChannel (index);
-            settings.setGuitarInputChannel (index);
+            auto routing = engine.getRouting();
+            routing.inputs.front().channel = channel;
+            engine.setRouting (routing);
+            settings.setRouting (routing);
         }
     };
     inputPane.addAndMakeVisible (inputChoice);
@@ -288,7 +291,28 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     if (error.isNotEmpty())
         setWarning ("Audio device problem: " + error);
 
-    engine.setGuitarInputChannel (settings.getGuitarInputChannel());
+    // This computer's inputs and outputs. The first time (before routing), the
+    // guitar input was a place among the switched-on inputs: it becomes the
+    // interface channel it pointed at.
+    auto routing = settings.getRouting();
+
+    if (! settings.hasRouting())
+        if (auto* device = deviceManager.getCurrentAudioDevice())
+        {
+            const auto active = device->getActiveInputChannels();
+            const auto wanted = juce::jmax (0, settings.getGuitarInputChannel());
+
+            for (int ch = 0, index = 0; ch <= active.getHighestBit(); ++ch)
+                if (active[ch] && index++ == wanted)
+                {
+                    routing.inputs.front().channel = ch + 1;
+                    break;
+                }
+
+            settings.setRouting (routing);
+        }
+
+    engine.setRouting (routing);
     deviceManager.addAudioCallback (&engine);
 
     // MIDI: every enabled input feeds the router (the device manager reopens
@@ -1336,25 +1360,28 @@ void MainComponent::refreshInputChoices()
     if (device == nullptr)
         return;
 
-    // The engine sees only *active* input channels, packed in order, so the
-    // combo lists those and maps item N to the Nth active channel.
+    // The switched-on input channels; an item's id is the channel (1-based).
     const auto names = device->getInputChannelNames();
     const auto active = device->getActiveInputChannels();
 
-    int activeIndex = 0;
+    int count = 0;
 
     for (int ch = 0; ch < names.size(); ++ch)
         if (active[ch])
-            inputChoice.addItem (juce::String (ch + 1) + ": " + names[ch], ++activeIndex);
+        {
+            inputChoice.addItem (juce::String (ch + 1) + ": " + names[ch], ch + 1);
+            ++count;
+        }
 
-    if (activeIndex == 0)
+    if (count == 0)
     {
         setWarning ("No input channels enabled: open Audio settings and tick your guitar input.");
         return;
     }
 
-    const auto wanted = juce::jlimit (0, activeIndex - 1, engine.getGuitarInputChannel());
-    inputChoice.setSelectedId (wanted + 1, juce::sendNotificationSync);
+    // The first input's channel. One that isn't switched on shows nothing
+    // chosen (and plays silence) rather than quietly changing the routing.
+    inputChoice.setSelectedId (engine.getRouting().inputs.front().channel, juce::dontSendNotification);
 }
 
 void MainComponent::refreshSystemStatus()
