@@ -2,6 +2,7 @@
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
 #include "model/ShowJson.h"
+#include "model/Routing.h"
 
 namespace encore::json
 {
@@ -32,6 +33,15 @@ namespace
     {
         const auto v = get (o, key);
         return v.isVoid() ? fallback : (bool) v;
+    }
+
+    bool hasSend (const PatchModel& patch, const juce::String& output)
+    {
+        for (const auto& s : patch.sends)
+            if (routing::sameName (s.output, output))
+                return true;
+
+        return false;
     }
 
     int integer (const juce::var& o, const char* key, int fallback)
@@ -282,6 +292,27 @@ juce::var patchToVar (const PatchModel& patch)
     }
 
     set (o, "lanes", lanes);
+
+    if (! patch.sends.empty())
+    {
+        juce::Array<juce::var> sends;
+
+        for (auto& send : patch.sends)
+        {
+            auto v = object();
+            set (v, "output", send.output);
+            // -inf has no JSON number; an off send keeps its level for when it's turned back on.
+            set (v, "level", juce::jmax (send.levelDb, routing::silentDb));
+
+            if (! send.on)
+                set (v, "on", false);
+
+            sends.add (v);
+        }
+
+        set (o, "sends", sends);
+    }
+
     return o;
 }
 
@@ -309,6 +340,19 @@ PatchModel patchFromVar (const juce::var& o)
     if (patch.lanes.empty())
         patch.lanes.emplace_back();
 
+    forEachIn (o, "sends", [&] (const juce::var& v)
+    {
+        const auto output = str (v, "output").trim();
+
+        if (output.isEmpty() || hasSend (patch, output))
+            return;   // unnamed, or listed twice: the first wins
+
+        const auto level = get (v, "level");
+        const auto dB = (level.isDouble() || level.isInt() || level.isInt64()) ? (float) (double) level : 0.0f;
+        patch.sends.push_back ({ output, routing::clampLevel (dB), flag (v, "on", true) && dB > routing::silentDb });
+    });
+
+    normaliseSplit (patch);
     return patch;
 }
 

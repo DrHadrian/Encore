@@ -147,6 +147,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/nam/NamModel.h
     Source/model/MidiMapping.cpp
     Source/model/MidiMapping.h
+    Source/model/Routing.cpp
+    Source/model/Routing.h
     Source/model/ShowFolder.cpp
     Source/model/ShowFolder.h
     Source/model/ShowJson.cpp
@@ -437,6 +439,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/PluginTests.cpp
         Tests/PluginViewTests.cpp
         Tests/ResamplerTests.cpp
+        Tests/RoutingTests.cpp
         Tests/SessionTests.cpp
         Tests/TestSignals.h)
 
