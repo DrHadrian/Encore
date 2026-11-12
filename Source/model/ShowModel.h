@@ -137,6 +137,15 @@ struct PatchModel
     /** Whether it uses anything of routing (an input name, sends, a split). */
     bool usesRouting() const;
 
+    /** Blocks by one index over both lanes, as a playing chain numbers them:
+        the main lane first, then path B. */
+    int numBlocks() const;
+    BlockModel* blockAt (int index);
+    const BlockModel* blockAt (int index) const;
+
+    /** Which lane (0 = main, 1 = path B) and where in it; false when out of range. */
+    bool locate (int index, int& lane, int& indexInLane) const;
+
     bool operator== (const PatchModel&) const = default;
 };
 

@@ -445,6 +445,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/PluginViewTests.cpp
         Tests/ResamplerTests.cpp
         Tests/RoutingEngineTests.cpp
+        Tests/RoutingSessionTests.cpp
         Tests/RoutingTests.cpp
         Tests/SessionTests.cpp
         Tests/SplitPathTests.cpp

@@ -24,6 +24,10 @@ AudioEngine::AudioEngine()
     inputActiveIndex.fill (-1);
     outputActiveIndex.fill (-1);
 
+    // "Mute output" footswitches toggle these, by the output's name.
+    midi.setOutputMutes (&outputMuted);
+    midi.setOutputResolver ([this] (const juce::String& name) { return getOutputSlot (name); });
+
     // Until told otherwise: the guitar on input 1, everything to every output.
     setRouting (makeDefaultRouting());
 }
@@ -126,6 +130,26 @@ void AudioEngine::setRouting (const RoutingConfig& config)
     }
 
     routingTables.publish (std::move (table));
+    midi.refreshOutputs();   // "Mute output" bindings follow the names to their slots
+}
+
+bool AudioEngine::syncOutputMutes()
+{
+    bool changed = false;
+
+    for (auto& out : routingConfig.outputs)
+    {
+        const auto slot = getOutputSlot (out.name);
+        const auto now = isOutputMuted (slot);
+
+        if (slot >= 0 && now != out.mute)
+        {
+            out.mute = now;
+            changed = true;
+        }
+    }
+
+    return changed;
 }
 
 int AudioEngine::getInputSlot (const juce::String& inputName) const noexcept

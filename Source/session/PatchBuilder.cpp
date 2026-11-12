@@ -9,6 +9,7 @@
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
 #include "engine/blocks/PluginBlock.h"
+#include "engine/blocks/SplitBlocks.h"
 #include "engine/core/MessageThread.h"
 #include "session/PluginCatalog.h"
 
@@ -34,6 +35,8 @@ std::unique_ptr<Block> createBlock (const juce::String& typeId)
     if (typeId == NoiseGateBlock::typeId) return std::make_unique<NoiseGateBlock>();
     if (typeId == EqBlock::typeId)        return std::make_unique<EqBlock>();
     if (typeId == DelayBlock::typeId)     return std::make_unique<DelayBlock>();
+    if (typeId == SplitBlock::typeId)     return std::make_unique<SplitBlock>();
+    if (typeId == MergeBlock::typeId)     return std::make_unique<MergeBlock>();
     return nullptr;
 }
 
@@ -87,8 +90,19 @@ std::unique_ptr<Chain> buildChain (const PatchModel& patch, const ShowFolder& fo
 {
     auto chain = std::make_unique<Chain>();
 
+    // The main lane, then path B (only with a split: the model keeps them so).
+    std::vector<std::pair<const BlockModel*, bool>> models;
+
     for (const auto& model : patch.mainLane().blocks)
+        models.push_back ({ &model, false });
+
+    if (const auto* pathB = patch.pathB())
+        for (const auto& model : pathB->blocks)
+            models.push_back ({ &model, true });
+
+    for (const auto& [modelPointer, toPathB] : models)
     {
+        const auto& model = *modelPointer;
         std::unique_ptr<Block> block;
 
         if (model.type == PluginBlock::typeId)
@@ -146,7 +160,7 @@ std::unique_ptr<Chain> buildChain (const PatchModel& patch, const ShowFolder& fo
                 problems.add (patch.name + ": " + error);
         }
 
-        chain->addBlock (std::move (block));
+        chain->addBlock (std::move (block), toPathB);
     }
 
     if (spec.isValid())
@@ -157,19 +171,24 @@ std::unique_ptr<Chain> buildChain (const PatchModel& patch, const ShowFolder& fo
 
 void captureChain (const Chain& chain, PatchModel& patch, const ShowFolder& folder)
 {
-    std::vector<BlockModel> blocks;
+    std::vector<BlockModel> blocks, pathBBlocks;
 
     auto findPrevious = [&patch] (const juce::String& id) -> const BlockModel*
     {
-        for (auto& b : patch.mainLane().blocks)
-            if (b.id == id)
-                return &b;
+        for (auto& lane : patch.lanes)
+            for (auto& b : lane.blocks)
+                if (b.id == id)
+                    return &b;
 
         return nullptr;
     };
 
-    for (const auto& block : chain.getBlocks())
+    const auto& chainBlocks = chain.getBlocks();
+
+    for (size_t index = 0; index < chainBlocks.size(); ++index)
     {
+        const auto& block = chainBlocks[index];
+        auto& into = (int) index < chain.getNumMainBlocks() ? blocks : pathBBlocks;
         BlockModel model;
         model.id = block->getModelId().isNotEmpty() ? block->getModelId() : newId();
         model.type = block->getTypeId();
@@ -196,7 +215,7 @@ void captureChain (const Chain& chain, PatchModel& patch, const ShowFolder& fold
                     model.params[id] = p->getValue();
             }
 
-            blocks.push_back (std::move (model));
+            into.push_back (std::move (model));
             continue;
         }
 
@@ -219,10 +238,42 @@ void captureChain (const Chain& chain, PatchModel& patch, const ShowFolder& fold
         else
             model.file = block->getRequestedFile();   // couldn't load: keep what was asked for
 
-        blocks.push_back (std::move (model));
+        into.push_back (std::move (model));
     }
 
-    patch.mainLane().blocks = std::move (blocks);
+    // The chain may be older than the patch (an edit whose rebuild hasn't
+    // arrived yet): then only take the values of the blocks both have, and
+    // keep the patch's own order, splits and new blocks.
+    auto ids = [] (const std::vector<BlockModel>& list)
+    {
+        juce::StringArray result;
+
+        for (auto& b : list)
+            result.add (b.id);
+
+        return result;
+    };
+
+    const auto* oldPathB = patch.lanes.size() > 1 ? &patch.lanes[1].blocks : nullptr;
+    const auto sameShape = ids (blocks) == ids (patch.mainLane().blocks)
+                           && ids (pathBBlocks) == (oldPathB != nullptr ? ids (*oldPathB) : juce::StringArray());
+
+    if (sameShape)
+    {
+        patch.mainLane().blocks = std::move (blocks);
+
+        if (patch.lanes.size() > 1)
+            patch.lanes[1].blocks = std::move (pathBBlocks);
+
+        return;
+    }
+
+    for (auto& lane : patch.lanes)
+        for (auto& b : lane.blocks)
+            for (auto* captured : { &blocks, &pathBBlocks })
+                for (auto& c : *captured)
+                    if (c.id == b.id)
+                        b = c;
 }
 
 } // namespace encore

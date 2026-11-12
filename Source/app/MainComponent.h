@@ -109,7 +109,14 @@ private:
     void watchAudioDevice();
     void reconnectAudioDevice();
     PreShowFacts gatherPreShowFacts();
-    void applyFix (PreShowCheckResult::Fix);
+    void applyFix (const PreShowCheckResult&);
+
+    // Routing (milestone 11): this computer's inputs and outputs.
+    void setRouting (const RoutingConfig&);
+    void setOutputMuted (const juce::String& outputName, bool shouldBeMuted);
+    void ensureRoutingChannelsActive();
+    void openRouting();
+    juce::String lastRoutedDevice;   // the interface whose channels the routing last switched on
     void showNotice (const juce::String& text, int seconds, bool logged = false);
 
     // Cue list

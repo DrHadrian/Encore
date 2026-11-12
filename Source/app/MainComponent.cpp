@@ -225,8 +225,7 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
         {
             auto routing = engine.getRouting();
             routing.inputs.front().channel = channel;
-            engine.setRouting (routing);
-            settings.setRouting (routing);
+            setRouting (routing);
         }
     };
     inputPane.addAndMakeVisible (inputChoice);
@@ -319,6 +318,11 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     // inputs that were enabled last time, and ones plugged back in).
     deviceManager.addMidiInputDeviceCallback ({}, &engine.getMidiRouter());
     deviceManager.addChangeListener (this);
+
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+        lastRoutedDevice = device->getName();
+
+    ensureRoutingChannelsActive();
 
     // Did the last run end cleanly? If not, go back to where it was.
     recovery = std::make_unique<RecoveryFile> (settings.getFolder().getChildFile ("recovery.json"));
@@ -946,7 +950,7 @@ void MainComponent::openPreShowCheck()
 
     checkDialog = std::make_unique<PreShowCheckDialog> (
         [this] { return gatherPreShowFacts(); },
-        [this] (PreShowCheckResult::Fix f) { applyFix (f); },
+        [this] (const PreShowCheckResult& r) { applyFix (r); },
         [this]
         {
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
@@ -977,13 +981,15 @@ void MainComponent::closePreShowCheck()
         grabKeyboardFocus();
 }
 
-void MainComponent::applyFix (PreShowCheckResult::Fix fix)
+void MainComponent::applyFix (const PreShowCheckResult& result)
 {
     using Fix = PreShowCheckResult::Fix;
 
     // The dialogs open on top of the check window; it stays open behind.
-    switch (fix)
+    switch (result.fix)
     {
+        case Fix::routing:        closePreShowCheck(); openRouting(); break;
+        case Fix::unmuteOutput:   setOutputMuted (result.target, false); break;
         case Fix::audioSettings:  openAudioSettings(); break;
         case Fix::midiSettings:   openMidiSettings(); break;
         case Fix::pluginSettings: openSettings (SettingsWindow::Tab::plugins); break;
@@ -1054,7 +1060,98 @@ PreShowFacts MainComponent::gatherPreShowFacts()
         f.cuesSendMidi = f.cuesSendMidi || ! cue->midiOut.empty();
 
     f.midiOutputConnected = midiOutputPresent;
+
+    f.routing = engine.getRouting();
+    f.patchRouting = describePatchRouting (session->getShow());
+    f.unalignedPatches = session->getUnalignedPatches();
+
+    if (f.deviceOpen)
+    {
+        f.deviceInputChannels = engine.getDeviceInputChannels();
+        f.deviceOutputChannels = engine.getDeviceOutputChannels();
+        f.switchedOnInputs = f.switchedOnOutputs = 0;
+
+        for (int ch = 1; ch <= routing::maxChannel; ++ch)
+        {
+            if (engine.isInputChannelUsable (ch))  f.switchedOnInputs  |= (juce::uint64) 1 << (ch - 1);
+            if (engine.isOutputChannelUsable (ch)) f.switchedOnOutputs |= (juce::uint64) 1 << (ch - 1);
+        }
+    }
+
     return f;
+}
+
+//==============================================================================
+void MainComponent::setRouting (const RoutingConfig& routing)
+{
+    engine.setRouting (routing);
+    settings.setRouting (engine.getRouting());
+    session->refreshRouting();   // inputs and sends by name, to the new slots
+    ensureRoutingChannelsActive();
+    refreshInputChoices();
+}
+
+void MainComponent::setOutputMuted (const juce::String& outputName, bool shouldBeMuted)
+{
+    const auto slot = engine.getOutputSlot (outputName);
+
+    if (slot < 0)
+        return;
+
+    engine.setOutputMuted (slot, shouldBeMuted);
+
+    if (engine.syncOutputMutes())
+        settings.setRouting (engine.getRouting());
+}
+
+void MainComponent::ensureRoutingChannelsActive()
+{
+    // The interface channels the routing uses must be switched on, or they'd
+    // stay silent; switch on the ones the interface has (never off).
+    auto* device = deviceManager.getCurrentAudioDevice();
+
+    if (device == nullptr || deviceLost)
+        return;
+
+    auto setup = deviceManager.getAudioDeviceSetup();
+    const auto numIns = device->getInputChannelNames().size();
+    const auto numOuts = device->getOutputChannelNames().size();
+    auto ins = device->getActiveInputChannels();
+    auto outs = device->getActiveOutputChannels();
+    bool changes = false;
+
+    for (const auto& in : engine.getRouting().inputs)
+        if (in.channel <= numIns && ! ins[in.channel - 1])
+        {
+            ins.setBit (in.channel - 1);
+            changes = true;
+        }
+
+    for (const auto& out : engine.getRouting().outputs)
+        for (auto ch : out.channels)
+            if (ch <= numOuts && ! outs[ch - 1])
+            {
+                outs.setBit (ch - 1);
+                changes = true;
+            }
+
+    if (! changes)
+        return;
+
+    setup.inputChannels = ins;
+    setup.outputChannels = outs;
+    setup.useDefaultInputChannels = false;
+    setup.useDefaultOutputChannels = false;
+
+    if (const auto error = deviceManager.setAudioDeviceSetup (setup, true); error.isNotEmpty())
+        eventlog::write ("Couldn't switch on the channels the routing uses: " + error);
+}
+
+void MainComponent::openRouting()
+{
+    // Routing lives in Edit (decision: design v3, milestone 11).
+    if (isShowingStage())
+        setStageVisible (false);
 }
 
 bool MainComponent::handleGoToKey (const juce::KeyPress& key)
@@ -1542,6 +1639,14 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
     if (warning.startsWith ("No input") || warning.startsWith ("Audio device problem"))
         setWarning ({});
 
+    // Another interface: switch on the channels the routing uses (once; on
+    // the same interface, what Settings › Audio switches off stays off).
+    if (auto* device = deviceManager.getCurrentAudioDevice(); device != nullptr && device->getName() != lastRoutedDevice)
+    {
+        lastRoutedDevice = device->getName();
+        ensureRoutingChannelsActive();
+    }
+
     refreshInputChoices();
     refreshStatus();
 }
@@ -1574,6 +1679,10 @@ void MainComponent::timerCallback()
         blockPanel->refresh();
 
     inspector->refresh();
+
+    // Outputs muted from Stage or a footswitch: kept in this computer's routing.
+    if (engine.syncOutputMutes())
+        settings.setRouting (engine.getRouting());
 
     // A footswitch can mute too: the button follows the engine.
     if (const auto isMuted = engine.isMuted(); muteButton.getToggleState() != isMuted)

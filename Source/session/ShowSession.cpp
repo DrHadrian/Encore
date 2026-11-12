@@ -470,8 +470,41 @@ void ShowSession::rebuildPatch (const juce::String& key)
     });
 }
 
+void ShowSession::applyRouting (Chain& chain, const PatchModel& patch) const
+{
+    engine.applyPatchRouting (chain, patch.inputName(), [&patch] (const juce::String& output)
+    {
+        const auto send = patch.sendFor (output);
+        return send.on ? routing::gainFor (send.levelDb) : 0.0f;
+    });
+}
+
+void ShowSession::refreshRouting()
+{
+    for (auto& [key, chain] : chains)
+        if (const auto* patch = findPatchForKey (key))
+            applyRouting (*chain, *patch);
+}
+
+juce::StringArray ShowSession::getUnalignedPatches() const
+{
+    juce::StringArray names;
+
+    for (const auto& [key, chain] : chains)
+        if (chain->isAlignmentLimited())
+            if (const auto* patch = findPatchForKey (key))
+                names.addIfNotAlreadyThere (patch->name);
+
+    names.sort (true);
+    return names;
+}
+
 void ShowSession::installChain (const juce::String& key, std::unique_ptr<Chain> chain)
 {
+    // Its input and sends before it can be heard.
+    if (const auto* patch = findPatchForKey (key))
+        applyRouting (*chain, *patch);
+
     auto* raw = player.adopt (std::move (chain));
     auto it = chains.find (key);
 
@@ -719,71 +752,197 @@ void ShowSession::setSwitchFades (const juce::String& patchId, float fadeInMs, f
 }
 
 //==============================================================================
-void ShowSession::addBlock (const juce::String& typeId, int index)
+namespace
 {
-    captureAll();
-
-    if (auto* patch = findPatchForKey (activePatchId))
+    /** The lane a new block goes into (0 = main, 1 = path B, which needs a split). */
+    std::vector<BlockModel>* laneFor (PatchModel& patch, int lane)
     {
-        auto& blocks = patch->mainLane().blocks;
-        BlockModel block;
-        block.id = newId();
-        block.type = typeId;
-        blocks.insert (blocks.begin() + juce::jlimit (0, (int) blocks.size(), index), block);
-        changed (true);
-        rebuildPatch (activePatchId);
+        if (lane == 1)
+            return patch.pathB() != nullptr ? &patch.pathB()->blocks : nullptr;
+
+        return &patch.mainLane().blocks;
+    }
+
+    bool isSplitOrMerge (const BlockModel& b)
+    {
+        return b.type == splitBlockType || b.type == mergeBlockType;
     }
 }
 
-void ShowSession::addPluginBlock (const PluginRef& plugin, int index)
+void ShowSession::addBlock (const juce::String& typeId, int index, int lane)
 {
     captureAll();
 
     if (auto* patch = findPatchForKey (activePatchId))
     {
-        auto& blocks = patch->mainLane().blocks;
-        BlockModel block;
-        block.id = newId();
-        block.type = pluginBlockType;
-        block.plugin = plugin;
-        blocks.insert (blocks.begin() + juce::jlimit (0, (int) blocks.size(), index), block);
-        changed (true);
-        rebuildPatch (activePatchId);
+        if (typeId == splitBlockType || typeId == mergeBlockType)
+            return;   // a split comes whole: addSplit()
+
+        if (auto* blocks = laneFor (*patch, lane))
+        {
+            BlockModel block;
+            block.id = newId();
+            block.type = typeId;
+            blocks->insert (blocks->begin() + juce::jlimit (0, (int) blocks->size(), index), block);
+            changed (true);
+            rebuildPatch (activePatchId);
+        }
+    }
+}
+
+void ShowSession::addPluginBlock (const PluginRef& plugin, int index, int lane)
+{
+    captureAll();
+
+    if (auto* patch = findPatchForKey (activePatchId))
+    {
+        if (auto* blocks = laneFor (*patch, lane))
+        {
+            BlockModel block;
+            block.id = newId();
+            block.type = pluginBlockType;
+            block.plugin = plugin;
+            blocks->insert (blocks->begin() + juce::jlimit (0, (int) blocks->size(), index), block);
+            changed (true);
+            rebuildPatch (activePatchId);
+        }
     }
 }
 
 void ShowSession::removeBlock (int index)
 {
     captureAll();
+    auto* patch = findPatchForKey (activePatchId);
+    int lane = 0, at = 0;
 
-    if (auto* patch = findPatchForKey (activePatchId);
-        patch != nullptr && juce::isPositiveAndBelow (index, (int) patch->mainLane().blocks.size()))
-    {
-        auto& blocks = patch->mainLane().blocks;
-        blocks.erase (blocks.begin() + index);
-        changed (true);
-        rebuildPatch (activePatchId);
-    }
+    if (patch == nullptr || ! patch->locate (index, lane, at))
+        return;
+
+    auto& blocks = patch->lanes[(size_t) lane].blocks;
+
+    // The split or the merge: the split goes (path A stays, path B with it).
+    if (isSplitOrMerge (blocks[(size_t) at]))
+        encore::removeSplit (*patch);
+    else
+        blocks.erase (blocks.begin() + at);
+
+    changed (true);
+    rebuildPatch (activePatchId);
 }
 
 void ShowSession::moveBlock (int from, int to)
 {
     captureAll();
+    auto* patch = findPatchForKey (activePatchId);
+    int lane = 0, at = 0;
 
-    if (auto* patch = findPatchForKey (activePatchId))
-    {
-        auto& blocks = patch->mainLane().blocks;
-        const auto size = (int) blocks.size();
+    if (patch == nullptr || from == to || ! patch->locate (from, lane, at))
+        return;
 
-        if (! juce::isPositiveAndBelow (from, size) || from == to)
+    // Within its own lane (path B's blocks stay in path B); the split and the
+    // merge stay where they are, and nothing jumps over them.
+    auto& blocks = patch->lanes[(size_t) lane].blocks;
+    const auto laneStart = from - at;
+    const auto target = juce::jlimit (0, (int) blocks.size() - 1, to - laneStart);
+
+    if (target == at || isSplitOrMerge (blocks[(size_t) at]))
+        return;
+
+    for (int i = juce::jmin (at, target); i <= juce::jmax (at, target); ++i)
+        if (i != at && isSplitOrMerge (blocks[(size_t) i]))
             return;
 
-        to = juce::jlimit (0, size - 1, to);
-        auto block = blocks[(size_t) from];
-        blocks.erase (blocks.begin() + from);
-        blocks.insert (blocks.begin() + to, block);
+    auto block = blocks[(size_t) at];
+    blocks.erase (blocks.begin() + at);
+    blocks.insert (blocks.begin() + target, block);
+    changed (true);
+    rebuildPatch (activePatchId);
+}
+
+void ShowSession::moveBlockToPath (int index, bool toPathB)
+{
+    captureAll();
+    auto* patch = findPatchForKey (activePatchId);
+    int lane = 0, at = 0;
+
+    if (patch == nullptr || ! patch->hasSplit() || ! patch->locate (index, lane, at))
+        return;
+
+    const auto split = patch->splitIndex(), merge = patch->mergeIndex();
+    auto& main = patch->mainLane().blocks;
+    auto& pathB = patch->pathB()->blocks;
+
+    if (toPathB && lane == 0 && at > split && at < merge)
+    {
+        // From path A to the end of path B.
+        pathB.push_back (main[(size_t) at]);
+        main.erase (main.begin() + at);
+    }
+    else if (! toPathB && lane == 1)
+    {
+        // From path B to the end of path A (just before the merge).
+        main.insert (main.begin() + merge, pathB[(size_t) at]);
+        pathB.erase (pathB.begin() + at);
+    }
+    else
+    {
+        return;
+    }
+
+    changed (true);
+    rebuildPatch (activePatchId);
+}
+
+bool ShowSession::addSplit (int index)
+{
+    captureAll();
+    auto* patch = findPatchForKey (activePatchId);
+
+    if (patch == nullptr || ! insertSplit (*patch, index))
+        return false;
+
+    changed (true);
+    rebuildPatch (activePatchId);
+    return true;
+}
+
+void ShowSession::removeSplit()
+{
+    captureAll();
+
+    if (auto* patch = findPatchForKey (activePatchId); patch != nullptr && patch->hasSplit())
+    {
+        encore::removeSplit (*patch);
         changed (true);
         rebuildPatch (activePatchId);
+    }
+}
+
+void ShowSession::setPatchInput (const juce::String& patchKey, const juce::String& inputName)
+{
+    if (auto* patch = findPatchForKey (patchKey))
+    {
+        patch->mainLane().input = routing::cleanName (inputName);
+
+        // Live at once: the input is an atomic on the chain.
+        if (const auto it = chains.find (patchKey); it != chains.end())
+            applyRouting (*it->second, *patch);
+
+        changed (true);
+    }
+}
+
+void ShowSession::setPatchSend (const juce::String& patchKey, const juce::String& outputName, float levelDb, bool on)
+{
+    if (auto* patch = findPatchForKey (patchKey); patch != nullptr && outputName.trim().isNotEmpty())
+    {
+        patch->setSend (outputName.trim(), levelDb, on);
+
+        // Live at once (ramped): sends are atomics on the chain.
+        if (const auto it = chains.find (patchKey); it != chains.end())
+            applyRouting (*it->second, *patch);
+
+        changed (true);
     }
 }
 
@@ -795,12 +954,13 @@ void ShowSession::markEdited()
 void ShowSession::setBlockStomp (int blockIndex, int stomp)
 {
     auto* patch = findPatchForKey (activePatchId);
+    auto* block = patch != nullptr ? patch->blockAt (blockIndex) : nullptr;
 
-    if (patch == nullptr || ! juce::isPositiveAndBelow (blockIndex, (int) patch->mainLane().blocks.size()))
+    if (block == nullptr || block->type == mergeBlockType)
         return;
 
     stomp = juce::jlimit (0, maxStomps, stomp);
-    patch->mainLane().blocks[(size_t) blockIndex].stomp = stomp;
+    block->stomp = stomp;
 
     // Live at once, no rebuild: the stomp number is an atomic on the block.
     if (const auto it = chains.find (activePatchId); it != chains.end()
@@ -813,23 +973,22 @@ void ShowSession::setBlockStomp (int blockIndex, int stomp)
 int ShowSession::getBlockStomp (int blockIndex) const
 {
     const auto* patch = findPatchForKey (activePatchId);
-    return patch != nullptr && juce::isPositiveAndBelow (blockIndex, (int) patch->mainLane().blocks.size())
-               ? patch->mainLane().blocks[(size_t) blockIndex].stomp : 0;
+    const auto* block = patch != nullptr ? patch->blockAt (blockIndex) : nullptr;
+    return block != nullptr ? block->stomp : 0;
 }
 
 void ShowSession::setExpression (int blockIndex, const juce::String& paramId, int pedal)
 {
     captureAll();
     auto* patch = findPatchForKey (activePatchId);
+    auto* block = patch != nullptr ? patch->blockAt (blockIndex) : nullptr;
 
-    if (patch == nullptr || ! juce::isPositiveAndBelow (blockIndex, (int) patch->mainLane().blocks.size()))
+    if (block == nullptr)
         return;
-
-    auto& block = patch->mainLane().blocks[(size_t) blockIndex];
 
     if (pedal <= 0)
     {
-        block.expression.erase (paramId);
+        block->expression.erase (paramId);
     }
     else
     {
@@ -845,7 +1004,7 @@ void ShowSession::setExpression (int blockIndex, const juce::String& paramId, in
                 assignment.max = p->getSpec().range.end;
             }
 
-        block.expression[paramId] = assignment;
+        block->expression[paramId] = assignment;
     }
 
     changed (true);
@@ -855,13 +1014,13 @@ void ShowSession::setExpression (int blockIndex, const juce::String& paramId, in
 int ShowSession::getExpressionPedal (int blockIndex, const juce::String& paramId) const
 {
     const auto* patch = findPatchForKey (activePatchId);
+    const auto* block = patch != nullptr ? patch->blockAt (blockIndex) : nullptr;
 
-    if (patch == nullptr || ! juce::isPositiveAndBelow (blockIndex, (int) patch->mainLane().blocks.size()))
+    if (block == nullptr)
         return 0;
 
-    const auto& expression = patch->mainLane().blocks[(size_t) blockIndex].expression;
-    const auto it = expression.find (paramId);
-    return it != expression.end() ? it->second.pedal : 0;
+    const auto it = block->expression.find (paramId);
+    return it != block->expression.end() ? it->second.pedal : 0;
 }
 
 //==============================================================================

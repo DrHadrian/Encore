@@ -106,10 +106,41 @@ public:
     juce::StringArray takePluginNotices();
 
     //== Blocks in the active patch ============================================
-    void addBlock (const juce::String& typeId, int index);
-    void addPluginBlock (const PluginRef& plugin, int index);
+    /** Adds a block at index within a lane (0 = the main lane, 1 = path B). */
+    void addBlock (const juce::String& typeId, int index, int lane = 0);
+    void addPluginBlock (const PluginRef& plugin, int index, int lane = 0);
+
+    /** Block indices below are the chain's: the main lane, then path B.
+        Removing the split or the merge removes the split (path A's blocks
+        stay, path B's go). A move stays within the block's lane and never
+        passes the split or the merge. */
     void removeBlock (int index);
     void moveBlock (int from, int to);
+
+    /** "Move to path A / B": from path A to the end of path B, or back to the
+        end of path A. */
+    void moveBlockToPath (int index, bool toPathB);
+
+    /** Split paths (milestone 11): a split and a merge before the main lane's
+        block at index, both paths empty. False if the patch has one already. */
+    bool addSplit (int index);
+    void removeSplit();
+
+    //== Routing (milestone 11) ================================================
+    /** A patch's input (by name, "" = this computer's first) and its send to
+        an output. Both live at once, no rebuild. patchKey as getActivePatchId(). */
+    void setPatchInput (const juce::String& patchKey, const juce::String& inputName);
+    void setPatchSend (const juce::String& patchKey, const juce::String& outputName, float levelDb, bool on);
+
+    /** Re-applies every patch's input and sends, after this computer's
+        routing changed (AudioEngine::setRouting). */
+    void refreshRouting();
+
+    /** Patches whose split paths are too far apart to line up. */
+    juce::StringArray getUnalignedPatches() const;
+
+    /** The patch of a key (a library patch's id, or a cue's own), or null. */
+    const PatchModel* getPatch (const juce::String& patchKey) const   { return findPatchForKey (patchKey); }
 
     /** Call when a knob, switch or file changed in the live chain. */
     void markEdited();
@@ -225,6 +256,7 @@ private:
     void buildAll();
     void rebuildPatch (const juce::String& patchId);
     void installChain (const juce::String& key, std::unique_ptr<Chain> chain);
+    void applyRouting (Chain& chain, const PatchModel& patch) const;
     void publishRunningOrder();
     void captureAll();
 

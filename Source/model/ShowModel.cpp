@@ -198,6 +198,47 @@ bool PatchModel::usesRouting() const
            || hasType (*this, splitBlockType) || hasType (*this, mergeBlockType);
 }
 
+int PatchModel::numBlocks() const
+{
+    int total = 0;
+
+    for (size_t l = 0; l < lanes.size() && l < 2; ++l)
+        total += (int) lanes[l].blocks.size();
+
+    return total;
+}
+
+bool PatchModel::locate (int index, int& lane, int& indexInLane) const
+{
+    for (size_t l = 0; l < lanes.size() && l < 2; ++l)
+    {
+        const auto size = (int) lanes[l].blocks.size();
+
+        if (juce::isPositiveAndBelow (index, size))
+        {
+            lane = (int) l;
+            indexInLane = index;
+            return true;
+        }
+
+        index -= size;
+    }
+
+    return false;
+}
+
+BlockModel* PatchModel::blockAt (int index)
+{
+    int lane = 0, i = 0;
+    return locate (index, lane, i) ? &lanes[(size_t) lane].blocks[(size_t) i] : nullptr;
+}
+
+const BlockModel* PatchModel::blockAt (int index) const
+{
+    int lane = 0, i = 0;
+    return locate (index, lane, i) ? &lanes[(size_t) lane].blocks[(size_t) i] : nullptr;
+}
+
 void ShowModel::forEachPatch (const std::function<void (const PatchModel&)>& fn) const
 {
     for (const auto& p : patches)

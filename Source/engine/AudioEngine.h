@@ -117,6 +117,10 @@ public:
     void setOutputMuted (int outputSlot, bool shouldBeMuted) noexcept;
     bool isOutputMuted (int outputSlot) const noexcept;
 
+    /** Message thread: takes mutes made elsewhere (Stage, a footswitch) into
+        getRouting(). True if any changed (then save the routing). */
+    bool syncOutputMutes();
+
     /** An output's level (dB, -inf..+6), any thread (a fader while it moves). */
     void setOutputLevel (int outputSlot, float dB) noexcept;
 
