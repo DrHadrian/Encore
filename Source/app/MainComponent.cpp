@@ -375,6 +375,21 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     cueEditor = std::make_unique<CueListEditor> (*session);
     cueEditor->onClose = [this] { setCueListVisible (false); };
     addChildComponent (*cueEditor);
+
+    // Routing (F7): this computer's inputs and outputs, the show's sends.
+    routingView = std::make_unique<RoutingView> (engine, *session, deviceManager);
+    routingView->onClose = [this] { setRoutingVisible (false); };
+    routingView->onSetRouting = [this] (const RoutingConfig& r) { setRouting (r); };
+    routingView->onSetOutputMuted = [this] (const juce::String& name, bool muted) { setOutputMuted (name, muted); };
+    routingView->onOpenAudioSettings = [this] { openAudioSettings(); };
+    addChildComponent (*routingView);
+
+    setButtonIcon (routingButton, Icon::route, (float) size::iconSize, false);
+    setButtonKeyCap (routingButton, "F7");
+    routingButton.setTooltip ("Routing: this computer's inputs and outputs, and every patch's sends (F7)");
+    routingButton.setWantsKeyboardFocus (false);
+    routingButton.onClick = [this] { setRoutingVisible (! isShowingRouting()); };
+    addAndMakeVisible (routingButton);
     setList->onExpand = [this] { setCueListVisible (true); };
 
     stageView = std::make_unique<StageView> (engine, *session);
@@ -412,6 +427,7 @@ MainComponent::~MainComponent()
 
     stageView = nullptr;
     cueEditor = nullptr;
+    routingView = nullptr;
     blockPanel = nullptr;
     inspector = nullptr;
     chainStrip = nullptr;
@@ -1126,10 +1142,11 @@ void MainComponent::refreshBottomRow()
     const auto* patch = session->getPatch (session->getActivePatchId());
     const auto wanted = patch != nullptr ? patch->inputName() : juce::String();
     const auto slot = engine.getInputSlot (wanted);
+    summaryInputSlot = slot;
 
-    if (juce::isPositiveAndBelow (slot, (int) routing.inputs.size()))
+    if (! routing.inputs.empty())
     {
-        const auto& input = routing.inputs[(size_t) slot];
+        const auto& input = routing.inputFor (wanted);   // the patch's, or the first one
         const auto missing = wanted.isNotEmpty() && routing.findInput (wanted) == nullptr;
         juce::String caption;
 
@@ -1211,6 +1228,34 @@ void MainComponent::openRouting()
     // Routing lives in Edit (decision: design v3, milestone 11).
     if (isShowingStage())
         setStageVisible (false);
+
+    setRoutingVisible (true);
+}
+
+void MainComponent::setRoutingVisible (bool shouldShow)
+{
+    if (routingView == nullptr)
+        return;
+
+    if (shouldShow && cueEditor != nullptr && cueEditor->isVisible())
+        cueEditor->setVisible (false);   // one view over the grid at a time
+
+    routingView->setVisible (shouldShow);
+    routingButton.setToggleState (shouldShow, juce::dontSendNotification);
+
+    if (shouldShow)
+    {
+        routingView->refresh();
+        routingView->toFront (false);
+
+        if (stageView != nullptr && stageView->isVisible())
+            stageView->toFront (false);
+    }
+
+    resized();
+
+    if (isShowing())   // (off-screen in tests)
+        grabKeyboardFocus();
 }
 
 bool MainComponent::handleGoToKey (const juce::KeyPress& key)
@@ -1384,7 +1429,16 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
 
     if (key.getKeyCode() == juce::KeyPress::F6Key && ! isShowingStage())
     {
+        if (! cueEditor->isVisible())
+            setRoutingVisible (false);
+
         setCueListVisible (! cueEditor->isVisible());
+        return true;
+    }
+
+    if (key.getKeyCode() == juce::KeyPress::F7Key && ! isShowingStage())
+    {
+        setRoutingVisible (! isShowingRouting());
         return true;
     }
 
@@ -1751,7 +1805,15 @@ void MainComponent::timerCallback()
     snapshot.onBattery = system::getPowerSource() == system::PowerSource::battery;
    #endif
 
-    inputSummary.setPeak (snapshot.inputPeak);
+    // The playing patch's input; the master input meter when routing can't say.
+    inputSummary.setPeak (juce::isPositiveAndBelow (summaryInputSlot, routing::maxInputs) ? snapshot.inputSlotPeaks[(size_t) summaryInputSlot]
+                                                                                          : snapshot.inputPeak);
+
+    if (routingView != nullptr && routingView->isVisible())
+    {
+        routingView->refresh();
+        routingView->update (snapshot);
+    }
 
     for (int i = 0; i < outputsPane.getNumStrips() && i < (int) engine.getRouting().outputs.size(); ++i)
     {
@@ -2020,6 +2082,9 @@ void MainComponent::resized()
     if (cueEditor != nullptr)
         cueEditor->setBounds (area);
 
+    if (routingView != nullptr)
+        routingView->setBounds (area);
+
     auto sidebar = area.removeFromLeft (size::sidebarWidth);
     area.removeFromLeft (size::gap);
     if (inspector != nullptr)
@@ -2038,6 +2103,8 @@ void MainComponent::resized()
     // Centre: header line, chain, block. The tuner covers the centre column.
     editTuner.setBounds (area);
     auto header = area.removeFromTop (size::centreHeaderH);
+    routingButton.setBounds (header.removeFromRight (size::routingButtonW).withSizeKeepingCentre (size::routingButtonW, size::buttonHeight));
+    header.removeFromRight (size::toolbarGap);
     const auto problemsW = problemsLabel.getText().isEmpty() ? 0
                                : juce::jmin (header.getWidth() / 2, (int) std::ceil (textWidth (font (type::label), problemsLabel.getText())) + 1);
     problemsLabel.setBounds (header.removeFromRight (problemsW));

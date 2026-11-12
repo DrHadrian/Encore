@@ -14,6 +14,7 @@
 #include "app/AppSettings.h"
 #include "app/MainComponent.h"
 #include "ui/BottomRow.h"
+#include "ui/RoutingView.h"
 #include "ui/theme/EncoreTheme.h"
 
 namespace encore::test
@@ -96,6 +97,65 @@ public:
             expectEquals (outputs != nullptr ? outputs->getNumStrips() : 0, 3);
             expect (outputs != nullptr && outputs->getStrip (2)->getMuteButton().getToggleState(), "Amp DI muted");
             expect (hasContent (renderSnapshot (main, "m11-edit-bottom-row")));
+
+            beginTest ("F7 opens Routing over the grid; In-ear selected (m11-routing-inputs-outputs)");
+            {
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F7Key));
+                expect (main.isShowingRouting());
+                auto* view = main.getRoutingView();
+                expect (view != nullptr && view->getTab() == RoutingView::Tab::inputsOutputs);
+
+                if (view != nullptr)
+                    view->selectOutput (1);
+
+                pump (600);
+                expect (hasContent (renderSnapshot (main, "m11-routing-inputs-outputs")));
+
+                beginTest ("Routing › Sends, Dual amp's In-ear send selected (m11-routing-sends)");
+                {
+                    if (view != nullptr)
+                    {
+                        view->setTab (RoutingView::Tab::sends);
+                        view->selectSend (1, 1);
+                    }
+
+                    pump (300);
+                    expect (hasContent (renderSnapshot (main, "m11-routing-sends")));
+                }
+
+                beginTest ("Routing: + Add input on a name that isn't here adds it to this computer");
+                {
+                    if (view != nullptr)
+                        view->setTab (RoutingView::Tab::inputsOutputs);
+
+                    juce::TextButton* addMic = nullptr;
+                    std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+                    {
+                        for (auto* child : c.getChildren())
+                        {
+                            if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && b->getTooltip().contains ("Mic"))
+                                addMic = b;
+
+                            find (*child);
+                        }
+                    };
+
+                    if (view != nullptr)
+                        find (*view);
+
+                    expect (addMic != nullptr, "the Mic row's + Add input");
+
+                    if (addMic != nullptr && addMic->onClick != nullptr)
+                        addMic->onClick();   // (a posted click can be overtaken by a rebuild in a test's tight loop)
+
+                    pumpUntil ([&] { return rig.settings.getRouting().findInput ("Mic") != nullptr; }, 3000);
+                    expect (rig.settings.getRouting().findInput ("Mic") != nullptr, "Mic saved in this computer's routing");
+                    expect (main.getRoutingView() != nullptr && main.isShowingRouting());
+                }
+
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F7Key));
+                expect (! main.isShowingRouting(), "F7 again closes it");
+            }
         }
     }
 };

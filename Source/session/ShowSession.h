@@ -143,6 +143,19 @@ public:
     /** The patch of a key (a library patch's id, or a cue's own), or null. */
     const PatchModel* getPatch (const juce::String& patchKey) const   { return findPatchForKey (patchKey); }
 
+    /** Every patch the show can play: the library's, then cues' own ("Cue 4 ·
+        Ballad in D (own patch)"), with the key the other calls take. */
+    struct PatchEntry
+    {
+        juce::String key, label;
+        const PatchModel* patch = nullptr;
+    };
+
+    std::vector<PatchEntry> getAllPatches() const;
+
+    /** How a built patch ends: 1 (mono) or 2 (stereo); 0 while it isn't built. */
+    int getPatchOutputChannels (const juce::String& patchKey) const;
+
     /** Call when a knob, switch or file changed in the live chain. */
     void markEdited();
 

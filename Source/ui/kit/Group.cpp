@@ -15,6 +15,17 @@ Group::Group (const juce::String& t) : title (paint::caps (type::groupTitle, t))
     setInterceptsMouseClicks (false, true);
 }
 
+void Group::setGroupTitle (const juce::String& t)
+{
+    const auto caps = paint::caps (type::groupTitle, t);
+
+    if (caps != title)
+    {
+        title = caps;
+        repaint (getTitleBounds());
+    }
+}
+
 juce::Rectangle<int> Group::getTitleBounds() const { return getLocalBounds().removeFromTop (size::groupTitleH); }
 juce::Rectangle<int> Group::getBoxBounds() const   { return getLocalBounds().withTrimmedTop (size::groupTitleH); }
 int Group::heightFor (int boxHeight) noexcept      { return size::groupTitleH + boxHeight; }

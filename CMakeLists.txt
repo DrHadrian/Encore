@@ -321,6 +321,8 @@ target_sources(Encore PRIVATE
     Source/app/MainComponent.h
     Source/ui/BlockPanel.cpp
     Source/ui/BlockPanel.h
+    Source/ui/RoutingView.cpp
+    Source/ui/RoutingView.h
     Source/ui/BottomRow.cpp
     Source/ui/BottomRow.h
     Source/ui/ChainStrip.cpp
@@ -456,6 +458,7 @@ if(ENCORE_BUILD_TESTS)
         Source/app/EventLog.cpp
         Source/app/MainComponent.cpp
         Source/ui/BlockPanel.cpp
+        Source/ui/RoutingView.cpp
         Source/ui/BottomRow.cpp
         Source/ui/ChainStrip.cpp
         Source/ui/Inspector.cpp

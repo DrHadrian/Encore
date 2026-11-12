@@ -106,6 +106,24 @@ namespace
     }
 }
 
+void setAmber (juce::Component& c, bool amber)
+{
+    if (amber != isAmber (c))
+    {
+        c.getProperties().set ("encoreAmber", amber);
+
+        if (auto* box = dynamic_cast<juce::ComboBox*> (&c))
+            box->lookAndFeelChanged();   // the text colour
+
+        c.repaint();
+    }
+}
+
+bool isAmber (const juce::Component& c)
+{
+    return (bool) c.getProperties().getWithDefault ("encoreAmber", false);
+}
+
 void setButtonKeyCap (juce::Button& b, const juce::String& key)
 {
     b.getProperties().set ("encoreKeyCap", key);
@@ -454,18 +472,20 @@ void EncoreLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, 
     if (! enabled)
         g.beginTransparencyLayer (state::disabledAlpha);
 
+    const auto amber = isAmber (box);
+
     if (getVariant (box) == Variant::field)
     {
-        paint::inset (g, r, colour::fieldFill, colour::fieldBorder, (float) size::fieldRadius, colour::fieldShadow);
+        paint::inset (g, r, colour::fieldFill, amber ? colour::amber : colour::fieldBorder, (float) size::fieldRadius, colour::fieldShadow);
     }
     else
     {
         r = r.withTrimmedBottom (1.0f);
 
         if (down || box.isPopupActive())
-            paint::pressed (g, r, (float) size::buttonRadius);
+            paint::pressed (g, r, (float) size::buttonRadius, amber ? colour::amber : colour::buttonBorder);
         else
-            paint::raised (g, r, colour::buttonTop, colour::buttonBot, colour::buttonBorder, (float) size::buttonRadius, true,
+            paint::raised (g, r, colour::buttonTop, colour::buttonBot, amber ? colour::amber : colour::buttonBorder, (float) size::buttonRadius, true,
                            box.isMouseOver (true) ? state::hoverLighten : 0.0f);
     }
 
@@ -486,7 +506,8 @@ void EncoreLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& 
     label.setBounds (8, 1, box.getWidth() - 30, box.getHeight() - 2);
     label.setFont (getComboBoxFont (box));
     label.setBorderSize ({});
-    label.setColour (juce::Label::textColourId, c (getVariant (box) == Variant::field ? colour::fieldText : colour::text));
+    label.setColour (juce::Label::textColourId, c (isAmber (box) ? colour::faultCardText
+                                                   : getVariant (box) == Variant::field ? colour::fieldText : colour::text));
 }
 
 //==============================================================================

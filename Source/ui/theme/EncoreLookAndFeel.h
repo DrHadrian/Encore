@@ -37,6 +37,11 @@ Segment getSegment (const juce::Component&);
     (the chevron of "Show ▾"), 6 px from the text. */
 void setButtonIcon (juce::Button&, Icon, float iconSize, bool afterText);
 
+/** A control showing something missing on this computer (a channel the
+    interface hasn't, a name that isn't here): amber border and text. */
+void setAmber (juce::Component&, bool amber);
+bool isAmber (const juce::Component&);
+
 /** A key cap after the text ("Back to patches  F6"). */
 void setButtonKeyCap (juce::Button&, const juce::String& key);
 

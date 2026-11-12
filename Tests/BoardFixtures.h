@@ -290,11 +290,31 @@ inline juce::File makeRoutingShow (const juce::File& parent)
         return c;
     };
 
+    // Two cues with their own patch (as on M11RoutingSends).
+    auto ownPatch = [&] (RunItem c, const char* from, const char* input, std::vector<Send> sends)
+    {
+        for (const auto& p : show.patches)
+            if (p.name == from)
+                c.uniquePatch = duplicatePatch (p, p.name);
+
+        c.uniquePatch->colour = 0xff6E6E75;
+        c.uniquePatch->mainLane().input = input;
+        c.uniquePatch->sends.clear();
+
+        for (auto& snd : sends)
+            c.uniquePatch->setSend (snd.output, snd.db, snd.on);
+
+        return c;
+    };
+
     auto set1 = RunItem::makeSection ("Set 1", "set");
     set1.children = { cue ("1", "Clean", "Clean"), cue ("2", "Dual amp intro", "Dual amp", 2), cue ("3", "Opener", "Crunch"),
-                      cue ("4", "Ballad in D", "Acoustic") };
+                      ownPatch (cue ("4", "Ballad in D", "Acoustic"), "Acoustic", "Acoustic",
+                                { { "Front of house", -6, true }, { "In-ear", 0, true }, { "Amp DI", off, false }, { "Monitor wedge", off, false } }) };
     auto set2 = RunItem::makeSection ("Set 2", "set");
-    set2.children = { cue ("5", "Shuffle", "Edge"), cue ("6", "Rock Medley", "Lead", 7, true), cue ("7", "Closer", "Dual amp") };
+    set2.children = { cue ("5", "Shuffle", "Edge"), cue ("6", "Rock Medley", "Lead", 7, true),
+                      ownPatch (cue ("7", "Closer", "Edge"), "Edge", "Guitar",
+                                { { "Front of house", 0, true }, { "In-ear", 0, true }, { "Amp DI", 0, true }, { "Monitor wedge", off, false } }) };
     auto encoreSet = RunItem::makeSection ("Encore", "set");
     encoreSet.children = { cue ("8", "Last Call", "Lead") };
     show.runningOrder.children = { set1, set2, encoreSet };

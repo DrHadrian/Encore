@@ -326,6 +326,30 @@ juce::String ShowSession::keyForCue (const RunItem& cue)
     return cue.uniquePatch ? cueKeyPrefix + cue.id : cue.patchId;
 }
 
+std::vector<ShowSession::PatchEntry> ShowSession::getAllPatches() const
+{
+    std::vector<PatchEntry> list;
+
+    for (const auto& p : show.patches)
+        list.push_back ({ p.id, p.name, &p });
+
+    const auto item = getWords().Item();
+
+    for (const auto* cue : getCues())
+        if (cue->uniquePatch)
+            list.push_back ({ keyForCue (*cue),
+                              item + " " + cue->number + juce::String (juce::CharPointer_UTF8 (" \xc2\xb7 ")) + cue->name + " (own patch)",
+                              &*cue->uniquePatch });
+
+    return list;
+}
+
+int ShowSession::getPatchOutputChannels (const juce::String& patchKey) const
+{
+    const auto it = chains.find (patchKey);
+    return it != chains.end() && it->second != nullptr ? it->second->getOutputChannels() : 0;
+}
+
 PatchModel* ShowSession::findPatchForKey (const juce::String& key)
 {
     if (key.startsWith (cueKeyPrefix))

@@ -12,6 +12,7 @@
 #include "session/ShowSession.h"
 #include "ui/BlockPanel.h"
 #include "ui/BottomRow.h"
+#include "ui/RoutingView.h"
 #include "ui/ChainStrip.h"
 #include "ui/Inspector.h"
 #include "ui/MidiSettings.h"
@@ -120,6 +121,14 @@ private:
     void setOutputMuted (const juce::String& outputName, bool shouldBeMuted);
     void ensureRoutingChannelsActive();
     void openRouting();
+
+public:
+    /** The Routing view (F7): shown or hidden; the Routing button follows. */
+    void setRoutingVisible (bool);
+    bool isShowingRouting() const noexcept { return routingView != nullptr && routingView->isVisible(); }
+    RoutingView* getRoutingView() const noexcept { return routingView.get(); }
+
+private:
     juce::String lastRoutedDevice;   // the interface whose channels the routing last switched on
     void showNotice (const juce::String& text, int seconds, bool logged = false);
 
@@ -183,6 +192,8 @@ private:
     std::unique_ptr<ChainStrip> chainStrip;
     std::unique_ptr<BlockPanel> blockPanel;
     juce::Label chainLabel, problemsLabel;
+    juce::TextButton routingButton { "Routing" };   // centre header, F7
+    std::unique_ptr<RoutingView> routingView;
     juce::TextButton patchPicker;
     juce::Label loadingLabel { {}, "(loading patches...)" };
     juce::Rectangle<int> headerArrow;
@@ -194,6 +205,7 @@ private:
     std::unique_ptr<Inspector> inspector;
     juce::Label deviceLine;   // not shown: the stage footer and Routing read it
     InputSummary inputSummary;
+    int summaryInputSlot = -1;
     OutputsPane outputsPane;
     void refreshBottomRow();
     juce::Label healthTitle { {}, "System health" };

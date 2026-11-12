@@ -232,6 +232,11 @@ float AudioEngine::takeOutputLimiterReductionDb (int slot) noexcept
     return juce::isPositiveAndBelow (slot, routing::maxOutputs) ? strips[(size_t) slot].takeLimiterReductionDb() : 0.0f;
 }
 
+int AudioEngine::getOutputClipCount (int slot) const noexcept
+{
+    return juce::isPositiveAndBelow (slot, routing::maxOutputs) ? outputClips[(size_t) slot].load (std::memory_order_relaxed) : 0;
+}
+
 float AudioEngine::takeLimiterReductionDb() noexcept
 {
     float deepest = 0.0f;
@@ -266,6 +271,9 @@ void AudioEngine::resetCounters() noexcept
 {
     loadMeasurer.reset (currentSampleRate.load(), currentBlockSize.load());
     clipCount.store (0, std::memory_order_relaxed);
+
+    for (auto& c : outputClips)
+        c.store (0, std::memory_order_relaxed);
 }
 
 //==============================================================================
@@ -486,7 +494,11 @@ void AudioEngine::renderChunk (const float* const* inputs, int numInputs, float*
 
         const auto level = outputMuted[slot].load (std::memory_order_relaxed)
                                ? 0.0f : outputLevelGain[slot].load (std::memory_order_relaxed);
-        clipped = strips[slot].process (left, right, numSamples, level) || clipped;
+        if (strips[slot].process (left, right, numSamples, level))
+        {
+            clipped = true;
+            outputClips[slot].fetch_add (1, std::memory_order_relaxed);
+        }
 
         for (const auto* samples : { left, right })
         {

@@ -15,7 +15,8 @@ namespace encore::kit
     the response (dB) at frequencies spread evenly in log; the path is built
     when that or the size changes, never in paint(). A click calls onClick
     (the Routing view resets the EQ). */
-class EqCurve final : public juce::Component
+class EqCurve final : public juce::Component,
+                      public juce::SettableTooltipClient
 {
 public:
     explicit EqCurve (bool full = true);

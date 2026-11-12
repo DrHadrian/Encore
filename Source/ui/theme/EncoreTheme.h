@@ -294,6 +294,12 @@ namespace colour
     constexpr juce::uint32 eqCurve         = 0xff6EA5FA;
     constexpr juce::uint32 eqCurveFill     = 0x1A6EA5FA;   // 10 %
     constexpr juce::uint32 faderTick       = 0xff3A3A3F;
+    constexpr juce::uint32 routingSelectedRow = 0xff2E3A50;   // the output whose EQ and delay show below
+    constexpr juce::uint32 routingDivider  = 0xff26262A;
+    constexpr juce::uint32 routingHead     = 0xff1E1E21;   // a table's head row and bar in a group
+    constexpr juce::uint32 tickGreen       = 0xff4CD964;
+    constexpr juce::uint32 sendsSelectedRow = 0xff232A38;  // the patch whose send is being set
+    constexpr juce::uint32 sendsCellWell   = 0xff0E1013;   // the selected send   // ✓ a name this computer has
     constexpr juce::uint32 faultCardShadow = 0x80000000;   // its drop shadow (0, 14, 30 px, black 50 %)
     constexpr juce::uint32 utilityShadow   = 0x73000000;   // chain tile drop shadow (0, 6, 6 px, black 45 %)
     constexpr juce::uint32 groupRowLine    = 0xff1F1F22;   // 1 px under each row of the Plugins, Folders and Blocked lists
@@ -491,6 +497,20 @@ namespace size
     constexpr int eqCurvePadX = 11, eqCurveLabelPad = 5;
     constexpr int faderTrackW = 4, faderThumbW = 28, faderThumbH = 14, faderThumbRadius = 3, sendFaderTrackH = 196;
     constexpr int faderScaleW = 26, faderTickW = 6, faderTickGap = 4, faderHThumb = 12;
+    // The Routing view (m11-routing-inputs-outputs.json, m11-routing-sends.json)
+    constexpr int routingButtonW = 112;   // the centre header's Routing button (F7)
+    constexpr int routingHeaderH = 41, routingFooterH = 31, routingPadX = 15, routingTitleX = 33, routingIconX = 13, routingIcon = 15;
+    constexpr int routingTabsX = 121, routingTabsW = 302, routingTabsH = 26, routingChipGap = 10, routingBackW = 156;
+    constexpr int routingLeftW = 452, routingColumnGap = 16, routingContentTop = 56, routingGroupGap = 14;
+    constexpr int routingHeadH = 27, routingInputRowH = 37, routingOutputRowH = 45, routingBarH = 37, routingNameRowH = 33;
+    constexpr int routingCellPadX = 12, routingRemoveW = 22, routingInterfaceH = 87, routingNamesHelpH = 48;
+    constexpr int routingInNameW = 130, routingInChannelW = 176, routingInLevelW = 56, routingColGap = 10;
+    constexpr int routingOutNameW = 136, routingOutChannelsW = 120, routingFaderW = 104, routingLevelFieldW = 66, routingOutMeterW = 86;
+    constexpr int routingEqThumbW = 40, routingEqSummaryW = 76, routingDelayW = 118, routingComboH = 22;
+    constexpr int routingDetailH = 257, routingDetailPad = 17, routingCurveW = 414, routingCurveH = 126, routingKnobsTop = 176;
+    constexpr int routingDividerX = 459, routingRightX = 488, routingRightW = 250, routingStepW = 26, routingDelayFieldW = 100, routingDelayFieldH = 30;
+    constexpr int sendsHeadH = 45, sendsRowH = 37, sendsPatchW = 308, sendsInputW = 128, sendsEndW = 78, sendsColumnW = 176;
+    constexpr int sendsBarW = 64, sendsCellH = 28, sendsHelpTop = 14, sendsHelpW = 420, sendsHelpGap = 24;
     // FaultCard (a plugin switched off or not loaded, over its dimmed plate; edit-plugin-switched-off.json)
     constexpr int faultCardW = 460, faultCardTop = 128, faultCardRadius = 8, faultCardPadX = 17, faultCardPadY = 15;
     constexpr int faultCardIconW = 10, faultCardIconH = 18, faultCardIconGap = 10, faultCardLineGap = 3, faultCardGap = 10;
@@ -685,6 +705,13 @@ namespace type
     constexpr Style smallKnobValue  { 11.0f, Weight::regular };
     constexpr Style eqScale         {  9.0f, Weight::regular };             // 20 Hz, 20 kHz, +12 dB
     constexpr Style faderScale      {  9.0f, Weight::regular };             // +6 0 −6 … −∞ beside a fader
+    constexpr Style routingTitle    { 14.0f, Weight::bold };                // "Routing"
+    constexpr Style routingRowName  { 12.5f, Weight::semibold };            // an output's or a name's row
+    constexpr Style routingDevice   { 13.0f, Weight::semibold };            // the interface's name
+    constexpr Style routingDelay    { 16.0f, Weight::semibold };            // "12.0 ms"
+    constexpr Style routingGlyph    { 12.5f, Weight::extraBold };           // ✓ / !
+    constexpr Style sendsHead       { 12.0f, Weight::semibold };            // an output's name over its column
+    constexpr Style sendsHeadSub    { 10.0f, Weight::regular };             // "3/4 · stereo"
     constexpr Style paramListName   { 13.0f, Weight::bold };                // the plugin's name over its parameter list
     constexpr Style paramListNote   { 12.0f, Weight::regular };             // "has no window of its own: its parameters"
     constexpr Style faultText       { 12.5f, Weight::regular };             // the FaultCard's message

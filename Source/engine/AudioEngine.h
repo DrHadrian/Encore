@@ -143,6 +143,9 @@ public:
     /** An output's deepest limiter gain reduction since the last call (dB). */
     float takeOutputLimiterReductionDb (int slot) noexcept;
 
+    /** Buffers in which an output's hard ceiling had to act (since the counters were reset). */
+    int getOutputClipCount (int slot) const noexcept;
+
     /** Buffers of broken audio silenced in the outputs (should stay 0). */
     int getBadOutputBufferCount() const noexcept;
 
@@ -195,6 +198,7 @@ private:
     // Per output slot, any thread.
     std::array<std::atomic<float>, (size_t) routing::maxOutputs> outputLevelGain;
     std::array<std::atomic<bool>, (size_t) routing::maxOutputs> outputMuted;
+    std::array<std::atomic<int>, (size_t) routing::maxOutputs> outputClips {};
 
     // The interface as it last started (written while audio is stopped).
     std::atomic<int> deviceInputs { 0 }, deviceOutputs { 0 };
