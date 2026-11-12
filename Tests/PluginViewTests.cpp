@@ -122,6 +122,56 @@ public:
         expect (showFile.replaceWithText (json::toJson (*show)));
     }
 
+    /** The board's show as on V3EditPlugin: patch Clean is Noise gate, Amp,
+        Cab, ValhallaRoom (stomp 3, EXP 1 on Mix from 0 to 60 %), Delay. */
+    juce::File makeEditPluginShow (const juce::File& parent, const juce::String& pluginId)
+    {
+        const auto folder = makeBoardShow (parent);
+        const auto showFile = folder.getChildFile ("show.json");
+        juce::String error;
+        auto show = json::fromJson (showFile.loadFileAsString(), error);
+        expect (show.has_value(), error);
+
+        if (! show)
+            return folder;
+
+        auto& blocks = show->patches[0].mainLane().blocks;
+        std::vector<BlockModel> chain;
+
+        for (const auto* type : { "gate", "nam", "cab" })
+            for (auto& b : blocks)
+                if (b.type == type)
+                    chain.push_back (b);
+
+        for (auto& b : chain)
+        {
+            b.enabled = true;
+            b.stomp = 0;
+            b.expression.clear();
+        }
+
+        BlockModel plugin;
+        plugin.id = pluginId;
+        plugin.type = pluginBlockType;
+        plugin.plugin = PluginCatalog::toRef (describe ({ "ValhallaRoom", "Valhalla DSP", "2.0.0" }));
+        plugin.stomp = 3;
+        plugin.expression["p0"] = { 1, 0.0f, 0.6f };
+        chain.push_back (plugin);
+
+        for (auto& b : blocks)
+        {
+            if (b.type == "delay")
+            {
+                b.enabled = true;
+                chain.push_back (b);
+            }
+        }
+
+        blocks = chain;
+        expect (showFile.replaceWithText (json::toJson (*show)));
+        return folder;
+    }
+
     void runTest() override
     {
         beginTest ("Set-up: a show with a plugin block, and a scanned plugin list");
@@ -222,7 +272,79 @@ public:
             main.closeSettings();
         }
 
-        beginTest ("A plugin block in the edit view: block stage and inspector (edit-plugin.png)");
+        beginTest ("Edit with a plugin block as on the board, the Add block menu open at Plugin > Valhalla DSP (edit-plugin.png)");
+        {
+            const ScopedBoardPlugins boardPlugins (19);   // 32 parameters: 8 on the plate, 10 in the inspector
+            const auto boardFolder = root.getChildFile ("Edit plugin board");
+            writeBoardCatalog (boardFolder.getChildFile ("plugins.xml"), false);
+            AppSettings boardSettings (boardFolder);
+            boardSettings.setLastShowFolder (makeEditPluginShow (boardFolder, "valhalla-room"));
+            boardSettings.setAudioDeviceState (&setup);
+
+            MainComponent main (boardSettings, std::make_unique<BoardDeviceType>());
+            main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+
+            auto* strip = findChild<ChainStrip> (main);
+            expect (strip != nullptr);
+            pumpUntil ([&] { return strip->getChain() != nullptr && strip->getChain()->getBlocks().size() == 5; }, 10000);
+            strip->selectBlock (3);
+            pump (300);
+
+            auto* plugin = strip->getChain() != nullptr ? dynamic_cast<PluginBlock*> (strip->getChain()->getBlocks()[3].get()) : nullptr;
+            expect (plugin != nullptr && plugin->isLoaded());
+            expectEquals (plugin != nullptr ? (int) plugin->getParameters().size() : 0, 32);
+
+            // Menus are windows of their own: draw Add block > Plugin > Valhalla DSP into the snapshot.
+            auto image = main.createComponentSnapshot (main.getLocalBounds());
+            {
+                juce::Graphics g (image);
+                auto& lnf = main.getLookAndFeel();
+                const auto menu = strip->blockTypeMenu ((int) strip->getChain()->getBlocks().size());
+                const auto addTile = main.getLocalArea (strip, strip->getAddTileBounds());
+
+                auto subMenuAt = [] (const juce::PopupMenu& m, const juce::String& text, int& index) -> const juce::PopupMenu*
+                {
+                    int i = 0;
+
+                    for (juce::PopupMenu::MenuItemIterator it (m); it.next(); ++i)
+                    {
+                        if (it.getItem().text == text)
+                        {
+                            index = i;
+                            return it.getItem().subMenu.get();
+                        }
+                    }
+
+                    return nullptr;
+                };
+
+                int pluginIndex = -1, makerIndex = -1;
+                const auto* makers = subMenuAt (menu, "Plugin", pluginIndex);
+                const auto* valhalla = makers != nullptr ? subMenuAt (*makers, "Valhalla DSP", makerIndex) : nullptr;
+                expect (makers != nullptr && valhalla != nullptr, "Plugin > Valhalla DSP");
+
+                const auto overlap = theme::size::menuPadding * 3;
+                const auto items = paintMenu (g, lnf, menu, { addTile.getRight() + 1, addTile.getY() - 2 }, pluginIndex);
+
+                if (makers != nullptr && juce::isPositiveAndBelow (pluginIndex, (int) items.size()))
+                {
+                    const auto parent = items[(size_t) pluginIndex];
+                    const auto makerItems = paintMenu (g, lnf, *makers, { parent.getRight() + theme::size::menuPadding - overlap,
+                                                                          parent.getY() - theme::size::menuPadding }, makerIndex);
+
+                    if (valhalla != nullptr && juce::isPositiveAndBelow (makerIndex, (int) makerItems.size()))
+                    {
+                        const auto maker = makerItems[(size_t) makerIndex];
+                        paintMenu (g, lnf, *valhalla, { maker.getRight() + theme::size::menuPadding - overlap, maker.getY() - theme::size::menuPadding });
+                    }
+                }
+            }
+
+            writeSnapshot (image, "edit-plugin");
+            expect (hasContent (image));
+        }
+
+        beginTest ("A plugin block in the edit view: block stage and inspector (edit-plugin-test-plugin.png)");
         {
             MainComponent main (settings, std::make_unique<BoardDeviceType>());
             main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
@@ -237,7 +359,7 @@ public:
             auto* plugin = strip->getChain() != nullptr ? dynamic_cast<PluginBlock*> (strip->getChain()->getBlocks()[2].get()) : nullptr;
             expect (plugin != nullptr && plugin->isLoaded());
             expect (findChild<BlockPanel> (main) != nullptr && &findChild<BlockPanel> (main)->getBlock() == plugin);
-            expect (hasContent (renderSnapshot (main, "edit-plugin")));
+            expect (hasContent (renderSnapshot (main, "edit-plugin-test-plugin")));
 
             beginTest ("Showing a plugin block never makes the plugin build its window (that crashes some plugins)");
             {

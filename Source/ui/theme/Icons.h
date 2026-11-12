@@ -14,7 +14,7 @@ namespace encore::theme
 enum class Icon
 {
     alert, arrowRight, audioWave, check, chevronDown, chevronUp, close, duplicate, lock,
-    midiPort, minus, plug, plus, sidebarRight, sliders, trash,
+    midiPort, minus, plug, plus, sidebarRight, sliders, trash, window,
     triangleRight, triangleLeft
 };
 

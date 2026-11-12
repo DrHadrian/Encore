@@ -7,6 +7,7 @@
 #include <atomic>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 
 #include "engine/AudioEngine.h"
@@ -153,6 +154,9 @@ public:
         full range, or takes it off (0). Rebuilds the patch (gapless). */
     void setExpression (int blockIndex, const juce::String& paramId, int pedal);
     int getExpressionPedal (int blockIndex, const juce::String& paramId) const;
+
+    /** The pedal and its heel / toe values for a parameter, if one moves it. */
+    std::optional<ExpressionAssignment> getExpressionAssignment (int blockIndex, const juce::String& paramId) const;
 
     //== Running order =========================================================
     /** The cues in playing order (sections flattened, cut cues left out). */

@@ -209,7 +209,8 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/icons/plus.svg
         Resources/ui/icons/sidebar-right.svg
         Resources/ui/icons/sliders.svg
-        Resources/ui/icons/trash.svg)
+        Resources/ui/icons/trash.svg
+        Resources/ui/icons/window.svg)
 
 # The UI's look (theme) and kit: shared by the app and the UI snapshot tests.
 add_library(EncoreUi INTERFACE)
@@ -255,7 +256,9 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/StatusBadge.cpp
     Source/ui/kit/StatusBadge.h
     Source/ui/kit/Toolbar.cpp
-    Source/ui/kit/Toolbar.h)
+    Source/ui/kit/Toolbar.h
+    Source/ui/kit/UtilityTile.cpp
+    Source/ui/kit/UtilityTile.h)
 target_link_libraries(EncoreUi INTERFACE EncoreUiAssets)
 
 # ------------------------------------------------------------------------------

@@ -8,6 +8,7 @@
 #include "engine/blocks/CabIrBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
 #include "ui/ChainStrip.h"
+#include "ui/kit/Chip.h"
 #include "ui/theme/EncoreFonts.h"
 #include "ui/theme/EncoreLookAndFeel.h"
 #include "ui/theme/Paint.h"
@@ -68,16 +69,29 @@ class BlockPanel::Gear final : public juce::Component
 {
 public:
     explicit Gear (BlockPanel& p)
-        : owner (p), box (kit::GearView::Size::panel, panelInfo (p.block))
+        : owner (p), box (kit::GearView::Size::panel, panelInfo (p.block)),
+          plugin (dynamic_cast<const PluginBlock*> (&p.block))
     {
         setInterceptsMouseClicks (false, true);
-        setSize (kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getWidth(),
-                 kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getHeight());
-        box.setBounds (getLocalBounds());
-        addAndMakeVisible (box);
-
         strip.setInterceptsMouseClicks (false, true);
-        strip.setBounds (box.getControlArea());
+
+        if (plugin != nullptr)
+        {
+            // The plugin plate: its own box (painted here), the parameters in a recessed panel.
+            setSize (size::pluginPlateW, size::pluginPlateH);
+            strip.setBounds (size::pluginPlatePadX, size::pluginPlatePanelTop, size::pluginPlateW - 2 * size::pluginPlatePadX,
+                             size::pluginPlatePanelH);
+            makePluginTexts();
+        }
+        else
+        {
+            setSize (kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getWidth(),
+                     kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getHeight());
+            box.setBounds (getLocalBounds());
+            addAndMakeVisible (box);
+            strip.setBounds (box.getControlArea());
+        }
+
         addAndMakeVisible (strip);
 
         power.setOn (owner.block.isEnabled());
@@ -90,7 +104,11 @@ public:
             if (owner.onEdited != nullptr)
                 owner.onEdited();
         };
-        strip.addAndMakeVisible (power);
+        // On the plate the LED sits top right, outside the panel.
+        if (plugin != nullptr)
+            addAndMakeVisible (power);
+        else
+            strip.addAndMakeVisible (power);
     }
 
     kit::GearPlaceholder& getBox() noexcept { return box; }
@@ -102,6 +120,12 @@ public:
         OUTPUT (level match, output, LED). */
     void layOut()
     {
+        if (plugin != nullptr)
+        {
+            layOutPlugin();
+            return;
+        }
+
         auto row = strip.getLocalBounds().withTrimmedTop (size::stripPadTop).withTrimmedBottom (size::stripPadBottom)
                        .reduced (size::stripPadX, 0);
         labelsRow = row.removeFromTop (size::groupLabelH);
@@ -164,7 +188,99 @@ public:
         repaint();
     }
 
-    void paint (juce::Graphics&) override {}
+    /** The plate's parameters: four to a row, knob (or switch) centred in
+        its column; the power LED top right. */
+    void layOutPlugin()
+    {
+        const auto inner = strip.getLocalBounds().reduced (size::pluginPlatePanelPadX, 0).withTrimmedTop (size::pluginPlatePanelPadTop);
+        const auto columnW = (float) inner.getWidth() / (float) size::pluginPlateColumns;
+        const auto knob = kit::KnobView::idealBounds (true);
+        const auto toggle = kit::GearToggle::idealBounds();
+
+        for (size_t i = 0; i < owner.controls.size(); ++i)
+        {
+            auto& c = *owner.controls[i];
+            const auto column = (int) i % size::pluginPlateColumns, row = (int) i / size::pluginPlateColumns;
+            const auto x = inner.getX() + juce::roundToInt ((float) column * columnW);
+            const auto cell = juce::Rectangle<int> (x, inner.getY() + row * size::pluginPlateRowPitch,
+                                                    juce::roundToInt ((float) (column + 1) * columnW) - juce::roundToInt ((float) column * columnW),
+                                                    size::pluginPlateRowPitch);
+
+            if (c.isSwitch)
+                c.toggle->setBounds (toggle.withCentre ({ cell.getCentreX(), cell.getY() + toggle.getHeight() / 2 }));
+            else
+                c.knob->setBounds (cell.withHeight (knob.getHeight()));
+        }
+
+        power.setBounds (juce::Rectangle<int> (size::ledHalo, size::ledHalo)
+                             .withCentre ({ getWidth() - size::pluginPlatePadX - size::powerColumn / 2,
+                                            size::pluginPlateNameTop + size::pluginPlateNameH / 2 }));
+        repaint();
+    }
+
+    void makePluginTexts()
+    {
+        const auto& ref = plugin->getPluginRef();
+        formatText = ref.format.isNotEmpty() ? ref.format : juce::String ("VST3");
+        formatCaps = paint::caps (type::tagChip, formatText);
+        nameText = ref.name.isNotEmpty() ? ref.name : owner.block.getName();
+
+        juce::StringArray maker;
+
+        if (ref.maker.isNotEmpty())
+            maker.add (ref.maker);
+
+        if (ref.version.isNotEmpty())
+            maker.add ("v" + ref.version);
+
+        makerText = maker.joinIntoString (middot());
+        kindCaps = paint::caps (type::gearPanelKind, "Plugin" + middot() + formatText);
+
+        const auto hidden = (int) owner.block.getParameters().size() - size::pluginPanelKnobs;
+        moreText = hidden > 0 ? "+ " + juce::String (hidden) + " more in the plugin window" : juce::String();
+        nameWidth = textWidth (font (type::plateName), nameText);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        if (plugin == nullptr)
+            return;
+
+        // The plate: gear box gradient, 1 px border, inner top highlight; the recessed panel.
+        const auto r = getLocalBounds().toFloat();
+        const auto radius = (float) size::gearRadius;
+        g.setGradientFill (juce::ColourGradient::vertical (paint::c (colour::gearTop), 0.0f, paint::c (colour::gearBot), r.getBottom()));
+        g.fillRoundedRectangle (r, radius);
+        g.setColour (paint::c (colour::gearHighlight));
+        paint::hline (g, radius, 1.0f, r.getWidth() - radius * 2.0f);
+        g.setColour (paint::c (colour::gearBorder));
+        g.drawRoundedRectangle (r.reduced (0.5f), radius - 0.5f, 1.0f);
+
+        const auto panel = strip.getBounds().toFloat();
+        g.setColour (paint::c (colour::gearStrip));
+        g.fillRoundedRectangle (panel, (float) size::stripRadius);
+        g.setColour (paint::c (colour::gearStripBorder));
+        g.drawRoundedRectangle (panel.reduced (0.5f), (float) size::stripRadius - 0.5f, 1.0f);
+
+        // VST3 · name · maker and version, on one line above the panel.
+        auto x = (float) size::pluginPlatePadX;
+        const auto chipW = kit::chipWidth (formatCaps);
+        kit::paintChip (g, { x, (float) size::pluginPlateChipTop, chipW, (float) size::pluginPlateChipH }, formatCaps, kit::ChipStyle::plain);
+        x += chipW + (float) size::pluginPlateTextGap;
+
+        const auto right = (float) (getWidth() - size::pluginPlatePadX - size::powerColumn);
+        const auto nameW = juce::jmin (nameWidth, right - x);
+        paint::text (g, nameText, { x, (float) size::pluginPlateNameTop, nameW, (float) size::pluginPlateNameH }, type::plateName, colour::text);
+        x += nameW + (float) size::pluginPlateTextGap;
+        paint::text (g, makerText, { x, (float) size::pluginPlateNameTop, juce::jmax (0.0f, right - x), (float) size::pluginPlateNameH },
+                     type::plateMaker, colour::textMuted);
+
+        // Under the panel: what isn't here, and what it is.
+        const auto foot = juce::Rectangle<float> ((float) size::pluginPlatePadX, (float) size::pluginPlateFootTop,
+                                                  r.getWidth() - 2.0f * (float) size::pluginPlatePadX, (float) size::pluginPlateFootH);
+        paint::text (g, kindCaps, foot, type::gearPanelKind, colour::gearLabel, juce::Justification::centredRight);
+        paint::text (g, moreText, foot, type::plateMore, colour::textMuted);
+    }
 
     void paintOverChildren (juce::Graphics& g) override
     {
@@ -195,8 +311,11 @@ private:
 
     BlockPanel& owner;
     kit::GearPlaceholder box;
+    const PluginBlock* plugin;
     juce::Component strip;
     kit::PowerLed power;
+    juce::String formatText, formatCaps, nameText, makerText, kindCaps, moreText;
+    float nameWidth = 0.0f;
     juce::Rectangle<int> labelsRow;
     std::vector<Group> groups;
 };
@@ -319,6 +438,7 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
                     onEdited();
             };
             s.setTooltip ("Right-click to assign an expression pedal");
+            s.setShowsValue (plugin != nullptr);   // the plugin's own text under its name
 
             auto& menu = knobMenus.emplace_back (std::make_unique<KnobMenu> (*this, *control));
             s.addMouseListener (menu.get(), false);
@@ -346,6 +466,7 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
         // The header button opens the plugin's own window instead.
         setVariant (loadButton, Variant::small);
         loadButton.setButtonText ("Open plugin window...");
+        setButtonIcon (loadButton, Icon::window, (float) size::smallButtonIcon, false);
         loadButton.setTooltip ("The plugin's own controls, in a window of their own");
         loadButton.onClick = [this]
         {
@@ -474,7 +595,9 @@ void BlockPanel::setLoading (bool isLoading)
 juce::String BlockPanel::headerLabel() const
 {
     // "AMP · <model>", "CAB · <IR>", "GATE · Noise gate", "EQ".
-    const auto kind = ChainStrip::describe (block).kindLabel;
+    // A plugin: "PLUGIN · VST3 · <name>".
+    const auto kind = dynamic_cast<const PluginBlock*> (&block) != nullptr ? panelInfo (block).kindLabel
+                                                                           : ChainStrip::describe (block).kindLabel;
 
     if (block.getFileSlot() != nullptr)
         return kind + middot() + shownFile;
@@ -672,7 +795,11 @@ void BlockPanel::layOutGear()
     gearScale = juce::jmax (0.01f, gearScale);
 
     const auto left = (float) area.getX() + ((float) area.getWidth() - (float) groupW * gearScale) * 0.5f;
-    const auto bottom = (float) area.getBottom();
+    auto bottom = (float) area.getBottom();
+
+    // The plugin plate hangs 22 px under the stage header instead (as on the board).
+    if (dynamic_cast<const PluginBlock*> (&block) != nullptr)
+        bottom = juce::jmin (bottom, (float) (getContentBounds().getY() + size::pluginPlateTop) + (float) gear->getHeight() * gearScale);
 
     gear->setTransform (juce::AffineTransform::scale (gearScale)
                             .translated (left, bottom - (float) gear->getHeight() * gearScale));

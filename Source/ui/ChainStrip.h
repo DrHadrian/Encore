@@ -8,6 +8,7 @@
 #include "engine/core/Chain.h"
 #include "session/ShowSession.h"
 #include "ui/kit/GearPlaceholder.h"
+#include "ui/kit/UtilityTile.h"
 #include "ui/kit/Pane.h"
 
 namespace encore
@@ -45,20 +46,37 @@ public:
     /** What a block shows as gear (shape, kind label, name, on). */
     static kit::BlockInfo describe (const Block&);
 
+    /** What a plugin block's tile shows: format, name, maker, its state. */
+    static kit::UtilityTileInfo describePlugin (const Block&);
+
+    /** The Add block menu (the "+" tile, Insert before / after): block
+        types, then Plugin ▸ makers ▸ plugins, Find plugins... */
+    juce::PopupMenu blockTypeMenu (int insertAt);
+    juce::Rectangle<int> getAddTileBounds() const noexcept { return addTile; }
+
 private:
+    /** A block's tile: gear (a placeholder) or a utility tile (a plugin). */
+    struct TileView
+    {
+        std::unique_ptr<kit::GearPlaceholder> gear;
+        std::unique_ptr<kit::UtilityTile> utility;
+
+        juce::Component& component() const { return gear != nullptr ? static_cast<juce::Component&> (*gear) : *utility; }
+    };
+
     void rebuildTiles();
+    void updateTile (TileView&, const Block&);
     juce::Rectangle<int> getBoardBounds() const;
 
     void select (int index);
     void showBlockMenu (int index);
     void showAddMenu (int insertAt);
-    juce::PopupMenu blockTypeMenu (int insertAt);
 
     ShowSession& session;
     Chain* chain = nullptr;
     int selected = 0;
     std::vector<juce::Rectangle<int>> tiles;
-    juce::OwnedArray<kit::GearPlaceholder> gear;
+    std::vector<TileView> views;
     juce::Rectangle<int> addTile;
     juce::Path addTileOutline;
     juce::String lastState;

@@ -283,6 +283,8 @@ namespace colour
     constexpr juce::uint32 faultCardBg     = 0xff2A251C;
     constexpr juce::uint32 faultCardBorder = 0xff3D2F12;
     constexpr juce::uint32 faultCardText   = 0xffFFD27A;
+    constexpr juce::uint32 statusRunning   = 0xff4CD964;   // inspector Status "Running" (a plugin playing)
+    constexpr juce::uint32 utilityShadow   = 0x73000000;   // chain tile drop shadow (0, 6, 6 px, black 45 %)
     constexpr juce::uint32 groupRowLine    = 0xff1F1F22;   // 1 px under each row of the Plugins, Folders and Blocked lists
 }
 
@@ -350,11 +352,12 @@ namespace size
     constexpr int tableHeaderHeight = 24;
     constexpr int sectionHeadingH   = 24;    // sidebar section heading (22 in the CSS; the target renders 24)
     constexpr int headerDot = 7;
+    constexpr int inspectorPluginKeyW = 84, inspectorPluginStompW = 120, inspectorPluginRowGap = 7, smallButtonIcon = 11;
     constexpr int inspectorPadX = 10, inspectorPadTop = 6, inspectorPadBottom = 10, inspectorKeyW = 74, inspectorColGap = 8;
     constexpr int inspectorRowGap = 6, inspectorTextH = 15, inspectorListPadX = 6, inspectorNameW = 60, inspectorChipW = 44;
     // Plugins can have hundreds of parameters: the block stage shows the first
     // few as knobs, the inspector lists the first ones; the rest are in the plugin's window.
-    constexpr int pluginPanelKnobs = 8, inspectorPluginParams = 48;
+    constexpr int pluginPanelKnobs = 8, inspectorPluginParams = 10;
     constexpr int inspectorBarH = 4, assignKeyW = 62, assignArrowW = 12;
     constexpr int listPad = 4, listGap = 1, rowPadX = 8, rowGap = 8, rowNumberW = 18, paneBarW = 3, paneBarH = 16, paneBarRadius = 2;
     constexpr int swatch = 9, swatchRadius = 2, rowRadius = 4, headingPadBottom = 2;
@@ -394,7 +397,7 @@ namespace size
     constexpr int pedalShadowY = 6, pedalShadowBlur = 10;
     constexpr int panelLabelBottom = 57, panelLabelH = 16;  // "AMP · NAM CAPTURE": top at height − 57
     constexpr int platePadX = 10, plateH = 20, plateRadius = 3, plateRight = 44, plateBottom = 38;
-    constexpr int knobCell = 64, knobColumn = 74, knobLabelGap = 4, knobLabelH = 12, chipH = 13, chipPadX = 5, chipRadius = 3;
+    constexpr int knobCell = 64, knobColumn = 74, knobLabelGap = 4, knobLabelH = 12, knobValueH = 13, chipH = 13, chipPadX = 5, chipRadius = 3;
     constexpr int toggleW = 22, toggleH = 36, toggleKnob = 16, toggleColumn = 74, toggleColumnH = 91;
     constexpr int toggleOnH = 10, toggleTrackY = 14, toggleNameY = 54, toggleNameLineH = 12, toggleOffY = 80;
     constexpr int powerLed = 28, ledGlowR = 8, ledHalo = 54;
@@ -459,6 +462,18 @@ namespace size
     // Milestones 10 and 11 (NEW-FEATURES-M10-M11 §C)
     constexpr int tagChipH = 16, tagChipRadius = 3, tagChipPadX = 6;
     constexpr int progressH = 4, progressRadius = 2;
+    // UtilityTile (chain tiles that aren't gear: plugin, IN/OUT jacks, split/merge), from edit-plugin.json
+    constexpr int utilityTileH = 84, utilityTileRadius = 8, utilityTilePadX = 7, utilityLabelTop = 6, utilityLabelH = 11;
+    constexpr int utilityDot = 6, utilityDotTop = 9, utilityDotRight = 8, utilityDotMinW = 60;
+    constexpr int utilityNameTop = 25, utilityNameLineH = 12, utilityCaptionTop = 50, utilityCaptionH = 11;
+    constexpr int utilityFootW = 22, utilityFootH = 16, utilityFootTop = 62, utilityFootRadius = 7;
+    constexpr int utilityShadowY = 6, utilityShadowBlur = 6;
+    // The plugin plate on the block stage (edit-plugin.json): 600 x 370, 22 below the stage header
+    constexpr int pluginPlateW = 600, pluginPlateH = 370, pluginPlateTop = 22, pluginPlatePadX = 22;
+    constexpr int pluginPlateChipTop = 26, pluginPlateChipH = 18, pluginPlateNameTop = 25, pluginPlateNameH = 20, pluginPlateTextGap = 10;
+    constexpr int pluginPlatePanelTop = 66, pluginPlatePanelH = 250, pluginPlatePanelPadX = 21, pluginPlatePanelPadTop = 15;
+    constexpr int pluginPlateColumns = 4, pluginPlateRowPitch = 115, pluginPlateFootTop = 340, pluginPlateFootH = 16;
+    // (the power LED sits top right, on the name line: not on the board, but the panel's on/off stays)
     constexpr int triggerX = 222, learnW = 76, learnH = 22, removeW = 22, removeRight = 18, lastValueW = 117, lastValueH = 21;
     constexpr int helpLineH = 18, helpGap = 10, groupPadTight = 13;   // (help groups: 13 above and below the text)
     constexpr int statusTitleH = 15, statusLineH = 14, statusTextH = 15, latencySplit = 2, tickTextGap = 10, defaultsValueX = 170;
@@ -625,6 +640,13 @@ namespace type
     constexpr Style noteStrong      { 11.5f, Weight::bold };
     constexpr Style columnHead      { 10.5f, Weight::bold, 0.06f, true };   // DOES, FOOTSWITCH / PEDAL
     constexpr Style tagChip         { 9.5f, Weight::bold, 0.02f, true };    // NOT HERE, OUTPUT MUTED, counts
+    constexpr Style utilityLabel    {  8.5f, Weight::extraBold, 0.08f, true }; // VST3, IN, OUT, SPLIT on a chain tile
+    constexpr Style utilityName     { 10.5f, Weight::bold };                // the plugin's name on its tile
+    constexpr Style utilityCaption  {  9.0f, Weight::regular };             // its maker
+    constexpr Style knobValue       { 10.5f, Weight::regular };             // "35 %" under a plugin plate knob
+    constexpr Style plateName       { 16.0f, Weight::bold };                // ValhallaRoom on the plugin plate
+    constexpr Style plateMaker      { 12.0f, Weight::regular };             // "Valhalla DSP · v2.0.0"
+    constexpr Style plateMore       { 11.0f, Weight::regular };             // "+ 24 more in the plugin window"
     constexpr Style tunerCaption    { 11.0f, Weight::bold, 0.08f, true };
     constexpr Style tunerNote       { 180.0f, Weight::semibold };
     constexpr Style tunerDetail     { 18.0f, Weight::regular };

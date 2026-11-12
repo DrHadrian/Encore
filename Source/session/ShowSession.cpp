@@ -1013,14 +1013,24 @@ void ShowSession::setExpression (int blockIndex, const juce::String& paramId, in
 
 int ShowSession::getExpressionPedal (int blockIndex, const juce::String& paramId) const
 {
+    const auto assignment = getExpressionAssignment (blockIndex, paramId);
+    return assignment.has_value() ? assignment->pedal : 0;
+}
+
+std::optional<ExpressionAssignment> ShowSession::getExpressionAssignment (int blockIndex, const juce::String& paramId) const
+{
     const auto* patch = findPatchForKey (activePatchId);
     const auto* block = patch != nullptr ? patch->blockAt (blockIndex) : nullptr;
 
     if (block == nullptr)
-        return 0;
+        return std::nullopt;
 
     const auto it = block->expression.find (paramId);
-    return it != block->expression.end() ? it->second.pedal : 0;
+
+    if (it == block->expression.end())
+        return std::nullopt;
+
+    return it->second;
 }
 
 //==============================================================================

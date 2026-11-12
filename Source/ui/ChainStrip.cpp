@@ -48,19 +48,59 @@ void ChainStrip::setChain (Chain* newChain)
     repaint();
 }
 
+kit::UtilityTileInfo ChainStrip::describePlugin (const Block& block)
+{
+    kit::UtilityTileInfo info;
+    info.footswitch = true;
+
+    if (auto* plugin = dynamic_cast<const PluginBlock*> (&block))
+    {
+        const auto& ref = plugin->getPluginRef();
+        info.label = ref.format.isNotEmpty() ? ref.format : juce::String ("VST3");
+        info.name = ref.name.isNotEmpty() ? ref.name : block.getName();
+        info.caption = ref.maker;
+
+        // Not loaded or switched off by the crash guard: amber, as on the stage.
+        info.amber = ! plugin->isLoaded() || plugin->getFault() != PluginBlock::Fault::none;
+    }
+    else
+    {
+        info.name = block.getName();
+    }
+
+    using Dot = kit::UtilityTileInfo::Dot;
+    info.dot = info.amber ? Dot::amber : (block.isEnabled() ? Dot::on : Dot::off);
+    return info;
+}
+
 void ChainStrip::rebuildTiles()
 {
-    gear.clear();
+    views.clear();
 
     if (chain == nullptr)
         return;
 
     for (auto& b : chain->getBlocks())
     {
-        auto* tile = gear.add (new kit::GearPlaceholder (kit::GearView::Size::chainTile, describe (*b)));
-        tile->setTitle (b->getName());
-        addAndMakeVisible (tile);
+        TileView view;
+
+        if (b->getTypeId() == PluginBlock::typeId)
+            view.utility = std::make_unique<kit::UtilityTile> (describePlugin (*b));
+        else
+            view.gear = std::make_unique<kit::GearPlaceholder> (kit::GearView::Size::chainTile, describe (*b));
+
+        view.component().setTitle (b->getName());
+        addAndMakeVisible (view.component());
+        views.push_back (std::move (view));
     }
+}
+
+void ChainStrip::updateTile (TileView& view, const Block& block)
+{
+    if (view.gear != nullptr)
+        view.gear->setBlock (describe (block));
+    else
+        view.utility->setInfo (describePlugin (block));
 }
 
 void ChainStrip::refresh()
@@ -69,16 +109,25 @@ void ChainStrip::refresh()
     juce::String state;
 
     if (chain != nullptr)
+    {
         for (auto& b : chain->getBlocks())
-            state << (b->isEnabled() ? "1" : "0") << b->getStomp() << b->getLoadedFile().getFileName() << "|";
+        {
+            state << (b->isEnabled() ? "1" : "0") << b->getStomp() << b->getLoadedFile().getFileName();
+
+            if (auto* plugin = dynamic_cast<const PluginBlock*> (b.get()))
+                state << (plugin->isLoaded() ? "L" : "-") << (int) plugin->getFault();
+
+            state << "|";
+        }
+    }
 
     if (state != lastState)
     {
         lastState = state;
 
         if (chain != nullptr)
-            for (size_t i = 0; i < chain->getBlocks().size() && (int) i < gear.size(); ++i)
-                gear[(int) i]->setBlock (describe (*chain->getBlocks()[i]));
+            for (size_t i = 0; i < chain->getBlocks().size() && i < views.size(); ++i)
+                updateTile (views[i], *chain->getBlocks()[i]);
 
         repaint();
     }
@@ -113,11 +162,12 @@ void ChainStrip::resized()
     const auto board = getBoardBounds().reduced (size::chainPadX, size::chainPadY);
     auto x = board.getX();
 
-    for (int i = 0; i < gear.size(); ++i)
+    for (auto& view : views)
     {
-        const auto r = kit::GearView::idealBounds (kit::GearView::Size::chainTile, gear[i]->getBlock().shape);
+        const auto r = view.gear != nullptr ? kit::GearView::idealBounds (kit::GearView::Size::chainTile, view.gear->getBlock().shape)
+                                            : juce::Rectangle<int> (size::tileW, size::utilityTileH);
         tiles.push_back (r.withPosition (x, board.getBottom() - r.getHeight()));
-        gear[i]->setBounds (tiles.back());
+        view.component().setBounds (tiles.back());
         x += r.getWidth() + size::tileGap;
     }
 
@@ -151,9 +201,13 @@ void ChainStrip::paint (juce::Graphics& g)
     }
 
     // Shadows under the pedals, then the selection outline (3 px, 3 px away).
-    for (auto* tile : gear)
-        if (tile->getBlock().shape == kit::BlockInfo::Shape::pedal)
-            kit::GearPlaceholder::paintPedalShadow (g, tile->getBounds().toFloat());
+    for (auto& view : views)
+    {
+        if (view.utility != nullptr)
+            kit::UtilityTile::paintShadow (g, view.utility->getBounds().toFloat());
+        else if (view.gear->getBlock().shape == kit::BlockInfo::Shape::pedal)
+            kit::GearPlaceholder::paintPedalShadow (g, view.gear->getBounds().toFloat());
+    }
 
     // The "+" tile.
     g.setColour (paint::c (colour::dashedTile));
@@ -229,8 +283,13 @@ juce::PopupMenu ChainStrip::blockTypeMenu (int insertAt)
                 }
             });
 
+    // Makers A to Z, then "Other" (plugins that don't name one).
     for (auto& [maker, items] : byMaker)
-        plugins.addSubMenu (maker, items);
+        if (maker != "Other")
+            plugins.addSubMenu (maker, items);
+
+    if (const auto other = byMaker.find ("Other"); other != byMaker.end())
+        plugins.addSubMenu (other->first, other->second);
 
     if (found.isEmpty())
         plugins.addItem ("No plugins found", false, false, nullptr);

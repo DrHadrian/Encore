@@ -97,6 +97,7 @@ public:
         }
 
         openWindowButton.setButtonText ("Open plugin window...");
+        setButtonIcon (openWindowButton, Icon::window, (float) size::smallButtonIcon, false);
         openWindowButton.onClick = [this]
         {
             if (owner.onOpenPluginWindow != nullptr)
@@ -213,6 +214,7 @@ public:
         {
             const auto& ref = plugin->getPluginRef();
             newModel = ref.name + (ref.maker.isNotEmpty() ? middot() + ref.maker : juce::String());
+            pluginNameOnly = ref.name;
             newFormat = plugin->isLoaded() ? display (plugin->getLoadedFileInfo()) : ref.format;
 
             const auto fault = plugin->getFault();
@@ -314,12 +316,12 @@ public:
 
             for (int b = 0; b < (int) blocks.size(); ++b)
                 for (auto& p : blocks[(size_t) b]->getParameters())
-                    if (const auto pedal = owner.session.getExpressionPedal (b, p->getSpec().id); pedal > 0)
+                    if (const auto a = owner.session.getExpressionAssignment (b, p->getSpec().id); a.has_value() && a->pedal > 0)
                     {
-                        const auto& r = p->getSpec().range;
+                        // Heel and toe as the patch sets them (the engine's range, not the parameter's).
                         const auto name = b == owner.blockIndex ? p->getSpec().name : blocks[(size_t) b]->getName() + " " + p->getSpec().name;
-                        newAssignments.add ("EXP " + juce::String (pedal) + "\t" + name + middot()
-                                            + "heel " + signedDisplay (*p, r.start) + ", toe " + signedDisplay (*p, r.end));
+                        newAssignments.add ("EXP " + juce::String (a->pedal) + "\t" + name + middot()
+                                            + "heel " + signedDisplay (*p, a->min) + ", toe " + signedDisplay (*p, a->max));
                     }
         }
 
@@ -345,9 +347,11 @@ public:
         blockHeader = { 0, y, w, size::paneHeader };
         y += size::paneHeader + size::inspectorPadTop;
 
-        const auto valueX = size::inspectorPadX + size::inspectorKeyW + size::inspectorColGap;
+        const auto valueX = size::inspectorPadX + keyWidth() + size::inspectorColGap;
         const auto valueW = juce::jmax (0, w - valueX - size::inspectorPadX);
-        const auto row = [&] (int h) { const auto r = juce::Rectangle<int> (valueX, y, valueW, h); y += h + size::inspectorRowGap; return r; };
+        // Plugin blocks space their rows a pixel wider, as on the board.
+        const auto gap = plugin != nullptr ? size::inspectorPluginRowGap : size::inspectorRowGap;
+        const auto row = [&] (int h) { const auto r = juce::Rectangle<int> (valueX, y, valueW, h); y += h + gap; return r; };
         keys.clear();
 
         if (block != nullptr)
@@ -357,7 +361,8 @@ public:
 
             if (plugin != nullptr)
             {
-                const auto lines = [&] (const juce::String& text) { return textWidth (font (type::bodySmall), text) > (float) valueW ? 2 : 1; };
+                // A line up to 4 % too long is squeezed rather than wrapped (font metrics differ a little between renderers).
+                const auto lines = [&] (const juce::String& text) { return textWidth (font (type::bodySmall), text) > (float) valueW * fitSqueeze ? 2 : 1; };
                 keys.push_back ({ "Plugin", row (size::inspectorTextH * lines (pluginName)) });
                 keys.push_back ({ "Format", row (size::inspectorTextH * lines (format)) });
                 keys.push_back ({ "Status", row (size::inspectorTextH * lines (pluginStatus)) });
@@ -377,7 +382,8 @@ public:
             }
 
             keys.push_back ({ "Stomp switch", row (size::fieldHeight) });
-            stompBox.setBounds (keys.back().second);
+            stompBox.setBounds (plugin != nullptr ? keys.back().second.withWidth (juce::jmin (valueW, size::inspectorPluginStompW))
+                                                  : keys.back().second);
 
             for (int i = 0; i < switches.size() && i < (int) onOff.size(); ++i)
             {
@@ -386,7 +392,7 @@ public:
             }
         }
 
-        y += size::inspectorPadBottom - size::inspectorRowGap;
+        y += size::inspectorPadBottom - gap;
 
         // PARAMETERS
         paramsHeader = { 0, y, w, size::paneHeader + 1 };
@@ -435,19 +441,28 @@ public:
 
         for (auto& [key, r] : keys)
         {
-            const auto keyArea = juce::Rectangle<int> (size::inspectorPadX, r.getY(), size::inspectorKeyW, juce::jmin (r.getHeight(), size::fieldHeight));
+            const auto keyArea = juce::Rectangle<int> (size::inspectorPadX, r.getY(), keyWidth(), juce::jmin (r.getHeight(), size::fieldHeight));
             paint::text (g, key, keyArea.toFloat(), type::label, colour::textTertiary);
 
             if (key == "Type")
                 paint::text (g, typeText, r.toFloat(), type::bodySmall, colour::text);
+            else if (key == "Plugin" && textWidth (font (type::bodySmall), pluginName) <= (float) r.getWidth())
+            {
+                // The name, then " · maker" muted.
+                auto line = r.toFloat();
+                const auto nameW = textWidth (font (type::bodySmall), pluginNameOnly);
+                paint::text (g, pluginNameOnly, line.removeFromLeft (nameW), type::bodySmall, colour::text);
+                paint::text (g, pluginName.substring (pluginNameOnly.length()), line, type::bodySmall, colour::textMuted);
+            }
             else if (key == "Format" || key == "Plugin" || key == "Status")
             {
                 const auto& text = key == "Format" ? format : key == "Plugin" ? pluginName : pluginStatus;
                 g.setFont (font (type::bodySmall));
                 g.setColour (paint::c (key == "Plugin" ? colour::text
-                                       : key == "Status" && pluginProblem ? colour::amber
-                                                                          : colour::textSoft));
-                g.drawFittedText (text, r, juce::Justification::centredLeft, 2, 1.0f);
+                                       : key == "Status" ? (pluginProblem ? colour::amber : colour::statusRunning)
+                                                         : colour::textSoft));
+                const auto oneLine = r.getHeight() < 2 * size::inspectorTextH;
+                g.drawFittedText (text, r, juce::Justification::centredLeft, oneLine ? 1 : 2, oneLine ? 1.0f / fitSqueeze : 1.0f);
             }
         }
 
@@ -523,6 +538,11 @@ private:
     juce::TextButton openWindowButton, pluginActionButton;
     juce::String pluginName, pluginStatus, pluginAction;
     bool pluginProblem = false;
+    juce::String pluginNameOnly;
+    static constexpr float fitSqueeze = 1.04f;
+
+    /** Plugin blocks: a wider key column ("Stomp switch" on one line), as on the board. */
+    int keyWidth() const noexcept { return plugin != nullptr ? size::inspectorPluginKeyW : size::inspectorKeyW; }
     int hiddenParams = 0;
     juce::Rectangle<int> moreParams;
     bool updating = false;
