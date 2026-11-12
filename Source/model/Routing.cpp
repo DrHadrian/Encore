@@ -16,7 +16,7 @@ namespace routing
         if (! std::isfinite (dB) || dB <= silentDb)
             return 0.0f;
 
-        return juce::Decibels::decibelsToGain (juce::jmin (dB, maxLevelDb), silentDb);
+        return std::pow (10.0f, juce::jmin (dB, maxLevelDb) * 0.05f);
     }
 
     float clampLevel (float dB) noexcept

@@ -3,6 +3,8 @@
 
 #include <juce_core/juce_core.h>
 
+#include <cmath>
+
 #include "app/AppSettings.h"
 #include "model/Routing.h"
 #include "model/ShowJson.h"
@@ -136,7 +138,7 @@ public:
             expectEquals (routing::gainFor (-1000.0f), 0.0f);
             expectEquals (routing::gainFor (std::numeric_limits<float>::quiet_NaN()), 0.0f);
             expectWithinAbsoluteError (routing::gainFor (0.0f), 1.0f, 1.0e-6f);
-            expectWithinAbsoluteError (routing::gainFor (60.0f), juce::Decibels::decibelsToGain (6.0f), 1.0e-5f);
+            expectWithinAbsoluteError (routing::gainFor (60.0f), std::pow (10.0f, 6.0f / 20.0f), 1.0e-5f);
             expectEquals (routing::clampLevel (-std::numeric_limits<float>::infinity()), routing::silentDb);
 
             const auto rig = makeRig();
