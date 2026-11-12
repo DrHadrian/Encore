@@ -11,6 +11,7 @@
 #include "engine/blocks/EqBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
+#include "engine/blocks/SplitBlocks.h"
 #include "engine/nam/NamModel.h"
 #include "session/PreShowCheck.h"
 #include "session/RecoveryFile.h"
@@ -273,7 +274,7 @@ public:
     {
         const auto seconds = juce::jmax (1, juce::SystemStats::getEnvironmentVariable ("ENCORE_SOAK_SECONDS", "120").getIntValue());
         beginTest ("Soak: " + juce::String (seconds) + " s of audio with random cues, stomps, pedals, panic, "
-                   "routing changes and edits, into several outputs");
+                   "routing changes and edits, into several outputs, with a split patch");
 
         // A stage rig (milestone 11): two inputs, five outputs on a 6-out
         // interface, each output with its own level, EQ or delay.
@@ -384,14 +385,33 @@ public:
             if (kind == 2)
                 chain->addBlock (std::make_unique<NoiseGateBlock>());
 
+            // Kind 3 splits after the amp: EQ on path A, gate and EQ on path
+            // B, merged wide; the stomp also switches path B.
+            if (kind == 3)
+                chain->addBlock (std::make_unique<SplitBlock>()).setStomp (1);
+
             auto& eq = chain->addBlock (std::make_unique<EqBlock>());
             chain->addExpressionTarget (1, *eq.findParameter ("treble"), -12.0f, 12.0f);
+
+            if (kind == 3)
+            {
+                auto& merge = chain->addBlock (std::make_unique<MergeBlock>());
+                merge.findParameter (mergeParams::panA)->setValue (-80.0f);
+                merge.findParameter (mergeParams::panB)->setValue (80.0f);
+                chain->addExpressionTarget (1, *merge.findParameter (mergeParams::levelB), MergeBlock::minLevelDb, 0.0f);
+            }
 
             if (kind != 2)
             {
                 auto& delay = chain->addBlock (std::make_unique<DelayBlock>());
                 delay.setStomp (1);
                 delay.findParameter ("feedback")->setValue (70.0f);
+            }
+
+            if (kind == 3)
+            {
+                chain->addBlock (std::make_unique<NoiseGateBlock>(), true);
+                chain->addBlock (std::make_unique<EqBlock>(), true);
             }
 
             chain->setTailMode (kind == 1 ? Chain::TailMode::fullChain : Chain::TailMode::tailsOnly);

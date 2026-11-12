@@ -119,6 +119,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/blocks/NoiseGateBlock.h
     Source/engine/blocks/PluginBlock.cpp
     Source/engine/blocks/PluginBlock.h
+    Source/engine/blocks/SplitBlocks.cpp
+    Source/engine/blocks/SplitBlocks.h
     Source/engine/core/BackgroundJobs.h
     Source/engine/core/Block.cpp
     Source/engine/core/Block.h
@@ -445,6 +447,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/RoutingEngineTests.cpp
         Tests/RoutingTests.cpp
         Tests/SessionTests.cpp
+        Tests/SplitPathTests.cpp
         Tests/TestSignals.h)
 
     target_compile_definitions(EncoreTests PRIVATE
