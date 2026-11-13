@@ -6,9 +6,8 @@
 #include <iostream>
 
 #if JUCE_WINDOWS
- #include <crtdbg.h>
+ #include <crtdbg.h>   // (not windows.h: its min/max macros break JUCE's headers)
  #include <cstdlib>
- #include <windows.h>
 #endif
 
 #include "session/PluginCatalog.h"
@@ -19,7 +18,6 @@ int main (int argc, char* argv[])
     // No dialogs in CI: a failed debug check of the C runtime or the standard
     // library (an index out of range, say) prints to stderr and the run fails,
     // instead of waiting for someone to click a message box that nobody sees.
-    SetErrorMode (SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
     _set_abort_behavior (0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 
     for (const auto type : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
