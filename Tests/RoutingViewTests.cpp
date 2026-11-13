@@ -260,18 +260,26 @@ public:
 
                     expect (addMic != nullptr, "the Mic row's + Add input");
 
+                    // Each step is logged: if this ever stalls in CI, the log says where.
+                    logMessage ("  + Add input: click");
+
                     if (addMic != nullptr && addMic->onClick != nullptr)
                         addMic->onClick();   // (a posted click can be overtaken by a rebuild in a test's tight loop)
 
+                    logMessage ("  + Add input: applied, waiting for the settings");
                     pumpUntil ([&] { return rig.settings.getRouting().findInput ("Mic") != nullptr; }, 3000);
+                    logMessage ("  + Add input: done");
                     expect (rig.settings.getRouting().findInput ("Mic") != nullptr, "Mic saved in this computer's routing");
                     expect (main.getRoutingView() != nullptr && main.isShowingRouting());
                 }
 
                 main.keyPressed (juce::KeyPress (juce::KeyPress::F7Key));
                 expect (! main.isShowingRouting(), "F7 again closes it");
+                logMessage ("  closing the window");
             }
         }
+
+        logMessage ("  window closed");
 
         beginTest ("The bottom row with 1, 3 and 8 outputs, compact and full (m11-bottom-row)");
         {
