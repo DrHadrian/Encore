@@ -20,10 +20,14 @@ public:
 
     explicit MuteButton (Style = Style::letter);
 
+    /** The stage variant's text size, as the stage scales (1 = 15 px). */
+    void setTextScale (float);
+
     void paintButton (juce::Graphics&, bool highlighted, bool down) override;
 
 private:
     Style style;
+    float textScale = 1.0f;
 };
 
 } // namespace encore::kit

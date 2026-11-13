@@ -63,6 +63,10 @@ public:
     /** The main window shows the edit view again. */
     std::function<void()> onLeave;
 
+    /** The Outputs widget's Mute / MUTED: the main window keeps the mute in
+        this computer's routing, as the bottom row's M does. */
+    std::function<void (const juce::String& output, bool muted)> onMuteOutput;
+
     /** The layout editor's widget inspector (SCREENS.md §6): the Inspector
         toggle (key I). The main window remembers it per computer. */
     void setLayoutInspectorShown (bool);

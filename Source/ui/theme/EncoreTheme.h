@@ -449,6 +449,7 @@ namespace size
     constexpr int widgetTitleX = 22, widgetTitleY = 34;                       // "SONG 3   SET 1"
     constexpr int currentNameX = 18, currentNameBottom = 22;
     constexpr int widgetTextX = 16, widgetTextBottom = 10;                    // Patch, Next cue (Cue note: bottom 12)
+    constexpr int patchInputRight = 15, patchInputBottom = 18, patchInputIcon = 15, patchInputGap = 4;   // the Patch widget's input (M11)
     constexpr int cueNoteBottom = 12, cueNoteGap = 2, nextCueGap = 16;
     constexpr int healthX = 12, healthBottom = 8, clockBottom = 8;
     constexpr int lockGap = 6, lockPadTop = 14, lockIcon = 34, panicPadTop = 12, stageButtonPadTop = 10;
@@ -505,7 +506,11 @@ namespace size
     constexpr int chainSplitPaneH = 235, pathRowH = 98, pathRowPitch = 96, pathRowLead = 28, pathRowPadRight = 9, pathRowGap = 10;
     constexpr int pathRowRadius = 9, pathTileTop = 6, pathBadge = 16, pathBadgeX = 6, pathOffRight = 17, pathAbove = 54, outTileRight = 10;
     // Routing (milestone 11; NEW-FEATURES-M10-M11 §B, §C)
-    constexpr int outputMuteW = 24, outputMuteH = 20, outputMuteRadius = 4, stageMuteW = 52;
+    constexpr int outputMuteW = 24, outputMuteH = 20, outputMuteRadius = 4, stageMuteW = 52, stageMuteRadius = 6;
+    // The Stage Outputs widget (M11Stage): a column per output.
+    constexpr int stageOutputsPadX = 15, stageOutputsGap = 14, stageOutputNameTop = 35, stageOutputNameH = 19, stageOutputChannelsGap = 6;
+    constexpr int stageOutputMeterTop = 62, stageOutputMeterW = 8, stageOutputMeterGap = 3, stageOutputMeterToMute = 8, stageOutputStateX = 28;
+    constexpr int stageOutputMuteH = 52, stageOutputBottom = 21;
     constexpr int levelBarH = 4, levelBarGap = 2;
     constexpr int outputStripFullW = 170, outputStripH = 71, outputStripRadius = 5, outputStripPadX = 9, outputStripNameTop = 7;
     constexpr int outputStripBarsTop = 31, outputStripValueTop = 51, outputStripGap = 6, outputStripMuteTop = 26;
@@ -729,7 +734,11 @@ namespace type
     constexpr Style outputChannels  {  9.5f, Weight::regular };             // "1/2"
     constexpr Style outputValue     { 10.5f, Weight::regular };             // "-6.0 dB", "muted"
     constexpr Style inputSummaryName{ 13.0f, Weight::semibold };            // the playing patch's input
-    constexpr Style stageMute       { 15.0f, Weight::bold };                // Mute / MUTED on the Outputs widget
+    constexpr Style stageMute       { 15.0f, Weight::extraBold, 0.04f };    // Mute / MUTED on the Outputs widget
+    constexpr Style stageOutputName { 15.0f, Weight::bold };                // "Front of house" on the Outputs widget
+    constexpr Style stageOutputChannels { 11.0f, Weight::regular };         // its "1/2"
+    constexpr Style stageOutputState { 12.0f, Weight::regular };            // "live" / "muted"
+    constexpr Style stagePatchInput { 13.0f, Weight::regular };             // the Patch widget's input
     constexpr Style smallKnobLabel  {  9.5f, Weight::extraBold, 0.08f, true }; // LOW CUT under a small knob
     constexpr Style smallKnobValue  { 11.0f, Weight::regular };
     constexpr Style eqScale         {  9.0f, Weight::regular };             // 20 Hz, 20 kHz, +12 dB

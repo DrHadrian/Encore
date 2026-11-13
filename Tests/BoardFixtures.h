@@ -481,6 +481,27 @@ inline juce::File makeStageShow (const juce::File& parent)
     return folder;
 }
 
+/** The M11 Stage board's layout: the Stage board's with the Outputs widget
+    beside the stomps instead of the pedals and meters. */
+inline std::vector<StageWidget> outputsStageWidgets()
+{
+    std::vector<StageWidget> widgets;
+
+    for (auto w : boardStageWidgets())
+    {
+        if (w.type == StageWidgetType::pedals || w.type == StageWidgetType::meters)
+            continue;
+
+        if (w.type == StageWidgetType::stomps)
+            w.width = 8;
+
+        widgets.push_back (w);
+    }
+
+    widgets.push_back ({ StageWidgetType::outputs, 8, 12, 8, 4, 1.0f, {} });
+    return widgets;
+}
+
 /** The layout editor board's layout: the Stage board's with a wider stomp
     board and level meters. */
 inline std::vector<StageWidget> layoutEditorWidgets()

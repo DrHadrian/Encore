@@ -18,11 +18,20 @@ MuteButton::MuteButton (Style s) : juce::Button ("Mute"), style (s)
     setTooltip ("Mute this output (only this one)");
 }
 
+void MuteButton::setTextScale (float newScale)
+{
+    if (juce::approximatelyEqual (newScale, textScale))
+        return;
+
+    textScale = newScale;
+    repaint();
+}
+
 void MuteButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
 {
     const auto on = getToggleState();
     const auto r = getLocalBounds().toFloat();
-    const auto radius = style == Style::letter ? (float) size::outputMuteRadius : (float) size::buttonRadius;
+    const auto radius = style == Style::letter ? (float) size::outputMuteRadius : (float) size::stageMuteRadius;
     const auto lighten = down ? 0.0f : (highlighted ? state::hoverLighten : 0.0f);
 
     if (down)
@@ -37,7 +46,7 @@ void MuteButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     if (style == Style::letter)
         paint::text (g, "M", r, type::muteLetter, ink, juce::Justification::centred);
     else
-        paint::text (g, on ? "MUTED" : "Mute", r, type::stageMute, ink, juce::Justification::centred);
+        paint::text (g, on ? "MUTED" : "Mute", r, type::stageMute, ink, juce::Justification::centred, textScale);
 }
 
 } // namespace encore::kit

@@ -396,6 +396,7 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     stageView = std::make_unique<StageView> (engine, *session);
     stageView->setOpaque (true);
     stageView->onLeave = [this] { setStageVisible (false); };
+    stageView->onMuteOutput = [this] (const juce::String& name, bool muted) { setOutputMuted (name, muted); };
     stageView->setLayoutInspectorShown (settings.getLayoutInspectorShown());
     stageView->onLayoutInspectorChanged = [this] (bool shown) { settings.setLayoutInspectorShown (shown); };
     addChildComponent (*stageView);
