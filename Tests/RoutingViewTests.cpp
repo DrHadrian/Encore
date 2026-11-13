@@ -13,6 +13,7 @@
 
 #include "app/AppSettings.h"
 #include "app/MainComponent.h"
+#include "model/ShowJson.h"
 #include "ui/BottomRow.h"
 #include "ui/ChainStrip.h"
 #include "ui/JackStage.h"
@@ -344,6 +345,113 @@ public:
             }
 
             writeSnapshot (sheet, "m11-bottom-row");
+        }
+
+        beginTest ("Pre-show check with the routing lines and their Routing... buttons (m11-preshow-check)");
+        {
+            // The board's case: outputs "Main" (all), In-ear on 1/2, Amp DI on 5 (muted; the
+            // interface has 4); the patches send to Main where they sent to Front of house,
+            // Dual amp and Lead to "Monitor wedge" (not here); "Ambient" reaches nothing.
+            const auto folder = makeRoutingShow (root.getChildFile ("preshow"));
+            {
+                const auto showFile = folder.getChildFile ("show.json");
+                juce::String error;
+                auto loaded = json::fromJson (showFile.loadFileAsString(), error);
+                expect (loaded.has_value(), error);
+
+                if (loaded)
+                {
+                    const auto toMain = [] (PatchModel& p)
+                    {
+                        for (auto& send : p.sends)
+                            if (send.output == "Front of house")
+                                send.output = "Main";
+                    };
+
+                    for (auto& p : loaded->patches)
+                        toMain (p);
+
+                    std::function<void (RunItem&)> walk = [&] (RunItem& item)
+                    {
+                        if (item.uniquePatch)
+                            toMain (*item.uniquePatch);
+
+                        item.midiOut.clear();   // (no cue sends MIDI on the board)
+
+                        for (auto& child : item.children)
+                            walk (child);
+                    };
+                    walk (loaded->runningOrder);
+
+                    auto ambient = duplicatePatch (loaded->patches.front(), "Ambient");
+                    ambient.sends.clear();
+                    ambient.setSend ("Main", routing::silentDb, false);
+                    ambient.setSend ("In-ear", routing::silentDb, false);
+                    ambient.setSend ("Amp DI", 0.0f, true);   // muted
+                    ambient.setSend ("Monitor wedge", routing::silentDb, false);
+                    loaded->patches.push_back (ambient);
+                    expect (showFile.replaceWithText (json::toJson (*loaded)));
+                }
+            }
+
+            Rig rig (root.getChildFile ("Settings preshow"), folder);
+            auto routing = makeBoardRouting();
+            RoutingOutput all;
+            all.name = "Main";   // no channels: all outputs
+            routing.outputs[0] = all;
+            routing.outputs[1].channels = { 1, 2 };
+            rig.settings.setRouting (routing);
+
+            MainComponent main (rig.settings, std::make_unique<BoardDeviceType> (focusriteSpec()));
+            main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            pump (800);
+
+            // Live, as before a show (one click on MUTED).
+            std::function<juce::TextButton* (juce::Component&, const juce::String&)> findButton = [&] (juce::Component& c, const juce::String& text) -> juce::TextButton*
+            {
+                for (auto* child : c.getChildren())
+                {
+                    if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && b->getButtonText() == text)
+                        return b;
+
+                    if (auto* found = findButton (*child, text))
+                        return found;
+                }
+
+                return nullptr;
+            };
+
+            if (auto* muted = findButton (main, "MUTED"); muted != nullptr && muted->onClick != nullptr)
+            {
+                muted->setToggleState (false, juce::dontSendNotification);
+                muted->onClick();
+            }
+
+            main.openPreShowCheck();
+            expect (main.isShowingPreShowCheck());
+            pump (1200);   // it checks again every second
+            expect (hasContent (renderSnapshot (main, "m11-preshow-check")));
+
+            // Routing... closes the check and opens Routing.
+            juce::TextButton* fix = nullptr;
+            std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+            {
+                for (auto* child : c.getChildren())
+                {
+                    if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && fix == nullptr && b->getButtonText() == "Routing...")
+                        fix = b;
+
+                    find (*child);
+                }
+            };
+            find (main);
+            expect (fix != nullptr, "a Routing... button");
+
+            if (fix != nullptr && fix->onClick != nullptr)
+                fix->onClick();
+
+            pumpUntil ([&] { return main.isShowingRouting(); }, 2000);
+            expect (main.isShowingRouting() && ! main.isShowingPreShowCheck(), "Routing... opens Routing");
         }
 
         // The IN and OUT stages act on the patch (a show of its own: these change it).
