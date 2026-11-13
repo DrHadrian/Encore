@@ -19,6 +19,7 @@
 #include "ui/kit/Fader.h"
 #include "ui/RoutingView.h"
 #include "ui/theme/EncoreTheme.h"
+#include "ui/theme/Paint.h"
 
 namespace encore::test
 {
@@ -83,16 +84,18 @@ public:
         return nullptr;
     }
 
-    /** A click released over the middle of c (what the input cards act on). */
-    static void releaseClick (juce::Component& c)
+    /** A mouse event over the middle of c. */
+    static juce::MouseEvent eventAt (juce::Component& c)
     {
         const auto centre = c.getLocalBounds().getCentre().toFloat();
         const auto now = juce::Time::getCurrentTime();
-        const juce::MouseEvent e (juce::Desktop::getInstance().getMainMouseSource(), centre, {}, juce::MouseInputSource::defaultPressure,
-                                  juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
-                                  juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY, &c, &c, now, centre, now, 1, false);
-        c.mouseUp (e);
+        return { juce::Desktop::getInstance().getMainMouseSource(), centre, {}, juce::MouseInputSource::defaultPressure,
+                 juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                 juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY, &c, &c, now, centre, now, 1, false };
     }
+
+    /** A click released over the middle of c (what the input cards act on). */
+    static void releaseClick (juce::Component& c) { c.mouseUp (eventAt (c)); }
 
     static juce::String inspectorValue (const JackStage& stage, const juce::String& key)
     {
@@ -102,6 +105,39 @@ public:
                     return row.value;
 
         return {};
+    }
+
+    /** The bottom row board's outputs: "Main" (all), the fixture's three, or eight. */
+    static RoutingConfig bottomRowRouting (int count)
+    {
+        auto r = makeBoardRouting();
+
+        if (count == 1)
+        {
+            RoutingOutput main;
+            main.name = "Main";   // no channels: all outputs
+            r.outputs = { main };
+            return r;
+        }
+
+        if (count == 3)
+            return r;
+
+        const auto output = [] (const char* name, std::vector<int> channels, float dB, bool mute)
+        {
+            RoutingOutput o;
+            o.name = name;
+            o.channels = std::move (channels);
+            o.levelDb = dB;
+            o.mute = mute;
+            return o;
+        };
+
+        r.outputs = { output ("Front of house", { 1, 2 }, 0.0f, false), output ("In-ear Gtr", { 3, 4 }, -6.0f, false),
+                      output ("In-ear Drums", { 5, 6 }, -4.0f, false), output ("Amp DI", { 7 }, 0.0f, true),
+                      output ("Monitor wedge", { 8 }, -3.0f, false), output ("Stream", { 9, 10 }, -10.0f, false),
+                      output ("Recorder", { 11, 12 }, 0.0f, false), output ("Side fill", { 13, 14 }, -2.0f, false) };
+        return r;
     }
 
     static void goToCue (MainComponent& main, int number)
@@ -232,6 +268,82 @@ public:
                 main.keyPressed (juce::KeyPress (juce::KeyPress::F7Key));
                 expect (! main.isShowingRouting(), "F7 again closes it");
             }
+        }
+
+        beginTest ("The bottom row with 1, 3 and 8 outputs, compact and full (m11-bottom-row)");
+        {
+            // The sheet: each band is the real Edit window's bottom row (input,
+            // outputs, system health), under the board's caption for it.
+            struct Variant { const char* caption; int outputs; bool full; };
+            const Variant variants[] {
+                { "Default after updating: one output \xe2\x80\x9cMain\xe2\x80\x9d = all outputs (today's behaviour)", 1, false },
+                { "3 outputs \xc2\xb7 compact (the default)", 3, false },
+                { "8 outputs \xc2\xb7 compact: strips shrink, names shorten, nothing hides", 8, false },
+                { "8 outputs \xc2\xb7 full: strips keep 170 px and the row scrolls sideways (the toggle is remembered on this computer)", 8, true },
+            };
+
+            constexpr int sheetH = 760, captionTop = 16, captionH = 14, bandTop = 36, bandPitch = 142;
+            juce::Image sheet (juce::Image::RGB, theme::size::referenceWidth, sheetH, true);
+            juce::Graphics sheetG (sheet);
+            sheetG.fillAll (theme::paint::c (theme::colour::window));
+            int index = 0;
+
+            for (const auto& v : variants)
+            {
+                auto spec = focusriteSpec();
+                spec.outputs.clear();
+
+                for (int ch = 1; ch <= 14; ++ch)
+                    spec.outputs.add ("Output " + juce::String (ch));
+
+                Rig rig (root.getChildFile ("Settings bottom " + juce::String (index)), show);
+                rig.settings.setRouting (bottomRowRouting (v.outputs));
+                rig.settings.setOutputStripsFull (v.full);
+
+                MainComponent main (rig.settings, std::make_unique<BoardDeviceType> (spec));
+                main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+                pump (800);
+
+                auto* outputs = findChild<OutputsPane> (main);
+                expect (outputs != nullptr);
+                expectEquals (outputs != nullptr ? outputs->getNumStrips() : 0, v.outputs);
+
+                if (outputs != nullptr && outputs->getParentComponent() != nullptr)
+                {
+                    auto* pane = outputs->getParentComponent();
+                    const auto row = main.getLocalArea (pane, pane->getLocalBounds()).withX (0).withWidth (main.getWidth());
+                    const auto band = main.createComponentSnapshot (row, false, 1.0f);
+                    expect (hasContent (band));
+                    writeSnapshot (band, "m11-bottom-row-" + juce::String (index + 1));
+
+                    const auto top = bandTop + index * bandPitch;
+                    sheetG.drawImageAt (band, 0, top);
+                    const theme::type::Style captionStyle { 11.0f, theme::type::Weight::bold, 0.08f, true };
+                    theme::paint::text (sheetG, theme::paint::caps (captionStyle, juce::String::fromUTF8 (v.caption)),
+                                        { 16.0f, (float) (top - bandTop + captionTop), 1408.0f, (float) captionH },
+                                        captionStyle, theme::colour::textDisabled);
+                }
+
+                // Full: wider than the pane, the row scrolls sideways with the wheel (no scroll bar).
+                if (v.full && outputs != nullptr)
+                {
+                    auto* viewport = findChild<juce::Viewport> (*outputs);
+                    expect (viewport != nullptr && ! viewport->isHorizontalScrollBarShown(), "no scroll bar");
+
+                    if (viewport != nullptr)
+                    {
+                        expect (viewport->getViewedComponent()->getWidth() > viewport->getViewWidth(), "the strips are wider than the pane");
+                        juce::MouseWheelDetails wheel {};
+                        wheel.deltaY = -1.0f;
+                        viewport->mouseWheelMove (eventAt (*viewport), wheel);
+                        expect (viewport->getViewPositionX() > 0, "the wheel scrolls the row sideways");
+                    }
+                }
+
+                ++index;
+            }
+
+            writeSnapshot (sheet, "m11-bottom-row");
         }
 
         // The IN and OUT stages act on the patch (a show of its own: these change it).

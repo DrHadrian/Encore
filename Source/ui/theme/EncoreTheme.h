@@ -373,6 +373,7 @@ namespace size
     constexpr int patchPickerW      = 130, headerArrow = 14;   // the centre header line
     constexpr int iconButton        = 20;
     constexpr int iconSize          = 12;
+    constexpr float nameMinSqueeze  = 0.96f;   // a name squeezed this far before it's shortened with "..."
     constexpr int infoButtonIcon    = 11;   // Open routing's icon in the inspector
     constexpr int rowHeight         = 26;    // pane lists
     constexpr int tableRowHeight    = 28;    // full list

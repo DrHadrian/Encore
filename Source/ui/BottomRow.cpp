@@ -71,8 +71,9 @@ OutputsPane::OutputsPane()
     addAndMakeVisible (mode);
 
     viewport.setViewedComponent (&row, false);
-    viewport.setScrollBarsShown (false, true, false, true);
-    viewport.setScrollBarThickness (6);
+    // Full: the row scrolls sideways (wheel, trackpad, shift-wheel) without a
+    // scroll bar; the strip cut at the edge shows there's more.
+    viewport.setScrollBarsShown (false, false, false, true);
     addAndMakeVisible (viewport);
 }
 
