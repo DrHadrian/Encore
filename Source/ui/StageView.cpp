@@ -5,6 +5,7 @@
 
 #include "ui/ChainStrip.h"
 #include "ui/kit/GearPlaceholder.h"
+#include "ui/kit/MuteButton.h"
 #include "ui/theme/EncoreFonts.h"
 #include "ui/theme/EncoreLookAndFeel.h"
 #include "ui/theme/Icons.h"
@@ -228,6 +229,9 @@ public:
     {
         noFocus (*this);
 
+        for (auto& levels : outputDb)
+            levels.fill (-60.0f);
+
         if (spec.type == StageWidgetType::tuner)
         {
             tuner = std::make_unique<TunerDisplay>();
@@ -375,7 +379,9 @@ private:
         kit::BlockInfo info;       // stomps
         juce::String label;        // pedals, meters
         bool on = false;
-        int permille = 0;          // pedal position, meter level
+        int permille = 0;          // pedal position, meter level (outputs: left)
+        int permille2 = 0;         // outputs: the right channel
+        juce::String sub;          // outputs: "1/2"
         bool operator== (const Tile&) const = default;
     };
 
@@ -447,8 +453,23 @@ private:
             }
 
             case StageWidgetType::patchName:
+            {
                 out.main = chain != nullptr ? chain->label : juce::String ("-");
+
+                // Under it, the input it plays (amber when the patch's own isn't on this computer).
+                const auto& routing = owner.engine.getRouting();
+
+                if (! routing.inputs.empty())
+                {
+                    const auto* patch = owner.session.getPatch (owner.session.getActivePatchId());
+                    const auto wanted = patch != nullptr ? patch->inputName() : juce::String();
+                    out.sub = routing.inputFor (wanted).name;
+
+                    if (wanted.isNotEmpty() && routing.findInput (wanted) == nullptr)
+                        out.state = State::warning;
+                }
                 break;
+            }
 
             case StageWidgetType::cueNote:
                 out.main = cue != nullptr ? cue->note : juce::String();
@@ -516,6 +537,33 @@ private:
                     meterDb[m] = db > meterDb[m] ? db : juce::jmax (-60.0f, meterDb[m] - 0.7f);
                     out.tiles.push_back ({ m, {}, m == 0 ? "IN" : "OUT", peaks[m] > 0.89f,
                                            juce::roundToInt ((meterDb[m] + 60.0f) / 60.0f * 1000.0f) });
+                }
+                break;
+            }
+
+            case StageWidgetType::outputs:
+            {
+                // This computer's outputs: name, channels, both channels' level, muted.
+                const auto& outputs = owner.engine.getRouting().outputs;
+
+                for (int i = 0; i < (int) outputs.size() && i < routing::maxOutputs; ++i)
+                {
+                    const auto& o = outputs[(size_t) i];
+                    const auto slot = owner.engine.getOutputSlot (o.name);
+                    const auto muted = slot >= 0 ? owner.engine.isOutputMuted (slot) : o.mute;
+                    int permille[2] {};
+
+                    for (int ch = 0; ch < 2; ++ch)
+                    {
+                        // A mono output shows its one channel in both bars.
+                        const auto peak = slot >= 0 ? snapshot.outputSlotPeaks[(size_t) slot][(size_t) (o.isStereo() ? ch : 0)] : 0.0f;
+                        auto& held = outputDb[(size_t) i][(size_t) ch];
+                        const auto db = juce::Decibels::gainToDecibels (peak, -60.0f);
+                        held = db > held ? db : juce::jmax (-60.0f, held - 0.7f);
+                        permille[ch] = juce::roundToInt ((held + 60.0f) / 60.0f * 1000.0f);
+                    }
+
+                    out.tiles.push_back ({ i, {}, o.name, muted, permille[0], permille[1], describeShortChannels (o) });
                 }
                 break;
             }
@@ -730,8 +778,26 @@ private:
             {
                 const auto left = b + (float) size::widgetTextX * s;
                 const auto bottom = H - b - (float) size::widgetTextBottom * s;
-                const auto f = fitted (type::patchName, content.main, k, W - 2.0f * left, bottom - tagBottom());
-                addRun (ellipsized (f, content.main, W - 2.0f * left), f, colour::text, left, bottom - f.getDescent());
+                // The input, right-aligned at the bottom: jack icon, name.
+                auto nameRight = W - left;
+
+                if (content.sub.isNotEmpty())
+                {
+                    const auto inputFont = fontFor (type::stagePatchInput, pxOf (type::stagePatchInput, k));
+                    const auto right = W - b - (float) size::patchInputRight * s;
+                    const auto inputBottom = H - b - (float) size::patchInputBottom * s;
+                    const auto textW = juce::jmin (textWidth (inputFont, content.sub), W * 0.4f);
+                    const auto icon = (float) size::patchInputIcon * k;
+                    const auto ink = content.state == State::warning ? colour::amber : colour::textTertiary;
+                    const auto lineH = lineOf (inputFont);
+                    addRun (ellipsized (inputFont, content.sub, textW), inputFont, ink, right - textW, baselineIn (inputFont, inputBottom - lineH, lineH));
+                    const auto iconX = right - textW - (float) size::patchInputGap * k - icon;
+                    marks.push_back ({ Icon::jack, { iconX, inputBottom - lineH * 0.5f - icon * 0.5f, icon, icon }, ink });
+                    nameRight = iconX - (float) size::widgetTextX * s;
+                }
+
+                const auto f = fitted (type::patchName, content.main, k, nameRight - left, bottom - tagBottom());
+                addRun (ellipsized (f, content.main, nameRight - left), f, colour::text, left, bottom - f.getDescent());
                 break;
             }
 
@@ -867,6 +933,7 @@ private:
             case StageWidgetType::stomps:   layOutStomps (W, H); break;
             case StageWidgetType::pedals:   layOutPedals (W, H); break;
             case StageWidgetType::meters:   layOutMeters (W, H); break;
+            case StageWidgetType::outputs:  layOutOutputs (W, H); break;
 
             case StageWidgetType::tuner:
             {
@@ -1137,6 +1204,96 @@ private:
         }
     }
 
+    /** A column per output: name and channels, two level bars with "live" or
+        "muted" beside them, and the big Mute / MUTED under them. */
+    void layOutOutputs (float W, float H)
+    {
+        const auto s = scale(), k = rowScale(), b = 1.0f;
+        const auto count = (int) content.tiles.size();
+
+        // The buttons: one per output, made only when the count changes.
+        while (mutes.size() > count)
+            mutes.removeLast();
+
+        while (mutes.size() < count)
+        {
+            auto* mute = mutes.add (new kit::MuteButton (kit::MuteButton::Style::stage));
+            mute->onClick = [this, mute]
+            {
+                const auto index = mutes.indexOf (mute);
+
+                // Locked: nothing changes (the button goes back as it was).
+                if (owner.locked || ! juce::isPositiveAndBelow (index, (int) content.tiles.size()))
+                {
+                    mute->setToggleState (! mute->getToggleState(), juce::dontSendNotification);
+                    return;
+                }
+
+                if (owner.onMuteOutput != nullptr)
+                    owner.onMuteOutput (content.tiles[(size_t) index].label, mute->getToggleState());
+            };
+            noFocus (*mute);
+            addAndMakeVisible (mute);
+        }
+
+        if (count == 0)
+            return;
+
+        const auto padX = (float) size::stageOutputsPadX * s, gap = (float) size::stageOutputsGap * s;
+        const auto pitch = (W - 2.0f * padX + gap) / (float) count;
+        const auto columnW = juce::jmax (0.0f, pitch - gap);
+        const auto muteH = (float) size::stageOutputMuteH * s;
+        const auto muteTop = H - b - (float) size::stageOutputBottom * s - muteH;
+        const auto nameTop = juce::jmax (b + (float) size::stageOutputNameTop * s, tagBottom());
+        const auto nameH = (float) size::stageOutputNameH * s;
+        const auto meterTop = b + (float) size::stageOutputMeterTop * s;
+        const auto meterBottom = muteTop - (float) size::stageOutputMeterToMute * s;
+        const auto barW = (float) size::stageOutputMeterW * s, barGap = (float) size::stageOutputMeterGap * s;
+        const auto nameFont = fontFor (type::stageOutputName, pxOf (type::stageOutputName, k));
+        const auto channelsFont = fontFor (type::stageOutputChannels, pxOf (type::stageOutputChannels, k));
+        const auto stateFont = fontFor (type::stageOutputState, pxOf (type::stageOutputState, k));
+
+        for (int i = 0; i < count; ++i)
+        {
+            const auto& tile = content.tiles[(size_t) i];
+            const auto x = b + padX + (float) i * pitch;
+
+            // Name, then its channels; the name gives way first.
+            const auto channelsW = textWidth (channelsFont, tile.sub);
+            const auto nameW = juce::jmin (textWidth (nameFont, tile.label), columnW - channelsW - (float) size::stageOutputChannelsGap * k);
+            addRun (ellipsized (nameFont, tile.label, juce::jmax (0.0f, nameW)), nameFont, colour::text, x, baselineIn (nameFont, nameTop, nameH));
+            addRun (tile.sub, channelsFont, colour::widgetTitle, x + juce::jmax (0.0f, nameW) + (float) size::stageOutputChannelsGap * k,
+                    baselineIn (nameFont, nameTop, nameH));
+
+            // The two bars (green, towards yellow above half way), as the level meters.
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                const juce::Rectangle<float> track (x + (float) ch * (barW + barGap), meterTop, barW, juce::jmax (0.0f, meterBottom - meterTop));
+                const auto level = (float) (ch == 0 ? tile.permille : tile.permille2) / 1000.0f;
+                Bar bar;
+                bar.track.addRoundedRectangle (track, (float) size::meterBarRadius);
+                bar.fill = track.withTrimmedTop (track.getHeight() * (1.0f - level));
+                bar.gradient = juce::ColourGradient::vertical (paint::c (colour::stageMeterLow), track.getBottom(),
+                                                               paint::c (level > 0.5f ? colour::stageMeterHigh : colour::stageMeterLow),
+                                                               juce::jmin (bar.fill.getY(), track.getBottom() - 1.0f));
+
+                if (level > 0.5f)
+                    bar.gradient.addColour (0.5f / level, paint::c (colour::stageMeterLow));
+
+                bars.push_back (std::move (bar));
+            }
+
+            addRun (tile.on ? "muted" : "live", stateFont, tile.on ? colour::danger : colour::textTertiary,
+                    x + (float) size::stageOutputStateX * s, meterBottom - stateFont.getDescent());
+
+            auto* mute = mutes[i];
+            mute->setBounds (juce::Rectangle<float> (x, muteTop, columnW, muteH).getSmallestIntegerContainer());
+            mute->setTextScale (k);
+            mute->setToggleState (tile.on, juce::dontSendNotification);
+            mute->setTitle ((tile.on ? "Unmute " : "Mute ") + tile.label);
+        }
+    }
+
     //==========================================================================
     void paintFrame (juce::Graphics& g) const
     {
@@ -1203,6 +1360,7 @@ private:
     StageView& owner;
     Content content;
     mutable float meterDb[2] = { -60.0f, -60.0f };
+    mutable std::array<std::array<float, 2>, routing::maxOutputs> outputDb {};   // the Outputs widget's held levels (set to -60 at first)
 
     std::vector<Run> runs;
     std::vector<Mark> marks;
@@ -1214,6 +1372,7 @@ private:
     juce::Font tagFont { juce::FontOptions() };
 
     juce::OwnedArray<kit::GearPlaceholder> pedals;
+    juce::OwnedArray<kit::MuteButton> mutes;   // the Outputs widget's Mute / MUTED
     std::unique_ptr<TunerDisplay> tuner;
 };
 
@@ -1573,7 +1732,7 @@ public:
             { "Show",    { { T::currentCue, "CC" }, { T::nextCue, "NC" }, { T::patchName, "P" }, { T::cueNote, "N" },
                            { T::setList, "SL" }, { T::text, "TX" } } },
             { "Play",    { { T::nextButton, ">" }, { T::previousButton, "<" }, { T::stomps, "SW" }, { T::pedals, "EX" } } },
-            { "Monitor", { { T::meters, "LM" }, { T::health, "SH" }, { T::clock, "CL" }, { T::tuner, "TU" } } },
+            { "Monitor", { { T::meters, "LM" }, { T::outputs, "OU" }, { T::health, "SH" }, { T::clock, "CL" }, { T::tuner, "TU" } } },
             { "Safety",  { { T::panicButton, "!" }, { T::lockButton, "LK" } } },
         };
 

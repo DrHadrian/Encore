@@ -96,7 +96,9 @@ public:
             addChildComponent (b);
         }
 
+        setVariant (pluginActionButton, Variant::primary);   // Turn back on: the fix (18 px: small text)
         openWindowButton.setButtonText ("Open plugin window...");
+        setButtonIcon (openWindowButton, Icon::window, (float) size::smallButtonIcon, false);
         openWindowButton.onClick = [this]
         {
             if (owner.onOpenPluginWindow != nullptr)
@@ -114,9 +116,28 @@ public:
         };
     }
 
+    /** Read-only rows after Type (the merge: Paths, Output, Latency). */
+    struct TextRow
+    {
+        juce::String key;
+        juce::StringArray lines;   // one row per line
+        juce::String tail;         // muted, after the last line
+        bool operator== (const TextRow&) const = default;
+    };
+
+    void setTextRows (const std::vector<TextRow>& rows)
+    {
+        if (rows == textRows)
+            return;
+
+        textRows = rows;
+        layOut();
+    }
+
     void setBlock (Block* newBlock)
     {
         block = newBlock;
+        textRows.clear();
         plugin = dynamic_cast<PluginBlock*> (block);
         switches.clear();
         values.clear();
@@ -213,6 +234,7 @@ public:
         {
             const auto& ref = plugin->getPluginRef();
             newModel = ref.name + (ref.maker.isNotEmpty() ? middot() + ref.maker : juce::String());
+            pluginNameOnly = ref.name;
             newFormat = plugin->isLoaded() ? display (plugin->getLoadedFileInfo()) : ref.format;
 
             const auto fault = plugin->getFault();
@@ -302,7 +324,7 @@ public:
         }
 
         // Assignments of the patch: stomp switches and pedals.
-        juce::StringArray newAssignments;
+        juce::StringArray newAssignments, others;   // this block's first, then the rest of the patch's
 
         if (owner.chain != nullptr)
         {
@@ -310,18 +332,22 @@ public:
 
             for (int b = 0; b < (int) blocks.size(); ++b)
                 if (const auto stomp = owner.session.getBlockStomp (b); stomp > 0)
-                    newAssignments.add ("Stomp " + juce::String (stomp) + "\t" + blocks[(size_t) b]->getName() + " on/off");
+                    (b == owner.blockIndex ? newAssignments : others).add ("Stomp " + juce::String (stomp) + "\t"
+                                        + (blocks[(size_t) b]->getTypeId() == juce::String (splitBlockType) ? juce::String ("Split: path B on/off")
+                                                                                                             : blocks[(size_t) b]->getName() + " on/off"));
 
             for (int b = 0; b < (int) blocks.size(); ++b)
                 for (auto& p : blocks[(size_t) b]->getParameters())
-                    if (const auto pedal = owner.session.getExpressionPedal (b, p->getSpec().id); pedal > 0)
+                    if (const auto a = owner.session.getExpressionAssignment (b, p->getSpec().id); a.has_value() && a->pedal > 0)
                     {
-                        const auto& r = p->getSpec().range;
+                        // Heel and toe as the patch sets them (the engine's range, not the parameter's).
                         const auto name = b == owner.blockIndex ? p->getSpec().name : blocks[(size_t) b]->getName() + " " + p->getSpec().name;
-                        newAssignments.add ("EXP " + juce::String (pedal) + "\t" + name + middot()
-                                            + "heel " + signedDisplay (*p, r.start) + ", toe " + signedDisplay (*p, r.end));
+                        (b == owner.blockIndex ? newAssignments : others).add ("EXP " + juce::String (a->pedal) + "\t" + name + middot()
+                                            + "heel " + signedDisplay (*p, a->min) + ", toe " + signedDisplay (*p, a->max));
                     }
         }
+
+        newAssignments.addArray (others);
 
         if (newAssignments != assignments)
         {
@@ -345,9 +371,11 @@ public:
         blockHeader = { 0, y, w, size::paneHeader };
         y += size::paneHeader + size::inspectorPadTop;
 
-        const auto valueX = size::inspectorPadX + size::inspectorKeyW + size::inspectorColGap;
+        const auto valueX = size::inspectorPadX + keyWidth() + size::inspectorColGap;
         const auto valueW = juce::jmax (0, w - valueX - size::inspectorPadX);
-        const auto row = [&] (int h) { const auto r = juce::Rectangle<int> (valueX, y, valueW, h); y += h + size::inspectorRowGap; return r; };
+        // Plugin blocks space their rows a pixel wider, as on the board.
+        const auto gap = plugin != nullptr ? size::inspectorPluginRowGap : size::inspectorRowGap;
+        const auto row = [&] (int h) { const auto r = juce::Rectangle<int> (valueX, y, valueW, h); y += h + gap; return r; };
         keys.clear();
 
         if (block != nullptr)
@@ -355,9 +383,13 @@ public:
             typeText = typeName (*block);
             keys.push_back ({ "Type", row (size::inspectorTextH) });
 
+            for (const auto& t : textRows)
+                keys.push_back ({ t.key, row (size::inspectorTextH * juce::jmax (1, t.lines.size())) });
+
             if (plugin != nullptr)
             {
-                const auto lines = [&] (const juce::String& text) { return textWidth (font (type::bodySmall), text) > (float) valueW ? 2 : 1; };
+                // A line up to 4 % too long is squeezed rather than wrapped (font metrics differ a little between renderers).
+                const auto lines = [&] (const juce::String& text) { return textWidth (font (type::bodySmall), text) > (float) valueW * fitSqueeze ? 2 : 1; };
                 keys.push_back ({ "Plugin", row (size::inspectorTextH * lines (pluginName)) });
                 keys.push_back ({ "Format", row (size::inspectorTextH * lines (format)) });
                 keys.push_back ({ "Status", row (size::inspectorTextH * lines (pluginStatus)) });
@@ -377,7 +409,8 @@ public:
             }
 
             keys.push_back ({ "Stomp switch", row (size::fieldHeight) });
-            stompBox.setBounds (keys.back().second);
+            stompBox.setBounds (plugin != nullptr ? keys.back().second.withWidth (juce::jmin (valueW, size::inspectorPluginStompW))
+                                                  : keys.back().second);
 
             for (int i = 0; i < switches.size() && i < (int) onOff.size(); ++i)
             {
@@ -386,7 +419,7 @@ public:
             }
         }
 
-        y += size::inspectorPadBottom - size::inspectorRowGap;
+        y += size::inspectorPadBottom - gap;
 
         // PARAMETERS
         paramsHeader = { 0, y, w, size::paneHeader + 1 };
@@ -435,19 +468,41 @@ public:
 
         for (auto& [key, r] : keys)
         {
-            const auto keyArea = juce::Rectangle<int> (size::inspectorPadX, r.getY(), size::inspectorKeyW, juce::jmin (r.getHeight(), size::fieldHeight));
+            const auto keyArea = juce::Rectangle<int> (size::inspectorPadX, r.getY(), keyWidth(), juce::jmin (r.getHeight(), size::fieldHeight));
             paint::text (g, key, keyArea.toFloat(), type::label, colour::textTertiary);
 
             if (key == "Type")
                 paint::text (g, typeText, r.toFloat(), type::bodySmall, colour::text);
+            else if (const auto* t = findTextRow (key))
+            {
+                // Each line in its own row; the tail muted after the last.
+                for (int i = 0; i < t->lines.size(); ++i)
+                {
+                    auto line = r.toFloat().withY ((float) (r.getY() + i * size::inspectorTextH)).withHeight ((float) size::inspectorTextH);
+                    const auto w = textWidth (font (type::bodySmall), t->lines[i]);
+                    paint::text (g, t->lines[i], line.removeFromLeft (w + 1.0f), type::bodySmall, colour::text);
+
+                    if (i == t->lines.size() - 1 && t->tail.isNotEmpty())
+                        paint::text (g, " " + t->tail, line, type::bodySmall, colour::textMuted);
+                }
+            }
+            else if (key == "Plugin" && textWidth (font (type::bodySmall), pluginName) <= (float) r.getWidth())
+            {
+                // The name, then " · maker" muted.
+                auto line = r.toFloat();
+                const auto nameW = textWidth (font (type::bodySmall), pluginNameOnly);
+                paint::text (g, pluginNameOnly, line.removeFromLeft (nameW), type::bodySmall, colour::text);
+                paint::text (g, pluginName.substring (pluginNameOnly.length()), line, type::bodySmall, colour::textMuted);
+            }
             else if (key == "Format" || key == "Plugin" || key == "Status")
             {
                 const auto& text = key == "Format" ? format : key == "Plugin" ? pluginName : pluginStatus;
                 g.setFont (font (type::bodySmall));
                 g.setColour (paint::c (key == "Plugin" ? colour::text
-                                       : key == "Status" && pluginProblem ? colour::amber
-                                                                          : colour::textSoft));
-                g.drawFittedText (text, r, juce::Justification::centredLeft, 2, 1.0f);
+                                       : key == "Status" ? (pluginProblem ? colour::amber : colour::statusRunning)
+                                                         : colour::textSoft));
+                const auto oneLine = r.getHeight() < 2 * size::inspectorTextH;
+                g.drawFittedText (text, r, juce::Justification::centredLeft, oneLine ? 1 : 2, oneLine ? 1.0f / fitSqueeze : 1.0f);
             }
         }
 
@@ -523,6 +578,22 @@ private:
     juce::TextButton openWindowButton, pluginActionButton;
     juce::String pluginName, pluginStatus, pluginAction;
     bool pluginProblem = false;
+    juce::String pluginNameOnly;
+    static constexpr float fitSqueeze = 1.04f;
+
+    /** Plugin blocks: a wider key column ("Stomp switch" on one line), as on the board. */
+    int keyWidth() const noexcept { return plugin != nullptr ? size::inspectorPluginKeyW : size::inspectorKeyW; }
+
+    const TextRow* findTextRow (const juce::String& key) const noexcept
+    {
+        for (const auto& t : textRows)
+            if (t.key == key)
+                return &t;
+
+        return nullptr;
+    }
+
+    std::vector<TextRow> textRows;
     int hiddenParams = 0;
     juce::Rectangle<int> moreParams;
     bool updating = false;
@@ -551,12 +622,35 @@ Inspector::Inspector (ShowSession& s) : session (s), content (std::make_unique<C
     viewport.setScrollBarThickness (size::scrollbar);
     viewport.setViewedComponent (content.get(), false);
     addAndMakeVisible (viewport);
+    info.onButton = [this] (int section) { if (onInfoButton != nullptr) onInfoButton (section); };
+}
+
+void Inspector::setInfo (const juce::String& kind, const juce::String& right, const std::vector<kit::InfoList::Section>& sections)
+{
+    if (! showingInfo)
+    {
+        showingInfo = true;
+        chain = nullptr;
+        blockIndex = -1;
+        content->setBlock (nullptr);
+        viewport.setViewedComponent (&info, false);
+    }
+
+    setHeader ("Inspector" + middot() + kind, right);
+    info.setSections (sections);
+    resized();
 }
 
 Inspector::~Inspector() = default;
 
 void Inspector::setBlock (Chain* newChain, int index)
 {
+    if (showingInfo)
+    {
+        showingInfo = false;
+        viewport.setViewedComponent (content.get(), false);
+    }
+
     chain = newChain;
     blockIndex = chain != nullptr && juce::isPositiveAndBelow (index, (int) chain->getBlocks().size()) ? index : -1;
     auto* block = blockIndex >= 0 ? chain->getBlocks()[(size_t) blockIndex].get() : nullptr;
@@ -564,7 +658,51 @@ void Inspector::setBlock (Chain* newChain, int index)
     setHeader (block != nullptr ? "Inspector" + middot() + ChainStrip::describe (*block).kindLabel : juce::String ("Inspector"));
     shownCpu.clear();
     content->setBlock (block);
+    shownLatency = std::numeric_limits<int>::min();
+    refreshMergeRows();
     resized();
+}
+
+void Inspector::refreshMergeRows()
+{
+    // The merge: what each path holds, what comes out, how the paths line up.
+    if (chain == nullptr || blockIndex < 0 || ! chain->hasSplit() || blockIndex != chain->getMergeIndex())
+        return;
+
+    const auto diff = chain->getPathLatencyDifference();
+
+    if (diff == shownLatency)
+        return;
+
+    shownLatency = diff;
+    const auto& blocks = chain->getBlocks();
+    juce::StringArray a, b;
+
+    for (int i = chain->getSplitIndex() + 1; i < chain->getMergeIndex(); ++i)
+        a.add (blocks[(size_t) i]->getName());
+
+    for (int i = chain->getNumMainBlocks(); i < (int) blocks.size(); ++i)
+        b.add (blocks[(size_t) i]->getName());
+
+    const auto path = [] (const char* name, const juce::StringArray& names)
+    {
+        return juce::String (name) + ": " + (names.isEmpty() ? juce::String ("dry") : names.joinIntoString (" + "));
+    };
+
+    const auto ms = std::abs (diff) * 1000.0 / juce::jmax (1.0, chain->getSpec().sampleRate);
+    Content::TextRow latency { "Latency", {}, {} };
+
+    if (diff == 0)
+        latency.lines.add ("Lined up");
+    else
+    {
+        latency.lines.add (juce::String (diff > 0 ? "A" : "B") + " delayed " + juce::String (ms, 1) + " ms");
+        latency.tail = chain->isAlignmentLimited() ? "(as far as it can)" : "to line up";
+    }
+
+    content->setTextRows ({ { "Paths", juce::StringArray (path ("A", a), path ("B", b)), {} },
+                            { "Output", juce::StringArray (chain->getOutputChannels() == 2 ? "Stereo" : "Mono"), {} },
+                            latency });
 }
 
 void Inspector::refresh()
@@ -581,13 +719,24 @@ void Inspector::refresh()
         }
     }
 
-    content->refresh();
+    if (! showingInfo)
+    {
+        refreshMergeRows();   // (latency is known once the patch is prepared)
+        content->refresh();
+    }
 }
 
 void Inspector::resized()
 {
     Pane::resized();
     viewport.setBounds (getContentBounds());
+
+    if (showingInfo)
+    {
+        info.setSize (viewport.getMaximumVisibleWidth(), info.getIdealHeight (viewport.getMaximumVisibleWidth()));
+        return;
+    }
+
     content->setSize (viewport.getMaximumVisibleWidth(), content->getHeight());
     content->layOut();
     content->setSize (viewport.getWidth() - (content->getHeight() > viewport.getHeight() ? viewport.getScrollBarThickness() : 0),

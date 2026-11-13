@@ -11,6 +11,10 @@
 #include "session/PluginCatalog.h"
 #include "session/ShowSession.h"
 #include "ui/BlockPanel.h"
+#include "ui/JackStage.h"
+#include "ui/BottomRow.h"
+#include "ui/RoutingView.h"
+#include "ui/kit/Fader.h"
 #include "ui/ChainStrip.h"
 #include "ui/Inspector.h"
 #include "ui/MidiSettings.h"
@@ -66,6 +70,9 @@ public:
     void closeSettings();
     bool isShowingSettings() const noexcept { return settingsWindow != nullptr; }
 
+    /** This computer's plugin catalog (Settings › Plugins). */
+    PluginCatalog& getPluginCatalog() noexcept { return *plugins; }
+
     /** The first start (no plugin list yet): scan for plugins in the background. */
     void startFirstPluginScanIfNeeded();
 
@@ -84,7 +91,7 @@ public:
 private:
     // Audio
     void openAudioSettings();
-    void refreshInputChoices();
+    void refreshInputChoices();   // warns when no input channel is on
     void refreshStatus();
     void refreshSystemStatus();
 
@@ -109,7 +116,22 @@ private:
     void watchAudioDevice();
     void reconnectAudioDevice();
     PreShowFacts gatherPreShowFacts();
-    void applyFix (PreShowCheckResult::Fix);
+    void applyFix (const PreShowCheckResult&);
+
+    // Routing (milestone 11): this computer's inputs and outputs.
+    void setRouting (const RoutingConfig&);
+    void setOutputMuted (const juce::String& outputName, bool shouldBeMuted);
+    void ensureRoutingChannelsActive();
+    void openRouting();
+
+public:
+    /** The Routing view (F7): shown or hidden; the Routing button follows. */
+    void setRoutingVisible (bool);
+    bool isShowingRouting() const noexcept { return routingView != nullptr && routingView->isVisible(); }
+    RoutingView* getRoutingView() const noexcept { return routingView.get(); }
+
+private:
+    juce::String lastRoutedDevice;   // the interface whose channels the routing last switched on
     void showNotice (const juce::String& text, int seconds, bool logged = false);
 
     // Cue list
@@ -122,6 +144,7 @@ private:
 
     // Chain view
     void showSelectedBlock();
+    void showJackInspector();
     void relayout();
     void layoutToolbar (juce::Rectangle<int>);
     void layoutBottomRow (juce::Rectangle<int>);
@@ -171,27 +194,32 @@ private:
     std::unique_ptr<PatchList> patchList;
     std::unique_ptr<ChainStrip> chainStrip;
     std::unique_ptr<BlockPanel> blockPanel;
+    std::unique_ptr<JackStage> jackStage;   // the IN or OUT tile's stage
     juce::Label chainLabel, problemsLabel;
+    juce::TextButton routingButton { "Routing" };   // centre header, F7
+    std::unique_ptr<RoutingView> routingView;
     juce::TextButton patchPicker;
     juce::Label loadingLabel { {}, "(loading patches...)" };
     juce::Rectangle<int> headerArrow;
     Chain* shownChain = nullptr;
     int shownBlockIndex = -1;
 
-    // Bottom row (SCREENS.md §4.4): guitar input, meters, system health.
+    // Bottom row (NEW-FEATURES-M10-M11 §B.4): the playing input, the outputs, system health.
     kit::Pane inputPane, metersPane, healthPane;
     std::unique_ptr<Inspector> inspector;
-    juce::Label inputLabel { {}, "Guitar input" }, deviceLine;
-    juce::ComboBox inputChoice;
-    kit::MeterBar inputMeter { "Input" }, outputMeter { "Output" };
-    kit::MeterScale meterScale;
+    juce::Label deviceLine;   // not shown: the stage footer and Routing read it
+    InputSummary inputSummary;
+    int summaryInputSlot = -1;
+    OutputsPane outputsPane;
+    void refreshBottomRow();
+    void refreshChainJacks();
     juce::Label healthTitle { {}, "System health" };
     juce::TextButton resetCountersButton { "Reset counters" };
     juce::Label healthLine, latencyLine, warningLine;   // full text in their tooltips
 
     // What the warning line shows (the most important first: lost, a device
     // or input problem, not ASIO, then the Windows / power line).
-    juce::String warning, systemText;
+    juce::String warning, systemText, mutedOutputsText;
     bool systemProblem = false;
     double roundTripMs = 0.0, sampleRate = 0.0;
     juce::String stageDeviceLine, footswitchLine;   // the stage footer (SCREENS.md §3.4)

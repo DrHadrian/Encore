@@ -80,6 +80,7 @@ namespace colour
     constexpr juce::uint32 okBadgeTick     = 0xff4CD964;
     constexpr juce::uint32 amber           = 0xffFFB340;   // warnings, section headings (at 85 %), bar marks
     constexpr juce::uint32 amberSection    = 0xD9FFB340;   // amber at 85 %: section headings / kinds
+    constexpr juce::uint32 missingRow      = 0x14FF9F0A;   // a mapping row whose output isn't on this computer (amber 8 %)
     constexpr juce::uint32 amberStrong     = 0xffFF9F0A;   // amber badge fill
     constexpr juce::uint32 amberInk        = 0xff1A1200;   // text on amber badge
     constexpr juce::uint32 noticeTop       = 0xff3D2F12;   // notice bar gradient
@@ -168,6 +169,7 @@ namespace colour
     constexpr juce::uint32 dialogFooter    = 0xff262629;
     constexpr juce::uint32 dimmer          = 0x73000000;   // behind modal dialogs (black 45 %)
     constexpr juce::uint32 dialogHighlight = 0x14FFFFFF;   // inner top highlight (white 8 %)
+    constexpr juce::uint32 groupHighlight  = 0x08FFFFFF;   // a group box's inner top line (white 3 %)
     constexpr juce::uint32 dialogShadow    = 0xB3000000;   // 0, 30, 80 px, black 70 %
     constexpr juce::uint32 tabStripTop     = 0xff2E2E31;   // settings tab strip
     constexpr juce::uint32 tabStripBot     = 0xff28282B;
@@ -261,6 +263,56 @@ namespace colour
     constexpr juce::uint32 patchOrange     = 0xffFF9F0A;
     constexpr juce::uint32 patchGreen      = 0xff30C25A;
     constexpr juce::uint32 patchRed        = 0xffFF6B4A;
+
+    // Milestones 10 and 11 (NEW-FEATURES-M10-M11 §C)
+    constexpr juce::uint32 chipMuteBg      = 0xff5A1A16;   // OUTPUT MUTED
+    constexpr juce::uint32 chipMuteText    = 0xffFFB4AD;
+    constexpr juce::uint32 chipAmberBg     = 0xff3D2F12;   // NOT HERE, counts
+    constexpr juce::uint32 chipAmberText   = 0xffFFD27A;
+    constexpr juce::uint32 chipExpBg       = 0xff1B2C45;   // EXP n, THIS COMPUTER
+    constexpr juce::uint32 chipExpText     = 0xff7FC4FF;
+    constexpr juce::uint32 chipOffBg       = 0xff2C2C30;   // OFF
+    constexpr juce::uint32 chipOffText     = 0xff85858C;
+    constexpr juce::uint32 chipGreenBg     = 0xff1E3A24;   // THIS SHOW
+    constexpr juce::uint32 chipGreenText   = 0xff4CD964;
+    constexpr juce::uint32 chipPlainBg     = 0xff2A2A2E;   // VST3, THIS COMPUTER
+    constexpr juce::uint32 chipPlainText   = 0xff8E8E95;
+    constexpr juce::uint32 utilityTileTop  = 0xff2C2C30;
+    constexpr juce::uint32 utilityTileBottom = 0xff1F1F22;
+    constexpr juce::uint32 utilityTileBorder = 0xff3A3A3F;
+    constexpr juce::uint32 selectionOutline = 0xff4FA3FF;
+    constexpr juce::uint32 faultCardBg     = 0xff2A251C;
+    constexpr juce::uint32 faultCardBorder = 0xff3D2F12;
+    constexpr juce::uint32 faultCardText   = 0xffFFD27A;
+    constexpr juce::uint32 statusRunning   = 0xff4CD964;   // inspector Status "Running" (a plugin playing)
+    constexpr juce::uint32 outputStripBg   = 0xff18181B;   // an output's strip in the bottom row
+    constexpr juce::uint32 muteOffText     = 0xffC4C4C9;   // the M button while the output plays
+    constexpr juce::uint32 smallKnobArc    = 0xff8E8E95;   // a small knob's value arc
+    constexpr juce::uint32 smallKnobCap    = 0xff3A3A3E;
+    constexpr juce::uint32 eqWell          = 0xff121214;   // behind the EQ curve
+    constexpr juce::uint32 eqGrid          = 0xff26262A;
+    constexpr juce::uint32 eqZero          = 0xff3A3A3F;
+    constexpr juce::uint32 eqCurve         = 0xff6EA5FA;
+    constexpr juce::uint32 eqCurveFill     = 0x1A6EA5FA;   // 10 %
+    constexpr juce::uint32 faderTick       = 0xff3A3A3F;
+    constexpr juce::uint32 routingSelectedRow = 0xff2E3A50;   // the output whose EQ and delay show below
+    constexpr juce::uint32 routingDivider  = 0xff26262A;
+    constexpr juce::uint32 routingHead     = 0xff1E1E21;   // a table's head row and bar in a group
+    constexpr juce::uint32 tickGreen       = 0xff4CD964;
+    constexpr juce::uint32 sendsSelectedRow = 0xff232A38;  // the patch whose send is being set
+    constexpr juce::uint32 sendsCellWell   = 0xff0E1013;   // the selected send   // ✓ a name this computer has
+    constexpr juce::uint32 pathRow         = 0x09FFFFFF;   // a split path's row (white 3.5 %)
+    constexpr juce::uint32 pathRowBorder   = 0x0DFFFFFF;   // (white 5 %)
+    constexpr juce::uint32 pathBadgeBg     = 0xff3A3A3F;
+    constexpr juce::uint32 pathBadgeOffBg  = 0xff2A2A2E;
+    constexpr juce::uint32 sendBoxTop      = 0xff2A2A2E;   // the OUT stage's box
+    constexpr juce::uint32 sendBoxBottom   = 0xff1E1E21;
+    constexpr juce::uint32 inputCardTop    = 0xff2A2A2E;
+    constexpr juce::uint32 inputCardBottom = 0xff1F1F22;
+    constexpr juce::uint32 inputCardBorder = 0xff2B2E35;
+    constexpr juce::uint32 faultCardShadow = 0x80000000;   // its drop shadow (0, 14, 30 px, black 50 %)
+    constexpr juce::uint32 utilityShadow   = 0x73000000;   // chain tile drop shadow (0, 6, 6 px, black 45 %)
+    constexpr juce::uint32 groupRowLine    = 0xff1F1F22;   // 1 px under each row of the Plugins, Folders and Blocked lists
 }
 
 //==============================================================================
@@ -322,16 +374,19 @@ namespace size
     constexpr int patchPickerW      = 130, headerArrow = 14;   // the centre header line
     constexpr int iconButton        = 20;
     constexpr int iconSize          = 12;
+    constexpr float nameMinSqueeze  = 0.96f;   // a name squeezed this far before it's shortened with "..."
+    constexpr int infoButtonIcon    = 11;   // Open routing's icon in the inspector
     constexpr int rowHeight         = 26;    // pane lists
     constexpr int tableRowHeight    = 28;    // full list
     constexpr int tableHeaderHeight = 24;
     constexpr int sectionHeadingH   = 24;    // sidebar section heading (22 in the CSS; the target renders 24)
     constexpr int headerDot = 7;
+    constexpr int inspectorPluginKeyW = 84, inspectorPluginStompW = 120, inspectorPluginRowGap = 7, smallButtonIcon = 11;
     constexpr int inspectorPadX = 10, inspectorPadTop = 6, inspectorPadBottom = 10, inspectorKeyW = 74, inspectorColGap = 8;
     constexpr int inspectorRowGap = 6, inspectorTextH = 15, inspectorListPadX = 6, inspectorNameW = 60, inspectorChipW = 44;
     // Plugins can have hundreds of parameters: the block stage shows the first
     // few as knobs, the inspector lists the first ones; the rest are in the plugin's window.
-    constexpr int pluginPanelKnobs = 8, inspectorPluginParams = 48;
+    constexpr int pluginPanelKnobs = 8, inspectorPluginParams = 10;
     constexpr int inspectorBarH = 4, assignKeyW = 62, assignArrowW = 12;
     constexpr int listPad = 4, listGap = 1, rowPadX = 8, rowGap = 8, rowNumberW = 18, paneBarW = 3, paneBarH = 16, paneBarRadius = 2;
     constexpr int swatch = 9, swatchRadius = 2, rowRadius = 4, headingPadBottom = 2;
@@ -357,6 +412,8 @@ namespace size
     constexpr int ampTileW = 117, tileW = 64, tileH = 84, plusTileW = 48, tileGap = 6;
     constexpr int pedalW = 160, pedalH = 210;            // drawn at 0.4 in the chain, 0.7 on Stage
     constexpr int ampPanelW = 600, ampPanelH = 430, blockPanelH = 300, cabPanelW = 230, cabPanelH = 300;
+    constexpr int mergePanelW = 562, mergePanelH = 302, mergeLabelBottom = 42, mergePanelTop = 40;   // the merge's box: PATH A · PATH B
+    constexpr int mergeGroupGap = 34, mergeLineGap = 14, mergeLineH = 14;         // the groups, the summary under each
     constexpr int ampStripX = 22, ampStripY = 44, ampStripW = 556, ampStripH = 138;
     constexpr int gearRadius = 10, pedalRadius = 14, pedalBorder = 2, stripRadius = 6, plusTileRadius = 8;
     constexpr int chainPadX = 12, chainPadY = 14, chainShadowH = 8, dash = 4;            // the chain board
@@ -371,7 +428,7 @@ namespace size
     constexpr int pedalShadowY = 6, pedalShadowBlur = 10;
     constexpr int panelLabelBottom = 57, panelLabelH = 16;  // "AMP · NAM CAPTURE": top at height − 57
     constexpr int platePadX = 10, plateH = 20, plateRadius = 3, plateRight = 44, plateBottom = 38;
-    constexpr int knobCell = 64, knobColumn = 74, knobLabelGap = 4, knobLabelH = 12, chipH = 13, chipPadX = 5, chipRadius = 3;
+    constexpr int knobCell = 64, knobColumn = 74, knobLabelGap = 4, knobLabelH = 12, knobValueH = 13, chipH = 13, chipPadX = 5, chipRadius = 3;
     constexpr int toggleW = 22, toggleH = 36, toggleKnob = 16, toggleColumn = 74, toggleColumnH = 91;
     constexpr int toggleOnH = 10, toggleTrackY = 14, toggleNameY = 54, toggleNameLineH = 12, toggleOffY = 80;
     constexpr int powerLed = 28, ledGlowR = 8, ledHalo = 54;
@@ -393,6 +450,7 @@ namespace size
     constexpr int widgetTitleX = 22, widgetTitleY = 34;                       // "SONG 3   SET 1"
     constexpr int currentNameX = 18, currentNameBottom = 22;
     constexpr int widgetTextX = 16, widgetTextBottom = 10;                    // Patch, Next cue (Cue note: bottom 12)
+    constexpr int patchInputRight = 15, patchInputBottom = 18, patchInputIcon = 15, patchInputGap = 4;   // the Patch widget's input (M11)
     constexpr int cueNoteBottom = 12, cueNoteGap = 2, nextCueGap = 16;
     constexpr int healthX = 12, healthBottom = 8, clockBottom = 8;
     constexpr int lockGap = 6, lockPadTop = 14, lockIcon = 34, panicPadTop = 12, stageButtonPadTop = 10;
@@ -430,7 +488,78 @@ namespace size
     constexpr int mappingHeaderH = 27, mappingRowH = 31, mappingBarH = 37, mappingPadX = 12, actionW = 200;
     // Settings > Plugins (milestone 10): the plugin list where the MIDI tab has
     // its mappings (same header, rows and bar), folders and the blocklist on the right.
-    constexpr int pluginsMakerW = 160, pluginsVersionW = 72, pluginsFolderRows = 4, pluginsBlockedRowH = 44, pluginsTryAgainW = 76;
+    constexpr int pluginsMakerW = 190, pluginsVersionW = 90, pluginsColumnGap = 10, pluginsFoldersBoxH = 147, pluginsBlockedRowH = 45;
+    constexpr int pluginsRowH = 27, pluginsBarH = 41, pluginsTitleRowH = 20, pluginsStatusTop = 10, pluginsProgressTop = 29;
+    constexpr int pluginsCountLift = 5, pluginsBlockedNameTop = 7, pluginsBlockedReasonTop = 24, pluginsTryAgainGap = 10, pluginsHelpPadTop = 10;
+    // Milestones 10 and 11 (NEW-FEATURES-M10-M11 §C)
+    constexpr int tagChipH = 16, tagChipRadius = 3, tagChipPadX = 6;
+    constexpr int progressH = 4, progressRadius = 2;
+    // UtilityTile (chain tiles that aren't gear: plugin, IN/OUT jacks, split/merge), from edit-plugin.json
+    constexpr int utilityTileH = 84, utilityTileRadius = 8, utilityTilePadX = 7, utilityLabelTop = 6, utilityLabelH = 11;
+    constexpr int utilityDot = 6, utilityDotTop = 9, utilityDotRight = 8, utilityDotMinW = 60;
+    constexpr int utilityNameTop = 25, utilityNameLineH = 12, utilityCaptionTop = 50, utilityCaptionH = 11;
+    constexpr int utilityFootW = 22, utilityFootH = 16, utilityFootTop = 62, utilityFootRadius = 7;
+    constexpr int utilityShadowY = 6, utilityShadowBlur = 6;
+    constexpr int utilityIcon = 22, utilityIconTop = 23;
+    constexpr int utilityBottomCaptionTop = 52, utilityBottomNameTop = 63, jackTileW = 64, splitTileW = 52, outTileW = 104;
+    constexpr int utilityLinesTop = 23, utilityLineH = 12, utilityLinePitch = 14, utilityLineBarW = 24, utilityLineChipW = 14, outTileLines = 3;
+    // Split paths on the chain board (m11-edit-split-merge.json)
+    constexpr int chainSplitPaneH = 235, pathRowH = 98, pathRowPitch = 96, pathRowLead = 28, pathRowPadRight = 9, pathRowGap = 10;
+    constexpr int pathRowRadius = 9, pathTileTop = 6, pathBadge = 16, pathBadgeX = 6, pathOffRight = 17, pathAbove = 54, outTileRight = 10;
+    // Routing (milestone 11; NEW-FEATURES-M10-M11 §B, §C)
+    constexpr int outputMuteW = 24, outputMuteH = 20, outputMuteRadius = 4, stageMuteW = 52, stageMuteRadius = 6;
+    // The Stage Outputs widget (M11Stage): a column per output.
+    constexpr int stageOutputsPadX = 15, stageOutputsGap = 14, stageOutputNameTop = 35, stageOutputNameH = 19, stageOutputChannelsGap = 6;
+    constexpr int stageOutputMeterTop = 62, stageOutputMeterW = 8, stageOutputMeterGap = 3, stageOutputMeterToMute = 8, stageOutputStateX = 28;
+    constexpr int stageOutputMuteH = 52, stageOutputBottom = 21;
+    constexpr int levelBarH = 4, levelBarGap = 2;
+    constexpr int outputStripFullW = 170, outputStripH = 71, outputStripRadius = 5, outputStripPadX = 9, outputStripNameTop = 7;
+    constexpr int outputStripBarsTop = 31, outputStripValueTop = 51, outputStripGap = 6, outputStripMuteTop = 26;
+    constexpr int outputsPaneTop = 30, outputsHeaderTop = 10, outputsSegmentW = 89, outputsSegmentCompactW = 57, outputsSegmentH = 18;
+    constexpr int inputSummaryNameTop = 47, inputSummaryLabelTop = 28, inputSummaryMeterTop = 68, inputSummaryMeterH = 8;
+    constexpr int smallKnob = 36, smallKnobColumn = 70, smallKnobLabelGap = 2, smallKnobLabelH = 11, smallKnobValueGap = 3, smallKnobValueH = 14;
+    constexpr float smallKnobArcR = 15.0f, smallKnobArcW = 3.0f, smallKnobCapR = 10.0f, smallKnobPointerW = 2.0f;
+    constexpr int eqCurvePadX = 11, eqCurveLabelPad = 5;
+    constexpr int faderTrackW = 4, faderThumbW = 28, faderThumbH = 14, faderThumbRadius = 3, sendFaderTrackH = 196;
+    constexpr int faderScaleW = 26, faderTickW = 6, faderTickGap = 4, faderHThumb = 12;
+    // The Routing view (m11-routing-inputs-outputs.json, m11-routing-sends.json)
+    constexpr int routingButtonW = 112;   // the centre header's Routing button (F7)
+    constexpr int routingHeaderH = 41, routingFooterH = 31, routingPadX = 15, routingTitleX = 33, routingIconX = 13, routingIcon = 15;
+    constexpr int routingTabsX = 121, routingTabsW = 302, routingTabsH = 26, routingChipGap = 10, routingBackW = 156;
+    constexpr int routingLeftW = 452, routingColumnGap = 16, routingContentTop = 56, routingGroupGap = 14;
+    constexpr int routingHeadH = 27, routingInputRowH = 37, routingOutputRowH = 45, routingBarH = 37, routingNameRowH = 33;
+    constexpr int routingCellPadX = 12, routingRemoveW = 22, routingInterfaceH = 87, routingNamesHelpH = 48;
+    constexpr int routingInNameW = 130, routingInChannelW = 176, routingInLevelW = 56, routingColGap = 10;
+    constexpr int routingOutNameW = 136, routingOutChannelsW = 120, routingFaderW = 104, routingLevelFieldW = 66, routingOutMeterW = 86;
+    constexpr int routingEqThumbW = 40, routingEqSummaryW = 76, routingDelayW = 118, routingComboH = 22;
+    constexpr int routingDetailH = 257, routingDetailPad = 17, routingCurveW = 414, routingCurveH = 126, routingKnobsTop = 176;
+    constexpr int routingDividerX = 459, routingRightX = 488, routingRightW = 250, routingStepW = 26, routingDelayFieldW = 100, routingDelayFieldH = 30;
+    constexpr int sendsHeadH = 45, sendsRowH = 37, sendsPatchW = 308, sendsInputW = 128, sendsEndW = 78, sendsColumnW = 176;
+    constexpr int sendsBarW = 64, sendsCellH = 28, sendsHelpTop = 14, sendsHelpW = 420, sendsHelpGap = 24;
+    // The IN and OUT stages (m11-edit-out-sends.json, m11-edit-in-missing.json)
+    constexpr int sendBoxTop = 26, sendBoxPad = 24, sendBoxH = 362, sendBoxRadius = 10, sendStripW = 92, sendStripGap = 26;
+    constexpr int sendNameTop = 18, sendSubTop = 40, sendOnTop = 58, sendOnX = 22, sendOnW = 48, sendOnH = 20, sendOnDotX = 11, sendOnDot = 6, sendOnTextGap = 5;
+    constexpr int sendFaderTop = 83, sendMeterX = 68, sendValueTop = 300, sendValueX = 14, sendValueW = 64, sendValueH = 22;
+    constexpr int jackFooterGap = 12, jackFooterH = 14, jackFooterSeparator = 20;   // the OUT stage's line under the box
+    constexpr int inputIntroTop = 36, inputCardsTop = 70, inputCardW = 200, inputCardH = 132, inputCardGap = 14;
+    constexpr int inputCardPad = 14, inputCardChipTop = 14, inputCardNameTop = 41, inputCardCaptionTop = 67, inputCardMeterTop = 101;
+    constexpr int inputCardIconX = 13, inputCardIconTop = 11, inputCardIcon = 18;
+    constexpr int inputCardMeterH = 6, inputCardRadius = 8, inputWarningTop = 226, inputWarningH = 57, inputWarningPadX = 33;
+    // FaultCard (a plugin switched off or not loaded, over its dimmed plate; edit-plugin-switched-off.json)
+    constexpr int faultCardW = 460, faultCardTop = 128, faultCardRadius = 8, faultCardPadX = 17, faultCardPadY = 15;
+    constexpr int faultCardIconW = 10, faultCardIconH = 18, faultCardIconGap = 10, faultCardLineGap = 3, faultCardGap = 10;
+    // ParameterList (a plugin's window when it has none of its own; plugin-window.json)
+    constexpr int paramListW = 580, paramListHeaderH = 41, paramListRowH = 33, paramListH = 455, paramListFooterH = 31;
+    constexpr int paramListPadX = 16, paramListNameW = 130, paramListSliderX = 158, paramListSliderW = 304, paramListValueW = 90;
+    constexpr int paramListChipH = 18, paramListGap = 10, paramListCountW = 120, paramListThumb = 12;
+    constexpr int faultCardButtonGap = 8, faultCardShadowY = 14, faultCardShadowBlur = 30;
+    // The plugin plate on the block stage (edit-plugin.json): 600 x 370, 22 below the stage header
+    constexpr int pluginPlateW = 600, pluginPlateH = 370, pluginPlateTop = 22, pluginPlatePadX = 22;
+    constexpr int pluginPlateChipTop = 26, pluginPlateChipH = 18, pluginPlateNameTop = 25, pluginPlateNameH = 20, pluginPlateTextGap = 10;
+    constexpr int pluginPlatePanelTop = 66, pluginPlatePanelH = 250, pluginPlatePanelPadX = 21, pluginPlatePanelPadTop = 15;
+    constexpr float pluginPlateDimmed = 0.45f;   // the plate under a FaultCard
+    constexpr int pluginPlateColumns = 4, pluginPlateRowPitch = 115, pluginPlateFootTop = 340, pluginPlateFootH = 16;
+    // (the power LED sits top right, on the name line: not on the board, but the panel's on/off stays)
     constexpr int triggerX = 222, learnW = 76, learnH = 22, removeW = 22, removeRight = 18, lastValueW = 117, lastValueH = 21;
     constexpr int helpLineH = 18, helpGap = 10, groupPadTight = 13;   // (help groups: 13 above and below the text)
     constexpr int statusTitleH = 15, statusLineH = 14, statusTextH = 15, latencySplit = 2, tickTextGap = 10, defaultsValueX = 170;
@@ -594,8 +723,47 @@ namespace type
     constexpr Style helpStrong      { 12.0f, Weight::bold };
     constexpr Style statusTitle     { 12.5f, Weight::semibold };
     constexpr Style noteText        { 11.5f, Weight::regular };             // notes under groups, the latency line
+    constexpr Style noteTextStrong  { 11.5f, Weight::semibold };            // a word picked out in such a note
     constexpr Style noteStrong      { 11.5f, Weight::bold };
     constexpr Style columnHead      { 10.5f, Weight::bold, 0.06f, true };   // DOES, FOOTSWITCH / PEDAL
+    constexpr Style tagChip         { 9.5f, Weight::bold, 0.02f, true };    // NOT HERE, OUTPUT MUTED, counts
+    constexpr Style utilityLabel    {  8.5f, Weight::extraBold, 0.08f, true }; // VST3, IN, OUT, SPLIT on a chain tile
+    constexpr Style utilityName     { 10.5f, Weight::bold };                // the plugin's name on its tile
+    constexpr Style utilityCaption  {  9.0f, Weight::regular };             // its maker
+    constexpr Style muteLetter      { 10.0f, Weight::extraBold };           // "M"
+    constexpr Style outputName      { 11.5f, Weight::semibold };            // an output's name on its strip
+    constexpr Style outputChannels  {  9.5f, Weight::regular };             // "1/2"
+    constexpr Style outputValue     { 10.5f, Weight::regular };             // "-6.0 dB", "muted"
+    constexpr Style inputSummaryName{ 13.0f, Weight::semibold };            // the playing patch's input
+    constexpr Style stageMute       { 15.0f, Weight::extraBold, 0.04f };    // Mute / MUTED on the Outputs widget
+    constexpr Style stageOutputName { 15.0f, Weight::bold };                // "Front of house" on the Outputs widget
+    constexpr Style stageOutputChannels { 11.0f, Weight::regular };         // its "1/2"
+    constexpr Style stageOutputState { 12.0f, Weight::regular };            // "live" / "muted"
+    constexpr Style stagePatchInput { 13.0f, Weight::regular };             // the Patch widget's input
+    constexpr Style smallKnobLabel  {  9.5f, Weight::extraBold, 0.08f, true }; // LOW CUT under a small knob
+    constexpr Style smallKnobValue  { 11.0f, Weight::regular };
+    constexpr Style eqScale         {  9.0f, Weight::regular };             // 20 Hz, 20 kHz, +12 dB
+    constexpr Style faderScale      {  9.0f, Weight::regular };             // +6 0 −6 … −∞ beside a fader
+    constexpr Style routingTitle    { 14.0f, Weight::bold };                // "Routing"
+    constexpr Style routingRowName  { 12.5f, Weight::semibold };            // an output's or a name's row
+    constexpr Style routingDevice   { 13.0f, Weight::semibold };            // the interface's name
+    constexpr Style routingDelay    { 16.0f, Weight::semibold };            // "12.0 ms"
+    constexpr Style routingGlyph    { 12.5f, Weight::extraBold };           // ✓ / !
+    constexpr Style sendsHead       { 12.0f, Weight::semibold };            // an output's name over its column
+    constexpr Style sendsHeadSub    { 10.0f, Weight::regular };             // "3/4 · stereo"
+    constexpr Style sendName        { 12.0f, Weight::semibold };            // an output over its send fader
+    constexpr Style sendSub         { 10.0f, Weight::regular };             // "1/2 · stereo"
+    constexpr Style inputCardName   { 18.0f, Weight::bold };                // Guitar on its card
+    constexpr Style paramListName   { 13.0f, Weight::bold };                // the plugin's name over its parameter list
+    constexpr Style paramListNote   { 12.0f, Weight::regular };             // "has no window of its own: its parameters"
+    constexpr Style faultText       { 12.5f, Weight::regular };             // the FaultCard's message
+    constexpr Style faultStrong     { 12.5f, Weight::bold };                // "Switched off:"
+    constexpr Style utilityLine     {  9.5f, Weight::semibold };            // an output on the OUT tile
+    constexpr Style pathBadge       {  9.5f, Weight::extraBold };           // A / B
+    constexpr Style knobValue       { 10.5f, Weight::regular };             // "35 %" under a plugin plate knob
+    constexpr Style plateName       { 16.0f, Weight::bold };                // ValhallaRoom on the plugin plate
+    constexpr Style plateMaker      { 12.0f, Weight::regular };             // "Valhalla DSP · v2.0.0"
+    constexpr Style plateMore       { 11.0f, Weight::regular };             // "+ 24 more in the plugin window"
     constexpr Style tunerCaption    { 11.0f, Weight::bold, 0.08f, true };
     constexpr Style tunerNote       { 180.0f, Weight::semibold };
     constexpr Style tunerDetail     { 18.0f, Weight::regular };

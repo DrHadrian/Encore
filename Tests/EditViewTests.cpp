@@ -13,6 +13,7 @@
 #include "app/AppSettings.h"
 #include "app/MainComponent.h"
 #include "model/ShowFolder.h"
+#include "model/ShowJson.h"
 #include "session/RecoveryFile.h"
 #include "ui/theme/EncoreTheme.h"
 
@@ -107,10 +108,36 @@ public:
             expect (hasContent (renderSnapshot (main, "full-list-typing")));
         }
 
-        beginTest ("Pre-show check (preshow-check.png)");
+        beginTest ("Pre-show check, with a plugin that isn't installed (preshow-check.png)");
         {
+            // The board's show, with H9 Shimmer in patch Lead (not on this computer).
+            const auto checkFolder = makeBoardShow (root.getChildFile ("Pre-show check show"));
+            {
+                const auto showFile = checkFolder.getChildFile ("show.json");
+                juce::String error;
+                auto show = json::fromJson (showFile.loadFileAsString(), error);
+                expect (show.has_value(), error);
+
+                if (show)
+                {
+                    for (auto& patch : show->patches)
+                    {
+                        if (patch.name == "Lead")
+                        {
+                            BlockModel shimmer;
+                            shimmer.id = "lead-shimmer";
+                            shimmer.type = pluginBlockType;
+                            shimmer.plugin = { "VST3", "H9 Shimmer", "Eventide", 0, "3.7.2", {} };
+                            patch.mainLane().blocks.push_back (shimmer);
+                        }
+                    }
+
+                    expect (showFile.replaceWithText (json::toJson (*show)));
+                }
+            }
+
             AppSettings settings (root.getChildFile ("Settings check"));
-            settings.setLastShowFolder (showFolder);
+            settings.setLastShowFolder (checkFolder);
             const auto setup = boardDeviceSetup();
             settings.setAudioDeviceState (&setup);
 

@@ -21,7 +21,8 @@ enum class MidiAction
     expression,      // index: 1..4
     mute,
     tuner,           // milestone 7
-    panic            // milestone 7
+    panic,           // milestone 7
+    muteOutput       // milestone 11: toggles one output's mute (MidiBinding::output)
 };
 
 /** Which incoming MIDI messages trigger a binding. */
@@ -41,6 +42,7 @@ struct MidiBinding
     MidiAction action = MidiAction::nextCue;
     int index = 1;      // stomp or expression number
     MidiTrigger trigger;
+    juce::String output {};   // muteOutput: the output's name (this computer's routing)
 
     bool operator== (const MidiBinding&) const = default;
 };
@@ -78,6 +80,9 @@ std::vector<MidiBinding> makeDefaultMidiBindings();
 
 //== Text, for the UI and the cue MIDI-out editor ==============================
 juce::String describe (MidiAction action, int index);
+
+/** What a binding does, in words: "Stomp 3", "Mute output: In-ear". */
+juce::String describe (const MidiBinding& binding);
 juce::String describe (const MidiTrigger& trigger);
 juce::String describe (const MidiOutMessage& message);
 

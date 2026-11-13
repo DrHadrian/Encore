@@ -11,6 +11,7 @@
 #include "UiSnapshot.h"
 
 #include "ui/StageView.h"
+#include "ui/kit/MuteButton.h"
 #include "ui/theme/EncoreTheme.h"
 
 namespace encore::test
@@ -56,10 +57,10 @@ public:
     }
 
     /** The board's layout as the show's default, expression pedal 1 at 72 %. */
-    static void setUpStage (AudioEngine& engine, ShowSession& session)
+    static void setUpStage (AudioEngine& engine, ShowSession& session, const std::vector<StageWidget>& widgets = boardStageWidgets())
     {
         const auto id = session.addLayout ("Default", {});
-        session.setLayoutWidgets (id, boardStageWidgets());
+        session.setLayoutWidgets (id, widgets);
         session.setDefaultLayout (id);
 
         MidiBinding pedal;
@@ -157,6 +158,72 @@ public:
 
                 view.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
             }
+        }
+
+        beginTest ("Stage with the Outputs widget: a meter and Mute / MUTED per output, Amp DI muted (m11-stage-outputs)");
+        {
+            ShowSession session (engine);
+            expect (session.openShow (makeStageShow (root)).wasOk());
+            setUpStage (engine, session, outputsStageWidgets());
+            engine.setRouting (makeBoardRouting());
+            settle (engine, session);
+            session.goToCue (2);   // "Ballad in D"
+            settle (engine, session);
+
+            StageView view (engine, session);
+            view.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            juce::StringArray muteCalls;
+            view.onMuteOutput = [&] (const juce::String& name, bool muted)
+            {
+                muteCalls.add (name + (muted ? " muted" : " live"));
+                engine.setOutputMuted (engine.getOutputSlot (name), muted);
+            };
+
+            // The board's levels: front of house at about 60 %, in-ear 45 %, Amp DI muted.
+            auto levels = boardSnapshot();
+            const auto gain = [] (float share) { return juce::Decibels::decibelsToGain (-60.0f + share * 60.0f); };
+            levels.outputSlotPeaks[(size_t) engine.getOutputSlot ("Front of house")] = { gain (0.61f), gain (0.54f) };
+            levels.outputSlotPeaks[(size_t) engine.getOutputSlot ("In-ear")] = { gain (0.46f), gain (0.39f) };
+
+            for (int i = 0; i < 3; ++i)
+                view.update (levels);
+
+            expect (hasContent (renderSnapshot (view, "m11-stage-outputs")));
+            renderSnapshot (view, "m11-stage-outputs@2x", 2.0f);
+
+            std::vector<kit::MuteButton*> mutes;
+            std::function<void (juce::Component&)> collect = [&] (juce::Component& c)
+            {
+                for (auto* child : c.getChildren())
+                {
+                    if (auto* m = dynamic_cast<kit::MuteButton*> (child))
+                        mutes.push_back (m);
+
+                    collect (*child);
+                }
+            };
+            collect (view);
+            expectEquals ((int) mutes.size(), 3);
+
+            if (mutes.size() == 3)
+            {
+                expect (! mutes[0]->getToggleState() && ! mutes[1]->getToggleState() && mutes[2]->getToggleState(), "Amp DI MUTED");
+
+                mutes[1]->triggerClick();
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                expect (muteCalls.contains ("In-ear muted"), muteCalls.joinIntoString (", "));
+                expect (engine.isOutputMuted (engine.getOutputSlot ("In-ear")));
+
+                view.setLocked (true);
+                muteCalls.clear();
+                mutes[2]->triggerClick();
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                expect (muteCalls.isEmpty(), "locked: Mute does nothing");
+                expect (mutes[2]->getToggleState(), "and the button stays as it was");
+                view.setLocked (false);
+            }
+
+            engine.setRouting (makeDefaultRouting());
         }
 
         beginTest ("Layout editor: the current cue selected, inspector on (layout-editor.png)");

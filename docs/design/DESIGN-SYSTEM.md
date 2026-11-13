@@ -172,6 +172,23 @@ Fill #1C1E23, border #2B2E35, radius 6. Name tag at (6, 6): padding 1 × 6, radi
 ### 5.14 Tooltips
 Fill #2C2C30, border #0A0A0B, radius 5, text 11.5 #E8E8EB, padding 6 × 8. Keep every tooltip the app has today.
 
+### 5.15 Milestone 10 and 11 components (`Source/ui/kit`, as built)
+The spec is `NEW-FEATURES-M10-M11.md` §C; values are tokens in `EncoreTheme.h`. Where the build differs from the spec, this list is what exists:
+- **ProgressBar**: 4 px, track #0E0E10, fill accent; repaints only when the value changes (plugin scan).
+- **UtilityTile**: chain tiles that aren't gear, 84 high, radius 8, #2C2C30 → #1F1F22, border #3A3A3F; label 8.5 / 800 caps, status dot, name 10.5 / 600, caption 9. Variants by info: plugin tile (footswitch shape), IN jack tile (64, jack icon 22 at 23, caption at 52, name at 63), OUT tile (104, up to three output lines with a send bar, "+ N more"), split ("A + B" / "A only") and merge ("stereo") tiles (52). Amber state for a missing name.
+- **FaultCard**: a plugin switched off or not loaded, over the plate dimmed to 45 %: amber card, lead in bold, primary and secondary buttons.
+- **ParameterList**: the plugin window when the plugin has no editor; `ListBox` rows 32.
+- **Fader**: vertical (OUT stage sends, 196 px track with its scale) or horizontal (Routing output level), on the send law (+6 → 0, 0 → 0.1, −6 → 0.25, −12 → 0.4, −24 → 0.6, −40 → 0.8, −∞ → 1); double-click 0 dB; at the bottom = Off.
+- **MuteButton**: "M" (24 × 20, radius 4) or stage **Mute / MUTED** (52 high, radius 6, 15 / 800, text scales with the stage); muted = MUTED gradient #E8483E → #BF2C25, white.
+- **Chip**: 16 high, radius 3, 9.5 / 700 caps; styles mute, amber, exp, off, green, plain.
+- **OutputStrip**: an output in the bottom row: name, channels, stereo bars, M, level; compact or 170 px.
+- **LevelBars**: one or two bars, horizontal or vertical, green → yellow; the stereo meters of outputs and inputs.
+- **SmallKnob** (36, value arc) and **EqCurve** (the 5-band response, log 20 Hz–20 kHz, ±12 dB, cached path): the Routing view's output EQ and its row thumbnails.
+- **InfoList**: read-only inspector sections (title, right note, key/value rows with a muted tail, amber or a chip, a note, one button with an icon and key cap): the IN / OUT tiles' inspector.
+- **StageBackdrop**: the block stage's lit radial background with the pane's rounded bottom (`BlockPanel`, `JackStage`).
+- **SegmentedControl** gains per-segment widths (Compact | Full); **Group** gains `setGroupTitle`.
+- Not kit components: the Sends matrix is a `ListBox` in `RoutingView`; the Stage Outputs widget is a `StageView` widget type (`outputs`).
+
 ---
 
 ## 6. Icons

@@ -5,10 +5,56 @@
 #include <juce_events/juce_events.h>
 #include <iostream>
 
+#if JUCE_WINDOWS
+ #include <atomic>
+ #include <crtdbg.h>   // (not windows.h: its min/max macros break JUCE's headers)
+ #include <cstdlib>
+#endif
+
 #include "session/PluginCatalog.h"
+
+#if JUCE_WINDOWS && defined (_DEBUG)
+namespace
+{
+    // Every report of the debug C runtime / standard library (a failed check),
+    // printed where CI shows it and counted: any one fails the run.
+    std::atomic<int> crtReports { 0 };
+
+    int __cdecl reportCrt (int type, char* message, int* returnValue)
+    {
+        if (type == _CRT_WARN)
+            return 0;   // informational: the usual handling (stderr)
+
+        ++crtReports;
+        std::cout << "C runtime " << (type == _CRT_ASSERT ? "assertion" : "error") << ": " << (message != nullptr ? message : "") << std::endl;
+
+        if (returnValue != nullptr)
+            *returnValue = 0;   // don't break into a debugger
+
+        return 1;   // handled
+    }
+}
+#endif
 
 int main (int argc, char* argv[])
 {
+   #if JUCE_WINDOWS
+    // No dialogs in CI: a failed debug check of the C runtime or the standard
+    // library (an index out of range, say) prints to stderr and the run fails,
+    // instead of waiting for someone to click a message box that nobody sees.
+    _set_abort_behavior (0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+
+    for (const auto type : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
+    {
+        _CrtSetReportMode (type, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
+        _CrtSetReportFile (type, _CRTDBG_FILE_STDERR);
+    }
+
+   #if defined (_DEBUG)
+    _CrtSetReportHook2 (_CRT_RPTHOOK_INSTALL, reportCrt);
+   #endif
+   #endif
+
     // Creates the message manager and shuts it (and other singletons) down cleanly.
     const juce::ScopedJuceInitialiser_GUI juceRuntime;
 
@@ -70,5 +116,14 @@ int main (int argc, char* argv[])
     }
 
     std::cout << "\nEncore tests: " << passes << " passed, " << failures << " failed\n";
+
+   #if JUCE_WINDOWS && defined (_DEBUG)
+    if (crtReports > 0)
+    {
+        std::cout << "FAILED: " << crtReports.load() << " report(s) from the debug C runtime (above)\n";
+        return 1;
+    }
+   #endif
+
     return failures == 0 ? 0 : 1;
 }

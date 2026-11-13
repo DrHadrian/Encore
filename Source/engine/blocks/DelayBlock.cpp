@@ -22,27 +22,36 @@ DelayBlock::DelayBlock()
 void DelayBlock::prepareBlock (const ProcessSpec& spec)
 {
     sampleRate = spec.sampleRate;
-    buffer.assign ((size_t) (maxDelaySeconds * spec.sampleRate) + 4, 0.0f);
+
+    for (auto& b : buffers)
+        b.assign ((size_t) (maxDelaySeconds * spec.sampleRate) + 4, 0.0f);
+
+    writeIndex = 0;
+    toneState = {};
     toneCoefficient = (float) std::exp (-2.0 * juce::MathConstants<double>::pi * feedbackToneHz / spec.sampleRate);
 }
 
 void DelayBlock::resetBlock() noexcept
 {
-    std::fill (buffer.begin(), buffer.end(), 0.0f);
+    for (auto& b : buffers)
+        std::fill (b.begin(), b.end(), 0.0f);
+
     writeIndex = 0;
-    toneState = 0.0f;
+    toneState = {};
 }
 
 void DelayBlock::processBlock (float* const* channels, int numChannels, int numSamples,
                                const ProcessContext&) noexcept
 {
-    const auto size = (int) buffer.size();
-    float* x = channels[0];   // mono for now
+    const auto size = (int) buffers[0].size();
+    numChannels = juce::jlimit (1, maxChannels, numChannels);
 
     for (int i = 0; i < numSamples; ++i)
     {
         // Fractional read position, linearly interpolated, so time changes glide.
         const auto delaySamples = juce::jlimit (1.0, (double) size - 2.0, time.nextValue() * 0.001 * sampleRate);
+        const auto feedbackGain = feedback.nextValue() * 0.01f;
+        const auto mixGain = mix.nextValue() * 0.01f;
         auto readPos = writeIndex - delaySamples;
 
         if (readPos < 0.0)
@@ -51,20 +60,24 @@ void DelayBlock::processBlock (float* const* channels, int numChannels, int numS
         const auto i0 = (int) readPos;
         const auto i1 = (i0 + 1) % size;
         const auto frac = (float) (readPos - i0);
-        const auto delayed = buffer[(size_t) i0] + (buffer[(size_t) i1] - buffer[(size_t) i0]) * frac;
 
-        // Darken the repeats a little each time round.
-        toneState = delayed + (toneState - delayed) * toneCoefficient;
+        // Each channel its own line: a stereo signal stays stereo.
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            auto& line = buffers[(size_t) ch];
+            auto& tone = toneState[(size_t) ch];
+            const auto delayed = line[(size_t) i0] + (line[(size_t) i1] - line[(size_t) i0]) * frac;
 
-        const auto dry = x[i];
-        buffer[(size_t) writeIndex] = dry + toneState * feedback.nextValue() * 0.01f;
+            // Darken the repeats a little each time round.
+            tone = delayed + (tone - delayed) * toneCoefficient;
+
+            const auto dry = channels[ch][i];
+            line[(size_t) writeIndex] = dry + tone * feedbackGain;
+            channels[ch][i] = dry + delayed * mixGain;
+        }
+
         writeIndex = (writeIndex + 1) % size;
-
-        x[i] = dry + delayed * mix.nextValue() * 0.01f;
     }
-
-    for (int ch = 1; ch < numChannels; ++ch)
-        std::copy (x, x + numSamples, channels[ch]);
 }
 
 } // namespace encore

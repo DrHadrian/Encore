@@ -56,6 +56,7 @@ public:
     juce::String getLoadedFileInfo() const override { return loadedInfo; }
     void collectGarbage() override { irs.collectGarbage(); }
     int getLatencySamples() const noexcept override { return 0; }
+    int getOutputChannels (int) const noexcept override { return 1; }   // mono IRs (stereo files are summed)
 
     //== Message thread ========================================================
     /** Hands an IR to the audio thread. Used by loadFileAsync() and tests. */

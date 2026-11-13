@@ -32,7 +32,8 @@ namespace
 
     juce::String fileName (const juce::String& path)
     {
-        return juce::File::createFileWithoutCheckingPath (path).getFileName();
+        // Either separator: a catalog may come from another system.
+        return path.fromLastOccurrenceOf ("\\", false, false).fromLastOccurrenceOf ("/", false, false);
     }
 }
 
@@ -354,6 +355,7 @@ void PluginCatalog::startScanThread (bool rescanEverything)
     {
         const juce::ScopedLock sl (lock);
         scanStatus = "Looking for plugins...";
+        progress = {};
     }
 
     scanThread = nullptr;   // a finished one not collected yet
@@ -367,7 +369,14 @@ void PluginCatalog::startScanThread (bool rescanEverything)
 void PluginCatalog::cancelScan()
 {
     if (scanThread != nullptr)
+    {
         scanThread->signalThreadShouldExit();
+    }
+    else if (scanning.load())
+    {
+        // Only a test's shown progress (no thread): end it at once.
+        scanFinished ({}, true);
+    }
 }
 
 bool PluginCatalog::isScanning() const noexcept
@@ -437,9 +446,23 @@ void PluginCatalog::scanProgress (int index, int total, const juce::String& file
     {
         const juce::ScopedLock sl (lock);
         scanStatus = "Scanning " + juce::String (index + 1) + " of " + juce::String (total) + ": " + fileName (file);
+        progress = { index + 1, total };
     }
 
     triggerAsyncUpdate();
+}
+
+PluginCatalog::ScanProgress PluginCatalog::getScanProgress() const
+{
+    const juce::ScopedLock sl (lock);
+    return isScanning() ? progress : ScanProgress {};
+}
+
+void PluginCatalog::showScanProgressForTesting (int index, int total, const juce::String& file)
+{
+    jassert (scanThread == nullptr);
+    scanning.store (true);
+    scanProgress (index, total, file);
 }
 
 void PluginCatalog::scanFoundTypes (const juce::String& file, const juce::OwnedArray<juce::PluginDescription>& found)
@@ -557,7 +580,18 @@ std::unique_ptr<juce::AudioPluginInstance> PluginCatalog::createInstance (const 
                                                                           juce::String& error)
 {
     JUCE_ASSERT_MESSAGE_THREAD
+
+    if (auto& maker = instanceMakerForTesting(); maker != nullptr)
+        if (auto instance = maker (description))
+            return instance;
+
     return formats.createPluginInstance (description, sampleRate, blockSize, error);
+}
+
+std::function<std::unique_ptr<juce::AudioPluginInstance> (const juce::PluginDescription&)>& PluginCatalog::instanceMakerForTesting()
+{
+    static std::function<std::unique_ptr<juce::AudioPluginInstance> (const juce::PluginDescription&)> maker;
+    return maker;
 }
 
 //==============================================================================

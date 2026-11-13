@@ -20,7 +20,7 @@ class PreShowCheckView final : public juce::Component,
                                private juce::Timer
 {
 public:
-    PreShowCheckView (std::function<PreShowFacts()> gather, std::function<void (PreShowCheckResult::Fix)> fix);
+    PreShowCheckView (std::function<PreShowFacts()> gather, std::function<void (const PreShowCheckResult&)> fix);
     ~PreShowCheckView() override;
 
     void paint (juce::Graphics&) override;
@@ -34,7 +34,7 @@ private:
     void refresh();
 
     std::function<PreShowFacts()> gather;
-    std::function<void (PreShowCheckResult::Fix)> applyFix;
+    std::function<void (const PreShowCheckResult&)> applyFix;
 
     std::vector<PreShowCheckResult> results;
     kit::SummaryBadge badge;
@@ -52,7 +52,7 @@ private:
 class PreShowCheckDialog final
 {
 public:
-    PreShowCheckDialog (std::function<PreShowFacts()> gather, std::function<void (PreShowCheckResult::Fix)> fix,
+    PreShowCheckDialog (std::function<PreShowFacts()> gather, std::function<void (const PreShowCheckResult&)> fix,
                         std::function<void()> close);
 
     juce::Component& getOverlay() noexcept { return *overlay; }

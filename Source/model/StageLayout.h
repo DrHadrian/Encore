@@ -28,7 +28,8 @@ enum class StageWidgetType
     lockButton,
     nextButton,   // big touch/click targets (also for a touch screen)
     previousButton,
-    text          // fixed text, e.g. a reminder
+    outputs,      // this computer's outputs: meter and Mute / MUTED each (milestone 11)
+    text          // fixed text, e.g. a reminder (keep it last: the fallback for unknown types)
 };
 
 constexpr int stageGridColumns = 24;

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <array>
+
 #include "engine/core/Block.h"
 
 namespace encore
@@ -35,10 +37,11 @@ private:
     Parameter& feedback;
     Parameter& mix;
 
-    std::vector<float> buffer;
+    std::array<std::vector<float>, (size_t) maxChannels> buffers;   // one line per channel (stereo after a merge)
     int writeIndex = 0;
     double sampleRate = 48000.0;
-    float toneState = 0.0f, toneCoefficient = 0.0f;
+    std::array<float, (size_t) maxChannels> toneState {};
+    float toneCoefficient = 0.0f;
 };
 
 } // namespace encore

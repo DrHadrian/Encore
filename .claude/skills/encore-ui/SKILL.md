@@ -11,13 +11,14 @@ Encore's UI follows one design system. The full kit is in `docs/design/` (start 
 1. Read `docs/design/DESIGN-SYSTEM.md` (look), `docs/design/SCREENS.md` (screens, strings, parity map) and `docs/design/JUCE-ARCHITECTURE.md` (structure, performance, robustness).
 2. Open the target image for the screen in `docs/design/reference/target/` and its measurements in `docs/design/reference/geometry/<screen>.json`.
 3. For a new feature, check `docs/design/PROPOSALS.md` (it may already be designed) and follow `docs/design/EXTENDING.md`.
+4. Plugins (milestone 10) and routing (milestone 11): `docs/design/NEW-FEATURES-M10-M11.md` is the spec (it wins on these features), `docs/design/reference/REFERENCES.md` maps every state to its target image and fixture, `docs/design/M10-M11-BRIEF.md` is the brief.
 
 ## Rules
 - **Native JUCE only**: `Graphics`, `Component`, `LookAndFeel`. Never a web view, HTML/CSS/JS, React or a new UI library. The `.dc.html` boards are drawings to read values from, never code to port.
 - **Tokens only**: colours, sizes, fonts come from `Source/ui/theme/EncoreTheme.h` (+ `EncoreFonts`). No literals in screens. New value → new named token.
-- **Kit only**: compose `Source/ui/kit` components (Pane, Toolbar, Lcd, SegmentedControl, IconButton, NoticeBar, DialogFrame, MeterBar, StatusBadge, KeyCap, GearPlaceholder/GearView, KnobView) and `EncoreLookAndFeel`. Missing piece → add a generic kit component.
+- **Kit only**: compose `Source/ui/kit` components (Pane, Toolbar, Lcd, SegmentedControl, IconButton, NoticeBar, DialogFrame, MeterBar, StatusBadge, KeyCap, GearPlaceholder/GearView, KnobView, Group, RowList) and `EncoreLookAndFeel`. Missing piece → add a generic kit component. Milestones 10/11 added: ProgressBar, UtilityTile (IN/OUT jack tiles, plugin tile, split/merge), FaultCard, ParameterList, Fader (vertical/horizontal, send law), MuteButton (letter "M" and stage Mute/MUTED), Chip, OutputStrip, LevelBars (mono/stereo bars), SmallKnob, EqCurve, InfoList (read-only inspector sections), StageBackdrop (the lit block stage). The Sends matrix is a `ListBox` in `RoutingView`; the Stage Outputs widget is a `StageView` widget type.
 - **Inter, bundled**; uppercase labels tracked; tabular numbers; icons as cached paths from `Resources/ui/icons`; the logo is the wordmark SVG, never typed.
-- **Behaviour is sacred**: never drop or change an action, key, menu item, tooltip or message. Words from the code; running-order words from `ShowSession::getWords()`.
+- **Behaviour is sacred**: never drop or change an action, key, menu item, tooltip or message. Words from the code; running-order words from `ShowSession::getWords()`. Routing words: Output, Send, Path A / Path B, Routing (F7, in Edit); a name missing on this computer → amber chip NOT HERE; pre-show fix button "Routing...".
 - **Nothing pretends**: no control without real behaviour behind it.
 - **Gear is placeholders** (DESIGN-SYSTEM §8) behind `GearView` until the gear-art feature exists.
 - **Performance**: no animation; repaint only on change; nothing allocated or built in `paint()`; cache gradients/paths/shadows; opaque where possible; the existing 30 Hz timer drives updates (no new timers); `ListBox` for growing lists.

@@ -6,11 +6,13 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <array>
 #include <atomic>
+#include <functional>
 
 #include "engine/core/LockFreeFifo.h"
 #include "engine/core/PatchPlayer.h"
 #include "engine/core/RealtimeHandover.h"
 #include "model/MidiMapping.h"
+#include "model/Routing.h"
 
 namespace encore
 {
@@ -43,6 +45,15 @@ public:
     //== Message thread ========================================================
     /** The mappings in use (the computer's, or the show's own). */
     void setBindings (const std::vector<MidiBinding>& bindings);
+
+    /** "Mute output" bindings name an output; this finds its slot (-1: not
+        here, the binding does nothing). Set once by the engine; call
+        refreshOutputs() when the routing changes. */
+    void setOutputResolver (std::function<int (const juce::String&)> slotForName);
+    void refreshOutputs()   { setBindings (currentBindings); }
+
+    /** The engine's per-output mutes, which "Mute output" toggles. */
+    void setOutputMutes (std::array<std::atomic<bool>, (size_t) routing::maxOutputs>* mutes) noexcept { outputMutes = mutes; }
     void collectGarbage() { tables.collectGarbage(); }
 
     /** The messages each cue sends (index = cue position). */
@@ -94,10 +105,11 @@ private:
     struct Table
     {
         std::vector<MidiBinding> bindings;
+        std::vector<int> outputSlots;   // per binding: the output a "Mute output" toggles, or -1
     };
 
     void handle (const Raw& message, PatchPlayer& player, std::atomic<bool>& muted) noexcept;
-    void act (const MidiBinding& binding, const Raw& message, PatchPlayer& player, std::atomic<bool>& muted) noexcept;
+    void act (const MidiBinding& binding, int outputSlot, const Raw& message, PatchPlayer& player, std::atomic<bool>& muted) noexcept;
     static bool matches (const MidiTrigger& trigger, const Raw& message) noexcept;
 
     // Input: many producers (serialised by the spin lock), one consumer (audio).
@@ -107,6 +119,9 @@ private:
 
     RealtimeHandover<Table, 8> tables;
     Table* table = nullptr;                                  // audio thread
+    std::vector<MidiBinding> currentBindings;                // message thread
+    std::function<int (const juce::String&)> outputSlotFor;  // message thread
+    std::array<std::atomic<bool>, (size_t) routing::maxOutputs>* outputMutes = nullptr;
 
     // Audio-thread state.
     std::array<std::array<juce::uint8, 128>, 16> lastCcValue {};

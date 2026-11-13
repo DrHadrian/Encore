@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Encore M11 — Stage with the Outputs widget</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Righteous&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#161618}
+*{scrollbar-width:thin;scrollbar-color:#4A4A4F transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#4A4A4F;border:2px solid transparent;border-radius:6px;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#5E5E64;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+a{color:#4C8DF6}a:hover{color:#82AEFA}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #4C8DF6;outline-offset:2px}
+.tb{background:linear-gradient(180deg,#333337,#28282B);border-bottom:1px solid #0A0A0B;box-shadow:inset 0 1px 0 rgba(255,255,255,0.07)}
+.pane{background:#1D1D20;border:1px solid #0A0A0B;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.hd{height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 10px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#85858C;background:linear-gradient(180deg,#252528,#202023);border-bottom:1px solid #111113}
+.b{border:1px solid #0E0E10;border-radius:5px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12),0 1px 0 rgba(0,0,0,0.4);color:#E8E8EB;font-weight:500}
+.b-on{background:linear-gradient(180deg,#252528,#2E2E31);box-shadow:inset 0 1px 3px rgba(0,0,0,0.7)}
+.lcd{background:linear-gradient(180deg,#1C232C,#12171D);border:1px solid #07090B;border-radius:6px;box-shadow:inset 0 1px 4px rgba(0,0,0,0.65),0 1px 0 rgba(255,255,255,0.05);color:#D5E4F7;font-variant-numeric:tabular-nums}
+.board{background:linear-gradient(180deg,rgba(0,0,0,0.2),rgba(0,0,0,0.55)),url(/_blob/3d6f9110dbe6da1bfe549597457b1148) 0 0/192px 192px,#151516}
+
+.pri{border-color:#0B3E86 !important;background:linear-gradient(180deg,#4C8DF6,#2E6FDC) !important;color:#FFFFFF !important}
+.sm{height:18px !important;font-size:10.5px !important;padding:0 7px !important;letter-spacing:0;text-transform:none}
+.ut{position:absolute;box-sizing:border-box;border-radius:8px;background:linear-gradient(180deg,#2C2C30,#1F1F22);border:1px solid #3A3A3F;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 6px 6px rgba(0,0,0,0.45);font-family:Inter,sans-serif;overflow:hidden}
+.ut .lb{position:absolute;left:7px;top:6px;font-size:8.5px;font-weight:800;letter-spacing:0.08em;color:#85858C}
+.ut .dot{position:absolute;right:7px;top:8px;width:6px;height:6px;border-radius:50%}
+.ut .nm{position:absolute;left:6px;right:6px;bottom:7px;font-size:10.5px;font-weight:600;color:#E8E8EB;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ut .sb{position:absolute;left:6px;right:6px;bottom:20px;font-size:9px;color:#85858C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ut .ic{position:absolute;left:0;right:0;top:22px;display:flex;justify-content:center;color:#C4C4C9}
+.sel{outline:3px solid #4FA3FF;outline-offset:3px}
+.chip{display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:3px;font-size:9.5px;font-weight:700;letter-spacing:0.02em;white-space:nowrap}
+.c-mute{background:#5A1A16;color:#FFB4AD}
+.c-amber{background:#3D2F12;color:#FFD27A}
+.c-exp{background:#1B2C45;color:#7FC4FF}
+.c-off{background:#2A2A2E;color:#8E8E95}
+.c-green{background:#1E3A24;color:#4CD964}
+.mb{width:24px;height:20px;border:1px solid #0E0E10;border-radius:4px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12);color:#C4C4C9;font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.mb-on{border-color:#6E120D;background:linear-gradient(180deg,#E8483E,#BF2C25);color:#FFFFFF}
+.meterh{height:4px;border-radius:2px;background:#0E0E10;position:relative;overflow:hidden}
+.meterh>i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#2BC24F 0,#2BC24F 80%,#E8CF3A)}
+.meterv{width:4px;border-radius:2px;background:#0E0E10;position:relative;overflow:hidden}
+.meterv>i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(0deg,#2BC24F 0,#2BC24F 70%,#E8CF3A)}
+.grp{background:#1A1A1D;border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03)}
+.gt{font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#85858C;padding:0 2px 6px}
+.th{font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#6E6E75}
+.pop{height:22px;border:1px solid #0C0C0E;border-radius:5px;background:linear-gradient(180deg,#46464B,#38383C);box-shadow:inset 0 1px 0 rgba(255,255,255,0.1);color:#E8E8EB;font-size:12px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box;white-space:nowrap;overflow:hidden}
+.menu{position:absolute;background:rgba(44,44,48,0.97);border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 14px 40px rgba(0,0,0,0.6);padding:5px;font-size:12.5px;color:#E8E8EB;z-index:10}
+.mi{height:24px;display:flex;align-items:center;gap:4px;padding:0 10px 0 6px;border-radius:4px;white-space:nowrap}
+.mi .tk{width:14px}
+.mi .sc{color:#85858C;font-size:11px;margin-left:auto;padding-left:16px}
+.mi.hi{background:#2E62C4;color:#FFFFFF}
+.mi.hi .sc{color:#D3E1FA}
+.mi.dim{color:#6E6E75}
+.msep{height:1px;background:#3A3A3F;margin:4px 6px}
+.mhd{height:22px;display:flex;align-items:center;padding:0 10px 0 20px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6E6E75}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #161618; color: #E8E8EB; font-family: Inter, -apple-system, system-ui, sans-serif; font-size: 13px; display: flex; flex-direction: column; position: relative; overflow: hidden">
+
+  <header class="tb" style="height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 12px">
+    <span style="display: inline-flex; padding: 0 4px"><dc-import name="Logo" variant="wordmark" size="17" color="#D9D9DE" hint-size="98px,17px"></dc-import></span>
+    <div role="group" aria-label="Mode" style="display: flex; border: 1px solid #0E0E10; border-radius: 6px; overflow: hidden">
+      <button class="b b-on" style="height: 30px; width: 72px; border: 0; border-radius: 0; font-size: 12px; color: #FFFFFF">Stage</button>
+      <button class="b" style="height: 30px; width: 72px; border: 0; border-left: 1px solid #0E0E10; border-radius: 0; font-size: 12px">Edit</button>
+      <button class="b" style="height: 30px; width: 72px; border: 0; border-left: 1px solid #0E0E10; border-radius: 0; font-size: 12px">Layout</button>
+    </div>
+    <span style="font-size: 11px; color: #85858C">Layout “Default”</span>
+    <div style="flex-grow: 1"></div>
+    <div class="lcd" style="height: 36px; display: flex; align-items: center; gap: 20px; padding: 0 16px">
+      <span style="display: flex; flex-direction: column; line-height: 1.05"><span style="font-size: 16px; font-weight: 600">{{songNo}}</span><span style="font-size: 9px; color: #7F95B3; font-weight: 600">{{itemWord}}</span></span>
+      <span style="display: flex; flex-direction: column; line-height: 1.05; min-width: 140px"><span style="font-size: 16px; font-weight: 600">{{song.name}}</span><span style="font-size: 9px; color: #7F95B3; font-weight: 600">{{pathUpper}}</span></span>
+    </div>
+    <div style="flex-grow: 1"></div>
+    <div style="display: flex; flex-direction: column; gap: 3px; width: 80px; font-size: 9px; font-weight: 700; color: #85858C">
+      <div style="display: flex; justify-content: space-between"><span>CPU</span><span>7%</span></div>
+      <div style="height: 4px; border-radius: 2px; background: #0E0E10"><div style="width: 7%; height: 100%; background: #30C25A; border-radius: 2px"></div></div>
+      <div style="display: flex; justify-content: space-between"><span>DROPOUTS</span><span>0</span></div>
+    </div>
+    <button onClick="{{openTuner}}" class="b" style="height: 36px; padding: 0 14px; font-size: 12px">Tuner</button>
+    <button onClick="{{toggleMute}}" class="b" style="{{muteStyle}}">{{muteLabel}}</button>
+  </header>
+
+  <sc-if value="{{muted}}" hint-placeholder-val="{{ false }}">
+    <button onClick="{{toggleMute}}" style="height: 28px; flex-shrink: 0; border: 0; background: #C9302A; color: #FFFFFF; font-size: 12px; font-weight: 600">Output muted — click to go live</button>
+  </sc-if>
+
+  <main style="flex-grow: 1; min-height: 0; padding: 8px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: repeat(8, minmax(0, 1fr)); gap: 8px">
+    <section style="grid-column: 1 / 9; grid-row: 1 / 4; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Current cue</span>
+      <span style="position: absolute; left: 22px; top: 34px; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; color: #6E7480; white-space: pre">{{cueTitle}}</span>
+      <span style="position: absolute; left: 18px; right: 18px; bottom: 22px; font-size: 168px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{song.name}}</span>
+    </section>
+    <section style="grid-column: 9 / 11; grid-row: 1 / 2; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Clock</span><span style="position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; font-size: 52px; font-weight: 800; font-variant-numeric: tabular-nums">23:31</span></section>
+    <section style="grid-column: 11 / 13; grid-row: 1 / 2; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">System health</span><span style="position: absolute; left: 12px; bottom: 8px; display: flex; flex-direction: column"><span style="font-size: 30px; font-weight: 800">CPU 7%</span><span style="font-size: 12px; font-weight: 700; color: #30C25A">OK · 0 dropouts · 5.3 ms</span></span></section>
+    <button style="grid-column: 9 / 11; grid-row: 2 / 4; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0; color: #E8E8EB; padding: 0; cursor: pointer"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Lock button</span><span style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding-top: 14px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg><span style="font-size: 38px; font-weight: 800">LOCK</span><span style="font-size: 14px; color: #8E8E95">click to lock · hold 1 s to unlock</span></span></button>
+    <button style="grid-column: 11 / 13; grid-row: 2 / 4; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0; background: linear-gradient(180deg, #A62B24, #761A15); border-color: #C2392F; color: #FFFFFF; padding: 0; cursor: pointer"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Panic button</span><span style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 12px"><span style="font-size: 50px; font-weight: 800">PANIC</span><span style="font-size: 13px; color: #F3C4C0">silence &amp; reset all</span></span></button>
+    <section style="grid-column: 1 / 5; grid-row: 4 / 5; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Patch</span><span style="position: absolute; left: 16px; bottom: 10px; font-size: 40px; font-weight: 800">{{song.patch}}</span><span style="position: absolute; right: 14px; bottom: 16px; display: flex; align-items: center; gap: 6px; font-size: 13px; color: #8E8E95"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.5"></circle><path d="M12 2v3"></path></svg>Guitar</span></section>
+    <section style="grid-column: 5 / 9; grid-row: 4 / 5; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Cue note and bar</span><span style="position: absolute; left: 16px; bottom: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 18px; font-weight: 600">Capo 2 · start on clean arpeggio</span><span style="font-size: 13px; color: #8E8E95">bar 1 / A</span></span></section>
+    <section style="grid-column: 1 / 9; grid-row: 5 / 6; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Next cue</span><span style="position: absolute; left: 16px; bottom: 10px; display: flex; align-items: baseline; gap: 16px"><span style="font-size: 44px; font-weight: 800">{{nextName}}</span><span style="font-size: 18px; color: #8E8E95">{{nextPatch}}</span></span></section>
+    <button onClick="{{prev}}" style="grid-column: 1 / 4; grid-row: 6 / 7; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0; color: #C4C4C9; padding: 0; cursor: pointer"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Previous button</span><span style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 10px; font-size: 26px; font-weight: 700">◂ Back</span></button>
+    <button onClick="{{next}}" style="grid-column: 4 / 9; grid-row: 6 / 7; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0; background: linear-gradient(180deg, #4C8DF6, #2E6FDC); border-color: #0B3E86; color: #FFFFFF; padding: 0; cursor: pointer"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Next button</span><span style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 10px; font-size: 30px; font-weight: 800">NEXT ▸</span></button>
+    <section class="board" style="grid-column: 1 / 5; grid-row: 7 / 9; position: relative; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0; box-shadow: inset 0 2px 8px rgba(0,0,0,0.75)"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Stomp switches</span>
+      <div style="position: absolute; left: 14px; right: 10px; bottom: 10px; display: flex; justify-content: flex-start; gap: 22px">
+        <sc-for list="{{stomps}}" as="st" hint-placeholder-count="6">
+          <button onClick="{{st.toggle}}" aria-pressed="{{st.on}}" aria-label="{{st.aria}}" style="width: 112px; height: 147px; border: 0; padding: 0; background: transparent; position: relative; flex-shrink: 0">
+            <span style="position: absolute; left: 0; top: 0; width: 160px; height: 210px; transform: scale(0.7); transform-origin: 0 0; display: block"><dc-import name="Pedal" kind="{{st.kind}}" on="{{st.onBool}}" hint-size="160px,210px"></dc-import></span>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+    <section style="grid-column: 5 / 9; grid-row: 7 / 9; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Outputs</span><div style="position: absolute; left: 14px; right: 14px; top: 34px; bottom: 12px; display: flex; gap: 14px"><div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px"><span style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Front of house</span><span style="font-size: 11px; color: #6E7480">1/2</span></span><span style="display: flex; gap: 3px; height: 54px; align-items: flex-end"><span class="meterv" style="width: 8px; height: 54px; background: #2A2D33"><i style="height: 33px"></i></span><span class="meterv" style="width: 8px; height: 54px; background: #2A2D33"><i style="height: 29px"></i></span><span style="margin-left: 6px; font-size: 12px; color: #8E8E95; font-variant-numeric: tabular-nums">live</span></span><button aria-pressed="false" style="height: 52px; border-radius: 6px; font-size: 15px; font-weight: 800; letter-spacing: 0.04em; border: 1px solid #0E0E10; background: linear-gradient(180deg, #4A4A4F, #3A3A3E); color: #E8E8EB; box-shadow: inset 0 1px 0 rgba(255,255,255,0.12)">Mute</button></div><div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px"><span style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">In-ear</span><span style="font-size: 11px; color: #6E7480">3/4</span></span><span style="display: flex; gap: 3px; height: 54px; align-items: flex-end"><span class="meterv" style="width: 8px; height: 54px; background: #2A2D33"><i style="height: 25px"></i></span><span class="meterv" style="width: 8px; height: 54px; background: #2A2D33"><i style="height: 21px"></i></span><span style="margin-left: 6px; font-size: 12px; color: #8E8E95; font-variant-numeric: tabular-nums">live</span></span><button aria-pressed="false" style="height: 52px; border-radius: 6px; font-size: 15px; font-weight: 800; letter-spacing: 0.04em; border: 1px solid #0E0E10; background: linear-gradient(180deg, #4A4A4F, #3A3A3E); color: #E8E8EB; box-shadow: inset 0 1px 0 rgba(255,255,255,0.12)">Mute</button></div><div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px"><span style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Amp DI</span><span style="font-size: 11px; color: #6E7480">5</span></span><span style="display: flex; gap: 3px; height: 54px; align-items: flex-end"><span class="meterv" style="width: 8px; height: 54px; background: #2A2D33"><i style="height: 0px"></i></span><span class="meterv" style="width: 8px; height: 54px; background: #2A2D33"><i style="height: 0px"></i></span><span style="margin-left: 6px; font-size: 12px; color: #FF8A80; font-variant-numeric: tabular-nums">muted</span></span><button aria-pressed="true" style="height: 52px; border-radius: 6px; font-size: 15px; font-weight: 800; letter-spacing: 0.04em; border: 1px solid #6E120D; background: linear-gradient(180deg, #E8483E, #BF2C25); color: #FFFFFF">MUTED</button></div></div></section>
+    <section style="grid-column: 9 / 13; grid-row: 4 / 9; position: relative; background: #1C1E23; border: 1px solid #2B2E35; border-radius: 6px; overflow: hidden; min-width: 0; min-height: 0"><span style="position: absolute; left: 6px; top: 6px; padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #D8D8DC; font-size: 10.5px; font-weight: 600; z-index: 2">Set list</span>
+      <div style="position: absolute; left: 6px; right: 6px; top: 30px; bottom: 6px; display: flex; flex-direction: column; gap: 2px; overflow: auto">
+        <sc-for list="{{listRows}}" as="s" hint-placeholder-count="9">
+          <sc-if value="{{s.isHeading}}" hint-placeholder-val="{{ false }}">
+            <div style="height: 30px; flex-shrink: 0; display: flex; align-items: flex-end; padding: 0 12px 3px; font-size: 13px; font-weight: 800; letter-spacing: 0.06em; color: rgba(255,179,64,0.85)">{{s.heading}}</div>
+          </sc-if>
+          <sc-if value="{{s.isItem}}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{s.pick}}" style="height: 48px; flex-shrink: 0; border: 0; border-radius: 4px; background: {{s.bg}}; color: {{s.fg}}; display: flex; align-items: center; gap: 12px; padding: 0 12px; text-align: left">
+            <span style="width: 20px; font-size: 13px; color: {{s.numColor}}">{{s.no}}</span>
+            <span style="flex-grow: 1; font-size: 20px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{s.name}}</span>
+            <span style="font-size: 15px; color: {{s.sub}}">{{s.patch}}</span>
+          </button>
+          </sc-if>
+        </sc-for>
+      </div>
+    </section>
+  </main>
+
+  <footer style="height: 22px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #1B1B1E; border-top: 1px solid #0A0A0B; font-size: 11px; color: #85858C">
+    <span>ASIO · 48 kHz · 64 samples · 5.3 ms round trip</span>
+    <span>Footswitch connected</span>
+    <span style="flex-grow: 1"></span>
+    <span>Lock: Ctrl+L · hold the lock 1 s to unlock · F11 full screen</span>
+  </footer>
+
+  <sc-if value="{{tunerOpen}}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(14,14,16,0.97); display: flex; align-items: center; justify-content: center">
+      <div class="pane" style="width: 900px; padding: 24px; align-items: center; gap: 18px">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #85858C">TUNER · OUTPUT MUTED WHILE TUNING</span>
+        <div class="lcd" style="width: 100%; padding: 22px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 16px">
+          <div style="font-size: 180px; font-weight: 600; line-height: 1; color: #30C25A">A</div>
+          <div style="width: 100%; height: 52px; display: grid; grid-template-columns: repeat(21, minmax(0, 1fr)); gap: 6px; align-items: center">
+            <sc-for list="{{ticks}}" as="t" hint-placeholder-count="21"><div style="height: {{t.h}}; border-radius: 3px; background: {{t.c}}"></div></sc-for>
+          </div>
+          <div style="font-size: 18px; color: #A5B8D2">−2 cents · 109.8 Hz · A = 440 Hz</div>
+        </div>
+        <button onClick="{{closeTuner}}" style="height: 60px; padding: 0 44px; border: 1px solid #0B3E86; border-radius: 8px; background: linear-gradient(180deg, #4C8DF6, #2E6FDC); color: #FFFFFF; font-size: 16px; font-weight: 600">Done — back to live</button>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { song: 2, scene: 1, stomps: [true, false, true], muted: false, tunerOpen: false, bpm: 112 };
+  }
+  renderVals() {
+    var self = this;
+    var st = this.state;
+    var words = { item: 'song', items: 'songs', list: 'Set list' };
+    var order = [
+      { sec: 'Set 1', d: 0 },
+      { name: 'Soundcheck', patch: 'Clean', d: 1 },
+      { name: 'Opener', patch: 'Crunch', d: 1 },
+      { name: 'Ballad in D', patch: 'Clean 2', d: 1 },
+      { name: 'Shuffle', patch: 'Edge of breakup', d: 1 },
+      { sec: 'Set 2', d: 0 },
+      { name: 'Rock Medley', patch: 'Lead', d: 1 },
+      { name: 'Acoustic Set', patch: 'Acoustic sim', d: 1 },
+      { name: 'Closer', patch: 'Crunch', d: 1 },
+      { sec: 'Encore', d: 0 },
+      { name: 'Last Call', patch: 'Lead', d: 1 }
+    ];
+    // Running order -> playable items (numbered 1..N) with their section path.
+    var songs = [], rowsAll = [], stack = [];
+    order.forEach(function (o) {
+      while (stack.length > o.d) stack.pop();
+      if (o.sec) { stack.push(o.sec); rowsAll.push({ heading: o.sec }); return; }
+      var s = { name: o.name, patch: o.patch, no: songs.length + 1, path: stack.join(' / ') };
+      rowsAll.push({ cue: songs.length });
+      songs.push(s);
+    });
+
+    var sceneDefs = [
+      { name: 'Verse', color: '#4C8DF6', dim: '#203450', key: 'A' },
+      { name: 'Chorus', color: '#FF9F0A', dim: '#47320f', key: 'B' },
+      { name: 'Solo', color: '#FF6B4A', dim: '#472119', key: 'C' },
+      { name: 'Outro', color: '#BF9BFF', dim: '#332b4c', key: 'D' }
+    ];
+    var stompDefs = [
+      { name: 'Stomp 1 · Delay', kind: 'delay' }, { name: 'Stomp 2 · EQ', kind: 'eq' }, { name: 'Stomp 3 · Noise gate', kind: 'gate' }
+    ];
+    var cur = songs[st.song];
+    var nxt = songs[st.song + 1];
+    var sc = sceneDefs[st.scene];
+    var ticks = [];
+    for (var i = 0; i < 21; i++) ticks.push({ h: i === 10 ? '52px' : (i % 5 === 0 ? '38px' : '26px'), c: i === 9 ? '#30C25A' : (i === 10 ? '#55657a' : '#25303c') });
+    var mini = [];
+    for (var j = 0; j < 11; j++) mini.push({ h: j === 5 ? '26px' : '16px', c: j === 4 ? '#30C25A' : (j === 5 ? '#55657a' : '#2a2a2e') });
+    return {
+      songNo: st.song + 1, songCount: songs.length, song: cur,
+      itemWord: words.item.toUpperCase(), pathUpper: cur.path.toUpperCase(),
+      cueTitle: words.item.toUpperCase() + ' ' + cur.no + (cur.path ? '   ' + cur.path.toUpperCase() : ''),
+      sceneName: sc.name, sceneColor: sc.color,
+      nextName: nxt ? nxt.no + '  ' + nxt.name : 'End',
+      nextPatch: nxt ? nxt.patch : '',
+      outMeter: st.muted ? '#2A2D33' : 'linear-gradient(0deg, #2BC24F 0, #2BC24F 46%, #2A2D33 46%)',
+      bpm: st.bpm, muted: st.muted, tunerOpen: st.tunerOpen, ticks: ticks, miniTicks: mini,
+      muteLabel: st.muted ? 'Muted' : 'Mute',
+      muteStyle: st.muted
+        ? 'height: 36px; min-width: 84px; font-size: 12px; font-weight: 700; border-color: #6e120d; background: linear-gradient(180deg, #E8483E, #BF2C25); color: #FFFFFF'
+        : 'height: 36px; min-width: 84px; font-size: 12px; font-weight: 700; color: #FF8A80',
+      next: function () { self.setState({ song: Math.min(st.song + 1, songs.length - 1), scene: 0 }); },
+      prev: function () { self.setState({ song: Math.max(st.song - 1, 0), scene: 0 }); },
+      toggleMute: function () { self.setState({ muted: !st.muted }); },
+      openTuner: function () { self.setState({ tunerOpen: true }); },
+      closeTuner: function () { self.setState({ tunerOpen: false }); },
+      tap: function () { self.setState({ bpm: st.bpm === 112 ? 116 : 112 }); },
+      scenes: sceneDefs.map(function (s, i) {
+        var on = i === st.scene;
+        return {
+          name: s.name, key: s.key,
+          bd: on ? '2px solid ' + s.color : '1px solid #33363D', bg: on ? '#2A2D33' : '#23252A',
+          led: on ? s.color : s.dim, glow: on ? '0 0 10px ' + s.color : 'none',
+          fg: on ? '#FFFFFF' : '#C4C4C9',
+          pick: function () { self.setState({ scene: i }); }
+        };
+      }),
+      stomps: stompDefs.map(function (s, i) {
+        var on = st.stomps[i];
+        return {
+          kind: s.kind, onBool: on, on: on ? 'true' : 'false', aria: s.name + (on ? ' on' : ' off'),
+          toggle: function () { var n = st.stomps.slice(); n[i] = !n[i]; self.setState({ stomps: n }); }
+        };
+      }),
+      listRows: (function () {
+        var cr = 0;
+        rowsAll.forEach(function (r, k) { if (r.cue === st.song) cr = k; });
+        var first = Math.max(0, cr - 1);
+        if (first > 0 && rowsAll[first - 1].heading) first--;
+        var visible = 9;
+        first = Math.max(0, Math.min(first, rowsAll.length - visible));
+        return rowsAll.slice(first, first + visible).map(function (r) {
+          if (r.heading) return { isHeading: true, isItem: false, heading: r.heading.toUpperCase() };
+          var i = r.cue, s = songs[i], isCur = i === st.song;
+          return {
+            isHeading: false, isItem: true, no: s.no, name: s.name, patch: s.patch,
+            bg: isCur ? '#2E62C4' : 'transparent',
+            fg: i < st.song ? '#7A7A80' : '#E8E8EB',
+            sub: isCur ? '#D3E1FA' : '#85858C',
+            numColor: isCur ? '#FFFFFF' : '#7A7A80',
+            pick: function () { self.setState({ song: i, scene: 0 }); }
+          };
+        });
+      })()
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -73,11 +73,12 @@ public:
             // and nothing allocates.
             auto signal = sine (110.0, 0.3f, blockSize);
             const auto dry = signal;
+            std::vector<float> spare ((size_t) blockSize);
             const auto before = realtimeAllocationCount();
             {
                 const rt::ScopedRealtimeSection realtime;
-                float* ch[1] = { signal.data() };
-                chain->process (ch, 1, blockSize);
+                float* ch[2] = { signal.data(), spare.data() };
+                chain->process (ch, blockSize);
             }
             expectEquals (realtimeAllocationCount() - before, 0);
             expect (signal != dry, "the amp is active from the first block");

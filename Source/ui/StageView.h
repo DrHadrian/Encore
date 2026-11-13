@@ -22,6 +22,8 @@ namespace encore
 struct StageSnapshot
 {
     float inputPeak = 0.0f, outputPeak = 0.0f;
+    std::array<float, 8> inputSlotPeaks {};                    // by input slot (routing::maxInputs)
+    std::array<std::array<float, 2>, 8> outputSlotPeaks {};    // by output slot, left and right
     double cpu = 0.0;
     int overruns = 0;
     bool onBattery = false;
@@ -60,6 +62,10 @@ public:
 
     /** The main window shows the edit view again. */
     std::function<void()> onLeave;
+
+    /** The Outputs widget's Mute / MUTED: the main window keeps the mute in
+        this computer's routing, as the bottom row's M does. */
+    std::function<void (const juce::String& output, bool muted)> onMuteOutput;
 
     /** The layout editor's widget inspector (SCREENS.md §6): the Inspector
         toggle (key I). The main window remembers it per computer. */

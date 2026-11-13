@@ -102,9 +102,29 @@ public:
 
     static bool isFinite (const float* samples, int numSamples) noexcept;
 
+    static constexpr double sendRampSeconds = 0.02;
+
+    /** What the audio thread plays from and into, by slot (see RoutingTable). */
+    struct Io
+    {
+        std::array<const float*, (size_t) routing::maxInputs> inputs {};   // null: silence
+        std::array<float*, (size_t) routing::maxOutputs> left {}, right {}; // null: no such output
+    };
+
     //== Audio thread ==========================================================
-    /** Mono, in place: the guitar in, the patches' mix out. numSamples <= prepared block size. */
+    /** Each sounding patch plays its input (Chain::getInputSlot) and adds its
+        result into every output through its own sends (Chain::getSendGain),
+        ramped: a patch switch or a send change never jumps. The outputs are
+        added to, not cleared. numSamples <= prepared block size. */
+    void process (const Io& io, int numSamples) noexcept;
+
+    /** Mono, in place: input slot 0 in, the mix into output slot 0 out (a
+        stereo patch as (L + R) / 2). For tests and simple setups. */
     void process (float* io, int numSamples) noexcept;
+
+    /** Audio thread, after process(): an input as the patches got it (a
+        driver's garbage silenced), or null when it wasn't given. */
+    const float* getProcessedInput (int slot) const noexcept;
 
     /** Audio thread: take the newest running order now (process() does this
         too). Lets MIDI act on the current table before the player renders. */
@@ -153,6 +173,8 @@ private:
         int activeFor = 0;              // samples it played as the active patch
         int age = 0;                    // samples since it started ringing out
         int silentFor = 0;              // consecutive quiet samples
+        std::array<float, (size_t) routing::maxOutputs> sends {};   // current send gains (ramped)
+        bool sendsSet = false;          // false: start right at the chain's sends
     };
 
     void sendCommand (const Command&);
@@ -160,7 +182,7 @@ private:
     void switchTo (Chain* target, bool resetIfSame) noexcept;
     bool tableContains (const Chain*) const noexcept;
     float stepFor (float seconds) const noexcept;
-    void renderSlot (Slot&, const float* input, float* out, int numSamples, bool ringing) noexcept;
+    void renderSlot (Slot&, const Io& io, int numSamples, bool ringing) noexcept;
     void publishSlotsForUi() noexcept;
 
     // Message-thread side.
@@ -179,7 +201,11 @@ private:
     Slot active;
     std::array<Slot, (size_t) maxFading> ringing;
     int cueIndex = -1;
-    std::vector<float> inputCopy, slotBuffer, mix;
+    std::array<std::vector<float>, (size_t) routing::maxInputs> inputCopies;
+    std::array<bool, (size_t) routing::maxInputs> inputGiven {};
+    std::array<std::vector<float>, (size_t) Block::maxChannels> slotBuffers;
+    std::vector<float> silence, mixLeft, mixRight;
+    float sendStep = 0.001f;
     double sampleRate = 48000.0;
     int settleSamples = 0, timeoutSamples = 0, silenceHoldSamples = 0;
 

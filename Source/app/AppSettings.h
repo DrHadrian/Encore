@@ -6,6 +6,7 @@
 #include <juce_data_structures/juce_data_structures.h>
 
 #include "model/MidiMapping.h"
+#include "model/Routing.h"
 
 namespace encore
 {
@@ -30,8 +31,22 @@ public:
     std::unique_ptr<juce::XmlElement> getAudioDeviceState() const;
     void setAudioDeviceState (const juce::XmlElement* state);
 
+    /** The guitar input before routing (0-based); routing's first input
+        replaces it (getRouting() migrates it once). */
     int getGuitarInputChannel() const;
     void setGuitarInputChannel (int channel);
+
+    /** This computer's named inputs and outputs (milestone 11). The first
+        time: input "Guitar" on the old guitar input, output "Main" on all. */
+    RoutingConfig getRouting() const;
+    void setRouting (const RoutingConfig& routing);
+
+    /** Whether routing was ever saved on this computer (false: before milestone 11). */
+    bool hasRouting() const;
+
+    /** The bottom row's output strips: full width (scrolling) or compact. */
+    bool getOutputStripsFull() const;
+    void setOutputStripsFull (bool full);
 
     float getMasterGainDecibels() const;
     void setMasterGainDecibels (float dB);

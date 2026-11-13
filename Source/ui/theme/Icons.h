@@ -13,8 +13,8 @@ namespace encore::theme
     any size in any colour. Message thread only. */
 enum class Icon
 {
-    alert, arrowRight, audioWave, check, chevronDown, chevronUp, close, duplicate, lock,
-    midiPort, minus, plug, plus, sidebarRight, sliders, trash,
+    alert, arrowRight, audioWave, check, chevronDown, chevronUp, close, duplicate, jack, lock,
+    merge, midiPort, minus, plug, plus, route, sidebarRight, sliders, split, trash, warn, window,
     triangleRight, triangleLeft
 };
 

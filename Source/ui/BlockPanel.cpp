@@ -7,7 +7,9 @@
 
 #include "engine/blocks/CabIrBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
+#include "engine/blocks/SplitBlocks.h"
 #include "ui/ChainStrip.h"
+#include "ui/kit/Chip.h"
 #include "ui/theme/EncoreFonts.h"
 #include "ui/theme/EncoreLookAndFeel.h"
 #include "ui/theme/Paint.h"
@@ -27,6 +29,7 @@ namespace
     }
 
     bool isAmp (const Block& b)  { return b.getTypeId() == NamAmpBlock::typeId; }
+    bool isMerge (const Block& b) { return b.getTypeId() == MergeBlock::typeId; }
 
     const juce::String& middot()
     {
@@ -49,6 +52,8 @@ namespace
         {
             if (block.getTypeId() == CabIrBlock::typeId)
                 info.kindLabel = "Cab" + middot() + "IR";
+            else if (isMerge (block))
+                info.kindLabel = "Merge" + middot() + "paths A + B";
             else if (auto* plugin = dynamic_cast<const PluginBlock*> (&block))
                 info.kindLabel = "Plugin" + middot() + (plugin->getPluginRef().format.isNotEmpty() ? plugin->getPluginRef().format
                                                                                                    : juce::String ("VST3"));
@@ -68,16 +73,40 @@ class BlockPanel::Gear final : public juce::Component
 {
 public:
     explicit Gear (BlockPanel& p)
-        : owner (p), box (kit::GearView::Size::panel, panelInfo (p.block))
+        : owner (p), box (kit::GearView::Size::panel, panelInfo (p.block)),
+          plugin (dynamic_cast<const PluginBlock*> (&p.block))
     {
         setInterceptsMouseClicks (false, true);
-        setSize (kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getWidth(),
-                 kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getHeight());
-        box.setBounds (getLocalBounds());
-        addAndMakeVisible (box);
-
         strip.setInterceptsMouseClicks (false, true);
-        strip.setBounds (box.getControlArea());
+
+        if (plugin != nullptr)
+        {
+            // The plugin plate: its own box (painted here), the parameters in a recessed panel.
+            setSize (size::pluginPlateW, size::pluginPlateH);
+            strip.setBounds (size::pluginPlatePadX, size::pluginPlatePanelTop, size::pluginPlateW - 2 * size::pluginPlatePadX,
+                             size::pluginPlatePanelH);
+            makePluginTexts();
+            addChildComponent (card);
+        }
+        else
+        {
+            if (isMerge (p.block))
+            {
+                // PATH A · PATH B: a box of its own size, its label lower.
+                setSize (size::mergePanelW, size::mergePanelH);
+                box.setLabelBottom (size::mergeLabelBottom);
+            }
+            else
+            {
+                setSize (kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getWidth(),
+                         kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getHeight());
+            }
+
+            box.setBounds (getLocalBounds());
+            addAndMakeVisible (box);
+            strip.setBounds (box.getControlArea());
+        }
+
         addAndMakeVisible (strip);
 
         power.setOn (owner.block.isEnabled());
@@ -90,7 +119,12 @@ public:
             if (owner.onEdited != nullptr)
                 owner.onEdited();
         };
-        strip.addAndMakeVisible (power);
+        // On the plate the LED sits top right, outside the panel. The merge
+        // has none: it is never off (path B goes off at the split).
+        if (plugin != nullptr)
+            addAndMakeVisible (power);
+        else if (! isMerge (owner.block))
+            strip.addAndMakeVisible (power);
     }
 
     kit::GearPlaceholder& getBox() noexcept { return box; }
@@ -102,6 +136,18 @@ public:
         OUTPUT (level match, output, LED). */
     void layOut()
     {
+        if (plugin != nullptr)
+        {
+            layOutPlugin();
+            return;
+        }
+
+        if (isMerge (owner.block))
+        {
+            layOutMerge();
+            return;
+        }
+
         auto row = strip.getLocalBounds().withTrimmedTop (size::stripPadTop).withTrimmedBottom (size::stripPadBottom)
                        .reduced (size::stripPadX, 0);
         labelsRow = row.removeFromTop (size::groupLabelH);
@@ -164,7 +210,155 @@ public:
         repaint();
     }
 
-    void paint (juce::Graphics&) override {}
+    /** The merge: PATH A (level, pan) and PATH B, two knob columns each,
+        centred on the strip; under each group its summary line. */
+    void layOutMerge()
+    {
+        auto row = strip.getLocalBounds().withTrimmedTop (size::stripPadTop).withTrimmedBottom (size::stripPadBottom);
+        labelsRow = row.removeFromTop (size::groupLabelH);
+        row.removeFromTop (size::groupLabelGap);
+
+        const auto groupW = 2 * size::knobColumn;
+        auto x = strip.getWidth() / 2 - (2 * groupW + size::mergeGroupGap) / 2;
+        const auto knobH = kit::KnobView::idealBounds().getHeight();
+        groups.clear();
+        mergeGroups.clear();
+
+        for (const auto* path : { "A", "B" })
+        {
+            const auto level = juce::String (path) == "A" ? mergeParams::levelA : mergeParams::levelB;
+            const auto pan = juce::String (path) == "A" ? mergeParams::panA : mergeParams::panB;
+            auto column = x;
+
+            for (const auto* id : { level, pan })
+                for (auto& c : owner.controls)
+                    if (! c->isSwitch && c->parameter.getSpec().id == id)
+                    {
+                        c->knob->setBounds (column, row.getY(), size::knobColumn, knobH);
+                        column += size::knobColumn;
+                    }
+
+            Group gr { labelsRow.withX (x).withWidth (groupW).toFloat(), juce::String ("PATH ") + path, true };
+            gr.width = kit::groupLabelWidth (gr.text);
+            groups.push_back (gr);
+            mergeGroups.push_back (juce::Rectangle<int> (x, 0, groupW, 0));
+            x += groupW + size::mergeGroupGap;
+        }
+
+        repaint();
+    }
+
+    /** "A: 0.0 dB · L 100" under PATH A, the same for B (from refresh). */
+    void setMergeLines (const juce::String& a, const juce::String& b)
+    {
+        if (a == mergeLines[0] && b == mergeLines[1])
+            return;
+
+        mergeLines[0] = a;
+        mergeLines[1] = b;
+        repaint();
+    }
+
+    /** The plate's parameters: four to a row, knob (or switch) centred in
+        its column; the power LED top right. */
+    void layOutPlugin()
+    {
+        const auto inner = strip.getLocalBounds().reduced (size::pluginPlatePanelPadX, 0).withTrimmedTop (size::pluginPlatePanelPadTop);
+        const auto columnW = (float) inner.getWidth() / (float) size::pluginPlateColumns;
+        const auto knob = kit::KnobView::idealBounds (true);
+        const auto toggle = kit::GearToggle::idealBounds();
+
+        for (size_t i = 0; i < owner.controls.size(); ++i)
+        {
+            auto& c = *owner.controls[i];
+            const auto column = (int) i % size::pluginPlateColumns, row = (int) i / size::pluginPlateColumns;
+            const auto x = inner.getX() + juce::roundToInt ((float) column * columnW);
+            const auto cell = juce::Rectangle<int> (x, inner.getY() + row * size::pluginPlateRowPitch,
+                                                    juce::roundToInt ((float) (column + 1) * columnW) - juce::roundToInt ((float) column * columnW),
+                                                    size::pluginPlateRowPitch);
+
+            if (c.isSwitch)
+                c.toggle->setBounds (toggle.withCentre ({ cell.getCentreX(), cell.getY() + toggle.getHeight() / 2 }));
+            else
+                c.knob->setBounds (cell.withHeight (knob.getHeight()));
+        }
+
+        power.setBounds (juce::Rectangle<int> (size::ledHalo, size::ledHalo)
+                             .withCentre ({ getWidth() - size::pluginPlatePadX - size::powerColumn / 2,
+                                            size::pluginPlateNameTop + size::pluginPlateNameH / 2 }));
+        layOutCard();
+        repaint();
+    }
+
+    void makePluginTexts()
+    {
+        const auto& ref = plugin->getPluginRef();
+        formatText = ref.format.isNotEmpty() ? ref.format : juce::String ("VST3");
+        formatCaps = paint::caps (type::tagChip, formatText);
+        nameText = ref.name.isNotEmpty() ? ref.name : owner.block.getName();
+
+        juce::StringArray maker;
+
+        if (ref.maker.isNotEmpty())
+            maker.add (ref.maker);
+
+        if (ref.version.isNotEmpty())
+            maker.add ("v" + ref.version);
+
+        makerText = maker.joinIntoString (middot());
+        kindCaps = paint::caps (type::gearPanelKind, "Plugin" + middot() + formatText);
+
+        const auto hidden = (int) owner.block.getParameters().size() - size::pluginPanelKnobs;
+        moreText = hidden > 0 ? "+ " + juce::String (hidden) + " more in the plugin window" : juce::String();
+        nameWidth = textWidth (font (type::plateName), nameText);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        if (plugin == nullptr)
+            return;
+
+        // The plate: gear box gradient, 1 px border, inner top highlight; the recessed panel.
+        if (dimmed)
+            g.beginTransparencyLayer (size::pluginPlateDimmed);
+
+        const auto r = getLocalBounds().toFloat();
+        const auto radius = (float) size::gearRadius;
+        g.setGradientFill (juce::ColourGradient::vertical (paint::c (colour::gearTop), 0.0f, paint::c (colour::gearBot), r.getBottom()));
+        g.fillRoundedRectangle (r, radius);
+        g.setColour (paint::c (colour::gearHighlight));
+        paint::hline (g, radius, 1.0f, r.getWidth() - radius * 2.0f);
+        g.setColour (paint::c (colour::gearBorder));
+        g.drawRoundedRectangle (r.reduced (0.5f), radius - 0.5f, 1.0f);
+
+        const auto panel = strip.getBounds().toFloat();
+        g.setColour (paint::c (colour::gearStrip));
+        g.fillRoundedRectangle (panel, (float) size::stripRadius);
+        g.setColour (paint::c (colour::gearStripBorder));
+        g.drawRoundedRectangle (panel.reduced (0.5f), (float) size::stripRadius - 0.5f, 1.0f);
+
+        // VST3 · name · maker and version, on one line above the panel.
+        auto x = (float) size::pluginPlatePadX;
+        const auto chipW = kit::chipWidth (formatCaps);
+        kit::paintChip (g, { x, (float) size::pluginPlateChipTop, chipW, (float) size::pluginPlateChipH }, formatCaps, kit::ChipStyle::plain);
+        x += chipW + (float) size::pluginPlateTextGap;
+
+        const auto right = (float) (getWidth() - size::pluginPlatePadX - size::powerColumn);
+        const auto nameW = juce::jmin (nameWidth, right - x);
+        paint::text (g, nameText, { x, (float) size::pluginPlateNameTop, nameW, (float) size::pluginPlateNameH }, type::plateName, colour::text);
+        x += nameW + (float) size::pluginPlateTextGap;
+        paint::text (g, makerText, { x, (float) size::pluginPlateNameTop, juce::jmax (0.0f, right - x), (float) size::pluginPlateNameH },
+                     type::plateMaker, colour::textMuted);
+
+        // Under the panel: what isn't here, and what it is.
+        const auto foot = juce::Rectangle<float> ((float) size::pluginPlatePadX, (float) size::pluginPlateFootTop,
+                                                  r.getWidth() - 2.0f * (float) size::pluginPlatePadX, (float) size::pluginPlateFootH);
+        paint::text (g, kindCaps, foot, type::gearPanelKind, colour::gearLabel, juce::Justification::centredRight);
+        paint::text (g, moreText, foot, type::plateMore, colour::textMuted);
+
+        if (dimmed)
+            g.endTransparencyLayer();
+    }
 
     void paintOverChildren (juce::Graphics& g) override
     {
@@ -172,6 +366,14 @@ public:
 
         for (auto& gr : groups)
             kit::paintGroupLabel (g, gr.area + origin, gr.text, gr.width, gr.rules);
+
+        // The merge: each group's summary under the strip.
+        for (size_t i = 0; i < mergeGroups.size() && i < 2; ++i)
+        {
+            const auto r = juce::Rectangle<float> (origin.x + (float) mergeGroups[i].getX(), origin.y + (float) strip.getHeight() + (float) size::mergeLineGap,
+                                                   (float) mergeGroups[i].getWidth(), (float) size::mergeLineH);
+            paint::text (g, mergeLines[i], r, type::caption, colour::textTertiary, juce::Justification::centred);
+        }
 
         // Status light (gate open): a small LED and its label, top left of the strip.
         if (owner.statusLit != nullptr)
@@ -195,10 +397,41 @@ private:
 
     BlockPanel& owner;
     kit::GearPlaceholder box;
+    const PluginBlock* plugin;
     juce::Component strip;
     kit::PowerLed power;
+    juce::String formatText, formatCaps, nameText, makerText, kindCaps, moreText;
+    float nameWidth = 0.0f;
+    bool dimmed = false;
+
+public:
+    kit::FaultCard card;
+
+    /** A plugin with a problem: the plate at 45 % under the card. */
+    void setDimmed (bool shouldDim)
+    {
+        if (shouldDim == dimmed)
+            return;
+
+        dimmed = shouldDim;
+        const auto alpha = dimmed ? size::pluginPlateDimmed : 1.0f;
+        strip.setAlpha (alpha);
+        power.setAlpha (alpha);
+        card.setVisible (dimmed);
+        card.toFront (false);   // over the knobs
+        repaint();
+    }
+
+    void layOutCard()
+    {
+        const auto w = size::faultCardW;
+        const auto body = juce::Rectangle<int> ((getWidth() - w) / 2, size::faultCardTop, w, card.getBodyHeight (w));
+        card.setBounds (kit::FaultCard::boundsFor (body));
+    }
     juce::Rectangle<int> labelsRow;
     std::vector<Group> groups;
+    std::vector<juce::Rectangle<int>> mergeGroups;   // x and width of PATH A, PATH B
+    juce::String mergeLines[2];
 };
 
 //==============================================================================
@@ -304,7 +537,8 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
             const auto& r = spec.range;
             control->knob = std::make_unique<kit::KnobView>();
             auto& s = *control->knob;
-            s.setLabel (spec.name);
+            // The merge's knobs sit under PATH A / PATH B: "Level", "Pan".
+            s.setLabel (isMerge (block) ? spec.name.upToLastOccurrenceOf (" ", false, false) : spec.name);
             s.setNormalisableRange ({ (double) r.start, (double) r.end, (double) r.interval, (double) r.skew, r.symmetricSkew });
             s.setValue (p->getValue(), juce::dontSendNotification);
             s.setDoubleClickReturnValue (true, spec.defaultValue);
@@ -319,6 +553,7 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
                     onEdited();
             };
             s.setTooltip ("Right-click to assign an expression pedal");
+            s.setShowsValue (plugin != nullptr);   // the plugin's own text under its name
 
             auto& menu = knobMenus.emplace_back (std::make_unique<KnobMenu> (*this, *control));
             s.addMouseListener (menu.get(), false);
@@ -346,6 +581,7 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
         // The header button opens the plugin's own window instead.
         setVariant (loadButton, Variant::small);
         loadButton.setButtonText ("Open plugin window...");
+        setButtonIcon (loadButton, Icon::window, (float) size::smallButtonIcon, false);
         loadButton.setTooltip ("The plugin's own controls, in a window of their own");
         loadButton.onClick = [this]
         {
@@ -353,6 +589,17 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
                 onOpenPluginWindow();
         };
         addAndMakeVisible (loadButton);
+
+        gear->card.getSecondaryButton().onClick = loadButton.onClick;
+        gear->card.getPrimaryButton().onClick = [this]
+        {
+            // Turning it back on may rebuild the patch (and this panel): after the click.
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<BlockPanel> (this)]
+            {
+                if (safe != nullptr && safe->onTurnPluginBackOn != nullptr)
+                    safe->onTurnPluginBackOn();
+            });
+        };
     }
 
     refresh();
@@ -474,7 +721,14 @@ void BlockPanel::setLoading (bool isLoading)
 juce::String BlockPanel::headerLabel() const
 {
     // "AMP · <model>", "CAB · <IR>", "GATE · Noise gate", "EQ".
-    const auto kind = ChainStrip::describe (block).kindLabel;
+    // A plugin: "PLUGIN · VST3 · <name>".
+    // The merge: "MERGE · paths A + B".
+    const auto kind = dynamic_cast<const PluginBlock*> (&block) != nullptr || isMerge (block) ? panelInfo (block).kindLabel
+                                                                                               : ChainStrip::describe (block).kindLabel;
+
+    if (isMerge (block))
+        return kind;
+
 
     if (block.getFileSlot() != nullptr)
         return kind + middot() + shownFile;
@@ -561,6 +815,8 @@ void BlockPanel::refresh()
         if (problem)
             cpuText.clear();
 
+        updateFaultCard();
+
         if (problem != shownProblem)
         {
             shownProblem = problem;
@@ -582,6 +838,27 @@ void BlockPanel::refresh()
     if (cabColumn != nullptr)
         cabColumn->refresh();
 
+    // The merge's summary lines, when a value moved.
+    if (isMerge (block))
+    {
+        const auto* la = block.findParameter (mergeParams::levelA);
+        const auto* pa = block.findParameter (mergeParams::panA);
+        const auto* lb = block.findParameter (mergeParams::levelB);
+        const auto* pb = block.findParameter (mergeParams::panB);
+
+        if (la != nullptr && pa != nullptr && lb != nullptr && pb != nullptr)
+        {
+            const std::array<float, 4> values { la->getValue(), pa->getValue(), lb->getValue(), pb->getValue() };
+
+            if (values != shownMerge)
+            {
+                shownMerge = values;
+                gear->setMergeLines ("A: " + la->toText (values[0]) + middot() + pa->toText (values[1]),
+                                     "B: " + lb->toText (values[2]) + middot() + pb->toText (values[3]));
+            }
+        }
+    }
+
     if (statusLit != nullptr)
     {
         const auto lit = block.isEnabled() && statusLit();
@@ -594,54 +871,84 @@ void BlockPanel::refresh()
     }
 }
 
+void BlockPanel::updateFaultCard()
+{
+    auto* plugin = dynamic_cast<PluginBlock*> (&block);
+
+    if (plugin == nullptr)
+        return;
+
+    // What the card says, by state; -1 = no problem. The words are the code's facts:
+    // the guard's count, and a switched-off plugin passes the dry signal.
+    const auto fault = ! plugin->isLoaded() ? 100 : (int) plugin->getFault();
+    const auto canOpen = plugin->getInstance() != nullptr;
+    const auto key = fault * 2 + (canOpen ? 1 : 0);
+
+    if (key == shownFault)
+        return;
+
+    shownFault = key;
+
+    if (fault == (int) PluginBlock::Fault::none)
+    {
+        gear->setDimmed (false);
+        return;
+    }
+
+    static const juce::String dry = " The signal passes through it dry, so the show goes on.";
+    juce::String lead = "Switched off:", rest, action;
+
+    switch ((PluginBlock::Fault) fault)
+    {
+        case PluginBlock::Fault::crashed:
+            rest = "it crashed.";
+            action = "Load again";
+            break;
+        case PluginBlock::Fault::badOutput:
+            rest = "it sent broken audio.";
+            break;
+        case PluginBlock::Fault::tooSlow:
+            rest = "it took longer than the audio buffer " + juce::String (PluginBlock::overrunsBeforeSwitchingOff) + " times in a row.";
+            break;
+        case PluginBlock::Fault::crashedLastTime:
+            rest = "it crashed Encore last time.";
+            break;
+        case PluginBlock::Fault::none:
+            break;
+    }
+
+    if (fault == 100)
+    {
+        lead = "Not loaded:";
+        rest = plugin->getLoadError().isNotEmpty() ? plugin->getLoadError() : juce::String ("it couldn't be loaded");
+
+        if (! rest.endsWithChar ('.'))
+            rest << ".";
+    }
+    else if (action.isEmpty() && plugin->canTurnBackOn())
+    {
+        action = "Turn back on";
+    }
+
+    gear->card.setMessage (lead, rest + dry);
+    gear->card.setActions (action, canOpen ? juce::String ("Open plugin window...") : juce::String());
+    gear->layOutCard();
+    gear->setDimmed (true);
+}
+
 //==============================================================================
 void BlockPanel::paint (juce::Graphics& g)
 {
     Pane::paint (g);
 
-    // The lit stage (radial-gradient at 45 % 25 %), rendered when the size or
-    // the screen scale changes; knob repaints only copy it.
-    const auto area = getContentBounds();
-
-    if (area.isEmpty())
-        return;
-
-    const auto scale = (float) g.getInternalContext().getPhysicalPixelScaleFactor();
-    const auto w = juce::roundToInt ((float) area.getWidth() * scale), h = juce::roundToInt ((float) area.getHeight() * scale);
-
-    if (stageImage.isNull() || stageImage.getWidth() != w || stageImage.getHeight() != h || ! juce::approximatelyEqual (scale, stageScale))
-    {
-        stageScale = scale;
-        stageImage = juce::Image (juce::Image::RGB, juce::jmax (1, w), juce::jmax (1, h), false);
-        juce::Graphics ig (stageImage);
-        const auto r = stageImage.getBounds().toFloat();
-        const juce::Point<float> centre (r.getWidth() * 0.45f, r.getHeight() * 0.25f);
-
-        // An ellipse through the farthest corner (CSS farthest-corner).
-        const auto rx = juce::jmax (centre.x, r.getWidth() - centre.x) * juce::MathConstants<float>::sqrt2;
-        const auto ry = juce::jmax (centre.y, r.getHeight() - centre.y) * juce::MathConstants<float>::sqrt2;
-        juce::ColourGradient light (paint::c (colour::blockStageTop), 0.0f, 0.0f, paint::c (colour::blockStageBot), 1.0f, 0.0f, true);
-        light.addColour (0.65, paint::c (colour::blockStageMid));
-        juce::FillType fill (light);
-        fill.transform = juce::AffineTransform::scale (rx, ry).translated (centre);
-        ig.setFillType (fill);
-        ig.fillRect (r);
-    }
-
-    // Inside the pane's rounded bottom corners.
-    const juce::Graphics::ScopedSaveState state (g);
-    g.reduceClipRegion (stageClip);
-    g.drawImage (stageImage, area.toFloat());
+    // The lit stage (kit::StageBackdrop).
+    backdrop.paint (g, getContentBounds());
 }
 
 void BlockPanel::resized()
 {
     Pane::resized();
 
-    const auto area = getContentBounds().toFloat();
-    stageClip.clear();
-    stageClip.addRoundedRectangle (area.getX(), area.getY(), area.getWidth(), area.getHeight(),
-                                   (float) size::paneRadius - 1.0f, (float) size::paneRadius - 1.0f, false, false, true, true);
 
     // Header: "6.9% CPU", then the file button (a plugin: its window) on the right.
     auto header = getHeaderBounds().withTrimmedRight (size::paneHeaderPadR);
@@ -672,7 +979,15 @@ void BlockPanel::layOutGear()
     gearScale = juce::jmax (0.01f, gearScale);
 
     const auto left = (float) area.getX() + ((float) area.getWidth() - (float) groupW * gearScale) * 0.5f;
-    const auto bottom = (float) area.getBottom();
+    auto bottom = (float) area.getBottom();
+
+    // The plugin plate hangs 22 px under the stage header instead (as on the board).
+    if (dynamic_cast<const PluginBlock*> (&block) != nullptr)
+        bottom = juce::jmin (bottom, (float) (getContentBounds().getY() + size::pluginPlateTop) + (float) gear->getHeight() * gearScale);
+
+    // So does the merge's box, 40 px under it.
+    if (isMerge (block))
+        bottom = juce::jmin (bottom, (float) (getContentBounds().getY() + size::mergePanelTop) + (float) gear->getHeight() * gearScale);
 
     gear->setTransform (juce::AffineTransform::scale (gearScale)
                             .translated (left, bottom - (float) gear->getHeight() * gearScale));

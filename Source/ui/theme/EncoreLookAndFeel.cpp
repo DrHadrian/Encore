@@ -106,6 +106,24 @@ namespace
     }
 }
 
+void setAmber (juce::Component& c, bool amber)
+{
+    if (amber != isAmber (c))
+    {
+        c.getProperties().set ("encoreAmber", amber);
+
+        if (auto* box = dynamic_cast<juce::ComboBox*> (&c))
+            box->lookAndFeelChanged();   // the text colour
+
+        c.repaint();
+    }
+}
+
+bool isAmber (const juce::Component& c)
+{
+    return (bool) c.getProperties().getWithDefault ("encoreAmber", false);
+}
+
 void setButtonKeyCap (juce::Button& b, const juce::String& key)
 {
     b.getProperties().set ("encoreKeyCap", key);
@@ -373,12 +391,23 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
 
     if (const auto key = button.getProperties()["encoreKeyCap"].toString(); key.isNotEmpty())
     {
-        // Text and key cap centred together.
+        // [icon] text and key cap centred together (Routing F7).
+        const auto icon = buttonIcon (button);
+        const auto iconW = icon ? std::get<1> (*icon) + (float) iconGap : 0.0f;
         const auto capW = (float) kit::KeyCap::widthFor (key);
-        const auto textW = juce::jmin ((float) area.getWidth() - capW - (float) size::keyCapGap, textWidth (f, button.getButtonText()) + 1.0f);
-        auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (textW + (float) size::keyCapGap + capW, (float) area.getWidth()), (float) area.getHeight());
+        const auto textW = juce::jmin ((float) area.getWidth() - capW - iconW - (float) size::keyCapGap, textWidth (f, button.getButtonText()) + 1.0f);
+        auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (iconW + textW + (float) size::keyCapGap + capW, (float) area.getWidth()),
+                                                         (float) area.getHeight());
         const auto cap = row.removeFromRight (capW).withSizeKeepingCentre (capW, (float) size::keyCapH);
         kit::paintKeyCap (g, cap, key);
+
+        if (icon)
+        {
+            const auto size = std::get<1> (*icon);
+            drawIcon (g, std::get<0> (*icon), row.removeFromLeft (size).withSizeKeepingCentre (size, size), colourToUse);
+            row.removeFromLeft ((float) iconGap);
+        }
+
         g.setFont (f);
         g.setColour (colourToUse);
         g.drawText (button.getButtonText(), row.withTrimmedRight ((float) size::keyCapGap), juce::Justification::centred, true);
@@ -454,18 +483,20 @@ void EncoreLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, 
     if (! enabled)
         g.beginTransparencyLayer (state::disabledAlpha);
 
+    const auto amber = isAmber (box);
+
     if (getVariant (box) == Variant::field)
     {
-        paint::inset (g, r, colour::fieldFill, colour::fieldBorder, (float) size::fieldRadius, colour::fieldShadow);
+        paint::inset (g, r, colour::fieldFill, amber ? colour::amber : colour::fieldBorder, (float) size::fieldRadius, colour::fieldShadow);
     }
     else
     {
         r = r.withTrimmedBottom (1.0f);
 
         if (down || box.isPopupActive())
-            paint::pressed (g, r, (float) size::buttonRadius);
+            paint::pressed (g, r, (float) size::buttonRadius, amber ? colour::amber : colour::buttonBorder);
         else
-            paint::raised (g, r, colour::buttonTop, colour::buttonBot, colour::buttonBorder, (float) size::buttonRadius, true,
+            paint::raised (g, r, colour::buttonTop, colour::buttonBot, amber ? colour::amber : colour::buttonBorder, (float) size::buttonRadius, true,
                            box.isMouseOver (true) ? state::hoverLighten : 0.0f);
     }
 
@@ -486,7 +517,8 @@ void EncoreLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& 
     label.setBounds (8, 1, box.getWidth() - 30, box.getHeight() - 2);
     label.setFont (getComboBoxFont (box));
     label.setBorderSize ({});
-    label.setColour (juce::Label::textColourId, c (getVariant (box) == Variant::field ? colour::fieldText : colour::text));
+    label.setColour (juce::Label::textColourId, c (isAmber (box) ? colour::faultCardText
+                                                   : getVariant (box) == Variant::field ? colour::fieldText : colour::text));
 }
 
 //==============================================================================

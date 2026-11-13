@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Encore M11 — Edit, merge block</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Righteous&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#161618}
+*{scrollbar-width:thin;scrollbar-color:#4A4A4F transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#4A4A4F;border:2px solid transparent;border-radius:6px;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#5E5E64;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+a{color:#4C8DF6}a:hover{color:#82AEFA}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #4C8DF6;outline-offset:1px}
+.tb{background:linear-gradient(180deg,#333337,#28282B);border-bottom:1px solid #0A0A0B;box-shadow:inset 0 1px 0 rgba(255,255,255,0.07)}
+.pane{background:#1D1D20;border:1px solid #0A0A0B;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.hd{height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 6px 0 10px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#85858C;background:linear-gradient(180deg,#252528,#202023);border-bottom:1px solid #111113}
+.b{height:24px;padding:0 10px;border:1px solid #0E0E10;border-radius:5px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12),0 1px 0 rgba(0,0,0,0.4);color:#E8E8EB;font-size:12px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.b-on{background:linear-gradient(180deg,#252528,#2E2E31);box-shadow:inset 0 1px 3px rgba(0,0,0,0.7)}
+.ib{width:20px;height:20px;padding:0;border:0;border-radius:4px;background:transparent;color:#A9A9AF;display:inline-flex;align-items:center;justify-content:center}
+.ib:hover{background:#2E2E32;color:#FFFFFF}
+.lcd{background:linear-gradient(180deg,#1C232C,#12171D);border:1px solid #07090B;border-radius:6px;box-shadow:inset 0 1px 4px rgba(0,0,0,0.65),0 1px 0 rgba(255,255,255,0.05);color:#D5E4F7;font-variant-numeric:tabular-nums}
+.row{height:26px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:4px;font-size:12.5px;color:#E1E1E5}
+.fld{height:22px;border:1px solid #0C0C0E;border-radius:4px;background:#141416;box-shadow:inset 0 1px 2px rgba(0,0,0,0.6);color:#E1E1E5;font-size:12px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box}
+.k{font-size:11.5px;color:#8E8E95}
+.kbd{font-size:10px;color:#6E6E75;border:1px solid #2E2E33;border-radius:3px;padding:0 4px}
+.board{background:linear-gradient(180deg,rgba(0,0,0,0.2),rgba(0,0,0,0.55)),url(/_blob/3d6f9110dbe6da1bfe549597457b1148) 0 0/192px 192px,#151516}
+.stage{background:radial-gradient(ellipse at 45% 25%,#3a3a3e,#1c1c1f 65%,#141416)}
+.chk{position:absolute;left:0;top:0;width:64px;height:64px;background:url(/_blob/8e462cd916a1546709639e2ebb36331d) 0 0/64px auto no-repeat}
+
+.pri{border-color:#0B3E86 !important;background:linear-gradient(180deg,#4C8DF6,#2E6FDC) !important;color:#FFFFFF !important}
+.sm{height:18px !important;font-size:10.5px !important;padding:0 7px !important;letter-spacing:0;text-transform:none}
+.ut{position:absolute;box-sizing:border-box;border-radius:8px;background:linear-gradient(180deg,#2C2C30,#1F1F22);border:1px solid #3A3A3F;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 6px 6px rgba(0,0,0,0.45);font-family:Inter,sans-serif;overflow:hidden}
+.ut .lb{position:absolute;left:7px;top:6px;font-size:8.5px;font-weight:800;letter-spacing:0.08em;color:#85858C}
+.ut .dot{position:absolute;right:7px;top:8px;width:6px;height:6px;border-radius:50%}
+.ut .nm{position:absolute;left:6px;right:6px;bottom:7px;font-size:10.5px;font-weight:600;color:#E8E8EB;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ut .sb{position:absolute;left:6px;right:6px;bottom:20px;font-size:9px;color:#85858C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ut .ic{position:absolute;left:0;right:0;top:22px;display:flex;justify-content:center;color:#C4C4C9}
+.sel{outline:3px solid #4FA3FF;outline-offset:3px}
+.chip{display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:3px;font-size:9.5px;font-weight:700;letter-spacing:0.02em;white-space:nowrap}
+.c-mute{background:#5A1A16;color:#FFB4AD}
+.c-amber{background:#3D2F12;color:#FFD27A}
+.c-exp{background:#1B2C45;color:#7FC4FF}
+.c-off{background:#2A2A2E;color:#8E8E95}
+.c-green{background:#1E3A24;color:#4CD964}
+.mb{width:24px;height:20px;border:1px solid #0E0E10;border-radius:4px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12);color:#C4C4C9;font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.mb-on{border-color:#6E120D;background:linear-gradient(180deg,#E8483E,#BF2C25);color:#FFFFFF}
+.meterh{height:4px;border-radius:2px;background:#0E0E10;position:relative;overflow:hidden}
+.meterh>i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#2BC24F 0,#2BC24F 80%,#E8CF3A)}
+.meterv{width:4px;border-radius:2px;background:#0E0E10;position:relative;overflow:hidden}
+.meterv>i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(0deg,#2BC24F 0,#2BC24F 70%,#E8CF3A)}
+.grp{background:#1A1A1D;border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03)}
+.gt{font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#85858C;padding:0 2px 6px}
+.th{font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#6E6E75}
+.pop{height:22px;border:1px solid #0C0C0E;border-radius:5px;background:linear-gradient(180deg,#46464B,#38383C);box-shadow:inset 0 1px 0 rgba(255,255,255,0.1);color:#E8E8EB;font-size:12px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box;white-space:nowrap;overflow:hidden}
+.menu{position:absolute;background:rgba(44,44,48,0.97);border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 14px 40px rgba(0,0,0,0.6);padding:5px;font-size:12.5px;color:#E8E8EB;z-index:10}
+.mi{height:24px;display:flex;align-items:center;gap:4px;padding:0 10px 0 6px;border-radius:4px;white-space:nowrap}
+.mi .tk{width:14px}
+.mi .sc{color:#85858C;font-size:11px;margin-left:auto;padding-left:16px}
+.mi.hi{background:#2E62C4;color:#FFFFFF}
+.mi.hi .sc{color:#D3E1FA}
+.mi.dim{color:#6E6E75}
+.msep{height:1px;background:#3A3A3F;margin:4px 6px}
+.mhd{height:22px;display:flex;align-items:center;padding:0 10px 0 20px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6E6E75}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #161618; color: #E8E8EB; font-family: Inter, -apple-system, system-ui, sans-serif; font-size: 12.5px; display: flex; flex-direction: column; overflow: hidden">
+
+  <header class="tb" style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px">
+    <span style="display: inline-flex; padding: 0 4px"><dc-import name="Logo" variant="wordmark" size="17" color="#D9D9DE" hint-size="98px,17px"></dc-import></span>
+    <button class="b">Show <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+    <span style="display: flex; flex-direction: column; line-height: 1.15"><span style="font-weight: 600">My Show</span><span style="font-size: 10.5px; color: #85858C">Saved 23:28</span></span>
+    <div role="group" aria-label="Mode" style="display: flex; border: 1px solid #0E0E10; border-radius: 6px; overflow: hidden; margin-left: 10px">
+      <button class="b" style="border: 0; border-radius: 0; height: 26px; width: 64px">Stage</button>
+      <button class="b b-on" style="border: 0; border-left: 1px solid #0E0E10; border-radius: 0; height: 26px; width: 64px; color: #FFFFFF">Edit</button>
+      <button class="b" style="border: 0; border-left: 1px solid #0E0E10; border-radius: 0; height: 26px; width: 64px">Layout</button>
+    </div>
+    <div style="flex-grow: 1"></div>
+    <div class="lcd" style="height: 32px; display: flex; align-items: center; gap: 18px; padding: 0 14px">
+      <span style="display: flex; flex-direction: column; line-height: 1.05"><span style="font-size: 14px; font-weight: 600">2 / 9</span><span style="font-size: 8.5px; color: #7F95B3; font-weight: 700">SONG</span></span>
+      <span style="display: flex; flex-direction: column; line-height: 1.05; min-width: 110px"><span style="font-size: 14px; font-weight: 600">Dual amp intro</span><span style="font-size: 8.5px; color: #7F95B3; font-weight: 700">PATCH DUAL AMP</span></span>
+      <span style="display: flex; flex-direction: column; line-height: 1.05"><span style="font-size: 14px; font-weight: 600">20.0 ms</span><span style="font-size: 8.5px; color: #7F95B3; font-weight: 700">ROUND TRIP</span></span>
+      <span style="display: flex; flex-direction: column; line-height: 1.05"><span style="font-size: 14px; font-weight: 600">48.0k</span><span style="font-size: 8.5px; color: #7F95B3; font-weight: 700">RATE</span></span>
+    </div>
+    <div style="flex-grow: 1"></div>
+    <button class="b">Tuner</button>
+    <button class="b">MIDI…</button>
+    <button class="b">Audio…</button>
+    <span style="display: flex; align-items: center; gap: 6px; margin-left: 4px">
+      <span class="k">Out</span>
+      <span style="width: 70px; height: 4px; border-radius: 2px; background: #0E0E10; position: relative; display: inline-block"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 62%; background: #6E6E75; border-radius: 2px"></span><span style="position: absolute; left: 62%; top: -4px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: linear-gradient(180deg, #F2F2F4, #B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span>
+      <span class="fld" style="width: 66px; justify-content: flex-end; font-variant-numeric: tabular-nums">−12.0 dB</span>
+    </span>
+    <button class="b" style="color: #FF8A80; font-weight: 700">PANIC</button>
+    <button class="b" style="border-color: #6e120d; background: linear-gradient(180deg, #E8483E, #BF2C25); color: #FFFFFF; font-weight: 700; width: 74px">MUTED</button>
+  </header>
+
+  <main style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr) 272px; gap: 8px; padding: 8px">
+
+    <aside style="display: flex; flex-direction: column; gap: 8px; min-height: 0">
+      <section class="pane" style="flex: 1 1 0">
+        <div class="hd"><span>Set list</span><span style="display: flex; gap: 1px; align-items: center"><button class="b" title="The full list: sections, bar marks, notes, cut items, fast typing (F6)" style="height: 18px; padding: 0 7px; margin-right: 4px; font-size: 10.5px; letter-spacing: 0; text-transform: none">Full list</button>
+          <button class="ib" aria-label="Add song after the playing one"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+          <button class="ib" aria-label="Remove song"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"></path></svg></button>
+          <button class="ib" aria-label="Move song up"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"></path></svg></button>
+          <button class="ib" aria-label="Move song down"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        </span></div>
+        <div style="display: flex; flex-direction: column; padding: 4px; gap: 1px; overflow: auto">
+          <sc-for list="{{cues}}" as="c" hint-placeholder-count="11">
+            <sc-if value="{{c.isHeading}}" hint-placeholder-val="{{ false }}">
+              <div style="height: 22px; flex-shrink: 0; display: flex; align-items: flex-end; padding: 0 8px 2px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; color: rgba(255,179,64,0.85)">{{c.heading}}</div>
+            </sc-if>
+            <sc-if value="{{c.isItem}}" hint-placeholder-val="{{ true }}">
+            <div class="row" style="background: {{c.bg}}; color: {{c.fg}}">
+              <span style="width: 3px; height: 16px; border-radius: 2px; background: {{c.bar}}"></span>
+              <span style="width: 18px; color: {{c.num}}; font-variant-numeric: tabular-nums">{{c.no}}</span>
+              <span style="flex-grow: 1; font-weight: {{c.weight}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.name}}</span>
+              <span style="font-size: 11px; color: {{c.sub}}; white-space: nowrap">{{c.patch}}</span>
+            </div>
+            </sc-if>
+          </sc-for>
+        </div>
+      </section>
+      <section class="pane" style="flex: 1 1 0">
+        <div class="hd"><span>Patches</span><span style="display: flex; gap: 1px">
+          <button class="ib" aria-label="New patch"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+          <button class="ib" aria-label="Duplicate patch"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"></path></svg></button>
+          <button class="ib" aria-label="Delete patch"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></button>
+        </span></div>
+        <div style="display: flex; flex-direction: column; padding: 4px; gap: 1px; overflow: auto">
+          <sc-for list="{{patches}}" as="p" hint-placeholder-count="5">
+            <div class="row" style="background: {{p.bg}}">
+              <span style="width: 9px; height: 9px; border-radius: 2px; background: {{p.color}}"></span>
+              <span style="flex-grow: 1; font-weight: {{p.weight}}">{{p.name}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top: auto; padding: 8px 10px; border-top: 1px solid #111113; font-size: 11px; color: #85858C; line-height: 1.45">A patch can be used by several cues. Editing it changes every cue that uses it.</div>
+      </section>
+    </aside>
+
+    <section style="display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0">
+      <div style="height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 10px">
+        <span style="font-size: 14px; font-weight: 600">Cue 2 of 9: Dual amp intro</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#85858C" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg><span class="fld" style="width: 150px">Patch: Dual amp <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><div style="flex-grow: 1"></div><button class="b" title="Inputs, outputs and every patch's sends (F7)" style="gap: 6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2"></circle><circle cx="5" cy="18" r="2"></circle><circle cx="19" cy="12" r="2"></circle><path d="M7 6c6 0 6 6 10 6M7 18c6 0 6-6 10-6"></path></svg>Routing <span class="kbd">F7</span></button>
+      </div>
+      <section class="pane" style="flex-shrink: 0">
+        <div class="hd"><span>Signal chain</span><span style="letter-spacing: 0; text-transform: none; font-weight: 500">Click a block to edit it · right-click to move it between paths A and B, insert, remove or give it a stomp switch</span></div>
+        <div class="board" style="position: relative; height: 208px; border-radius: 0; border: 0; box-shadow: inset 0 2px 6px rgba(0,0,0,0.7); overflow: hidden">
+          <button aria-label="Input: Guitar" class="ut" style="left: 12px; top: 62px; width: 64px; height: 84px; padding: 0; "><span class="lb">IN</span><span class="dot" style="background: #30C25A"></span><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.5"></circle><path d="M12 2v3"></path></svg></span><span class="sb">input 1</span><span class="nm">Guitar</span></button>
+          <button aria-label="Noise gate, on" style="position: absolute; left: 82px; top: 62px; border: 0; padding: 0; background: transparent; width: 64px; height: 84px"><div style="position: absolute; left: 0; top: 0; width: 160px; height: 210px; transform: scale(0.4); transform-origin: 0 0"><dc-import name="Pedal" kind="gate" on="{{ true }}" hint-size="160px,210px"></dc-import></div></button>
+          <button aria-label="SPLIT A + B" class="ut" style="left: 152px; top: 62px; width: 52px; height: 84px; padding: 0; "><span class="lb">SPLIT</span><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h6"></path><path d="M9 12c4 0 4-6 9-6"></path><path d="M9 12c4 0 4 6 9 6"></path></svg></span><span class="nm">A + B</span></button>
+          <div aria-hidden="true" style="position: absolute; left: 214px; top: 8px; width: 222px; height: 96px; border-radius: 9px; background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.05)"></div>
+          <span style="position: absolute; left: 220px; top: 48px; width: 16px; height: 16px; border-radius: 50%; background: #3A3A3F; color: #E8E8EB; font-size: 9.5px; font-weight: 800; display: flex; align-items: center; justify-content: center">A</span>
+          <div aria-hidden="true" style="position: absolute; left: 214px; top: 104px; width: 222px; height: 96px; border-radius: 9px; background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.05)"></div>
+          <span style="position: absolute; left: 220px; top: 144px; width: 16px; height: 16px; border-radius: 50%; background: #3A3A3F; color: #E8E8EB; font-size: 9.5px; font-weight: 800; display: flex; align-items: center; justify-content: center">B</span>
+          <div style="opacity: 1"><button aria-label="Amp A, Plexi" style="position: absolute; left: 242px; top: 14px; width: 117px; height: 84px; border: 0; padding: 0; background: transparent; border-radius: 6px"><img src="/_blob/25ebf133be833b5b5ad3c6370435ba6b" alt="" style="width: 117px; height: 84px; display: block; filter: drop-shadow(0 6px 5px rgba(0,0,0,0.6))"><div style="position: absolute; left: 9px; top: 46px"><dc-import name="Logo" variant="wordmark" size="8" color="#F3E6C4" hint-size="46px,8px"></dc-import></div></button><button aria-label="Cab A, 4x12" style="position: absolute; left: 365px; top: 14px; width: 64px; height: 84px; border: 0; padding: 0; background: transparent"><img src="/_blob/cfd4bdf72f9b6b40b69b3a73ae74e4d2" alt="" style="width: 64px; height: 84px; display: block; filter: drop-shadow(0 6px 5px rgba(0,0,0,0.6))"></button></div>
+          <div style="opacity: 1"><button aria-label="Amp B, AC30" style="position: absolute; left: 242px; top: 110px; width: 117px; height: 84px; border: 0; padding: 0; background: transparent; border-radius: 6px"><img src="/_blob/25ebf133be833b5b5ad3c6370435ba6b" alt="" style="width: 117px; height: 84px; display: block; filter: drop-shadow(0 6px 5px rgba(0,0,0,0.6))"><div style="position: absolute; left: 9px; top: 46px"><dc-import name="Logo" variant="wordmark" size="8" color="#F3E6C4" hint-size="46px,8px"></dc-import></div></button><button aria-label="Cab B, 2x12" style="position: absolute; left: 365px; top: 110px; width: 64px; height: 84px; border: 0; padding: 0; background: transparent"><img src="/_blob/cfd4bdf72f9b6b40b69b3a73ae74e4d2" alt="" style="width: 64px; height: 84px; display: block; filter: drop-shadow(0 6px 5px rgba(0,0,0,0.6))"></button></div>
+          <button aria-label="MERGE stereo" class="ut sel" style="left: 448px; top: 62px; width: 52px; height: 84px; padding: 0; "><span class="lb">MERGE</span><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6c5 0 5 6 9 6"></path><path d="M3 18c5 0 5-6 9-6"></path><path d="M12 12h9"></path></svg></span><span class="nm">stereo</span></button>
+          <button aria-label="Delay, on" style="position: absolute; left: 508px; top: 62px; border: 0; padding: 0; background: transparent; width: 64px; height: 84px"><div style="position: absolute; left: 0; top: 0; width: 160px; height: 210px; transform: scale(0.4); transform-origin: 0 0"><dc-import name="Pedal" kind="delay" on="{{ true }}" hint-size="160px,210px"></dc-import></div></button>
+          <button aria-label="Add block" style="position: absolute; left: 580px; top: 62px; width: 48px; height: 84px; box-sizing: border-box; border-radius: 8px; border: 2px dashed #3E3E42; background: transparent; color: #A5A5AB; font-size: 22px">+</button>
+          <button aria-label="Output: the patch's sends" class="ut" style="left: 770px; top: 62px; width: 104px; height: 84px; padding: 0"><span class="lb">OUT</span><span class="dot" style="background: #30C25A"></span><span style="position: absolute; left: 7px; right: 7px; top: 22px; display: flex; flex-direction: column; gap: 1px; text-align: left"><span style="display: flex; align-items: center; gap: 4px; height: 13px"><span style="flex-grow: 1; font-size: 9.5px; font-weight: 600; color: #E1E1E5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Front of house</span><span style="width: 26px; height: 3px; border-radius: 2px; background: #0E0E10; position: relative"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 22px; background: #8E8E95; border-radius: 2px"></span></span></span><span style="display: flex; align-items: center; gap: 4px; height: 13px"><span style="flex-grow: 1; font-size: 9.5px; font-weight: 600; color: #E1E1E5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">In-ear</span><span style="width: 26px; height: 3px; border-radius: 2px; background: #0E0E10; position: relative"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 16px; background: #8E8E95; border-radius: 2px"></span></span></span><span style="display: flex; align-items: center; gap: 4px; height: 13px"><span style="flex-grow: 1; font-size: 9.5px; font-weight: 600; color: #E1E1E5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Amp DI</span><span class="chip c-mute" style="height: 12px; font-size: 8px; padding: 0 3px">M</span></span><span style="font-size: 9px; color: #85858C">+ 1 more</span></span></button>
+          <svg aria-hidden="true" width="886" height="208" style="position: absolute; left: 0; top: 0; pointer-events: none" fill="none" stroke="#5A5A60" stroke-width="1.5" stroke-linecap="round"><path d="M204 104 H209 V56 H214"></path><path d="M209 104 V152 H214" ></path><path d="M436 56 H442 V104 H448"></path><path d="M436 152 H442 V104" ></path><path d="M628 104 H770" stroke="#3A3A3F" stroke-dasharray="2 4"></path></svg>
+        </div>
+      </section>
+      <section class="pane stage" style="flex-grow: 1">
+        <div class="hd" style="background: linear-gradient(180deg, #2a2a2e, #222225)"><span style="display: flex; align-items: center; gap: 8px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #30C25A; box-shadow: 0 0 6px #30C25A"></span>Merge · paths A + B</span>
+          <span style="display: flex; align-items: center; gap: 6px; letter-spacing: 0; text-transform: none; font-weight: 500">0.1% CPU</span>
+        </div>
+        <div style="flex-grow: 1; min-height: 0; position: relative">
+<div aria-hidden="true" style="position: absolute; left: 163px; top: 40px; width: 560px; height: 300px; border-radius: 10px; background: linear-gradient(180deg, #2C2C30, #1F1F22); border: 1px solid #3A3A3F; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 24px 30px rgba(0,0,0,0.5)"></div><div style="position: absolute; left: 185px; top: 84px; width: 516px; height: 138px; box-sizing: border-box; border-radius: 6px; background: #26262A; border: 1px solid #38383D; padding: 8px 18px 6px; display: flex; flex-direction: column; gap: 2px"><div style="display: flex; justify-content: center; font-size: 10px; font-weight: 800; letter-spacing: 0.16em; color: #A9A9AF"><span style="width: 148px; display: flex; align-items: center; gap: 8px"><span style="flex-grow: 1; height: 1px; background: #3A3A3F"></span>PATH A<span style="flex-grow: 1; height: 1px; background: #3A3A3F"></span></span><span style="width: 34px"></span><span style="width: 148px; display: flex; align-items: center; gap: 8px"><span style="flex-grow: 1; height: 1px; background: #3A3A3F"></span>PATH B<span style="flex-grow: 1; height: 1px; background: #3A3A3F"></span></span></div><div style="display: flex; justify-content: center; align-items: flex-start"><div style="width: 74px; display: flex; flex-direction: column; align-items: center; gap: 4px"><div role="img" aria-label="Level" style="width: 64px; height: 64px; position: relative"><svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true" style="position: absolute; left: 0; top: 0"><line x1="14.3" y1="49.7" x2="10.8" y2="53.2" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line><line x1="8.2" y1="39.7" x2="3.5" y2="41.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="7.3" y1="28.1" x2="2.4" y2="27.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="11.8" y1="17.3" x2="7.7" y2="14.4" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="20.7" y1="9.7" x2="18.4" y2="5.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="32.0" y1="7.0" x2="32.0" y2="2.0" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line><line x1="43.3" y1="9.7" x2="45.6" y2="5.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="52.2" y1="17.3" x2="56.3" y2="14.4" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="56.7" y1="28.1" x2="61.6" y2="27.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="55.8" y1="39.7" x2="60.5" y2="41.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="49.7" y1="49.7" x2="53.2" y2="53.2" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line></svg><div class="chk" style="background-position: 0 -1280px"></div></div><span style="font-size: 10px; font-weight: 800; letter-spacing: 0.12em; color: #C4C4C9; white-space: nowrap">LEVEL</span></div><div style="width: 74px; display: flex; flex-direction: column; align-items: center; gap: 4px"><div role="img" aria-label="Pan" style="width: 64px; height: 64px; position: relative"><svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true" style="position: absolute; left: 0; top: 0"><line x1="14.3" y1="49.7" x2="10.8" y2="53.2" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line><line x1="8.2" y1="39.7" x2="3.5" y2="41.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="7.3" y1="28.1" x2="2.4" y2="27.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="11.8" y1="17.3" x2="7.7" y2="14.4" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="20.7" y1="9.7" x2="18.4" y2="5.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="32.0" y1="7.0" x2="32.0" y2="2.0" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line><line x1="43.3" y1="9.7" x2="45.6" y2="5.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="52.2" y1="17.3" x2="56.3" y2="14.4" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="56.7" y1="28.1" x2="61.6" y2="27.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="55.8" y1="39.7" x2="60.5" y2="41.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="49.7" y1="49.7" x2="53.2" y2="53.2" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line></svg><div class="chk" style="background-position: 0 -0px"></div></div><span style="font-size: 10px; font-weight: 800; letter-spacing: 0.12em; color: #C4C4C9; white-space: nowrap">PAN</span></div><span style="width: 34px"></span><div style="width: 74px; display: flex; flex-direction: column; align-items: center; gap: 4px"><div role="img" aria-label="Level" style="width: 64px; height: 64px; position: relative"><svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true" style="position: absolute; left: 0; top: 0"><line x1="14.3" y1="49.7" x2="10.8" y2="53.2" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line><line x1="8.2" y1="39.7" x2="3.5" y2="41.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="7.3" y1="28.1" x2="2.4" y2="27.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="11.8" y1="17.3" x2="7.7" y2="14.4" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="20.7" y1="9.7" x2="18.4" y2="5.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="32.0" y1="7.0" x2="32.0" y2="2.0" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line><line x1="43.3" y1="9.7" x2="45.6" y2="5.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="52.2" y1="17.3" x2="56.3" y2="14.4" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="56.7" y1="28.1" x2="61.6" y2="27.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="55.8" y1="39.7" x2="60.5" y2="41.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="49.7" y1="49.7" x2="53.2" y2="53.2" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line></svg><div class="chk" style="background-position: 0 -1088px"></div></div><span style="font-size: 10px; font-weight: 800; letter-spacing: 0.12em; color: #C4C4C9; white-space: nowrap">LEVEL</span><span style="font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 3px; background: #141414; color: #7FC4FF">EXP 1</span></div><div style="width: 74px; display: flex; flex-direction: column; align-items: center; gap: 4px"><div role="img" aria-label="Pan" style="width: 64px; height: 64px; position: relative"><svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true" style="position: absolute; left: 0; top: 0"><line x1="14.3" y1="49.7" x2="10.8" y2="53.2" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line><line x1="8.2" y1="39.7" x2="3.5" y2="41.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="7.3" y1="28.1" x2="2.4" y2="27.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="11.8" y1="17.3" x2="7.7" y2="14.4" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="20.7" y1="9.7" x2="18.4" y2="5.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="32.0" y1="7.0" x2="32.0" y2="2.0" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line><line x1="43.3" y1="9.7" x2="45.6" y2="5.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="52.2" y1="17.3" x2="56.3" y2="14.4" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="56.7" y1="28.1" x2="61.6" y2="27.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="55.8" y1="39.7" x2="60.5" y2="41.3" stroke="#6E6E75" stroke-width="1" stroke-linecap="round"></line><line x1="49.7" y1="49.7" x2="53.2" y2="53.2" stroke="#6E6E75" stroke-width="1.6" stroke-linecap="round"></line></svg><div class="chk" style="background-position: 0 -2560px"></div></div><span style="font-size: 10px; font-weight: 800; letter-spacing: 0.12em; color: #C4C4C9; white-space: nowrap">PAN</span></div></div></div><div style="position: absolute; left: 185px; top: 236px; width: 516px; display: flex; justify-content: center; font-size: 11px; color: #8E8E95; font-variant-numeric: tabular-nums"><span style="width: 148px; text-align: center">A: 0.0 dB · L 100</span><span style="width: 34px"></span><span style="width: 148px; text-align: center">B: −3.0 dB · R 100</span></div><span style="position: absolute; left: 0; right: 0; top: 300px; text-align: center; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; color: #85858C">MERGE · PATHS A + B</span>
+        </div>
+      </section>
+    </section>
+
+    <aside class="pane">
+      <div class="hd"><span>Inspector · Merge</span><span style="letter-spacing: 0; text-transform: none; font-weight: 500">0.1% CPU</span></div>
+      <div style="flex-grow: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column">
+        <div class="hd" style="background: transparent;"><span>Block</span><span style="letter-spacing: 0; text-transform: none; font-weight: 500"></span></div><div style="padding: 6px 10px 10px; display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 7px 8px; align-items: center"><span class="k">Type</span><span style="font-size: 12px; min-width: 0">Merge</span><span class="k">Paths</span><span style="font-size: 12px; min-width: 0">A: Plexi + 4x12<br>B: AC30 + 2x12</span><span class="k">Output</span><span style="font-size: 12px; min-width: 0">Stereo</span><span class="k">Latency</span><span style="font-size: 12px; min-width: 0">B delayed 0.4 ms <span style="color: #85858C">to line up</span></span><span class="k">Stomp switch</span><span style="font-size: 12px; min-width: 0"><span class="fld" style="width: 120px">None <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span></span></div><div class="hd" style="background: transparent; border-top: 1px solid #111113;"><span>Parameters</span><span style="letter-spacing: 0; text-transform: none; font-weight: 500">value · pedal</span></div><div style="display: flex; flex-direction: column; padding: 4px 6px 8px"><div class="row" style="padding: 0 4px; gap: 6px"><span style="width: 60px; color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Level A</span><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: #0E0E10; position: relative"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 77%; background: #8E8E95; border-radius: 2px"></span></span><span style="width: 58px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap">0.0 dB</span><span style="width: 44px"></span></div><div class="row" style="padding: 0 4px; gap: 6px"><span style="width: 60px; color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Pan A</span><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: #0E0E10; position: relative"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: #8E8E95; border-radius: 2px"></span></span><span style="width: 58px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap">L 100</span><span style="width: 44px"></span></div><div class="row" style="padding: 0 4px; gap: 6px"><span style="width: 60px; color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Level B</span><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: #0E0E10; position: relative"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 64%; background: #6EA5FA; border-radius: 2px"></span></span><span style="width: 58px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap">−3.0 dB</span><span style="width: 44px; text-align: center; font-size: 9.5px; font-weight: 700; padding: 1px 0; border-radius: 3px; background: #1B2C45; color: #7FC4FF">EXP 1</span></div><div class="row" style="padding: 0 4px; gap: 6px"><span style="width: 60px; color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Pan B</span><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: #0E0E10; position: relative"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: #8E8E95; border-radius: 2px"></span></span><span style="width: 58px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap">R 100</span><span style="width: 44px"></span></div></div><div class="hd" style="background: transparent; border-top: 1px solid #111113;"><span>Assignments</span><span style="letter-spacing: 0; text-transform: none; font-weight: 500">right-click a knob or block</span></div><div style="display: flex; flex-direction: column; padding: 4px 6px 8px"><div class="row"><span style="width: 62px; color: #C4C4C9">EXP 1</span><span style="color: #6E6E75">→</span><span>Level B · heel −∞, toe 0 dB</span></div><div class="row"><span style="width: 62px; color: #C4C4C9">Stomp 2</span><span style="color: #6E6E75">→</span><span>Split: path B on/off</span></div></div>
+      </div>
+    </aside>
+  </main>
+
+  <section style="height: 104px; flex-shrink: 0; margin: 0 8px 8px; display: grid; grid-template-columns: 250px minmax(0, 1fr) 272px; gap: 8px">
+    <div class="pane" style="padding: 8px 10px; gap: 5px; justify-content: center">
+      <span style="display: flex; justify-content: space-between; align-items: baseline"><span class="k">Input</span><span style="font-size: 10.5px; color: #6E6E75">playing patch</span></span>
+      <span style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 13px; font-weight: 600; color: #E8E8EB">Guitar</span><span style="font-size: 11px; color: #85858C; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">1 · Input 1 (Mic/Inst)</span></span>
+      <span style="height: 8px; border-radius: 4px; background: #0E0E10; position: relative; overflow: hidden"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 64%; background: linear-gradient(90deg, #2BC24F 0, #2BC24F 80%, #E8CF3A)"></span><span style="position: absolute; left: 70%; top: 0; bottom: 0; width: 2px; background: #E8E8EB"></span></span>
+    </div>
+    <div class="pane" style="padding: 6px 8px 8px; gap: 5px">
+      <div style="display: flex; align-items: center; gap: 8px; height: 18px"><span style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #85858C">OUTPUTS</span><span style="font-size: 10.5px; color: #6E6E75">3 on this computer · M mutes one</span><div style="flex-grow: 1"></div><div role="group" aria-label="Output strips" style="display: flex; border: 1px solid #0E0E10; border-radius: 5px; overflow: hidden"><button class="b b-on" style="height: 18px; font-size: 10px; border: 0; border-radius: 0; padding: 0 7px">Compact</button><button class="b" style="height: 18px; font-size: 10px; border: 0; border-left: 1px solid #0E0E10; border-radius: 0; padding: 0 7px">Full</button></div></div>
+      <div style="display: flex; gap: 6px; min-width: 0"><div role="group" aria-label="Output Front of house" style="flex: 1 1 0; min-width: 0; flex-shrink: 0; box-sizing: border-box; padding: 6px 8px; border-radius: 5px; background: #18181B; border: 1px solid #111113; display: flex; flex-direction: column; gap: 5px"><span style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1">Front of house</span><span style="font-size: 9.5px; color: #6E6E75; font-variant-numeric: tabular-nums">1/2</span></span><span style="display: flex; align-items: center; gap: 6px"><span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><span class="meterh"><i style="width: 62%"></i></span><span class="meterh"><i style="width: 57%"></i></span></span><button class="mb" title="Mute Front of house">M</button></span><span style="font-size: 10.5px; color: #8E8E95; font-variant-numeric: tabular-nums">0.0 dB</span></div><div role="group" aria-label="Output In-ear" style="flex: 1 1 0; min-width: 0; flex-shrink: 0; box-sizing: border-box; padding: 6px 8px; border-radius: 5px; background: #18181B; border: 1px solid #111113; display: flex; flex-direction: column; gap: 5px"><span style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1">In-ear</span><span style="font-size: 9.5px; color: #6E6E75; font-variant-numeric: tabular-nums">3/4</span></span><span style="display: flex; align-items: center; gap: 6px"><span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><span class="meterh"><i style="width: 48%"></i></span><span class="meterh"><i style="width: 43%"></i></span></span><button class="mb" title="Mute In-ear">M</button></span><span style="font-size: 10.5px; color: #8E8E95; font-variant-numeric: tabular-nums">−6.0 dB</span></div><div role="group" aria-label="Output Amp DI" style="flex: 1 1 0; min-width: 0; flex-shrink: 0; box-sizing: border-box; padding: 6px 8px; border-radius: 5px; background: #18181B; border: 1px solid #111113; display: flex; flex-direction: column; gap: 5px"><span style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1">Amp DI</span><span style="font-size: 9.5px; color: #6E6E75; font-variant-numeric: tabular-nums">5</span></span><span style="display: flex; align-items: center; gap: 6px"><span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><span class="meterh"><i style="width: 0%"></i></span><span class="meterh"><i style="width: 0%"></i></span></span><button class="mb mb-on" title="Mute Amp DI">M</button></span><span style="font-size: 10.5px; color: #FF8A80; font-variant-numeric: tabular-nums">muted</span></div></div>
+    </div>
+    <div class="pane" style="padding: 8px 10px; gap: 3px; font-size: 11px; color: #A9A9AF; font-variant-numeric: tabular-nums">
+      <div style="display: flex; justify-content: space-between; align-items: center"><span class="k" style="font-weight: 600">System health</span><button class="b" style="height: 18px; font-size: 10.5px; padding: 0 6px">Reset counters</button></div>
+      <span>CPU 9% · overruns 0 · dropouts 0 · limiter idle</span>
+      <span>48.0 kHz · 64 samples · 5.3 ms round trip</span>
+      <span style="color: #FFB340">⚠ Output “Amp DI” is muted</span>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var mk = function (kind, name, on, diff) { return { kind: kind, on: on, diff: diff, aria: name + (on ? ', on' : ', bypassed') + (diff ? ', changes in this scene' : '') }; };
+    var knobVals = [
+      ['Input', '0.0 dB', 0.5, '', ''],
+      ['Bass', '0.0 dB', 0.5, '', ''],
+      ['Mid', '0.0 dB', 0.5, '', ''],
+      ['Treble', '0.0 dB', 0.5, '', '']
+    ];
+    var sceneDefs = [['Verse', '#4C8DF6', true], ['Chorus', '#FF9F0A', false], ['Solo', '#FF6B4A', false], ['Outro', '#BF9BFF', false]];
+    // Running order: sections (headings) and songs; cut songs only show in the full list.
+    var cues = [['#', 'Set 1'], ['Clean', 'Clean'], ['Dual amp intro', 'Dual amp', 'PC 2'], ['Opener', 'Crunch'], ['Ballad in D', 'Acoustic'], ['#', 'Set 2'], ['Shuffle', 'Edge'], ['Rock Medley', 'Lead', 'PC 7  OUT'], ['Closer', 'Dual amp'], ['#', 'Encore'], ['Last Call', 'Lead']];
+    var patches = [['Clean', '#4C8DF6', '1 cue'], ['Dual amp', '#FF6B4A', '2 cues'], ['Crunch', '#FF9F0A', '1 cue'], ['Acoustic', '#30C25A', '1 cue'], ['Edge', '#30C25A', '1 cue'], ['Lead', '#FF6B4A', '2 cues']];
+    var params = [['Input', '0.0 dB', '50%', ''], ['Output', '0.0 dB', '77%', 'EXP 1'], ['Bass', '0.0 dB', '50%', ''], ['Mid', '0.0 dB', '50%', ''], ['Treble', '0.0 dB', '50%', '']];
+    return {
+      cues: (function () {
+        var n = 0;
+        return cues.map(function (c) {
+          if (c[0] === '#') return { isHeading: true, isItem: false, heading: c[1].toUpperCase() };
+          n++;
+          var cur = n === 2;
+          return { isHeading: false, isItem: true, no: n, name: c[0], patch: (c[2] ? c[2] + '  ' : '') + c[1], bg: cur ? '#2E62C4' : 'transparent', fg: '#E8E8EB', num: cur ? '#FFFFFF' : '#7A7A80', sub: cur ? '#D3E1FA' : '#85858C', bar: cur ? '#30C25A' : 'transparent', weight: cur ? '600' : '400' };
+        });
+      })(),
+      patches: patches.map(function (p, i) {
+        return { name: p[0], color: p[1], used: p[2], bg: i === 1 ? '#2B2B30' : 'transparent', weight: i === 1 ? '600' : '400' };
+      }),
+      sceneList: sceneDefs.map(function (s) {
+        return { name: s[0], color: s[1], cls: s[2] ? 'b b-on' : 'b', fg: s[2] ? '#FFFFFF' : '#C4C4C9', glow: s[2] ? '0 0 6px ' + s[1] : 'none' };
+      }),
+      params: params.map(function (p) {
+        var src = p[3];
+        return { name: p[0], value: p[1], pct: p[2], color: src === 'SCENE' ? '#FF9F0A' : (src ? '#6EA5FA' : '#8E8E95'), chip: src || '', chipBg: src === 'SCENE' ? '#3A2C14' : (src ? '#1B2C45' : 'transparent'), chipFg: src === 'SCENE' ? '#FFB340' : (src ? '#7FC4FF' : '#6E6E75') };
+      }),
+      chainA: [],
+      chainB: [mk('gate', 'Noise gate', false, false), mk('eq', 'EQ', false, false), mk('delay', 'Delay', false, false)],
+      knobs: knobVals.map(function (k) {
+        var mapped = k[3] !== '';
+        return {
+          label: k[0].toUpperCase(), value: k[1], aria: k[0] + ' ' + k[1],
+          deg: Math.round(-135 + 270 * k[2]),
+          pos: '-' + (Math.round(k[2] * 40) * 64) + 'px',
+          chip: mapped ? k[3] : '',
+          chipBg: mapped ? '#141414' : 'transparent',
+          chipFg: mapped ? k[4] : '#5a4520'
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

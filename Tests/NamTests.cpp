@@ -137,6 +137,7 @@ public:
 
             auto secondModel = loadModel ("lstm.nam");
             auto signal = sine (110.0, 0.3f, blockSize);
+            std::vector<float> spare ((size_t) blockSize);
             const auto before = realtimeAllocationCount();
 
             for (int i = 0; i < 1500; ++i)
@@ -149,8 +150,8 @@ public:
                     amp.installModel (std::move (secondModel));   // message-thread work
 
                 const rt::ScopedRealtimeSection realtime;
-                float* channels[1] = { signal.data() };
-                chain.process (channels, 1, blockSize);
+                float* channels[2] = { signal.data(), spare.data() };
+                chain.process (channels, blockSize);
             }
 
             expectEquals (realtimeAllocationCount() - before, 0);
