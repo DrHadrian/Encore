@@ -5,10 +5,30 @@
 #include <juce_events/juce_events.h>
 #include <iostream>
 
+#if JUCE_WINDOWS
+ #include <crtdbg.h>
+ #include <cstdlib>
+ #include <windows.h>
+#endif
+
 #include "session/PluginCatalog.h"
 
 int main (int argc, char* argv[])
 {
+   #if JUCE_WINDOWS
+    // No dialogs in CI: a failed debug check of the C runtime or the standard
+    // library (an index out of range, say) prints to stderr and the run fails,
+    // instead of waiting for someone to click a message box that nobody sees.
+    SetErrorMode (SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    _set_abort_behavior (0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+
+    for (const auto type : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
+    {
+        _CrtSetReportMode (type, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
+        _CrtSetReportFile (type, _CRTDBG_FILE_STDERR);
+    }
+   #endif
+
     // Creates the message manager and shuts it (and other singletons) down cleanly.
     const juce::ScopedJuceInitialiser_GUI juceRuntime;
 
