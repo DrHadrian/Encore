@@ -17,6 +17,8 @@
 #include "ui/BottomRow.h"
 #include "ui/ChainStrip.h"
 #include "ui/JackStage.h"
+#include "ui/MidiSettings.h"
+#include "ui/SettingsWindow.h"
 #include "ui/kit/Fader.h"
 #include "ui/RoutingView.h"
 #include "ui/theme/EncoreTheme.h"
@@ -452,6 +454,99 @@ public:
 
             pumpUntil ([&] { return main.isShowingRouting(); }, 2000);
             expect (main.isShowingRouting() && ! main.isShowingPreShowCheck(), "Routing... opens Routing");
+        }
+
+        beginTest ("MIDI: the action menu at Mute output, a binding to an output not here in amber (m11-settings-midi-mute-output)");
+        {
+            Rig rig (root.getChildFile ("Settings midi"), show);
+            using K = MidiTrigger::Kind;
+            const auto bind = [] (MidiAction a, int index, K kind, int channel, int number, const char* output = "")
+            {
+                MidiBinding b;
+                b.action = a;
+                b.index = index;
+                b.trigger = { kind, channel, number };
+                b.output = output;
+                return b;
+            };
+            rig.settings.setMidiBindings ({ bind (MidiAction::nextCue, 1, K::controlChange, 0, 64),
+                                            bind (MidiAction::previousCue, 1, K::controlChange, 1, 65),
+                                            bind (MidiAction::programRecall, 1, K::programChange, 0, 0),
+                                            bind (MidiAction::stomp, 1, K::controlChange, 1, 80),
+                                            bind (MidiAction::stomp, 2, K::controlChange, 1, 81),
+                                            bind (MidiAction::expression, 1, K::controlChange, 0, 11),
+                                            bind (MidiAction::mute, 1, K::note, 10, 36),
+                                            bind (MidiAction::muteOutput, 1, K::controlChange, 1, 85, "In-ear"),
+                                            bind (MidiAction::muteOutput, 1, K::controlChange, 1, 86, "Monitor wedge"),
+                                            bind (MidiAction::tuner, 1, K::controlChange, 1, 69),
+                                            bind (MidiAction::panic, 1, K::controlChange, 1, 70) });
+
+            MainComponent main (rig.settings, std::make_unique<BoardDeviceType> (focusriteSpec()));
+            main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            pump (800);
+            main.openSettings (SettingsWindow::Tab::midi);
+            pump (200);
+
+            juce::TextButton* first = nullptr;
+            std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+            {
+                for (auto* child : c.getChildren())
+                {
+                    if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && first == nullptr && b->getButtonText() == "Next cue")
+                        first = b;
+
+                    find (*child);
+                }
+            };
+            find (main);
+            expect (first != nullptr, "the first mapping's action button");
+
+            // The menu as the row's button opens it, Mute output ▸ In-ear highlighted.
+            auto image = main.createComponentSnapshot (main.getLocalBounds(), false, 1.0f);
+            {
+                juce::Graphics g (image);
+                auto& lnf = main.getLookAndFeel();
+                const auto menu = MidiSettings::makeActionMenu ({ "Front of house", "In-ear", "Amp DI" });
+                const auto at = first != nullptr ? main.getLocalArea (first->getParentComponent(), first->getBounds()).getTopLeft() : juce::Point<int>();
+                int muteOutputIndex = -1, i = 0;
+                const juce::PopupMenu* outputsMenu = nullptr;
+
+                for (juce::PopupMenu::MenuItemIterator it (menu); it.next(); ++i)
+                    if (it.getItem().text == "Mute output")
+                    {
+                        muteOutputIndex = i;
+                        outputsMenu = it.getItem().subMenu.get();
+                    }
+
+                expect (outputsMenu != nullptr, "Mute output has a submenu");
+                const auto items = paintMenu (g, lnf, menu, at, muteOutputIndex);
+
+                if (outputsMenu != nullptr && juce::isPositiveAndBelow (muteOutputIndex, (int) items.size()))
+                {
+                    const auto overlap = theme::size::menuPadding * 3;
+                    const auto parent = items[(size_t) muteOutputIndex];
+                    paintMenu (g, lnf, *outputsMenu, { parent.getRight() + theme::size::menuPadding - overlap, parent.getY() - theme::size::menuPadding }, 1);
+                }
+            }
+
+            writeSnapshot (image, "m11-settings-midi-mute-output");
+            expect (hasContent (image));
+
+            // The rows say what they do; the one whose output isn't here says so.
+            juce::StringArray actions;
+            std::function<void (juce::Component&)> collect = [&] (juce::Component& c)
+            {
+                for (auto* child : c.getChildren())
+                {
+                    if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && b->getButtonText().startsWith ("Mute output"))
+                        actions.add (b->getButtonText());
+
+                    collect (*child);
+                }
+            };
+            collect (main);
+            expect (actions.contains ("Mute output: In-ear") && actions.contains ("Mute output: Monitor wedge"), actions.joinIntoString (", "));
+            main.closeSettings();
         }
 
         // The IN and OUT stages act on the patch (a show of its own: these change it).

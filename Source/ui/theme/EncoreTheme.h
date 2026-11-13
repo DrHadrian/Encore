@@ -80,6 +80,7 @@ namespace colour
     constexpr juce::uint32 okBadgeTick     = 0xff4CD964;
     constexpr juce::uint32 amber           = 0xffFFB340;   // warnings, section headings (at 85 %), bar marks
     constexpr juce::uint32 amberSection    = 0xD9FFB340;   // amber at 85 %: section headings / kinds
+    constexpr juce::uint32 missingRow      = 0x14FF9F0A;   // a mapping row whose output isn't on this computer (amber 8 %)
     constexpr juce::uint32 amberStrong     = 0xffFF9F0A;   // amber badge fill
     constexpr juce::uint32 amberInk        = 0xff1A1200;   // text on amber badge
     constexpr juce::uint32 noticeTop       = 0xff3D2F12;   // notice bar gradient

@@ -22,8 +22,12 @@ namespace
 
     constexpr int learnTimeoutMs = 15000;
 
-    /** Every action the menu offers, as (action, index) pairs with menu ids. */
-    void addActionItems (juce::PopupMenu& menu, int idBase)
+    constexpr int actionIdBase = 1000;
+    constexpr int outputIdBase = 100000;   // Mute output ▸ <name>: this + the output's position
+
+    /** Every action the menu offers, as (action, index) pairs with menu ids;
+        Mute output ▸ lists this computer's outputs. */
+    void addActionItems (juce::PopupMenu& menu, int idBase, const juce::StringArray& outputs)
     {
         const auto id = [idBase] (MidiAction a, int index) { return idBase + (int) a * 16 + index; };
 
@@ -43,17 +47,36 @@ namespace
         menu.addSubMenu ("Expression pedal", pedals);
         menu.addSeparator();
         menu.addItem (id (MidiAction::mute, 1), describe (MidiAction::mute, 1));
+
+        juce::PopupMenu outputItems;
+
+        for (int i = 0; i < outputs.size(); ++i)
+            outputItems.addItem (outputIdBase + i, outputs[i]);
+
+        menu.addSubMenu (describe (MidiAction::muteOutput, 1), outputItems, ! outputs.isEmpty());
         menu.addItem (id (MidiAction::tuner, 1), describe (MidiAction::tuner, 1));   // the stale "(from milestone 7)" is gone
         menu.addItem (id (MidiAction::panic, 1), describe (MidiAction::panic, 1));
     }
 
-    bool decodeAction (int result, int idBase, MidiAction& action, int& index)
+    bool decodeAction (int result, int idBase, const juce::StringArray& outputs, MidiBinding& binding)
     {
+        if (result >= outputIdBase)
+        {
+            if (! juce::isPositiveAndBelow (result - outputIdBase, outputs.size()))
+                return false;
+
+            binding.action = MidiAction::muteOutput;
+            binding.index = 1;
+            binding.output = outputs[result - outputIdBase];
+            return true;
+        }
+
         if (result < idBase)
             return false;
 
-        action = (MidiAction) ((result - idBase) / 16);
-        index = (result - idBase) % 16;
+        binding.action = (MidiAction) ((result - idBase) / 16);
+        binding.index = (result - idBase) % 16;
+        binding.output = {};
         return true;
     }
 }
@@ -100,8 +123,17 @@ public:
     void show (const MidiBinding& binding, bool isLearning)
     {
         learning = isLearning;
-        actionButton.setButtonText (describe (binding.action, binding.index));
+        actionButton.setButtonText (describe (binding));
         trigger = learning ? juce::String (juce::CharPointer_UTF8 ("Press the control now\xe2\x80\xa6")) : describe (binding.trigger);
+
+        // Mute output with a name this computer hasn't: amber, and says so.
+        missing = ! learning && binding.action == MidiAction::muteOutput
+                  && owner.settings.getRouting().findOutput (binding.output) == nullptr;
+
+        if (missing)
+            trigger << juce::String (juce::CharPointer_UTF8 (" \xc2\xb7 no output \xe2\x80\x9c")) << binding.output
+                    << juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9d here"));
+
         learnButton.setButtonText (learning ? "Cancel" : "Learn");
         learnButton.setToggleState (learning, juce::dontSendNotification);
         repaint();
@@ -111,10 +143,12 @@ public:
     {
         if (learning)
             g.fillAll (paint::c (colour::learningRow));
+        else if (missing)
+            g.fillAll (paint::c (colour::missingRow));
         else if (rowIndex % 2 == 1)
             g.fillAll (paint::c (colour::mappingRowAlt));
 
-        paint::text (g, trigger, triggerBox, type::body, learning ? colour::amber : colour::triggerText);
+        paint::text (g, trigger, triggerBox, type::body, learning || missing ? colour::amber : colour::triggerText);
     }
 
     void resized() override
@@ -140,25 +174,25 @@ private:
 
     void chooseAction()
     {
-        constexpr int idBase = 1000;
-        juce::PopupMenu menu;
-        addActionItems (menu, idBase);
+        const auto outputs = owner.outputNames();
+        auto menu = MidiSettings::makeActionMenu (outputs);
 
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&actionButton),
-                            [safe = juce::Component::SafePointer<MidiSettings> (&owner), row = rowIndex] (int result)
+                            [safe = juce::Component::SafePointer<MidiSettings> (&owner), row = rowIndex, outputs] (int result)
         {
-            MidiAction action;
-            int index = 1;
+            MidiBinding chosen;
 
-            if (safe == nullptr || ! decodeAction (result, idBase, action, index))
+            if (safe == nullptr || ! decodeAction (result, actionIdBase, outputs, chosen))
                 return;
 
             auto bindings = safe->currentBindings();
 
             if (juce::isPositiveAndBelow (row, (int) bindings.size()))
             {
+                const auto action = chosen.action;
                 bindings[(size_t) row].action = action;
-                bindings[(size_t) row].index = index;
+                bindings[(size_t) row].index = chosen.index;
+                bindings[(size_t) row].output = chosen.output;
 
                 if (action == MidiAction::programRecall)
                     bindings[(size_t) row].trigger.kind = MidiTrigger::Kind::programChange;
@@ -174,7 +208,7 @@ private:
     kit::IconButton removeButton { Icon::close, "Remove mapping" };
     juce::String trigger;
     juce::Rectangle<float> triggerBox;
-    bool learning = false;
+    bool learning = false, missing = false;
 };
 
 //==============================================================================
@@ -311,18 +345,34 @@ void MidiSettings::stopLearning()
     rebuildRows();
 }
 
+juce::PopupMenu MidiSettings::makeActionMenu (const juce::StringArray& outputs)
+{
+    juce::PopupMenu menu;
+    addActionItems (menu, actionIdBase, outputs);
+    return menu;
+}
+
+juce::StringArray MidiSettings::outputNames() const
+{
+    juce::StringArray names;
+
+    for (const auto& o : settings.getRouting().outputs)
+        names.add (o.name);
+
+    return names;
+}
+
 void MidiSettings::showAddMenu()
 {
-    constexpr int idBase = 1000;
-    juce::PopupMenu menu;
-    addActionItems (menu, idBase);
+    const auto outputs = outputNames();
+    auto menu = makeActionMenu (outputs);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&addButton),
-                        [safe = juce::Component::SafePointer<MidiSettings> (this)] (int result)
+                        [safe = juce::Component::SafePointer<MidiSettings> (this), outputs] (int result)
     {
         MidiBinding binding;
 
-        if (safe == nullptr || ! decodeAction (result, idBase, binding.action, binding.index))
+        if (safe == nullptr || ! decodeAction (result, actionIdBase, outputs, binding))
             return;
 
         if (binding.action == MidiAction::programRecall)
