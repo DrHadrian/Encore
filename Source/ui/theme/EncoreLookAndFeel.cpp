@@ -391,12 +391,23 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
 
     if (const auto key = button.getProperties()["encoreKeyCap"].toString(); key.isNotEmpty())
     {
-        // Text and key cap centred together.
+        // [icon] text and key cap centred together (Routing F7).
+        const auto icon = buttonIcon (button);
+        const auto iconW = icon ? std::get<1> (*icon) + (float) iconGap : 0.0f;
         const auto capW = (float) kit::KeyCap::widthFor (key);
-        const auto textW = juce::jmin ((float) area.getWidth() - capW - (float) size::keyCapGap, textWidth (f, button.getButtonText()) + 1.0f);
-        auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (textW + (float) size::keyCapGap + capW, (float) area.getWidth()), (float) area.getHeight());
+        const auto textW = juce::jmin ((float) area.getWidth() - capW - iconW - (float) size::keyCapGap, textWidth (f, button.getButtonText()) + 1.0f);
+        auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (iconW + textW + (float) size::keyCapGap + capW, (float) area.getWidth()),
+                                                         (float) area.getHeight());
         const auto cap = row.removeFromRight (capW).withSizeKeepingCentre (capW, (float) size::keyCapH);
         kit::paintKeyCap (g, cap, key);
+
+        if (icon)
+        {
+            const auto size = std::get<1> (*icon);
+            drawIcon (g, std::get<0> (*icon), row.removeFromLeft (size).withSizeKeepingCentre (size, size), colourToUse);
+            row.removeFromLeft ((float) iconGap);
+        }
+
         g.setFont (f);
         g.setColour (colourToUse);
         g.drawText (button.getButtonText(), row.withTrimmedRight ((float) size::keyCapGap), juce::Justification::centred, true);

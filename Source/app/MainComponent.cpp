@@ -368,6 +368,7 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     chainStrip = std::make_unique<ChainStrip> (*session);
     chainStrip->onSelectionChanged = [this] (int) { showSelectedBlock(); };
     chainStrip->onFindPlugins = [this] { openSettings (SettingsWindow::Tab::plugins); };
+    chainStrip->onHeightChanged = [this] { resized(); };
     addAndMakeVisible (*chainStrip);
 
     openInitialShow();
@@ -429,6 +430,7 @@ MainComponent::~MainComponent()
     cueEditor = nullptr;
     routingView = nullptr;
     blockPanel = nullptr;
+    jackStage = nullptr;
     inspector = nullptr;
     chainStrip = nullptr;
     patchList = nullptr;
@@ -666,13 +668,28 @@ void MainComponent::showSelectedBlock()
     const auto index = chainStrip->getSelectedIndex();
     auto* chain = engine.getChain();
 
-    if (chain == shownChain && index == shownBlockIndex && blockPanel != nullptr)
+    if (chain == shownChain && index == shownBlockIndex && (blockPanel != nullptr || jackStage != nullptr))
         return;
 
     shownChain = chain;
     shownBlockIndex = index;
     blockPanel = nullptr;
+    jackStage = nullptr;
     inspector->setBlock (chain, index);
+
+    // The chain's IN or OUT tile: the patch's input or sends.
+    if (chain != nullptr && (index == ChainStrip::inputSelected || index == ChainStrip::outputSelected))
+    {
+        const auto kind = index == ChainStrip::inputSelected ? JackStage::Kind::input : JackStage::Kind::output;
+        jackStage = std::make_unique<JackStage> (kind, engine, *session, deviceManager);
+        jackStage->onOpenRouting = [this] { setRoutingVisible (true); };
+        jackStage->refresh();
+        showJackInspector();
+
+        const auto behindStage = cueEditor != nullptr ? getIndexOfChildComponent (cueEditor.get()) : -1;
+        addAndMakeVisible (*jackStage, behindStage);
+        keepKeysForTheShow (*jackStage);
+    }
 
     if (chain != nullptr && juce::isPositiveAndBelow (index, (int) chain->getBlocks().size()))
     {
@@ -730,6 +747,23 @@ void MainComponent::showSelectedBlock()
     }
 
     relayout();
+}
+
+void MainComponent::showJackInspector()
+{
+    if (jackStage == nullptr)
+        return;
+
+    const auto input = jackStage->getKind() == JackStage::Kind::input;
+    inspector->setInfo (input ? "Input" : "Output", "this patch", jackStage->getInspectorSections());
+    inspector->onInfoButton = [this] (int)
+    {
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
+        {
+            if (safe != nullptr)
+                safe->setRoutingVisible (true);
+        });
+    };
 }
 
 void MainComponent::relayout()
@@ -1165,6 +1199,71 @@ void MainComponent::refreshBottomRow()
 
         inputSummary.setInput (input.name, caption, missing);
     }
+
+    refreshChainJacks();
+}
+
+void MainComponent::refreshChainJacks()
+{
+    // The chain's IN and OUT tiles: the playing patch's input and sends.
+    const auto& routing = engine.getRouting();
+    const auto* patch = session->getPatch (session->getActivePatchId());
+    using Dot = kit::UtilityTileInfo::Dot;
+
+    kit::UtilityTileInfo in;
+    in.label = "In";
+    in.nameAtBottom = true;
+    in.icon = Icon::jack;
+    const auto wanted = patch != nullptr ? patch->inputName() : juce::String();
+
+    if (wanted.isNotEmpty() && routing.findInput (wanted) == nullptr)
+    {
+        in.name = wanted;
+        in.caption = "not here";
+        in.amber = true;
+        in.dot = Dot::amber;
+    }
+    else if (! routing.inputs.empty())
+    {
+        const auto& input = routing.inputFor (wanted);
+        in.name = input.name;
+        in.caption = "input " + juce::String (input.channel);
+        in.dot = Dot::on;
+    }
+
+    kit::UtilityTileInfo out;
+    out.label = "Out";
+    out.dot = Dot::on;
+
+    if (patch != nullptr)
+    {
+        // This computer's outputs, then the show's names that aren't here.
+        juce::StringArray names;
+
+        for (const auto& o : routing.outputs)
+            names.add (o.name);
+
+        for (const auto& s : patch->sends)
+            if (routing.findOutput (s.output) == nullptr)
+                names.addIfNotAlreadyThere (s.output);
+
+        for (int i = 0; i < names.size(); ++i)
+        {
+            if (i == size::outTileLines)
+            {
+                out.more = "+ " + juce::String (names.size() - i) + " more";
+                break;
+            }
+
+            const auto send = patch->sendFor (names[i]);
+            const auto slot = engine.getOutputSlot (names[i]);
+            const auto on = send.on && send.levelDb > routing::silentDb;
+            out.lines.push_back ({ names[i], on ? 1.0f - kit::faderLaw::positionFor (send.levelDb) : 0.0f,
+                                   slot >= 0 && engine.isOutputMuted (slot) });
+        }
+    }
+
+    chainStrip->setJackTiles (in, out);
 }
 
 void MainComponent::setOutputMuted (const juce::String& outputName, bool shouldBeMuted)
@@ -1770,6 +1869,12 @@ void MainComponent::timerCallback()
     if (blockPanel != nullptr)
         blockPanel->refresh();
 
+    if (jackStage != nullptr)
+    {
+        if (jackStage->refresh())
+            showJackInspector();
+    }
+
     inspector->refresh();
 
     // Plugin windows without an editor of their own: their parameter lists.
@@ -1814,6 +1919,9 @@ void MainComponent::timerCallback()
         routingView->refresh();
         routingView->update (snapshot);
     }
+
+    if (jackStage != nullptr)
+        jackStage->update (snapshot);
 
     for (int i = 0; i < outputsPane.getNumStrips() && i < (int) engine.getRouting().outputs.size(); ++i)
     {
@@ -2127,12 +2235,15 @@ void MainComponent::resized()
     area.removeFromTop (size::gap);
 
     if (chainStrip != nullptr)
-        chainStrip->setBounds (area.removeFromTop (size::chainPaneH));
+        chainStrip->setBounds (area.removeFromTop (chainStrip->getIdealHeight()));
 
     area.removeFromTop (size::gap);
 
     if (blockPanel != nullptr)
         blockPanel->setBounds (area);   // the block stage fills the rest
+
+    if (jackStage != nullptr)
+        jackStage->setBounds (area);
 }
 
 //==============================================================================

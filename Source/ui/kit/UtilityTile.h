@@ -5,6 +5,12 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <optional>
+
+#include "ui/theme/Icons.h"
+
+#include <vector>
+
 namespace encore::kit
 {
 
@@ -20,10 +26,31 @@ struct UtilityTileInfo
     bool amber = false;     // a problem: amber border and name
     bool footswitch = false;
 
+    /** Jack and split / merge tiles: the caption, then the name, at the
+        bottom (IN: "input 1" over "Guitar"; SPLIT: "A + B"). */
+    bool nameAtBottom = false;
+
+    /** Jack and split / merge tiles: an icon in the middle (22 px). */
+    std::optional<theme::Icon> icon;
+
+    /** The OUT tile: a line per send (the output's name, a small bar on the
+        send law, or M when that output is muted), then "+ N more". */
+    struct Line
+    {
+        juce::String text;
+        float proportion = 0.0f;   // of the bar, 0 … 1
+        bool muted = false;
+
+        bool operator== (const Line&) const = default;
+    };
+
+    std::vector<Line> lines;
+    juce::String more;
+
     bool operator== (const UtilityTileInfo& o) const
     {
-        return label == o.label && name == o.name && caption == o.caption && dot == o.dot
-            && amber == o.amber && footswitch == o.footswitch;
+        return label == o.label && name == o.name && caption == o.caption && dot == o.dot && amber == o.amber
+            && footswitch == o.footswitch && nameAtBottom == o.nameAtBottom && icon == o.icon && lines == o.lines && more == o.more;
     }
 
     bool operator!= (const UtilityTileInfo& o) const { return ! (*this == o); }

@@ -14,6 +14,9 @@
 #include "app/AppSettings.h"
 #include "app/MainComponent.h"
 #include "ui/BottomRow.h"
+#include "ui/ChainStrip.h"
+#include "ui/JackStage.h"
+#include "ui/kit/Fader.h"
 #include "ui/RoutingView.h"
 #include "ui/theme/EncoreTheme.h"
 
@@ -65,6 +68,42 @@ public:
         AppSettings settings;
     };
 
+    /** The first component below parent with this accessible title. */
+    static juce::Component* findTitled (juce::Component& parent, const juce::String& title)
+    {
+        for (auto* c : parent.getChildren())
+        {
+            if (c->getTitle() == title)
+                return c;
+
+            if (auto* found = findTitled (*c, title))
+                return found;
+        }
+
+        return nullptr;
+    }
+
+    /** A click released over the middle of c (what the input cards act on). */
+    static void releaseClick (juce::Component& c)
+    {
+        const auto centre = c.getLocalBounds().getCentre().toFloat();
+        const auto now = juce::Time::getCurrentTime();
+        const juce::MouseEvent e (juce::Desktop::getInstance().getMainMouseSource(), centre, {}, juce::MouseInputSource::defaultPressure,
+                                  juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                  juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY, &c, &c, now, centre, now, 1, false);
+        c.mouseUp (e);
+    }
+
+    static juce::String inspectorValue (const JackStage& stage, const juce::String& key)
+    {
+        for (const auto& section : stage.getInspectorSections())
+            for (const auto& row : section.rows)
+                if (row.key == key)
+                    return row.value;
+
+        return {};
+    }
+
     static void goToCue (MainComponent& main, int number)
     {
         const auto digits = juce::String (number);
@@ -97,6 +136,43 @@ public:
             expectEquals (outputs != nullptr ? outputs->getNumStrips() : 0, 3);
             expect (outputs != nullptr && outputs->getStrip (2)->getMuteButton().getToggleState(), "Amp DI muted");
             expect (hasContent (renderSnapshot (main, "m11-edit-bottom-row")));
+
+            beginTest ("Dual amp's split paths: IN, gate, SPLIT, two rows, MERGE (selected), delay, OUT (m11-edit-split-merge)");
+            {
+                auto* strip = findChild<ChainStrip> (main);
+                expect (strip != nullptr && strip->getChain() != nullptr && strip->getChain()->hasSplit());
+                expectEquals (strip != nullptr ? strip->getIdealHeight() : 0, theme::size::chainSplitPaneH);
+
+                if (strip != nullptr && strip->getChain() != nullptr)
+                    strip->selectBlock (strip->getChain()->getMergeIndex());
+
+                pump (400);
+                expect (hasContent (renderSnapshot (main, "m11-edit-split-merge")));
+
+                beginTest ("OUT selected: the patch's sends as faders (m11-edit-out-sends)");
+                {
+                    if (strip != nullptr)
+                        strip->selectBlock (ChainStrip::outputSelected);
+
+                    pump (400);
+                    expect (hasContent (renderSnapshot (main, "m11-edit-out-sends")));
+                }
+
+                beginTest ("IN selected, its name not on this computer, path B off (m11-edit-in-missing)");
+                {
+                    if (strip != nullptr && strip->getChain() != nullptr)
+                    {
+                        strip->getChain()->getBlocks()[(size_t) strip->getChain()->getSplitIndex()]->setEnabled (false);
+                        strip->selectBlock (ChainStrip::inputSelected);
+                    }
+
+                    pump (400);
+                    expect (hasContent (renderSnapshot (main, "m11-edit-in-missing")));
+
+                    if (strip != nullptr && strip->getChain() != nullptr)
+                        strip->getChain()->getBlocks()[(size_t) strip->getChain()->getSplitIndex()]->setEnabled (true);
+                }
+            }
 
             beginTest ("F7 opens Routing over the grid; In-ear selected (m11-routing-inputs-outputs)");
             {
@@ -155,6 +231,123 @@ public:
 
                 main.keyPressed (juce::KeyPress (juce::KeyPress::F7Key));
                 expect (! main.isShowingRouting(), "F7 again closes it");
+            }
+        }
+
+        // The IN and OUT stages act on the patch (a show of its own: these change it).
+        const auto jackFolder = root.getChildFile ("jack");
+        jackFolder.createDirectory();
+        const auto jackShow = makeRoutingShow (jackFolder);
+
+        beginTest ("IN stage: a click on an input's card is the patch's input, live; the saved name not here can't be picked");
+        {
+            Rig rig (root.getChildFile ("Settings jack"), jackShow);
+            MainComponent main (rig.settings, std::make_unique<BoardDeviceType> (focusriteSpec()));
+            main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            pump (800);
+            goToCue (main, 2);
+            pump (1200);
+
+            auto* strip = findChild<ChainStrip> (main);
+            expect (strip != nullptr);
+
+            if (strip != nullptr)
+                strip->selectBlock (ChainStrip::inputSelected);
+
+            pump (300);
+            auto* stage = findChild<JackStage> (main);
+            expect (stage != nullptr && stage->getKind() == JackStage::Kind::input);
+
+            if (stage != nullptr)
+            {
+                expectEquals (inspectorValue (*stage, "Playing"), juce::String ("Guitar"), "Mic isn't here: Guitar plays instead");
+
+                if (auto* mic = findTitled (*stage, "Input Mic"))
+                    releaseClick (*mic);
+
+                pump (200);
+                expectEquals (inspectorValue (*stage, "Playing"), juce::String ("Guitar"), "a name that isn't here isn't picked");
+
+                auto* acoustic = findTitled (*stage, "Input Acoustic");
+                expect (acoustic != nullptr);
+
+                if (acoustic != nullptr)
+                    releaseClick (*acoustic);
+
+                pump (300);
+                stage = findChild<JackStage> (main);
+                expect (stage != nullptr, "the stage stays (no rebuild)");
+
+                if (stage != nullptr)
+                {
+                    expectEquals (inspectorValue (*stage, "Playing"), juce::String ("Acoustic"));
+                    expect (inspectorValue (*stage, "Saved").isEmpty(), "Acoustic is here: no saved-but-missing line");
+                    expect (findTitled (*stage, "Input Mic") == nullptr, "Mic's card goes once the patch doesn't want it");
+                }
+            }
+
+            beginTest ("OUT stage: On turns a send off and on; the fader sets its level; Routing... opens Routing");
+            {
+                if (strip != nullptr)
+                    strip->selectBlock (ChainStrip::outputSelected);
+
+                pump (300);
+                stage = findChild<JackStage> (main);
+                expect (stage != nullptr && stage->getKind() == JackStage::Kind::output);
+                auto* inEar = stage != nullptr ? findTitled (*stage, "Send to In-ear") : nullptr;
+                expect (inEar != nullptr);
+
+                if (inEar != nullptr)
+                {
+                    auto* on = findChild<juce::TextButton> (*inEar);
+                    auto* fader = findChild<kit::Fader> (*inEar);
+                    expect (on != nullptr && fader != nullptr);
+
+                    if (on != nullptr && fader != nullptr)
+                    {
+                        expectEquals (on->getTitle(), juce::String ("On"));
+                        expectWithinAbsoluteError (fader->getDb(), -6.0f, 0.01f);
+
+                        on->onClick();
+                        pump (200);
+                        inEar = findTitled (*stage, "Send to In-ear");
+                        on = inEar != nullptr ? findChild<juce::TextButton> (*inEar) : nullptr;
+                        expect (on != nullptr && on->getTitle() == "Off", "In-ear's send off");
+
+                        if (on != nullptr)
+                            on->onClick();
+
+                        pump (200);
+                        inEar = findTitled (*stage, "Send to In-ear");
+                        on = inEar != nullptr ? findChild<juce::TextButton> (*inEar) : nullptr;
+                        fader = inEar != nullptr ? findChild<kit::Fader> (*inEar) : nullptr;
+                        expect (on != nullptr && on->getTitle() == "On", "and on again, at its level");
+                        expect (fader != nullptr && std::abs (fader->getDb() + 6.0f) < 0.01f);
+
+                        if (fader != nullptr && fader->onChange != nullptr)
+                            fader->onChange (-12.0f);
+
+                        pump (200);
+                        inEar = findTitled (*stage, "Send to In-ear");
+                        fader = inEar != nullptr ? findChild<kit::Fader> (*inEar) : nullptr;
+                        expect (fader != nullptr && std::abs (fader->getDb() + 12.0f) < 0.01f, "In-ear at -12 dB");
+                    }
+                }
+
+                auto* routingButton = stage != nullptr ? findTitled (*stage, "Routing...") : nullptr;
+
+                if (routingButton == nullptr && stage != nullptr)
+                    for (auto* c : stage->getChildren())
+                        if (auto* b = dynamic_cast<juce::TextButton*> (c); b != nullptr && b->getButtonText() == "Routing...")
+                            routingButton = b;
+
+                expect (routingButton != nullptr);
+
+                if (auto* b = dynamic_cast<juce::TextButton*> (routingButton); b != nullptr && b->onClick != nullptr)
+                    b->onClick();
+
+                pumpUntil ([&] { return main.isShowingRouting(); }, 2000);
+                expect (main.isShowingRouting(), "Routing... opens Routing");
             }
         }
     }

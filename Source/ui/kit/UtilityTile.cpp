@@ -5,6 +5,7 @@
 
 #include <map>
 
+#include "ui/kit/Chip.h"
 #include "ui/theme/EncoreFonts.h"
 #include "ui/theme/Paint.h"
 
@@ -99,6 +100,59 @@ void UtilityTile::paint (juce::Graphics& g)
 
         g.setColour (paint::c (c));
         g.fillEllipse (dot);
+    }
+
+    if (info.icon.has_value())
+    {
+        const auto box = juce::Rectangle<float> ((float) size::utilityIcon, (float) size::utilityIcon)
+                             .withCentre ({ r.getCentreX(), (float) size::utilityIconTop + (float) size::utilityIcon * 0.5f });
+        drawIcon (g, *info.icon, box, paint::c (colour::textSoft));
+    }
+
+    if (info.nameAtBottom)
+    {
+        // Caption over the name, at the bottom.
+        if (info.caption.isNotEmpty())
+            paint::text (g, info.caption, inner.withY ((float) size::utilityBottomCaptionTop).withHeight ((float) size::utilityCaptionH),
+                         type::utilityCaption, colour::textMuted);
+
+        paint::text (g, info.name, inner.withY ((float) size::utilityBottomNameTop).withHeight ((float) size::utilityNameLineH + 1.0f),
+                     type::utilityName, info.amber ? colour::faultCardText : colour::text);
+        return;
+    }
+
+    if (! info.lines.empty())
+    {
+        // OUT: a line per send.
+        auto ly = (float) size::utilityLinesTop;
+
+        for (const auto& line : info.lines)
+        {
+            const auto row = inner.withY (ly).withHeight ((float) size::utilityLineH);
+            const auto chipW = (float) size::utilityLineChipW;
+
+            if (line.muted)
+            {
+                kit::paintChip (g, row.withLeft (row.getRight() - chipW).withSizeKeepingCentre (chipW, 12.0f), "M", ChipStyle::mute);
+            }
+            else
+            {
+                const auto bar = juce::Rectangle<float> ((float) size::utilityLineBarW, 3.0f)
+                                     .withPosition (row.getRight() - (float) size::utilityLineBarW, row.getCentreY() - 1.0f);
+                g.setColour (paint::c (colour::meterTrack));
+                g.fillRoundedRectangle (bar, 1.5f);
+                g.setColour (paint::c (colour::smallKnobArc));
+                g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, line.proportion)), 1.5f);
+            }
+
+            paint::text (g, line.text, row.withTrimmedRight ((float) size::utilityLineBarW + 4.0f), type::utilityLine, colour::fieldText);
+            ly += (float) size::utilityLinePitch;
+        }
+
+        if (info.more.isNotEmpty())
+            paint::text (g, info.more, inner.withY (ly).withHeight ((float) size::utilityCaptionH), type::utilityCaption, colour::textMuted);
+
+        return;
     }
 
     auto y = (float) size::utilityNameTop;

@@ -15,10 +15,12 @@ namespace encore
 {
 
 /** The patch's signal chain as a row of tiles, left to right (Helix/MainStage
-    style). Click a tile to edit it below; right-click to move, insert or
-    remove; the "+" tile adds a block at the end. Message thread only.
-    Looks: docs/design/SCREENS.md §4.3 (the Signal chain pane): gear
-    placeholders on a board, bottom-aligned, the selected one outlined. */
+    style): IN, the blocks, "+", and OUT at the right end. With split paths
+    the blocks between SPLIT and MERGE sit in two rows, path A over path B
+    (NEW-FEATURES-M10-M11 §B.3). Click a tile to edit it below; right-click
+    to move (also between the paths), insert or remove; the "+" tile adds a
+    block at the end. Message thread only. Looks: docs/design/SCREENS.md
+    §4.3: gear placeholders on a board, the selected one outlined. */
 class ChainStrip final : public kit::Pane
 {
 public:
@@ -28,9 +30,20 @@ public:
     void setChain (Chain* chain);
     Chain* getChain() const noexcept { return chain; }
 
+    /** A block's index (as the chain's: main lane, then path B), or the IN
+        or OUT tile (milestone 11). */
+    static constexpr int inputSelected = -2, outputSelected = -3;
+
     int getSelectedIndex() const noexcept { return selected; }
-    void selectBlock (int index);   // as if clicked
+    void selectBlock (int index);   // as if clicked (inputSelected / outputSelected too)
     std::function<void (int)> onSelectionChanged;
+
+    /** What the IN and OUT tiles show (the main window knows the routing). */
+    void setJackTiles (const kit::UtilityTileInfo& in, const kit::UtilityTileInfo& out);
+
+    /** 235 with split paths (two rows), else the usual pane height. */
+    int getIdealHeight() const;
+    std::function<void()> onHeightChanged;
 
     /** "Find plugins..." in the add menu (opens Settings > Plugins). */
     std::function<void()> onFindPlugins;
@@ -51,7 +64,7 @@ public:
 
     /** The Add block menu (the "+" tile, Insert before / after): block
         types, then Plugin ▸ makers ▸ plugins, Find plugins... */
-    juce::PopupMenu blockTypeMenu (int insertAt);
+    juce::PopupMenu blockTypeMenu (int insertAt, int lane = 0);
     juce::Rectangle<int> getAddTileBounds() const noexcept { return addTile; }
 
 private:
@@ -71,6 +84,11 @@ private:
     void select (int index);
     void showBlockMenu (int index);
     void showAddMenu (int insertAt);
+    void showPathMenu (int lane);
+
+    /** Where block i sits: 0 = the main line, 1 = path A, 2 = path B. */
+    int rowOf (int index) const;
+    juce::Rectangle<int> selectedBounds() const;
 
     ShowSession& session;
     Chain* chain = nullptr;
@@ -78,6 +96,9 @@ private:
     std::vector<juce::Rectangle<int>> tiles;
     std::vector<TileView> views;
     juce::Rectangle<int> addTile;
+    kit::UtilityTile inTile, outTile;
+    juce::Rectangle<int> pathRows[2];   // A, B (empty without a split)
+    bool hadSplit = false;
     juce::Path addTileOutline;
     juce::String lastState;
 

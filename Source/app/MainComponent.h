@@ -11,8 +11,10 @@
 #include "session/PluginCatalog.h"
 #include "session/ShowSession.h"
 #include "ui/BlockPanel.h"
+#include "ui/JackStage.h"
 #include "ui/BottomRow.h"
 #include "ui/RoutingView.h"
+#include "ui/kit/Fader.h"
 #include "ui/ChainStrip.h"
 #include "ui/Inspector.h"
 #include "ui/MidiSettings.h"
@@ -142,6 +144,7 @@ private:
 
     // Chain view
     void showSelectedBlock();
+    void showJackInspector();
     void relayout();
     void layoutToolbar (juce::Rectangle<int>);
     void layoutBottomRow (juce::Rectangle<int>);
@@ -191,6 +194,7 @@ private:
     std::unique_ptr<PatchList> patchList;
     std::unique_ptr<ChainStrip> chainStrip;
     std::unique_ptr<BlockPanel> blockPanel;
+    std::unique_ptr<JackStage> jackStage;   // the IN or OUT tile's stage
     juce::Label chainLabel, problemsLabel;
     juce::TextButton routingButton { "Routing" };   // centre header, F7
     std::unique_ptr<RoutingView> routingView;
@@ -208,6 +212,7 @@ private:
     int summaryInputSlot = -1;
     OutputsPane outputsPane;
     void refreshBottomRow();
+    void refreshChainJacks();
     juce::Label healthTitle { {}, "System health" };
     juce::TextButton resetCountersButton { "Reset counters" };
     juce::Label healthLine, latencyLine, warningLine;   // full text in their tooltips

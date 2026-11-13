@@ -313,7 +313,9 @@ public:
 
             for (int b = 0; b < (int) blocks.size(); ++b)
                 if (const auto stomp = owner.session.getBlockStomp (b); stomp > 0)
-                    newAssignments.add ("Stomp " + juce::String (stomp) + "\t" + blocks[(size_t) b]->getName() + " on/off");
+                    newAssignments.add ("Stomp " + juce::String (stomp) + "\t"
+                                        + (blocks[(size_t) b]->getTypeId() == juce::String (splitBlockType) ? juce::String ("Split: path B on/off")
+                                                                                                             : blocks[(size_t) b]->getName() + " on/off"));
 
             for (int b = 0; b < (int) blocks.size(); ++b)
                 for (auto& p : blocks[(size_t) b]->getParameters())
@@ -572,12 +574,35 @@ Inspector::Inspector (ShowSession& s) : session (s), content (std::make_unique<C
     viewport.setScrollBarThickness (size::scrollbar);
     viewport.setViewedComponent (content.get(), false);
     addAndMakeVisible (viewport);
+    info.onButton = [this] (int section) { if (onInfoButton != nullptr) onInfoButton (section); };
+}
+
+void Inspector::setInfo (const juce::String& kind, const juce::String& right, const std::vector<kit::InfoList::Section>& sections)
+{
+    if (! showingInfo)
+    {
+        showingInfo = true;
+        chain = nullptr;
+        blockIndex = -1;
+        content->setBlock (nullptr);
+        viewport.setViewedComponent (&info, false);
+    }
+
+    setHeader ("Inspector" + middot() + kind, right);
+    info.setSections (sections);
+    resized();
 }
 
 Inspector::~Inspector() = default;
 
 void Inspector::setBlock (Chain* newChain, int index)
 {
+    if (showingInfo)
+    {
+        showingInfo = false;
+        viewport.setViewedComponent (content.get(), false);
+    }
+
     chain = newChain;
     blockIndex = chain != nullptr && juce::isPositiveAndBelow (index, (int) chain->getBlocks().size()) ? index : -1;
     auto* block = blockIndex >= 0 ? chain->getBlocks()[(size_t) blockIndex].get() : nullptr;
@@ -602,13 +627,21 @@ void Inspector::refresh()
         }
     }
 
-    content->refresh();
+    if (! showingInfo)
+        content->refresh();
 }
 
 void Inspector::resized()
 {
     Pane::resized();
     viewport.setBounds (getContentBounds());
+
+    if (showingInfo)
+    {
+        info.setSize (viewport.getMaximumVisibleWidth(), info.getIdealHeight (viewport.getMaximumVisibleWidth()));
+        return;
+    }
+
     content->setSize (viewport.getMaximumVisibleWidth(), content->getHeight());
     content->layOut();
     content->setSize (viewport.getWidth() - (content->getHeight() > viewport.getHeight() ? viewport.getScrollBarThickness() : 0),

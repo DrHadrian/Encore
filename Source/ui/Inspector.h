@@ -7,6 +7,7 @@
 
 #include "engine/core/Chain.h"
 #include "session/ShowSession.h"
+#include "ui/kit/InfoList.h"
 #include "ui/kit/Pane.h"
 
 namespace encore
@@ -33,6 +34,11 @@ public:
     /** The block to show (null: none) and its place in the chain. */
     void setBlock (Chain* chain, int blockIndex);
 
+    /** The IN or OUT tile (milestone 11): read-only sections instead of a
+        block ("Inspector · Output", "this patch"). Empty sections: none. */
+    void setInfo (const juce::String& kind, const juce::String& right, const std::vector<kit::InfoList::Section>&);
+    std::function<void (int section)> onInfoButton;
+
     /** Call from the UI timer. */
     void refresh();
 
@@ -50,6 +56,8 @@ private:
     ShowSession& session;
     juce::Viewport viewport;
     std::unique_ptr<Content> content;
+    kit::InfoList info;
+    bool showingInfo = false;
     Chain* chain = nullptr;
     int blockIndex = -1;
     juce::String shownCpu;

@@ -258,6 +258,10 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/EqCurve.h
     Source/ui/kit/Fader.cpp
     Source/ui/kit/Fader.h
+    Source/ui/kit/InfoList.cpp
+    Source/ui/kit/InfoList.h
+    Source/ui/kit/StageBackdrop.cpp
+    Source/ui/kit/StageBackdrop.h
     Source/ui/kit/Lcd.cpp
     Source/ui/kit/Lcd.h
     Source/ui/kit/MeterBar.cpp
@@ -321,6 +325,8 @@ target_sources(Encore PRIVATE
     Source/app/MainComponent.h
     Source/ui/BlockPanel.cpp
     Source/ui/BlockPanel.h
+    Source/ui/JackStage.cpp
+    Source/ui/JackStage.h
     Source/ui/RoutingView.cpp
     Source/ui/RoutingView.h
     Source/ui/BottomRow.cpp
@@ -458,6 +464,7 @@ if(ENCORE_BUILD_TESTS)
         Source/app/EventLog.cpp
         Source/app/MainComponent.cpp
         Source/ui/BlockPanel.cpp
+        Source/ui/JackStage.cpp
         Source/ui/RoutingView.cpp
         Source/ui/BottomRow.cpp
         Source/ui/ChainStrip.cpp

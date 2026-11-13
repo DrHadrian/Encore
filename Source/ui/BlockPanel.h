@@ -8,6 +8,7 @@
 #include "engine/core/Block.h"
 #include "model/MidiMapping.h"
 #include "ui/kit/FaultCard.h"
+#include "ui/kit/StageBackdrop.h"
 #include "ui/kit/GearPlaceholder.h"
 #include "ui/kit/KnobView.h"
 #include "ui/kit/Pane.h"
@@ -124,9 +125,7 @@ private:
     bool statusWasLit = false;
 
     // The lit stage behind the gear, drawn once per size and screen scale.
-    juce::Image stageImage;
-    juce::Path stageClip;
-    float stageScale = 0.0f;
+    kit::StageBackdrop backdrop;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE (BlockPanel)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BlockPanel)

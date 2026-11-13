@@ -834,49 +834,14 @@ void BlockPanel::paint (juce::Graphics& g)
 {
     Pane::paint (g);
 
-    // The lit stage (radial-gradient at 45 % 25 %), rendered when the size or
-    // the screen scale changes; knob repaints only copy it.
-    const auto area = getContentBounds();
-
-    if (area.isEmpty())
-        return;
-
-    const auto scale = (float) g.getInternalContext().getPhysicalPixelScaleFactor();
-    const auto w = juce::roundToInt ((float) area.getWidth() * scale), h = juce::roundToInt ((float) area.getHeight() * scale);
-
-    if (stageImage.isNull() || stageImage.getWidth() != w || stageImage.getHeight() != h || ! juce::approximatelyEqual (scale, stageScale))
-    {
-        stageScale = scale;
-        stageImage = juce::Image (juce::Image::RGB, juce::jmax (1, w), juce::jmax (1, h), false);
-        juce::Graphics ig (stageImage);
-        const auto r = stageImage.getBounds().toFloat();
-        const juce::Point<float> centre (r.getWidth() * 0.45f, r.getHeight() * 0.25f);
-
-        // An ellipse through the farthest corner (CSS farthest-corner).
-        const auto rx = juce::jmax (centre.x, r.getWidth() - centre.x) * juce::MathConstants<float>::sqrt2;
-        const auto ry = juce::jmax (centre.y, r.getHeight() - centre.y) * juce::MathConstants<float>::sqrt2;
-        juce::ColourGradient light (paint::c (colour::blockStageTop), 0.0f, 0.0f, paint::c (colour::blockStageBot), 1.0f, 0.0f, true);
-        light.addColour (0.65, paint::c (colour::blockStageMid));
-        juce::FillType fill (light);
-        fill.transform = juce::AffineTransform::scale (rx, ry).translated (centre);
-        ig.setFillType (fill);
-        ig.fillRect (r);
-    }
-
-    // Inside the pane's rounded bottom corners.
-    const juce::Graphics::ScopedSaveState state (g);
-    g.reduceClipRegion (stageClip);
-    g.drawImage (stageImage, area.toFloat());
+    // The lit stage (kit::StageBackdrop).
+    backdrop.paint (g, getContentBounds());
 }
 
 void BlockPanel::resized()
 {
     Pane::resized();
 
-    const auto area = getContentBounds().toFloat();
-    stageClip.clear();
-    stageClip.addRoundedRectangle (area.getX(), area.getY(), area.getWidth(), area.getHeight(),
-                                   (float) size::paneRadius - 1.0f, (float) size::paneRadius - 1.0f, false, false, true, true);
 
     // Header: "6.9% CPU", then the file button (a plugin: its window) on the right.
     auto header = getHeaderBounds().withTrimmedRight (size::paneHeaderPadR);

@@ -300,6 +300,15 @@ namespace colour
     constexpr juce::uint32 tickGreen       = 0xff4CD964;
     constexpr juce::uint32 sendsSelectedRow = 0xff232A38;  // the patch whose send is being set
     constexpr juce::uint32 sendsCellWell   = 0xff0E1013;   // the selected send   // ✓ a name this computer has
+    constexpr juce::uint32 pathRow         = 0x09FFFFFF;   // a split path's row (white 3.5 %)
+    constexpr juce::uint32 pathRowBorder   = 0x0DFFFFFF;   // (white 5 %)
+    constexpr juce::uint32 pathBadgeBg     = 0xff3A3A3F;
+    constexpr juce::uint32 pathBadgeOffBg  = 0xff2A2A2E;
+    constexpr juce::uint32 sendBoxTop      = 0xff2A2A2E;   // the OUT stage's box
+    constexpr juce::uint32 sendBoxBottom   = 0xff1E1E21;
+    constexpr juce::uint32 inputCardTop    = 0xff2A2A2E;
+    constexpr juce::uint32 inputCardBottom = 0xff1F1F22;
+    constexpr juce::uint32 inputCardBorder = 0xff2B2E35;
     constexpr juce::uint32 faultCardShadow = 0x80000000;   // its drop shadow (0, 14, 30 px, black 50 %)
     constexpr juce::uint32 utilityShadow   = 0x73000000;   // chain tile drop shadow (0, 6, 6 px, black 45 %)
     constexpr juce::uint32 groupRowLine    = 0xff1F1F22;   // 1 px under each row of the Plugins, Folders and Blocked lists
@@ -364,6 +373,7 @@ namespace size
     constexpr int patchPickerW      = 130, headerArrow = 14;   // the centre header line
     constexpr int iconButton        = 20;
     constexpr int iconSize          = 12;
+    constexpr int infoButtonIcon    = 11;   // Open routing's icon in the inspector
     constexpr int rowHeight         = 26;    // pane lists
     constexpr int tableRowHeight    = 28;    // full list
     constexpr int tableHeaderHeight = 24;
@@ -485,6 +495,12 @@ namespace size
     constexpr int utilityNameTop = 25, utilityNameLineH = 12, utilityCaptionTop = 50, utilityCaptionH = 11;
     constexpr int utilityFootW = 22, utilityFootH = 16, utilityFootTop = 62, utilityFootRadius = 7;
     constexpr int utilityShadowY = 6, utilityShadowBlur = 6;
+    constexpr int utilityIcon = 22, utilityIconTop = 23;
+    constexpr int utilityBottomCaptionTop = 52, utilityBottomNameTop = 63, jackTileW = 64, splitTileW = 52, outTileW = 104;
+    constexpr int utilityLinesTop = 23, utilityLineH = 12, utilityLinePitch = 14, utilityLineBarW = 24, utilityLineChipW = 14, outTileLines = 3;
+    // Split paths on the chain board (m11-edit-split-merge.json)
+    constexpr int chainSplitPaneH = 235, pathRowH = 98, pathRowPitch = 96, pathRowLead = 28, pathRowPadRight = 9, pathRowGap = 10;
+    constexpr int pathRowRadius = 9, pathTileTop = 6, pathBadge = 16, pathBadgeX = 6, pathOffRight = 17, pathAbove = 54, outTileRight = 10;
     // Routing (milestone 11; NEW-FEATURES-M10-M11 §B, §C)
     constexpr int outputMuteW = 24, outputMuteH = 20, outputMuteRadius = 4, stageMuteW = 52;
     constexpr int levelBarH = 4, levelBarGap = 2;
@@ -511,6 +527,15 @@ namespace size
     constexpr int routingDividerX = 459, routingRightX = 488, routingRightW = 250, routingStepW = 26, routingDelayFieldW = 100, routingDelayFieldH = 30;
     constexpr int sendsHeadH = 45, sendsRowH = 37, sendsPatchW = 308, sendsInputW = 128, sendsEndW = 78, sendsColumnW = 176;
     constexpr int sendsBarW = 64, sendsCellH = 28, sendsHelpTop = 14, sendsHelpW = 420, sendsHelpGap = 24;
+    // The IN and OUT stages (m11-edit-out-sends.json, m11-edit-in-missing.json)
+    constexpr int sendBoxTop = 26, sendBoxPad = 24, sendBoxH = 362, sendBoxRadius = 10, sendStripW = 92, sendStripGap = 26;
+    constexpr int sendNameTop = 18, sendSubTop = 40, sendOnTop = 58, sendOnX = 22, sendOnW = 48, sendOnH = 20, sendOnDotX = 11, sendOnDot = 6, sendOnTextGap = 5;
+    constexpr int sendFaderTop = 83, sendMeterX = 68, sendValueTop = 300, sendValueX = 14, sendValueW = 64, sendValueH = 22;
+    constexpr int jackFooterGap = 12, jackFooterH = 14, jackFooterSeparator = 20;   // the OUT stage's line under the box
+    constexpr int inputIntroTop = 36, inputCardsTop = 70, inputCardW = 200, inputCardH = 132, inputCardGap = 14;
+    constexpr int inputCardPad = 14, inputCardChipTop = 14, inputCardNameTop = 41, inputCardCaptionTop = 67, inputCardMeterTop = 101;
+    constexpr int inputCardIconX = 13, inputCardIconTop = 11, inputCardIcon = 18;
+    constexpr int inputCardMeterH = 6, inputCardRadius = 8, inputWarningTop = 226, inputWarningH = 57, inputWarningPadX = 33;
     // FaultCard (a plugin switched off or not loaded, over its dimmed plate; edit-plugin-switched-off.json)
     constexpr int faultCardW = 460, faultCardTop = 128, faultCardRadius = 8, faultCardPadX = 17, faultCardPadY = 15;
     constexpr int faultCardIconW = 10, faultCardIconH = 18, faultCardIconGap = 10, faultCardLineGap = 3, faultCardGap = 10;
@@ -689,6 +714,7 @@ namespace type
     constexpr Style helpStrong      { 12.0f, Weight::bold };
     constexpr Style statusTitle     { 12.5f, Weight::semibold };
     constexpr Style noteText        { 11.5f, Weight::regular };             // notes under groups, the latency line
+    constexpr Style noteTextStrong  { 11.5f, Weight::semibold };            // a word picked out in such a note
     constexpr Style noteStrong      { 11.5f, Weight::bold };
     constexpr Style columnHead      { 10.5f, Weight::bold, 0.06f, true };   // DOES, FOOTSWITCH / PEDAL
     constexpr Style tagChip         { 9.5f, Weight::bold, 0.02f, true };    // NOT HERE, OUTPUT MUTED, counts
@@ -712,10 +738,15 @@ namespace type
     constexpr Style routingGlyph    { 12.5f, Weight::extraBold };           // ✓ / !
     constexpr Style sendsHead       { 12.0f, Weight::semibold };            // an output's name over its column
     constexpr Style sendsHeadSub    { 10.0f, Weight::regular };             // "3/4 · stereo"
+    constexpr Style sendName        { 12.0f, Weight::semibold };            // an output over its send fader
+    constexpr Style sendSub         { 10.0f, Weight::regular };             // "1/2 · stereo"
+    constexpr Style inputCardName   { 18.0f, Weight::bold };                // Guitar on its card
     constexpr Style paramListName   { 13.0f, Weight::bold };                // the plugin's name over its parameter list
     constexpr Style paramListNote   { 12.0f, Weight::regular };             // "has no window of its own: its parameters"
     constexpr Style faultText       { 12.5f, Weight::regular };             // the FaultCard's message
     constexpr Style faultStrong     { 12.5f, Weight::bold };                // "Switched off:"
+    constexpr Style utilityLine     {  9.5f, Weight::semibold };            // an output on the OUT tile
+    constexpr Style pathBadge       {  9.5f, Weight::extraBold };           // A / B
     constexpr Style knobValue       { 10.5f, Weight::regular };             // "35 %" under a plugin plate knob
     constexpr Style plateName       { 16.0f, Weight::bold };                // ValhallaRoom on the plugin plate
     constexpr Style plateMaker      { 12.0f, Weight::regular };             // "Valhalla DSP · v2.0.0"
