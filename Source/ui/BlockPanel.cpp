@@ -7,6 +7,7 @@
 
 #include "engine/blocks/CabIrBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
+#include "engine/blocks/SplitBlocks.h"
 #include "ui/ChainStrip.h"
 #include "ui/kit/Chip.h"
 #include "ui/theme/EncoreFonts.h"
@@ -28,6 +29,7 @@ namespace
     }
 
     bool isAmp (const Block& b)  { return b.getTypeId() == NamAmpBlock::typeId; }
+    bool isMerge (const Block& b) { return b.getTypeId() == MergeBlock::typeId; }
 
     const juce::String& middot()
     {
@@ -50,6 +52,8 @@ namespace
         {
             if (block.getTypeId() == CabIrBlock::typeId)
                 info.kindLabel = "Cab" + middot() + "IR";
+            else if (isMerge (block))
+                info.kindLabel = "Merge" + middot() + "paths A + B";
             else if (auto* plugin = dynamic_cast<const PluginBlock*> (&block))
                 info.kindLabel = "Plugin" + middot() + (plugin->getPluginRef().format.isNotEmpty() ? plugin->getPluginRef().format
                                                                                                    : juce::String ("VST3"));
@@ -86,8 +90,18 @@ public:
         }
         else
         {
-            setSize (kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getWidth(),
-                     kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getHeight());
+            if (isMerge (p.block))
+            {
+                // PATH A · PATH B: a box of its own size, its label lower.
+                setSize (size::mergePanelW, size::mergePanelH);
+                box.setLabelBottom (size::mergeLabelBottom);
+            }
+            else
+            {
+                setSize (kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getWidth(),
+                         kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getHeight());
+            }
+
             box.setBounds (getLocalBounds());
             addAndMakeVisible (box);
             strip.setBounds (box.getControlArea());
@@ -105,10 +119,11 @@ public:
             if (owner.onEdited != nullptr)
                 owner.onEdited();
         };
-        // On the plate the LED sits top right, outside the panel.
+        // On the plate the LED sits top right, outside the panel. The merge
+        // has none: it is never off (path B goes off at the split).
         if (plugin != nullptr)
             addAndMakeVisible (power);
-        else
+        else if (! isMerge (owner.block))
             strip.addAndMakeVisible (power);
     }
 
@@ -124,6 +139,12 @@ public:
         if (plugin != nullptr)
         {
             layOutPlugin();
+            return;
+        }
+
+        if (isMerge (owner.block))
+        {
+            layOutMerge();
             return;
         }
 
@@ -186,6 +207,55 @@ public:
                 gr.width = kit::groupLabelWidth (gr.text);
         }
 
+        repaint();
+    }
+
+    /** The merge: PATH A (level, pan) and PATH B, two knob columns each,
+        centred on the strip; under each group its summary line. */
+    void layOutMerge()
+    {
+        auto row = strip.getLocalBounds().withTrimmedTop (size::stripPadTop).withTrimmedBottom (size::stripPadBottom);
+        labelsRow = row.removeFromTop (size::groupLabelH);
+        row.removeFromTop (size::groupLabelGap);
+
+        const auto groupW = 2 * size::knobColumn;
+        auto x = strip.getWidth() / 2 - (2 * groupW + size::mergeGroupGap) / 2;
+        const auto knobH = kit::KnobView::idealBounds().getHeight();
+        groups.clear();
+        mergeGroups.clear();
+
+        for (const auto* path : { "A", "B" })
+        {
+            const auto level = juce::String (path) == "A" ? mergeParams::levelA : mergeParams::levelB;
+            const auto pan = juce::String (path) == "A" ? mergeParams::panA : mergeParams::panB;
+            auto column = x;
+
+            for (const auto* id : { level, pan })
+                for (auto& c : owner.controls)
+                    if (! c->isSwitch && c->parameter.getSpec().id == id)
+                    {
+                        c->knob->setBounds (column, row.getY(), size::knobColumn, knobH);
+                        column += size::knobColumn;
+                    }
+
+            Group gr { labelsRow.withX (x).withWidth (groupW).toFloat(), juce::String ("PATH ") + path, true };
+            gr.width = kit::groupLabelWidth (gr.text);
+            groups.push_back (gr);
+            mergeGroups.push_back (juce::Rectangle<int> (x, 0, groupW, 0));
+            x += groupW + size::mergeGroupGap;
+        }
+
+        repaint();
+    }
+
+    /** "A: 0.0 dB · L 100" under PATH A, the same for B (from refresh). */
+    void setMergeLines (const juce::String& a, const juce::String& b)
+    {
+        if (a == mergeLines[0] && b == mergeLines[1])
+            return;
+
+        mergeLines[0] = a;
+        mergeLines[1] = b;
         repaint();
     }
 
@@ -297,6 +367,14 @@ public:
         for (auto& gr : groups)
             kit::paintGroupLabel (g, gr.area + origin, gr.text, gr.width, gr.rules);
 
+        // The merge: each group's summary under the strip.
+        for (size_t i = 0; i < mergeGroups.size() && i < 2; ++i)
+        {
+            const auto r = juce::Rectangle<float> (origin.x + (float) mergeGroups[i].getX(), origin.y + (float) strip.getHeight() + (float) size::mergeLineGap,
+                                                   (float) mergeGroups[i].getWidth(), (float) size::mergeLineH);
+            paint::text (g, mergeLines[i], r, type::caption, colour::textTertiary, juce::Justification::centred);
+        }
+
         // Status light (gate open): a small LED and its label, top left of the strip.
         if (owner.statusLit != nullptr)
         {
@@ -352,6 +430,8 @@ public:
     }
     juce::Rectangle<int> labelsRow;
     std::vector<Group> groups;
+    std::vector<juce::Rectangle<int>> mergeGroups;   // x and width of PATH A, PATH B
+    juce::String mergeLines[2];
 };
 
 //==============================================================================
@@ -457,7 +537,8 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
             const auto& r = spec.range;
             control->knob = std::make_unique<kit::KnobView>();
             auto& s = *control->knob;
-            s.setLabel (spec.name);
+            // The merge's knobs sit under PATH A / PATH B: "Level", "Pan".
+            s.setLabel (isMerge (block) ? spec.name.upToLastOccurrenceOf (" ", false, false) : spec.name);
             s.setNormalisableRange ({ (double) r.start, (double) r.end, (double) r.interval, (double) r.skew, r.symmetricSkew });
             s.setValue (p->getValue(), juce::dontSendNotification);
             s.setDoubleClickReturnValue (true, spec.defaultValue);
@@ -641,8 +722,13 @@ juce::String BlockPanel::headerLabel() const
 {
     // "AMP · <model>", "CAB · <IR>", "GATE · Noise gate", "EQ".
     // A plugin: "PLUGIN · VST3 · <name>".
-    const auto kind = dynamic_cast<const PluginBlock*> (&block) != nullptr ? panelInfo (block).kindLabel
-                                                                           : ChainStrip::describe (block).kindLabel;
+    // The merge: "MERGE · paths A + B".
+    const auto kind = dynamic_cast<const PluginBlock*> (&block) != nullptr || isMerge (block) ? panelInfo (block).kindLabel
+                                                                                               : ChainStrip::describe (block).kindLabel;
+
+    if (isMerge (block))
+        return kind;
+
 
     if (block.getFileSlot() != nullptr)
         return kind + middot() + shownFile;
@@ -751,6 +837,27 @@ void BlockPanel::refresh()
 
     if (cabColumn != nullptr)
         cabColumn->refresh();
+
+    // The merge's summary lines, when a value moved.
+    if (isMerge (block))
+    {
+        const auto* la = block.findParameter (mergeParams::levelA);
+        const auto* pa = block.findParameter (mergeParams::panA);
+        const auto* lb = block.findParameter (mergeParams::levelB);
+        const auto* pb = block.findParameter (mergeParams::panB);
+
+        if (la != nullptr && pa != nullptr && lb != nullptr && pb != nullptr)
+        {
+            const std::array<float, 4> values { la->getValue(), pa->getValue(), lb->getValue(), pb->getValue() };
+
+            if (values != shownMerge)
+            {
+                shownMerge = values;
+                gear->setMergeLines ("A: " + la->toText (values[0]) + middot() + pa->toText (values[1]),
+                                     "B: " + lb->toText (values[2]) + middot() + pb->toText (values[3]));
+            }
+        }
+    }
 
     if (statusLit != nullptr)
     {
@@ -877,6 +984,10 @@ void BlockPanel::layOutGear()
     // The plugin plate hangs 22 px under the stage header instead (as on the board).
     if (dynamic_cast<const PluginBlock*> (&block) != nullptr)
         bottom = juce::jmin (bottom, (float) (getContentBounds().getY() + size::pluginPlateTop) + (float) gear->getHeight() * gearScale);
+
+    // So does the merge's box, 40 px under it.
+    if (isMerge (block))
+        bottom = juce::jmin (bottom, (float) (getContentBounds().getY() + size::mergePanelTop) + (float) gear->getHeight() * gearScale);
 
     gear->setTransform (juce::AffineTransform::scale (gearScale)
                             .translated (left, bottom - (float) gear->getHeight() * gearScale));

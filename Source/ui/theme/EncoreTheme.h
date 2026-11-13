@@ -410,6 +410,8 @@ namespace size
     constexpr int ampTileW = 117, tileW = 64, tileH = 84, plusTileW = 48, tileGap = 6;
     constexpr int pedalW = 160, pedalH = 210;            // drawn at 0.4 in the chain, 0.7 on Stage
     constexpr int ampPanelW = 600, ampPanelH = 430, blockPanelH = 300, cabPanelW = 230, cabPanelH = 300;
+    constexpr int mergePanelW = 562, mergePanelH = 302, mergeLabelBottom = 42, mergePanelTop = 40;   // the merge's box: PATH A · PATH B
+    constexpr int mergeGroupGap = 34, mergeLineGap = 14, mergeLineH = 14;         // the groups, the summary under each
     constexpr int ampStripX = 22, ampStripY = 44, ampStripW = 556, ampStripH = 138;
     constexpr int gearRadius = 10, pedalRadius = 14, pedalBorder = 2, stripRadius = 6, plusTileRadius = 8;
     constexpr int chainPadX = 12, chainPadY = 14, chainShadowH = 8, dash = 4;            // the chain board

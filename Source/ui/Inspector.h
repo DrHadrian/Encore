@@ -61,6 +61,9 @@ private:
     Chain* chain = nullptr;
     int blockIndex = -1;
     juce::String shownCpu;
+    int shownLatency = 0;
+
+    void refreshMergeRows();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Inspector)
 };

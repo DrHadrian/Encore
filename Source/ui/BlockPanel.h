@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <array>
+
 #include "engine/core/Block.h"
 #include "model/MidiMapping.h"
 #include "ui/kit/FaultCard.h"
@@ -123,6 +125,7 @@ private:
     juce::String statusLabel, statusLabelCaps;
     std::function<bool()> statusLit;
     bool statusWasLit = false;
+    std::array<float, 4> shownMerge { -1.0e9f, -1.0e9f, -1.0e9f, -1.0e9f };   // the merge's level A, pan A, level B, pan B
 
     // The lit stage behind the gear, drawn once per size and screen scale.
     kit::StageBackdrop backdrop;

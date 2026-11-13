@@ -116,9 +116,28 @@ public:
         };
     }
 
+    /** Read-only rows after Type (the merge: Paths, Output, Latency). */
+    struct TextRow
+    {
+        juce::String key;
+        juce::StringArray lines;   // one row per line
+        juce::String tail;         // muted, after the last line
+        bool operator== (const TextRow&) const = default;
+    };
+
+    void setTextRows (const std::vector<TextRow>& rows)
+    {
+        if (rows == textRows)
+            return;
+
+        textRows = rows;
+        layOut();
+    }
+
     void setBlock (Block* newBlock)
     {
         block = newBlock;
+        textRows.clear();
         plugin = dynamic_cast<PluginBlock*> (block);
         switches.clear();
         values.clear();
@@ -305,7 +324,7 @@ public:
         }
 
         // Assignments of the patch: stomp switches and pedals.
-        juce::StringArray newAssignments;
+        juce::StringArray newAssignments, others;   // this block's first, then the rest of the patch's
 
         if (owner.chain != nullptr)
         {
@@ -313,7 +332,7 @@ public:
 
             for (int b = 0; b < (int) blocks.size(); ++b)
                 if (const auto stomp = owner.session.getBlockStomp (b); stomp > 0)
-                    newAssignments.add ("Stomp " + juce::String (stomp) + "\t"
+                    (b == owner.blockIndex ? newAssignments : others).add ("Stomp " + juce::String (stomp) + "\t"
                                         + (blocks[(size_t) b]->getTypeId() == juce::String (splitBlockType) ? juce::String ("Split: path B on/off")
                                                                                                              : blocks[(size_t) b]->getName() + " on/off"));
 
@@ -323,10 +342,12 @@ public:
                     {
                         // Heel and toe as the patch sets them (the engine's range, not the parameter's).
                         const auto name = b == owner.blockIndex ? p->getSpec().name : blocks[(size_t) b]->getName() + " " + p->getSpec().name;
-                        newAssignments.add ("EXP " + juce::String (a->pedal) + "\t" + name + middot()
+                        (b == owner.blockIndex ? newAssignments : others).add ("EXP " + juce::String (a->pedal) + "\t" + name + middot()
                                             + "heel " + signedDisplay (*p, a->min) + ", toe " + signedDisplay (*p, a->max));
                     }
         }
+
+        newAssignments.addArray (others);
 
         if (newAssignments != assignments)
         {
@@ -361,6 +382,9 @@ public:
         {
             typeText = typeName (*block);
             keys.push_back ({ "Type", row (size::inspectorTextH) });
+
+            for (const auto& t : textRows)
+                keys.push_back ({ t.key, row (size::inspectorTextH * juce::jmax (1, t.lines.size())) });
 
             if (plugin != nullptr)
             {
@@ -449,6 +473,19 @@ public:
 
             if (key == "Type")
                 paint::text (g, typeText, r.toFloat(), type::bodySmall, colour::text);
+            else if (const auto* t = findTextRow (key))
+            {
+                // Each line in its own row; the tail muted after the last.
+                for (int i = 0; i < t->lines.size(); ++i)
+                {
+                    auto line = r.toFloat().withY ((float) (r.getY() + i * size::inspectorTextH)).withHeight ((float) size::inspectorTextH);
+                    const auto w = textWidth (font (type::bodySmall), t->lines[i]);
+                    paint::text (g, t->lines[i], line.removeFromLeft (w + 1.0f), type::bodySmall, colour::text);
+
+                    if (i == t->lines.size() - 1 && t->tail.isNotEmpty())
+                        paint::text (g, " " + t->tail, line, type::bodySmall, colour::textMuted);
+                }
+            }
             else if (key == "Plugin" && textWidth (font (type::bodySmall), pluginName) <= (float) r.getWidth())
             {
                 // The name, then " · maker" muted.
@@ -546,6 +583,17 @@ private:
 
     /** Plugin blocks: a wider key column ("Stomp switch" on one line), as on the board. */
     int keyWidth() const noexcept { return plugin != nullptr ? size::inspectorPluginKeyW : size::inspectorKeyW; }
+
+    const TextRow* findTextRow (const juce::String& key) const noexcept
+    {
+        for (const auto& t : textRows)
+            if (t.key == key)
+                return &t;
+
+        return nullptr;
+    }
+
+    std::vector<TextRow> textRows;
     int hiddenParams = 0;
     juce::Rectangle<int> moreParams;
     bool updating = false;
@@ -610,7 +658,51 @@ void Inspector::setBlock (Chain* newChain, int index)
     setHeader (block != nullptr ? "Inspector" + middot() + ChainStrip::describe (*block).kindLabel : juce::String ("Inspector"));
     shownCpu.clear();
     content->setBlock (block);
+    shownLatency = std::numeric_limits<int>::min();
+    refreshMergeRows();
     resized();
+}
+
+void Inspector::refreshMergeRows()
+{
+    // The merge: what each path holds, what comes out, how the paths line up.
+    if (chain == nullptr || blockIndex < 0 || ! chain->hasSplit() || blockIndex != chain->getMergeIndex())
+        return;
+
+    const auto diff = chain->getPathLatencyDifference();
+
+    if (diff == shownLatency)
+        return;
+
+    shownLatency = diff;
+    const auto& blocks = chain->getBlocks();
+    juce::StringArray a, b;
+
+    for (int i = chain->getSplitIndex() + 1; i < chain->getMergeIndex(); ++i)
+        a.add (blocks[(size_t) i]->getName());
+
+    for (int i = chain->getNumMainBlocks(); i < (int) blocks.size(); ++i)
+        b.add (blocks[(size_t) i]->getName());
+
+    const auto path = [] (const char* name, const juce::StringArray& names)
+    {
+        return juce::String (name) + ": " + (names.isEmpty() ? juce::String ("dry") : names.joinIntoString (" + "));
+    };
+
+    const auto ms = std::abs (diff) * 1000.0 / juce::jmax (1.0, chain->getSpec().sampleRate);
+    Content::TextRow latency { "Latency", {}, {} };
+
+    if (diff == 0)
+        latency.lines.add ("Lined up");
+    else
+    {
+        latency.lines.add (juce::String (diff > 0 ? "A" : "B") + " delayed " + juce::String (ms, 1) + " ms");
+        latency.tail = chain->isAlignmentLimited() ? "(as far as it can)" : "to line up";
+    }
+
+    content->setTextRows ({ { "Paths", juce::StringArray (path ("A", a), path ("B", b)), {} },
+                            { "Output", juce::StringArray (chain->getOutputChannels() == 2 ? "Stereo" : "Mono"), {} },
+                            latency });
 }
 
 void Inspector::refresh()
@@ -628,7 +720,10 @@ void Inspector::refresh()
     }
 
     if (! showingInfo)
+    {
+        refreshMergeRows();   // (latency is known once the patch is prepared)
         content->refresh();
+    }
 }
 
 void Inspector::resized()
