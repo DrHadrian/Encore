@@ -9,7 +9,7 @@ namespace encore::kit::ampArt
 {
 
 /** The amp builder's art (design/textures/AMP-BUILDER-LAYERS.md), built into
-    the app: 227 WebP layers at 2x (body_<layout>_<tolex>_<piping>,
+    the app (packed in one zip resource, read with juce::ZipFile): 227 WebP layers at 2x (body_<layout>_<tolex>_<piping>,
     panel_<layout>_<material>, grille_<layout>_<cloth>,
     corner_<chrome|black>_<tl|tr|bl|br>) and the sprites from TEXTURES.md
     (chicken_strip, knob_black, knob_cream, knob_silver, toggle_lg_on/off,

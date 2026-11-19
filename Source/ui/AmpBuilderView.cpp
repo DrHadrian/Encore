@@ -2,6 +2,7 @@
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
 #include "ui/AmpBuilderView.h"
+#include "ui/theme/EncoreAmpTheme.h"
 
 #include "session/AmpLibrary.h"
 #include "session/ShowSession.h"

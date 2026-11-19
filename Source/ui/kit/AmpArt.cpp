@@ -13,11 +13,25 @@ namespace encore::kit::ampArt
 
 namespace
 {
-    /** The decoded images; let go at JUCE's shutdown (before the leak checks), as the fonts are. */
+    /** The packed art (one zip in the binary data, see CMakeLists.txt), its entries
+        by file name, and the decoded images; let go at JUCE's shutdown (before
+        the leak checks), as the fonts are. */
     struct Cache final : private juce::DeletedAtShutdown
     {
+        Cache()
+            : stream (EncoreAmpArt::ampart_zip, (size_t) EncoreAmpArt::ampart_zipSize, false),
+              zip (stream)
+        {
+            for (int i = 0; i < zip.getNumEntries(); ++i)
+                if (const auto* entry = zip.getEntry (i))
+                    entries[entry->filename.fromLastOccurrenceOf ("/", false, false)] = i;
+        }
+
         ~Cache() override { clearSingletonInstance(); }
 
+        juce::MemoryInputStream stream;   // over the binary data, no copy
+        juce::ZipFile zip;
+        std::map<juce::String, int> entries;
         std::map<juce::String, juce::Image> images;
 
         JUCE_DECLARE_SINGLETON_INLINE (Cache, false)
@@ -28,14 +42,17 @@ namespace
         return Cache::getInstance()->images;
     }
 
-    const void* dataFor (const juce::String& fileName, int& size)
+    /** A file's bytes from the zip; empty when there is no such file. */
+    juce::MemoryBlock dataFor (const juce::String& fileName)
     {
-        for (int i = 0; i < EncoreAmpArt::namedResourceListSize; ++i)
-            if (fileName == EncoreAmpArt::originalFilenames[i])
-                return EncoreAmpArt::getNamedResource (EncoreAmpArt::namedResourceList[i], size);
+        auto& c = *Cache::getInstance();
+        juce::MemoryBlock block;
 
-        size = 0;
-        return nullptr;
+        if (const auto found = c.entries.find (fileName); found != c.entries.end())
+            if (std::unique_ptr<juce::InputStream> in (c.zip.createStreamForEntry (found->second)); in != nullptr)
+                in->readIntoMemoryBlock (block);
+
+        return block;
     }
 
     /** A CSS saturate(s) matrix (Filter Effects spec). */
@@ -108,11 +125,10 @@ juce::Image get (const juce::String& fileName)
     if (const auto found = images.find (fileName); found != images.end())
         return found->second;
 
-    int size = 0;
     juce::Image image;
 
-    if (const auto* data = dataFor (fileName, size); data != nullptr && size > 0)
-        image = juce::ImageFileFormat::loadFrom (data, (size_t) size);
+    if (const auto data = dataFor (fileName); data.getSize() > 0)
+        image = juce::ImageFileFormat::loadFrom (data.getData(), data.getSize());
 
     if (image.isValid())
         image = image.convertedToFormat (juce::Image::ARGB);   // premultiplied ARGB, as Graphics draws fastest
@@ -205,8 +221,8 @@ juce::StringArray names()
 {
     juce::StringArray all;
 
-    for (int i = 0; i < EncoreAmpArt::namedResourceListSize; ++i)
-        if (const juce::String name (EncoreAmpArt::originalFilenames[i]); name.endsWith (".webp") || name.endsWith (".png"))
+    for (const auto& [name, index] : Cache::getInstance()->entries)
+        if (name.endsWith (".webp") || name.endsWith (".png"))
             all.add (name);
 
     all.sort (false);

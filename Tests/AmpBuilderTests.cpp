@@ -2,6 +2,7 @@
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
 #include "FakeDevice.h"
+#include "ui/theme/EncoreAmpTheme.h"
 #include "TestSignals.h"
 #include "UiSnapshot.h"
 

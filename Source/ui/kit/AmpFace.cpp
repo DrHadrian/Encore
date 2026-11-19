@@ -5,6 +5,7 @@
 
 #include "ui/kit/AmpArt.h"
 #include "ui/theme/EncoreFonts.h"
+#include "ui/theme/EncoreAmpTheme.h"
 #include "ui/theme/EncoreTheme.h"
 #include "ui/theme/Icons.h"
 #include "ui/theme/Paint.h"
