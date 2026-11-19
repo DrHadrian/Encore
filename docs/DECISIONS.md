@@ -659,3 +659,33 @@ Warm runs reuse the cache as before. Still open: new pull requests in a stack
 start cold until main has the stack's code (merging the stack fixes that for
 every later pull request).
 
+## 0058 — Main is protected: changes go in through pull requests with a green "CI"
+
+From 19 Nov 2026, main takes changes only through pull requests, and a pull
+request merges only when the **CI** check is green. That keeps main always
+buildable and tested, for players and for every branch started from it.
+- **One required check, "CI".** It's the last job of the build workflow. It's
+  green when the Windows Debug and Release builds and their tests passed, or
+  when the change needed no build. A required check can't name a matrix job that
+  was skipped, so this job stands for them.
+- **Every pull request runs**, so the check always reports. A job named
+  "Changes" looks at the pull request's files. When only docs changed (`*.md`,
+  `docs/`, `LICENSE`), the Windows builds are skipped and CI is green within a
+  minute. Pushes to main still skip docs-only changes (`paths-ignore`).
+- **The rules apply to admins too**: direct pushes to main, force pushes and
+  deleting main are refused. In an emergency, an admin can switch off "Do not
+  allow bypassing" in the repository's branch settings, then switch it back on.
+- Pull requests merge with a merge commit, which keeps each step's commit.
+- **Main's cache serves the pull requests.** Pushes to main now build like pull
+  requests, without link-time optimisation. A pull request can reuse main's
+  compiler cache, but objects built for LTO can't be reused without it. Before
+  this, every pull request's Release build started from nothing. The players'
+  build (LTO) is made every night and when the workflow is run by hand, with
+  its own cache (`windows-Release-lto`). It also tests the LTO build, which a
+  pull request doesn't.
+- **One compiler cache per compiler version.** GitHub rolls out new Windows
+  images gradually, so for a while runs land on the old or the new MSVC at
+  random. A cache filled by one compiler misses everything on the other (seen
+  on #17: 0 % hits, MSVC 14.51 after 14.52). The cache key now includes the
+  MSVC version, so each compiler keeps its own cache.
+
