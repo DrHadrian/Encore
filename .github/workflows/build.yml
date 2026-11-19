@@ -145,6 +145,25 @@ jobs:
       - name: Run the tests (soak ${{ env.ENCORE_SOAK_SECONDS }} s)
         run: ctest --test-dir build --output-on-failure --parallel 4 --timeout ${{ env.ENCORE_TEST_TIMEOUT }}
 
+      # TEMPORARY (removed before merging):
+      # repeat the whole suite to catch the hang.
+      - name: Repeat the whole suite
+        if: matrix.config == 'Release'
+        shell: bash
+        run: |
+          for i in $(seq 1 10); do
+            echo "== round $i"
+            ctest --test-dir build --output-on-failure --parallel 4 --timeout ${{ env.ENCORE_TEST_TIMEOUT }} || exit 1
+          done
+
+      - name: Upload Encore.exe
+        if: matrix.config == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Encore-windows-x64
+          path: build/Encore_artefacts/Release/Encore.exe
+          if-no-files-found: error
+
       # A failed or hung run: the program and its symbols, to name the
       # watchdog's module + offset stacks (llvm-symbolizer reads the PDB).
       - name: Upload the test program and its symbols
@@ -157,39 +176,6 @@ jobs:
             build/**/EncoreTests.pdb
           retention-days: 14
           if-no-files-found: warn
-
-      # TEMPORARY (removed before merging): check the watchdog's report on
-      # Windows, then repeat the whole suite to catch the hang.
-      - name: Trip the hang watchdog
-        if: matrix.config == 'Release'
-        shell: bash
-        env:
-          ENCORE_TEST_ONLY: Design v3 hardening
-          ENCORE_TEST_HANG_SECONDS: '1'
-        run: |
-          set +e
-          ./build/EncoreTests_artefacts/Release/EncoreTests > trip.log 2>&1
-          rc=$?
-          sed -n '/^HANG/,$p' trip.log | head -150
-          echo "exit code $rc"
-          [ $rc -eq 3 ] && grep -q "Stacks with names" trip.log
-
-      - name: Repeat the whole suite
-        if: matrix.config == 'Release'
-        shell: bash
-        run: |
-          for i in 1 2 3 4 5; do
-            echo "== round $i"
-            ctest --test-dir build --output-on-failure --parallel 4 --timeout ${{ env.ENCORE_TEST_TIMEOUT }} || exit 1
-          done
-
-      - name: Upload Encore.exe
-        if: matrix.config == 'Release'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Encore-windows-x64
-          path: build/Encore_artefacts/Release/Encore.exe
-          if-no-files-found: error
 
   # The one check main requires: green when the builds passed, or when the
   # change needed none (docs only). Required checks can't name matrix jobs
