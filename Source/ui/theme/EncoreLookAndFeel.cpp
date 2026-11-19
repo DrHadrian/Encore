@@ -283,6 +283,9 @@ juce::Font EncoreLookAndFeel::getTextButtonFont (juce::TextButton& button, int b
     if (v == Variant::danger || v == Variant::muted)
         return font (type::buttonBold);
 
+    if ((bool) button.getProperties()["encoreCompact"])
+        return font (type::buttonCompact);   // grids of options (amp builder)
+
     return font (type::button);
 }
 

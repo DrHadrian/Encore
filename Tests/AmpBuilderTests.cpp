@@ -12,6 +12,7 @@
 #include "ui/kit/AmpArt.h"
 #include "ui/kit/AmpFace.h"
 #include "ui/kit/AmpFaceView.h"
+#include "ui/AmpBuilderView.h"
 #include "ui/BlockPanel.h"
 #include "ui/kit/AmpTemplates.h"
 
@@ -94,6 +95,8 @@ public:
 
     void runTest() override
     {
+        ScopedEncoreLook look;
+
         beginTest ("Art: every layer and sprite decodes at its 2x size, once");
         {
             namespace art = kit::ampArt;
@@ -354,6 +357,149 @@ public:
             noLight.onPowerClicked = [&] { powered = true; };
             noLight.clickPower();
             expect (powered, "the power LED stands in");
+        }
+
+        beginTest ("Builder: Parts | Face | Inspector; add, NOT SET blocks Save amp, saving writes the show and the library");
+        {
+            FakeDevice device;
+            AudioEngine engine;
+            engine.audioDeviceAboutToStart (&device);
+            const auto temp = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                  .getChildFile ("encore-builder-" + juce::String (juce::Random::getSystemRandom().nextInt()));
+            temp.createDirectory();
+
+            {
+                ShowSession session (engine);
+                expect (session.newShow (temp.getChildFile ("Builder.encore"), "Builder").wasOk());
+                pumpUntil (engine, [&] { return ! session.isBuilding(); });
+                AmpLibrary library (temp.getChildFile ("Amps"));
+
+                AmpBuilderView builder (session, library);
+                builder.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight - 44);
+                expectEquals (builder.getAmp().name, juce::String ("Encore Gold 30"));
+                builder.select ("k4");   // as the board shows it
+                expect (hasContent (renderSnapshot (builder, "v32-amp-builder")));
+                expect (builder.countText().startsWith ("12 parts"), builder.countText());
+                expect (builder.countText().contains ("template: British gold"));
+
+                // A knob from the parts list: NOT SET until it drives something or is Fixed; Save amp waits.
+                const auto id = builder.addPart ("knob", "plain", { 300, 300 });
+                expect (builder.getAmp().findPart (id) != nullptr && builder.getAmp().findPart (id)->isNotSet());
+                expect (! builder.getSaveButton().isEnabled(), "Save amp is blocked while a knob is NOT SET");
+                expect (builder.getSaveButton().getTooltip().contains ("NOT SET"));
+                expect (! builder.save());
+                expect (session.getAmps().empty(), "nothing saved");
+                renderSnapshot (builder, "v32-amp-builder-not-set");
+
+                builder.changeSelected ([] (AmpPart& p) { p.drives = "fixed"; p.value = 0.3f; });
+                expect (builder.getSaveButton().isEnabled());
+                expect (builder.save());
+                expectEquals ((int) session.getAmps().size(), 1);
+                expect (library.load (builder.getAmp().id).has_value(), "a copy in the library");
+                expect (! builder.hasUnsavedChanges());
+
+                // The 2 px grid; inside the face (below the top 24).
+                builder.movePart (id, { 101, 3 });
+                const auto* moved = builder.getAmp().findPart (id);
+                expect (moved->x % 2 == 0 && moved->y >= 24, "x " + juce::String (moved->x) + ", y " + juce::String (moved->y));
+
+                // Smart guides: a centre within 6 px of another's lines up (magenta guide).
+                const auto& k1 = *builder.getAmp().findPart ("k1");
+                auto probe = *builder.getAmp().findPart (id);
+                const auto wanted = juce::Point<int> (380, k1.y + k1.height() / 2 - probe.height() / 2 + 4);
+                const auto landing = builder.landingFor (probe, wanted);
+                expectEquals (landing.topLeft.y + probe.height() / 2, k1.y + k1.height() / 2, "centres line up across");
+                expect (! landing.guides.empty());
+
+                // Equal spacing: the treble knob near the bass-mid gap snaps to it, both gaps marked.
+                const auto& k2 = *builder.getAmp().findPart ("k2");
+                const auto& k3 = *builder.getAmp().findPart ("k3");
+                const auto gap = k3.x - (k2.x + k2.width());
+                auto k4 = *builder.getAmp().findPart ("k4");
+                const auto spaced = builder.landingFor (k4, { k3.x + k3.width() + gap + 4, k4.y });
+                expectEquals (spaced.topLeft.x, k3.x + k3.width() + gap);
+                expectEquals ((int) spaced.gaps.size(), 2);
+                expectEquals (spaced.gaps[0].px, gap);
+
+                // Several parts: Arrange.
+                builder.select ("k1");
+                builder.select ("t1", true);
+                expectEquals (builder.getSelection().size(), 2);
+                builder.arrange (AmpBuilderView::Arrange::tops);
+                expectEquals (builder.getAmp().findPart ("t1")->y, builder.getAmp().findPart ("k1")->y);
+                renderSnapshot (builder, "v32-amp-builder-arrange");
+                builder.undo();
+                expect (builder.getAmp().findPart ("t1")->y != builder.getAmp().findPart ("k1")->y, "Undo");
+                builder.redo();
+                expectEquals (builder.getAmp().findPart ("t1")->y, builder.getAmp().findPart ("k1")->y, "Redo");
+
+                builder.select ("k1");
+                builder.select ("k2", true);
+                builder.select ("k3", true);
+                builder.changeSelected ([] (AmpPart& p) { if (p.id == "k2") p.x += 10; });
+                builder.arrange (AmpBuilderView::Arrange::spaceEvenly);
+                const auto* a = builder.getAmp().findPart ("k1");
+                const auto* b = builder.getAmp().findPart ("k2");
+                const auto* c = builder.getAmp().findPart ("k3");
+                expect (std::abs ((b->x - (a->x + a->width())) - (c->x - (b->x + b->width()))) <= 1, "even gaps, the outer two stay");
+
+                // Keyboard: Tab, arrows (2 px, Shift 10), Ctrl+D, Delete, Esc, Ctrl+Z / Ctrl+Y.
+                builder.select ({});
+                expect (builder.keyPressed (juce::KeyPress (juce::KeyPress::tabKey)));
+                expectEquals (builder.getSelection()[0], builder.getAmp().parts.front().id);
+                const auto x0 = builder.getAmp().parts.front().x;
+                builder.keyPressed (juce::KeyPress (juce::KeyPress::rightKey));
+                expectEquals (builder.getAmp().parts.front().x, x0 + 2);
+                builder.keyPressed (juce::KeyPress (juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0));
+                expectEquals (builder.getAmp().parts.front().x, x0 + 12);
+                const auto count = builder.getAmp().parts.size();
+                builder.keyPressed (juce::KeyPress ('d', juce::ModifierKeys::commandModifier, 0));
+                expectEquals (builder.getAmp().parts.size(), count + 1);
+                builder.keyPressed (juce::KeyPress (juce::KeyPress::deleteKey));
+                expectEquals (builder.getAmp().parts.size(), count);
+                builder.keyPressed (juce::KeyPress ('z', juce::ModifierKeys::commandModifier, 0));
+                expectEquals (builder.getAmp().parts.size(), count + 1, "Ctrl+Z brings it back");
+                builder.keyPressed (juce::KeyPress ('y', juce::ModifierKeys::commandModifier, 0));
+                expectEquals (builder.getAmp().parts.size(), count);
+                builder.keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
+                expect (builder.getSelection().isEmpty());
+
+                // A template replaces the look and the parts, without asking; Undo brings them back.
+                const auto beforeTemplate = builder.getAmp();
+                builder.applyTemplate ("frame");
+                expectEquals (builder.getAmp().look.body, juce::String ("head"));
+                expect (builder.getAmp().parts == kit::ampTemplates::find ("frame")->amp.parts);
+                builder.undo();
+                expect (builder.getAmp() == beforeTemplate);
+
+                // A part dragged from the list: the drop box shows, then it's added where let go.
+                const auto before = builder.getAmp().parts.size();
+                builder.dragNewPart ("symbol", {}, { 300, 200 }, false);
+                expect (builder.getAmp().parts.size() == before, "not until it's let go");
+                builder.dragNewPart ("symbol", {}, { 300, 200 }, true);
+                expectEquals (builder.getAmp().parts.size(), before + 1);
+                const auto& symbol = builder.getAmp().parts.back();
+                expect (symbol.type == "symbol" && std::abs (symbol.x + symbol.w / 2 - 300) <= 8, "centred where it was dropped");
+                builder.dragNewPart ("screw", {}, { -40, 900 }, true);
+                expectEquals (builder.getAmp().parts.size(), before + 1, "off the face: nothing");
+
+                // Every example amp in the builder (the board's five).
+                for (const auto& e : kit::ampTemplates::examples())
+                {
+                    builder.edit (e.amp);
+                    expect (hasContent (renderSnapshot (builder, "v32-amp-builder-" + e.amp.id.fromFirstOccurrenceOf ("example-", false, false))));
+                }
+
+                // Tiny and huge windows never break.
+                for (auto size : { juce::Point<int> (1, 1), juce::Point<int> (640, 400), juce::Point<int> (3840, 2100) })
+                {
+                    builder.setSize (size.x, size.y);
+                    builder.createComponentSnapshot (builder.getLocalBounds().withSizeKeepingCentre (juce::jmin (size.x, 1440), juce::jmin (size.y, 900)));
+                }
+            }
+
+            engine.audioDeviceStopped();
+            temp.deleteRecursively();
         }
 
         beginTest ("Data: an amp survives JSON exactly, with the fields a newer Encore added");

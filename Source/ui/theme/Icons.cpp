@@ -48,6 +48,7 @@ namespace
             using namespace EncoreUiAssets;
             const std::pair<Icon, std::pair<const char*, int>> files[] = {
                 { Icon::alert,        { alert_svg,        alert_svgSize } },
+                { Icon::amp,          { amp_svg,          amp_svgSize } },
                 { Icon::arrowRight,   { arrowright_svg,   arrowright_svgSize } },
                 { Icon::audioWave,    { audiowave_svg,    audiowave_svgSize } },
                 { Icon::check,        { check_svg,        check_svgSize } },

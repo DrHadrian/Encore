@@ -223,6 +223,7 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/icons/route.svg
         Resources/ui/icons/sidebar-right.svg
         Resources/ui/icons/settings.svg
+        Resources/ui/icons/amp.svg
         Resources/ui/icons/sliders.svg
         Resources/ui/icons/split.svg
         Resources/ui/icons/trash.svg
@@ -372,6 +373,8 @@ target_sources(Encore PRIVATE
     Source/app/MainComponent.h
     Source/ui/BlockPanel.cpp
     Source/ui/BlockPanel.h
+    Source/ui/AmpBuilderView.cpp
+    Source/ui/AmpBuilderView.h
     Source/ui/JackStage.cpp
     Source/ui/JackStage.h
     Source/ui/RoutingView.cpp
@@ -512,6 +515,7 @@ if(ENCORE_BUILD_TESTS)
         Source/app/EventLog.cpp
         Source/app/MainComponent.cpp
         Source/ui/BlockPanel.cpp
+        Source/ui/AmpBuilderView.cpp
         Source/ui/JackStage.cpp
         Source/ui/RoutingView.cpp
         Source/ui/BottomRow.cpp

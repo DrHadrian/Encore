@@ -80,6 +80,40 @@ public:
                 const auto minimum = main.getMinimumEditSize();
                 expect (minimum.x >= theme::size::minEditWidth && minimum.y >= theme::size::minEditHeight);
             }
+
+            beginTest ("Amp builder (F8): builds the selected amp block's amp; Save amp gives the block its face");
+            {
+                MainComponent main (settings, std::make_unique<BoardDeviceType>());
+                main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+                pump (1500);
+
+                // The amp block (the board's patch starts with it).
+                auto* strip = main.getChainStrip();
+                expect (strip != nullptr);
+
+                if (strip != nullptr)
+                    strip->selectBlock (0);
+
+                pump (100);
+                expect (main.getBlockPanel() != nullptr && main.getBlockPanel()->getAmpFace() != nullptr, "the amp block shows a face");
+
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F8Key));
+                expect (main.isShowingAmpBuilder());
+
+                if (auto* builder = main.getAmpBuilder())
+                {
+                    expectEquals (builder->getAmp().name, juce::String ("Encore Gold 30"), "the block has no amp of its own yet");
+                    renderSnapshot (main, "v32-amp-builder-edit");
+                    builder->applyTemplate ("jazz");
+                    expect (builder->save());
+                    pump (50);
+                    expect (main.getBlockPanel() != nullptr && main.getBlockPanel()->getAmpFace() != nullptr
+                            && main.getBlockPanel()->getAmpFace()->getAmp().look.body == "thin", "the block shows the saved amp");
+                }
+
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F8Key));
+                expect (! main.isShowingAmpBuilder(), "F8 again: back to the patches");
+            }
         }
 
         beginTest ("Full list: typing a name (full-list-typing.png)");

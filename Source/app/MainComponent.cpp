@@ -6,6 +6,7 @@
 
 #include "engine/blocks/CabIrBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
+#include "ui/kit/AmpTemplates.h"
 #include "engine/blocks/NoiseGateBlock.h"
 #include "engine/core/Realtime.h"
 #include "ui/theme/EncoreFonts.h"
@@ -249,6 +250,7 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
             engine.resetOutputClips (slot);
     };
 
+
     healthStatus.onClick = [this] { openHealthDetails(); };
     addAndMakeVisible (healthStatus);
 
@@ -406,6 +408,43 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     routingView->onOpenAudioSettings = [this] { openAudioSettings(); };
     addChildComponent (*routingView);
 
+    // The amp builder (F8): this computer's amp library beside the settings.
+    ampLibrary = std::make_unique<AmpLibrary> (settings.getFolder().getChildFile ("Amps"));
+    ampBuilder = std::make_unique<AmpBuilderView> (*session, *ampLibrary);
+    ampBuilder->onClose = [this] { setAmpBuilderVisible (false); };
+    ampBuilder->onSaved = [this] (const AmpPreset& saved)
+    {
+        // The amp block it was built for shows it from now on (its starting settings applied).
+        if (builderBlockIndex >= 0)
+        {
+            session->setBlockAmp (builderBlockIndex, saved.id);
+
+            if (blockPanel != nullptr && shownBlockIndex == builderBlockIndex)
+                blockPanel->setAmpFace (saved);
+        }
+    };
+    ampBuilder->onLoadCapture = [this] (std::function<void (const juce::File&, const juce::String&)> done)
+    {
+        captureChooser = std::make_unique<juce::FileChooser> ("Load a NAM capture", settings.getLastBrowseFolder(), "*.nam");
+        juce::Component::SafePointer<MainComponent> safe (this);
+        captureChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                                     [safe, done] (const juce::FileChooser& chooser)
+        {
+            if (safe == nullptr || chooser.getResult() == juce::File())
+                return;
+
+            const auto file = chooser.getResult();
+            safe->settings.setLastBrowseFolder (file.getParentDirectory());
+
+            // The amp block being built loads it (the existing loader, off the audio thread).
+            if (safe->blockPanel != nullptr && safe->shownBlockIndex == safe->builderBlockIndex)
+                safe->blockPanel->loadFile (file);
+
+            done (file, {});
+        });
+    };
+    addChildComponent (*ampBuilder);
+
     setButtonIcon (routingButton, Icon::route, (float) size::iconSize, false);
     setButtonKeyCap (routingButton, "F7");
     routingButton.setTooltip ("Routing: this computer's inputs and outputs, and every patch's sends (F7)");
@@ -452,6 +491,7 @@ MainComponent::~MainComponent()
     stageView = nullptr;
     cueEditor = nullptr;
     routingView = nullptr;
+    ampBuilder = nullptr;   // it holds the session
     blockPanel = nullptr;
     jackStage = nullptr;
     inspector = nullptr;
@@ -1473,6 +1513,43 @@ void MainComponent::openRouting()
     setRoutingVisible (true);
 }
 
+void MainComponent::setAmpBuilderVisible (bool shouldShow)
+{
+    if (ampBuilder == nullptr || shouldShow == ampBuilder->isVisible() || (shouldShow && isShowingStage()))
+        return;
+
+    if (shouldShow)
+    {
+        // Build the amp of the selected amp block (or Encore Gold 30, which it shows until it has its own).
+        builderBlockIndex = -1;
+        const auto* chain = engine.getChain();
+        const auto index = chainStrip != nullptr ? chainStrip->getSelectedIndex() : -1;
+
+        if (chain != nullptr && juce::isPositiveAndBelow (index, (int) chain->getBlocks().size())
+            && chain->getBlocks()[(size_t) index]->getTypeId() == NamAmpBlock::typeId)
+            builderBlockIndex = index;
+
+        const auto* own = builderBlockIndex >= 0 ? session->getBlockAmp (builderBlockIndex) : nullptr;
+        ampBuilder->edit (own != nullptr ? *own : kit::ampTemplates::defaultFace());
+        builderCaptureInfo.clear();
+
+        if (routingView != nullptr && routingView->isVisible())
+            setRoutingVisible (false);
+
+        if (cueEditor != nullptr && cueEditor->isVisible())
+            cueEditor->setVisible (false);
+    }
+
+    ampBuilder->setVisible (shouldShow);
+    resized();
+
+    if (shouldShow)
+        ampBuilder->toFront (false);
+
+    if (isShowing())
+        (shouldShow ? static_cast<juce::Component&> (*ampBuilder) : static_cast<juce::Component&> (*this)).grabKeyboardFocus();
+}
+
 void MainComponent::setRoutingVisible (bool shouldShow)
 {
     if (routingView == nullptr)
@@ -1679,6 +1756,15 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         setCueListVisible (! cueEditor->isVisible());
         return true;
     }
+
+    if (key.getKeyCode() == juce::KeyPress::F8Key && ! isShowingStage())
+    {
+        setAmpBuilderVisible (! isShowingAmpBuilder());
+        return true;
+    }
+
+    if (isShowingAmpBuilder() && ampBuilder->keyPressed (key))
+        return true;
 
     if (key.getKeyCode() == juce::KeyPress::F7Key && ! isShowingStage())
     {
@@ -2350,6 +2436,9 @@ void MainComponent::resized()
 
     if (noticeBar.isVisible())
         noticeBar.setBounds (area.removeFromTop (size::noticeBar + 1));
+
+    if (ampBuilder != nullptr)
+        ampBuilder->setBounds (area);   // the whole area under the toolbar (it pads itself)
 
     area.reduce (size::outerPadding, size::outerPadding);
     layoutBottomRow (area.removeFromBottom (mixerOpen ? size::mixerRow : size::bottomRow));

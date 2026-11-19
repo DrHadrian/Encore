@@ -683,6 +683,7 @@ namespace type
     constexpr Style bodyReadout     { 12.5f, Weight::regular, 0.0f, false, true }; // cue numbers in rows, MIDI triggers (readout)
     constexpr Style bodySmall       { 12.0f, Weight::regular };             // fields, button text
     constexpr Style button          { 12.0f, Weight::medium };
+    constexpr Style buttonCompact   { 11.0f, Weight::medium };              // the amp builder's option grids (22 px buttons)
     constexpr Style label           { 11.5f, Weight::regular };             // field labels ("k"), help
     constexpr Style caption         { 11.0f, Weight::regular };             // footers, notes
     constexpr Style paneHeader      { 10.0f, Weight::bold, 0.08f, true };   // "SET LIST", "INSPECTOR · AMP"
@@ -945,6 +946,23 @@ namespace amp
     constexpr juce::uint32 bindFixedFill = 0xff2C2C30, bindFixedText = 0xffC4C4C9;
     constexpr juce::uint32 bindNotSetFill = 0xff4A3510, bindNotSetText = 0xffFFD27A;
     constexpr juce::uint32 selectedOutline = 0xff6EA5FA, notSetOutline = 0xffFFB340, handleFill = 0xffFFFFFF, handleBorder = 0xff2E6FDC;
+
+    // The amp builder (board BAmpBuilder): the face's work area, notes in the inspector.
+    constexpr juce::uint32 workArea = 0xff121418, workDots = 0x12FFFFFF, faceShadow = 0x8C000000;
+    constexpr juce::uint32 dropFill = 0x294C8DF6;    // where a dragged part lands: accent at 16 %
+    constexpr juce::uint32 notSetNoteFill = 0xff2A251C, notSetNoteBorder = 0xff3D2F12, notSetNoteText = 0xffFFD27A;
+    constexpr juce::uint32 fixedNoteFill = 0xff232326;
+    constexpr juce::uint32 swatchRing = 0xffE8E8EB, swatchShine = 0x0FFFFFFF;
+    // Swatches the builder can't cut from the layers: piping cords, light colours.
+    constexpr juce::uint32 pipingGold = 0xffD6C080, pipingWhite = 0xffE4E2DC, pipingBlack = 0xff1E1E20, pipingNone = 0xff2A2A2E, pipingNoneSlash = 0xffFF8A80;
+    constexpr juce::uint32 lightRed = 0xffFF6E3C, lightAmber = 0xffFFAA28, lightGreen = 0xff50E65A, lightBlue = 0xff5096FF;
+
+    constexpr int partsW = 220, inspectorW = 300, footerH = 30, ampPickerW = 210, backButtonW = 156;
+    constexpr int dotPitch = 16, faceShadowY = 24, faceShadowBlur = 20;
+    constexpr int handleSize = 7, bindH = 16, bindPadX = 6, outlineGap = 3;
+    constexpr int rowLabelW = 86, rowGap = 8, rowMinH = 26, inspectorPadX = 12, inspectorPadY = 10, swatch = 22;
+    constexpr int dropBorder = 2, dropRadius = 6, gapLabelH = 12;
+    constexpr int undoDepth = 100;
 }
 
 } // namespace encore::theme

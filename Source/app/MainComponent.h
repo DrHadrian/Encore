@@ -14,6 +14,8 @@
 #include "session/ShowSession.h"
 #include "ui/BlockPanel.h"
 #include "ui/JackStage.h"
+#include "ui/AmpBuilderView.h"
+#include "session/AmpLibrary.h"
 #include "ui/BottomRow.h"
 #include "ui/RoutingView.h"
 #include "ui/kit/Fader.h"
@@ -97,6 +99,13 @@ public:
 
     // The bottom row (tests): the mixer view, the health status and its details.
     bool isMixerOpen() const noexcept { return mixerOpen; }
+
+    // The amp builder (F8; tests).
+    void setAmpBuilderVisible (bool);
+    bool isShowingAmpBuilder() const noexcept { return ampBuilder != nullptr && ampBuilder->isVisible(); }
+    AmpBuilderView* getAmpBuilder() noexcept { return ampBuilder.get(); }
+    ChainStrip* getChainStrip() noexcept { return chainStrip.get(); }
+    BlockPanel* getBlockPanel() noexcept { return blockPanel.get(); }
     void setMixerOpen (bool);
     kit::PaneTab& getMixerTab() noexcept { return mixerTab; }
     InputSummary& getInputSummary() noexcept { return inputSummary; }
@@ -217,6 +226,13 @@ private:
     juce::Label chainLabel, problemsLabel;
     juce::TextButton routingButton { "Routing" };   // centre header, F7
     std::unique_ptr<RoutingView> routingView;
+
+    // The amp builder (design/AMP-BUILDER.md, F8): over the whole area under the toolbar.
+    std::unique_ptr<AmpLibrary> ampLibrary;
+    std::unique_ptr<AmpBuilderView> ampBuilder;
+    int builderBlockIndex = -1;             // the amp block it builds for (-1: none)
+    juce::String builderCaptureInfo;
+    std::unique_ptr<juce::FileChooser> captureChooser;
     juce::TextButton patchPicker;
     juce::Label loadingLabel { {}, "(loading patches...)" };
     juce::Rectangle<int> headerArrow;
