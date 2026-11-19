@@ -10,6 +10,8 @@
 #include "session/AmpLibrary.h"
 #include "session/ShowSession.h"
 #include "ui/kit/AmpArt.h"
+#include "ui/kit/AmpFace.h"
+#include "ui/kit/AmpTemplates.h"
 
 namespace encore::test
 {
@@ -162,10 +164,120 @@ public:
             expect (blue.getBlue() > blue.getRed() && blue.getBlue() > blue.getGreen(), "blue is blue");
             expect (amber.getRed() > amber.getBlue() && amber.getGreen() > green.getRed() * 0.5f, "amber is warm");
             expect (art::jewel ("green", true) == art::jewel ("green", true), "made once");
-            expect (art::jewel ("green", false) == art::get ("jewel_off.png"), "unlit: jewel_off");
+            const auto unlit = meanColour (art::jewel ("green", false));
+            expect (unlit.getBrightness() < green.getBrightness() * 0.6f, "unlit: darker");
+            expect (art::jewel ("red", false) != art::jewel ("red", true));
 
             art::clearCache();
             expectEquals (art::numCached(), 0);
+        }
+
+        beginTest ("Templates: the eight templates and the five example amps, as on the board");
+        {
+            namespace tpl = kit::ampTemplates;
+            juce::StringArray names;
+
+            for (const auto& t : tpl::all())
+                names.add (t.name);
+
+            expectEquals (names.joinIntoString (", "), juce::String ("British gold, Black panel, Plexi, Cream, Tweed top, Grille head, Framed head, Jazz clean"));
+            juce::StringArray amps;
+
+            for (const auto& e : tpl::examples())
+                amps.add (e.amp.name);
+
+            expectEquals (amps.joinIntoString (", "), juce::String ("Encore Gold 30, JC-120, Super Crush 100, Blues Junior, 5150 III 50W"));
+            expectEquals (tpl::defaultFace().name, juce::String ("Encore Gold 30"));
+
+            for (const auto& e : tpl::examples())
+            {
+                juce::String why;
+                expect (e.amp.canSave (&why), e.amp.name + ": " + why);
+                expect (e.amp.capture.isEmpty(), "no capture is shipped");
+            }
+
+            // Encore Gold 30: every control drives a real parameter (it stands in for any amp block without its own).
+            int driving = 0;
+
+            for (const auto& p : tpl::defaultFace().parts)
+            {
+                expect (! p.isFixed(), p.id + " isn't fixed");
+
+                if (p.drivesParameter())
+                    ++driving;
+            }
+
+            expectEquals (driving, 6, "Input, Bass, Mid, Treble, Output and Level match");
+
+            // The board's bindings on the others (AMP-BUILDER.md: example amps).
+            const auto count = [] (const AmpPreset& a, const char* drives)
+            {
+                return (int) std::count_if (a.parts.begin(), a.parts.end(), [drives] (const AmpPart& p) { return p.drives == drives; });
+            };
+
+            const auto& jc = tpl::examples()[1].amp;
+            expectEquals (count (jc, "fixed"), 8, "JC-120: channel 1 (4 knobs), Distortion, Reverb, Speed, Depth fixed");
+            expectEquals (count (jc, "input") + count (jc, "treble") + count (jc, "mid") + count (jc, "bass") + count (jc, "output"), 5);
+
+            const auto made = tpl::makeFrom ("frame", "My head");
+            expect (made.id.isNotEmpty() && made.id != tpl::find ("frame")->amp.id && made.name == "My head");
+            expect (made.parts == tpl::find ("frame")->amp.parts);
+        }
+
+        beginTest ("Face: composed once to a 2x image, cached by content, the live parts left for the view");
+        {
+            kit::AmpFace::clearCache();
+            const auto& gold = kit::ampTemplates::defaultFace();
+            const auto all = kit::AmpFace::compose (gold, kit::AmpFace::Layer::everything);
+            expectEquals (all.getWidth(), 1200);
+            expectEquals (all.getHeight(), 860);
+            expect (all == kit::AmpFace::compose (gold, kit::AmpFace::Layer::everything), "the second ask is the cached image");
+            expectEquals (kit::AmpFace::numCached(), 1);
+
+            const auto still = kit::AmpFace::compose (gold, kit::AmpFace::Layer::staticOnly);
+            expect (still != all);
+
+            // The knobs' place differs between the two (their bodies are drawn live on top).
+            const auto knob = *gold.findPart ("k1");
+            const auto centre = juce::Point<int> ((knob.x + knob.width() / 2) * 2, (knob.y + knob.height() / 2) * 2);
+            expect (all.getPixelAt (centre.x, centre.y) != still.getPixelAt (centre.x, centre.y), "a driving knob isn't in the static image");
+
+            // The print stays in it: a label under the knob.
+            const auto plate = *gold.findPart ("p1");
+            expect (all.getPixelAt ((plate.x + 4) * 2, (plate.y + plate.h / 2) * 2) == still.getPixelAt ((plate.x + 4) * 2, (plate.y + plate.h / 2) * 2));
+
+            // Another amp is another image; an edited amp too.
+            auto edited = gold;
+            edited.look.tolex = "cream";
+            expect (kit::AmpFace::compose (edited, kit::AmpFace::Layer::everything) != all);
+
+            // Every example and template composes, at 1x and 2x, every part type drawn.
+            for (const auto& e : kit::ampTemplates::examples())
+            {
+                const auto face = kit::AmpFace::compose (e.amp, kit::AmpFace::Layer::everything);
+                expect (face.isValid() && face.getPixelAt (600, 500).getAlpha() > 0, e.amp.name);
+                writeSnapshot (face, "amp-face-" + e.amp.id.fromFirstOccurrenceOf ("example-", false, false));
+            }
+
+            for (const auto& t : kit::ampTemplates::all())
+                expect (kit::AmpFace::compose (t.amp, kit::AmpFace::Layer::staticOnly, 1.0f).getWidth() == 600, t.name);
+
+            // Unknown materials and part types fall back, never crash.
+            auto odd = sampleAmp();
+            odd.look.tolex = "plaid";
+            odd.parts.push_back ({});
+            odd.parts.back().type = "hologram";
+            expect (kit::AmpFace::compose (odd, kit::AmpFace::Layer::everything).isValid());
+
+            // The component shows the composed face, scaled.
+            kit::AmpFace view;
+            view.setFace (gold);
+            view.setBounds (0, 0, 600, 430);
+            expect (view.getImage() == all);
+            expect (hasContent (view.createComponentSnapshot (view.getLocalBounds())));
+
+            kit::AmpFace::clearCache();
+            expectEquals (kit::AmpFace::numCached(), 0);
         }
 
         beginTest ("Data: an amp survives JSON exactly, with the fields a newer Encore added");

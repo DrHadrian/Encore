@@ -24,8 +24,9 @@ namespace encore::kit::ampArt
     "knob_black.png"); a null image when there is no such file. */
 juce::Image get (const juce::String& fileName);
 
-/** The pilot jewel, lit, in red (as drawn), amber, green or blue (the
-    board's hue-rotate filters, applied once at load); unlit: jewel_off. */
+/** The pilot jewel in red (as drawn), amber, green or blue (the board's
+    hue-rotate filters, applied once at load); unlit, darkened as the board
+    does (brightness 0.4, saturation 0.6). */
 juce::Image jewel (const juce::String& colour, bool lit);
 
 /** Every file built in, sorted. */

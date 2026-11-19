@@ -29,7 +29,8 @@ EncoreFonts::EncoreFonts()
       readoutMedium    (load (EncoreUiAssets::InterReadoutMedium_ttf,    EncoreUiAssets::InterReadoutMedium_ttfSize)),
       readoutSemibold  (load (EncoreUiAssets::InterReadoutSemiBold_ttf,  EncoreUiAssets::InterReadoutSemiBold_ttfSize)),
       readoutBold      (load (EncoreUiAssets::InterReadoutBold_ttf,      EncoreUiAssets::InterReadoutBold_ttfSize)),
-      readoutExtraBold (load (EncoreUiAssets::InterReadoutExtraBold_ttf, EncoreUiAssets::InterReadoutExtraBold_ttfSize))
+      readoutExtraBold (load (EncoreUiAssets::InterReadoutExtraBold_ttf, EncoreUiAssets::InterReadoutExtraBold_ttfSize)),
+      serif (load (EncoreUiAssets::DejaVuSerifBold_ttf, EncoreUiAssets::DejaVuSerifBold_ttfSize))
 {
 }
 
@@ -123,6 +124,12 @@ float fittedSize (type::Weight weight, const juce::String& text, float width, fl
         return maxPx;
 
     return juce::jlimit (juce::jmin (minPx, maxPx), maxPx, 100.0f * width / at100);
+}
+
+juce::Font serifOfSize (float px, float tracking)
+{
+    auto f = juce::Font (juce::FontOptions (EncoreFonts::get().serifTypeface()).withPointHeight (px));
+    return f.withExtraKerningFactor (tracking);
 }
 
 } // namespace encore::theme

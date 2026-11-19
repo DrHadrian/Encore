@@ -12,3 +12,6 @@ CMakeUserPresets.json
 # OS
 Thumbs.db
 .DS_Store
+
+# Python bytecode (tools)
+__pycache__/

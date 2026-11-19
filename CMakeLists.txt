@@ -202,7 +202,9 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/fonts/InterReadout-SemiBold.ttf
         Resources/ui/fonts/InterReadout-Bold.ttf
         Resources/ui/fonts/InterReadout-ExtraBold.ttf
+        Resources/ui/fonts/DejaVuSerif-Bold.ttf
         Resources/ui/logo/encore-wordmark-ui.svg
+        Resources/ui/logo/encore-icon-clef.svg
         Resources/ui/icons/alert.svg
         Resources/ui/icons/arrow-right.svg
         Resources/ui/icons/audio-wave.svg
@@ -238,7 +240,7 @@ list(SORT ENCORE_AMP_SPRITES)
 juce_add_binary_data(EncoreAmpArt
     HEADER_NAME EncoreAmpArt.h
     NAMESPACE EncoreAmpArt
-    SOURCES ${ENCORE_AMP_PARTS} ${ENCORE_AMP_SPRITES})
+    SOURCES ${ENCORE_AMP_PARTS} ${ENCORE_AMP_SPRITES} Resources/amps/amp-templates.json)
 
 # The UI's look (theme) and kit: shared by the app and the UI snapshot tests.
 add_library(EncoreUi INTERFACE)
@@ -301,6 +303,10 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/DropBox.h
     Source/ui/kit/AmpArt.cpp
     Source/ui/kit/AmpArt.h
+    Source/ui/kit/AmpFace.cpp
+    Source/ui/kit/AmpFace.h
+    Source/ui/kit/AmpTemplates.cpp
+    Source/ui/kit/AmpTemplates.h
     Source/ui/kit/Lcd.cpp
     Source/ui/kit/Lcd.h
     Source/ui/kit/MeterBar.cpp

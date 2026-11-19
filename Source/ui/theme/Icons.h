@@ -28,6 +28,13 @@ void drawIcon (juce::Graphics&, Icon, juce::Rectangle<float> bounds, juce::Colou
     `bounds` keeping its proportions. Never typed, never recoloured. */
 void drawLogo (juce::Graphics&, juce::Rectangle<float> bounds);
 
+/** The wordmark in one colour (amp faces: cream, white, gold, black), its
+    designed box placed in `bounds` by `placement` (aspect kept). */
+void drawLogo (juce::Graphics&, juce::Rectangle<float> bounds, juce::Colour, juce::RectanglePlacement placement);
+
+/** The clef mark (Resources/ui/logo/encore-icon-clef.svg) in one colour, fitted and centred. */
+void drawClef (juce::Graphics&, juce::Rectangle<float> bounds, juce::Colour);
+
 /** The logo's width : height. */
 float logoAspect();
 

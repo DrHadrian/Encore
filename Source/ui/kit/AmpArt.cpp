@@ -38,8 +38,20 @@ namespace
         return nullptr;
     }
 
-    /** The CSS filters hue-rotate(deg) then saturate(s) (Filter Effects spec), on unpremultiplied colour. */
-    juce::Image filtered (const juce::Image& source, float degrees, float saturation)
+    /** A CSS saturate(s) matrix (Filter Effects spec). */
+    void saturateMatrix (float k, float m[3][3])
+    {
+        const float rows[3][3] {
+            { 0.213f + 0.787f * k, 0.715f - 0.715f * k, 0.072f - 0.072f * k },
+            { 0.213f - 0.213f * k, 0.715f + 0.285f * k, 0.072f - 0.072f * k },
+            { 0.213f - 0.213f * k, 0.715f - 0.715f * k, 0.072f + 0.928f * k },
+        };
+        std::copy (&rows[0][0], &rows[0][0] + 9, &m[0][0]);
+    }
+
+    /** The CSS filters hue-rotate(deg) saturate(s) and, for an unlit light,
+        brightness(b) saturate(s2) (Filter Effects spec), on unpremultiplied colour. */
+    juce::Image filtered (const juce::Image& source, float degrees, float saturation, float brightness = 1.0f, float saturation2 = 1.0f)
     {
         auto image = source.createCopy();
         const auto a = juce::degreesToRadians (degrees);
@@ -49,12 +61,9 @@ namespace
             { 0.213f - c * 0.213f + s * 0.143f, 0.715f + c * 0.285f + s * 0.140f, 0.072f - c * 0.072f - s * 0.283f },
             { 0.213f - c * 0.213f - s * 0.787f, 0.715f - c * 0.715f + s * 0.715f, 0.072f + c * 0.928f + s * 0.072f },
         };
-        const auto k = saturation;
-        const float sat[3][3] {
-            { 0.213f + 0.787f * k, 0.715f - 0.715f * k, 0.072f - 0.072f * k },
-            { 0.213f - 0.213f * k, 0.715f + 0.285f * k, 0.072f - 0.072f * k },
-            { 0.213f - 0.213f * k, 0.715f - 0.715f * k, 0.072f + 0.928f * k },
-        };
+        float sat[3][3], sat2[3][3];
+        saturateMatrix (saturation, sat);
+        saturateMatrix (saturation2, sat2);
 
         juce::Image::BitmapData bits (image, juce::Image::BitmapData::readWrite);
 
@@ -74,7 +83,13 @@ namespace
                     mid[r] = juce::jlimit (0.0f, 1.0f, hue[r][0] * in[0] + hue[r][1] * in[1] + hue[r][2] * in[2]);
 
                 for (int r = 0; r < 3; ++r)
-                    out[r] = juce::jlimit (0.0f, 1.0f, sat[r][0] * mid[0] + sat[r][1] * mid[1] + sat[r][2] * mid[2]);
+                    out[r] = juce::jlimit (0.0f, 1.0f, sat[r][0] * mid[0] + sat[r][1] * mid[1] + sat[r][2] * mid[2]) * brightness;
+
+                for (int r = 0; r < 3; ++r)
+                    mid[r] = out[r];
+
+                for (int r = 0; r < 3; ++r)
+                    out[r] = juce::jlimit (0.0f, 1.0f, sat2[r][0] * mid[0] + sat2[r][1] * mid[1] + sat2[r][2] * mid[2]);
 
                 bits.setPixelColour (x, y, juce::Colour::fromFloatRGBA (out[0], out[1], out[2], px.getFloatAlpha()));
             }
@@ -110,28 +125,28 @@ juce::Image jewel (const juce::String& colour, bool lit)
 {
     JUCE_ASSERT_MESSAGE_THREAD
 
-    if (! lit)
-        return get ("jewel_off.png");
-
-    if (colour.isEmpty() || colour == "red")
+    if (lit && (colour.isEmpty() || colour == "red"))
         return get ("jewel_on.png");
 
-    const auto key = "jewel_on_" + colour;
+    const auto key = juce::String (lit ? "jewel_on_" : "jewel_unlit_") + (colour.isEmpty() ? juce::String ("red") : colour);
     auto& images = cache();
 
     if (const auto found = images.find (key); found != images.end())
         return found->second;
 
-    // The board's filters: amber hue-rotate(28deg) saturate(1.3), green hue-rotate(95deg), blue hue-rotate(215deg).
+    // The board's filters: amber hue-rotate(28deg) saturate(1.3), green hue-rotate(95deg), blue hue-rotate(215deg);
+    // unlit (always off, or the block off): the same, then brightness(0.4) saturate(0.6).
     const auto base = get ("jewel_on.png");
     juce::Image made;
 
     if (base.isValid())
     {
-        if (colour == "amber")      made = filtered (base, 28.0f, 1.3f);
-        else if (colour == "green") made = filtered (base, 95.0f, 1.0f);
-        else if (colour == "blue")  made = filtered (base, 215.0f, 1.0f);
-        else                        made = base;
+        const auto brightness = lit ? 1.0f : 0.4f, saturation2 = lit ? 1.0f : 0.6f;
+
+        if (colour == "amber")      made = filtered (base, 28.0f, 1.3f, brightness, saturation2);
+        else if (colour == "green") made = filtered (base, 95.0f, 1.0f, brightness, saturation2);
+        else if (colour == "blue")  made = filtered (base, 215.0f, 1.0f, brightness, saturation2);
+        else                        made = filtered (base, 0.0f, 1.0f, brightness, saturation2);
     }
 
     images[key] = made;
@@ -143,7 +158,8 @@ juce::StringArray names()
     juce::StringArray all;
 
     for (int i = 0; i < EncoreAmpArt::namedResourceListSize; ++i)
-        all.add (EncoreAmpArt::originalFilenames[i]);
+        if (const juce::String name (EncoreAmpArt::originalFilenames[i]); name.endsWith (".webp") || name.endsWith (".png"))
+            all.add (name);
 
     all.sort (false);
     return all;
