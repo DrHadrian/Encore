@@ -41,7 +41,7 @@ namespace
 class AmpFaceView::Knob final : public juce::Slider
 {
 public:
-    Knob (const AmpPreset& a, const AmpPart& p) : amp (a), part (p)
+    Knob (const AmpPreset& a, const AmpPart& p) : part (p), amp (a)
     {
         setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
         setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);

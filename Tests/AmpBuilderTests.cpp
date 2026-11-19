@@ -114,17 +114,17 @@ public:
 
             int checked = 0;
 
-            for (const auto& name : all)
+            for (const auto& file : all)
             {
-                const auto image = art::get (name);
-                expect (image.isValid(), name + " decodes");
+                const auto image = art::get (file);
+                expect (image.isValid(), file + " decodes");
 
                 for (const auto& [prefix, size] : sizes)
                 {
-                    if (name.startsWith (prefix))
+                    if (file.startsWith (prefix))
                     {
-                        expectEquals (image.getWidth(), size.x, name);
-                        expectEquals (image.getHeight(), size.y, name);
+                        expectEquals (image.getWidth(), size.x, file);
+                        expectEquals (image.getHeight(), size.y, file);
                         ++checked;
                         break;
                     }
@@ -309,7 +309,8 @@ public:
             block.findParameter ("treble")->setValue (-3.0f);
             panel.refresh();
             expectWithinAbsoluteError ((float) treble->getValue(), -3.0f, 0.01f, "a change elsewhere (MIDI) shows on the face");
-            expect (treble->getDoubleClickReturnValue() == block.findParameter ("treble")->getSpec().defaultValue, "double-click: the default");
+            expectWithinAbsoluteError ((float) treble->getDoubleClickReturnValue(), block.findParameter ("treble")->getSpec().defaultValue, 1.0e-6f,
+                                       "double-click: the default");
 
             // Level match is the switch.
             auto* match = face->findSwitch ("normalise");
@@ -317,7 +318,7 @@ public:
             const auto before = block.findParameter ("normalise")->getValue();
             match->triggerClick();
             juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
-            expect (block.findParameter ("normalise")->getValue() != before, "the switch sets Level match");
+            expect (std::abs (block.findParameter ("normalise")->getValue() - before) > 0.5f, "the switch sets Level match");
 
             // The pilot light follows the block, and turns it off and on.
             expect (block.isEnabled() && face->isOn());
@@ -496,8 +497,8 @@ public:
                     auto choices = builder.libraryChoices();
                     juce::StringArray names;
 
-                    for (const auto& c : choices)
-                        names.add (c.name);
+                    for (const auto& choice : choices)
+                        names.add (choice.name);
 
                     for (const auto& e : kit::ampTemplates::examples())
                         expect (names.contains (e.amp.name) == (session.getAmp (e.amp.id) == nullptr),
@@ -506,12 +507,12 @@ public:
                     // One saved to the library is offered once, as the library's.
                     expect (library.save (kit::ampTemplates::examples()[2].amp).wasOk());
                     choices = builder.libraryChoices();
-                    expectEquals ((int) std::count_if (choices.begin(), choices.end(), [] (const AmpPreset& a) { return a.name == "Super Crush 100"; }), 1);
+                    expectEquals ((int) std::count_if (choices.begin(), choices.end(), [] (const AmpPreset& offered) { return offered.name == "Super Crush 100"; }), 1);
 
                     // In the show: not offered at all.
                     session.saveAmp (kit::ampTemplates::examples()[3].amp);
                     choices = builder.libraryChoices();
-                    expect (std::none_of (choices.begin(), choices.end(), [] (const AmpPreset& a) { return a.name == "Blues Junior"; }));
+                    expect (std::none_of (choices.begin(), choices.end(), [] (const AmpPreset& offered) { return offered.name == "Blues Junior"; }));
                 }
 
                 // A new amp from a template: its own id, the name given, no capture.
@@ -540,6 +541,46 @@ public:
             temp.deleteRecursively();
         }
 
+        beginTest ("Snapshots: the Edit amp panel with each example amp's face; tiny and huge sizes never break");
+        {
+            NamAmpBlock block;
+            BlockPanel panel (block);
+            panel.setBounds (0, 0, 1100, 640);
+
+            for (const auto& e : kit::ampTemplates::examples())
+            {
+                panel.setAmpFace (e.amp);
+                panel.refresh();
+                expect (hasContent (renderSnapshot (panel, "v32-amp-face-edit-" + e.amp.id.fromFirstOccurrenceOf ("example-", false, false))));
+
+                // Every driving control is there, every fixed one says so.
+                auto* face = panel.getAmpFace();
+
+                for (const auto& p : e.amp.parts)
+                {
+                    if (p.isKnob() && p.drivesParameter())
+                        expect (face->findKnob (ampPreset::parameterFor (p.drives)) != nullptr, e.amp.name + " " + p.id);
+
+                    if (p.isFixed())
+                        expectEquals (face->getTooltipAt ({ p.x + p.width() / 2, p.y + p.height() / 2 }), p.fixedTooltip(), e.amp.name + " " + p.id);
+                }
+            }
+
+            for (auto size : { juce::Point<int> (1, 1), juce::Point<int> (200, 120), juce::Point<int> (3840, 2160) })
+            {
+                panel.setSize (size.x, size.y);
+                panel.createComponentSnapshot (panel.getLocalBounds().withSizeKeepingCentre (juce::jmin (size.x, 1440), juce::jmin (size.y, 900)));
+            }
+
+            // The face composes at 1x and 2x for any screen; a face with nothing on it too.
+            AmpPreset bare;
+            bare.id = "bare";
+            expect (kit::AmpFace::compose (bare, kit::AmpFace::Layer::everything, 1.0f).getWidth() == 600);
+            kit::AmpFaceView empty (bare);
+            empty.setBounds (0, 0, 600, 430);
+            expect (hasContent (empty.createComponentSnapshot (empty.getLocalBounds())));
+        }
+
         beginTest ("Data: an amp survives JSON exactly, with the fields a newer Encore added");
         {
             const auto amp = sampleAmp();
@@ -563,7 +604,7 @@ public:
 
             // Odd values are clamped, never NaN.
             auto odd = ampPreset::fromJson (R"({"format": "encore-amp", "id": "x", "parts": [{"id": "k", "type": "knob", "value": 7, "w": -4}]})", error);
-            expect (odd.has_value() && odd->parts[0].value == 1.0f && odd->parts[0].w == 0);
+            expect (odd.has_value() && std::abs (odd->parts[0].value - 1.0f) < 1.0e-6f && odd->parts[0].w == 0);
         }
 
         beginTest ("Data: what each control drives, Fixed and NOT SET, the words");
