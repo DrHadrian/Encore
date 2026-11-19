@@ -300,7 +300,8 @@ void InputStrip::resized()
     picker.setBounds (area.removeFromTop (mixerInputPickerH));
     area.removeFromTop (mixerRowGap);
     const auto scaleX = area.getX(), meterX = scaleX + mixerScaleW + mixerScaleGap;
-    peak.setBounds (area.removeFromTop (mixerInputPeakH).withRight (meterX + mixerInputMeterW));
+    // Right-aligned on the meter; it may use the padding on the left ("−10.5" is wider than the scale and the gap).
+    peak.setBounds (area.removeFromTop (mixerInputPeakH).withRight (meterX + mixerInputMeterW).withLeft (0));
     area.removeFromTop (mixerRowGap);
     meter.setBounds (meterX, area.getY(), mixerInputMeterW, area.getHeight());
     scaleColumn = juce::Rectangle<int> (scaleX, area.getY(), mixerScaleW, area.getHeight()).toFloat();

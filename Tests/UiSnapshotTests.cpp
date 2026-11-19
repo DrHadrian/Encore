@@ -110,7 +110,7 @@ public:
         beginTest ("Kit: every component draws, at 1x and 2x");
         {
             KitGallery gallery;
-            gallery.setBounds (0, 0, 1440, 1320);
+            gallery.setBounds (0, 0, 1440, 1560);
             const auto image = renderSnapshot (gallery, "kit");
             expect (hasContent (image), "the gallery drew something");
 
@@ -151,6 +151,59 @@ public:
 
             expect (std::isfinite (meter.getDisplayDb()), "never NaN");
             expect (MeterBar::toProportion (meter.getDisplayDb()) <= 0.0f, "falls back to the bottom after the burst");
+        }
+
+        beginTest ("Kit (v3.2): the mixer meter's law, its readouts and the peak hold");
+        {
+            using namespace kit;
+            for (auto [db, pos] : { std::pair { 0.0f, 1.0f }, { -6.0f, 0.82f }, { -12.0f, 0.64f }, { -24.0f, 0.38f }, { -48.0f, 0.08f }, { -60.0f, 0.0f } })
+                expectWithinAbsoluteError (dbfsLaw::positionFor (db), pos, 1.0e-5f);
+
+            expectWithinAbsoluteError (dbfsLaw::positionFor (6.0f), 1.0f, 1.0e-6f);
+            expectWithinAbsoluteError (dbfsLaw::positionFor (-90.0f), 0.0f, 1.0e-6f);
+            expectWithinAbsoluteError (dbfsLaw::positionFor (-3.0f), 0.91f, 1.0e-5f);
+
+            float last = -1.0f;
+
+            for (float db = -70.0f; db <= 3.0f; db += 0.25f)
+            {
+                expect (dbfsLaw::positionFor (db) >= last, "never runs backwards");
+                last = dbfsLaw::positionFor (db);
+            }
+
+            expectEquals (dbfsLaw::readout (0.0f, -60.0f), juce::String ("0.0"));
+            expectEquals (dbfsLaw::readout (-8.24f, -60.0f), juce::String::fromUTF8 ("\xe2\x88\x92" "8.2"));
+            expectEquals (dbfsLaw::readout (2.5f, -60.0f), juce::String ("+2.5"));
+            expectEquals (dbfsLaw::readout (-0.04f, -60.0f), juce::String ("0.0"), "no minus zero");
+            expectEquals (dbfsLaw::readout (-60.0f, -60.0f), juce::String::fromUTF8 ("\xe2\x88\x92\xe2\x88\x9e"));
+
+            PeakHold hold;
+            expectEquals (hold.text (false), juce::String::fromUTF8 ("\xe2\x80\x94"), "silent: a dash");
+            hold.feed (juce::Decibels::decibelsToGain (-8.2f));
+            hold.feed (juce::Decibels::decibelsToGain (-20.0f));
+            expectEquals (hold.text (false), juce::String::fromUTF8 ("\xe2\x88\x92" "8.2"), "the highest since reset");
+            expect (hold.colour (false) == theme::colour::stripValue);
+            expectEquals (hold.text (true), juce::String::fromUTF8 ("\xe2\x80\x94"), "muted: a dash");
+            hold.feed (1.0f);
+            expect (hold.colour (false) == theme::colour::peakHot, "at the limiter: red");
+            hold.reset();
+            expectEquals (hold.text (false), juce::String::fromUTF8 ("\xe2\x80\x94"));
+
+            // The health status: words and icon, not colour alone.
+            HealthStatus status;
+            status.setStatus ({}, "CPU 9%");
+            expectEquals (status.getHeadline(), juce::String ("Healthy"));
+            expectEquals (status.getTooltip(), juce::String ("Click for system health details (CPU, dropouts, device, latency)."));
+            status.setStatus ({ "A", "B" }, "CPU 9%");
+            expectEquals (status.getHeadline(), juce::String ("2 things to check"));
+            expect (status.getTooltip().startsWith ("A\nB\n"));
+
+            // The pane tab's words follow its state.
+            PaneTab tab;
+            tab.setTooltips ("Open the mixer view: vertical meters, peaks and level faders", "Close the mixer view");
+            expectEquals (tab.getTooltip(), juce::String ("Open the mixer view: vertical meters, peaks and level faders"));
+            tab.setOpen (true);
+            expectEquals (tab.getTooltip(), juce::String ("Close the mixer view"));
         }
 
         beginTest ("Kit: tiny and empty sizes never crash");
