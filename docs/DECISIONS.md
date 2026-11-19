@@ -717,3 +717,22 @@ Now (as DESIGN-SYSTEM already said: "only after keyboard navigation, never on cl
   repaints the toolbar 13 times and compares, and a scan of every `paint()` found
   no other place that changes state.
 
+
+## 0060 — A hang in the tests prints its stacks
+
+Main's CI on 4d72c76 hung once in the amp builder test until ctest's 10-minute
+limit. The log named only the test. The same test passed 60 times in a local
+Release build and 40 times on the Windows runner, so the cause is still open.
+
+- **A hang watchdog** (`Tests/HangWatchdog`) now runs in CI:
+  - With `ENCORE_TEST_HANG_SECONDS` set (CI: 180 s), a test process with no
+    progress for that long prints the step it was in and exits with code 3.
+  - On Windows it also prints every thread's stack, with function names and
+    file:line. This was checked on the runner.
+  - Off by default, so a test paused in a debugger isn't killed.
+- **Progress** is each test step, plus a heartbeat from the soak. The longest
+  step takes about 20 s.
+- **Symbols:** EncoreTests links DbgHelp and gets a PDB in Release (`/DEBUG`,
+  with `/OPT:REF` and `/OPT:ICF` kept on).
+- **The next time it hangs,** the log shows where. The fix follows from that,
+  with a test.
