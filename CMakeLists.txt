@@ -187,6 +187,10 @@ target_sources(Encore PRIVATE
     Source/ui/LevelMeter.h
     Source/ui/MidiSettings.cpp
     Source/ui/MidiSettings.h
+    Source/ui/CueDialogs.cpp
+    Source/ui/CueDialogs.h
+    Source/ui/CueListEditor.cpp
+    Source/ui/CueListEditor.h
     Source/ui/PreShowCheckView.cpp
     Source/ui/PreShowCheckView.h
     Source/ui/StageView.cpp
@@ -251,6 +255,8 @@ if(ENCORE_BUILD_TESTS)
         Tests/StageTests.cpp
         Tests/StageViewTests.cpp
         # Screens tested off-screen (rendered into images, no window).
+        Source/ui/CueDialogs.cpp
+        Source/ui/CueListEditor.cpp
         Source/ui/StageView.cpp
         Source/ui/TunerDisplay.cpp
         Tests/PatchBuilderTests.cpp

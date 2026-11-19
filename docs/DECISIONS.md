@@ -370,3 +370,41 @@ pedals, panicking, opening the tuner, rebuilding patches and injecting
 invalid input, checking every buffer: finite, never above full scale, no
 audio-thread allocations, ringing bounded, every replaced patch freed. CI
 runs 10 minutes of audio per change; ENCORE_SOAK_SECONDS sets longer runs.
+
+## 0040 — Cue numbers are always automatic (milestone 8)
+
+Cues are numbered 1..N in playing order after every change; inserting a cue
+renumbers everything after it, and cut cues have no number. (Chosen over
+point cues like 42.5: the numbers always match the order on screen.) Numbers
+are stored for display and "go to", but never typed. Older shows are
+renumbered when opened.
+
+## 0041 — Edits address items by id; the playing cue follows its id (milestone 8)
+
+Sections, cues and cut cues are edited by their stable ids, not positions,
+so a list redrawn mid-edit can't hit the wrong row. After every structural
+change the running order is republished and the player's position is set
+to wherever the playing cue's id now is, so *next* continues from the cue
+that's actually sounding. Moving a cue past a section's edge steps it out of
+the section; moving it next to a section steps it in. Deleting a section
+keeps its cues.
+
+## 0042 — Only the newest running order waits while audio is stopped (milestone 8)
+
+The handover queue to the audio thread fills only when the audio thread
+isn't running (no device, interface unplugged). Then each new version
+replaces the one waiting (which the audio thread never saw, so it can be
+freed at once) and is queued as soon as there's room. Before, editing more
+than eight times while the interface was unplugged could leave the show
+playing an older running order after reconnecting.
+
+## 0043 — One running order; its name follows the kind of show (milestone 8)
+
+A set list and a cue list are the same thing: an ordered list of items that
+each recall a patch, grouped in sections. Encore has one, and the show's kind
+picks the words: band, worship and solo shows have a **Set list** of *songs*
+(sections default to *sets*); musicals have a **Cue list** of *cues*
+(sections default to *scenes*). The sidebar is its compact form (sections as
+headings, cut items hidden) and expands into the full table for editing.
+Keeping one model means every feature (go to, cut, MIDI per item, per-item
+stage layouts) works for every kind of gig.

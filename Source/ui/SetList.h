@@ -10,39 +10,52 @@
 namespace encore
 {
 
-/** The running order: songs or cues in playing order, each pointing at a
-    patch. Click a cue to go to it; Space/arrow keys step through (handled by
-    the main window). Double-click to rename; right-click to choose its patch,
-    its same-patch behaviour, or to remove it.
+/** The running order in the edit view's sidebar: called "Set list" (songs) or
+    "Cue list" (cues) depending on the kind of show, with its sections as
+    headings. Click to go to an item; Space/arrow keys step through (the main
+    window handles those). Double-click to rename; right-click for options.
 
-    This is the simple, flat version; the theatre cue list (acts, scenes, bar
-    marks, decimal numbers, cut cues) comes in milestone 8 on the same data. */
+    The same list opens full size (all columns, cut items, fast typing) with
+    the expand button: that's CueListEditor, on the same data. */
 class SetList final : public juce::Component,
                       private juce::ListBoxModel
 {
 public:
     explicit SetList (ShowSession& session);
 
-    /** Re-reads the cues and the playing position from the session. */
+    /** Re-reads the running order and the playing position from the session. */
     void refresh();
+
+    /** The expand button: open the full list. */
+    std::function<void()> onExpand;
 
     void resized() override;
 
 private:
+    struct Row
+    {
+        juce::String id;
+        int cueIndex = -1;       // -1: a section heading
+        juce::String heading;
+    };
+
     int getNumRows() override;
     void paintListBoxItem (int row, juce::Graphics&, int width, int height, bool selected) override;
     void listBoxItemClicked (int row, const juce::MouseEvent&) override;
     void listBoxItemDoubleClicked (int row, const juce::MouseEvent&) override;
     void selectedRowsChanged (int lastRowSelected) override;
 
-    void rename (int row);
-    void showCueMenu (int row);
-    void editProgramChange (int row);
-    void editMidiOut (int row);
+    int cueIndexOfRow (int row) const;
+    void rename (int cueIndex);
+    void showCueMenu (int cueIndex);
+    void updateButtons();
 
     ShowSession& session;
-    juce::Label header { {}, "Set list" };
-    juce::ListBox list { "Set list", this };
+    std::vector<Row> rows;
+
+    juce::Label header;
+    juce::TextButton expandButton { "Full list" };
+    juce::ListBox list { "Running order", this };
     juce::TextButton addButton { "+ Add" }, removeButton { "Remove" }, upButton { "Up" }, downButton { "Down" };
     bool updating = false;
 

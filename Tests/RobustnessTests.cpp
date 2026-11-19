@@ -6,6 +6,7 @@
 #include "TestSignals.h"
 
 #include "engine/AudioEngine.h"
+#include "engine/core/RealtimeHandover.h"
 #include "engine/blocks/DelayBlock.h"
 #include "engine/blocks/EqBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
@@ -129,6 +130,36 @@ public:
                 after = rig.callback (tone.data());
 
             expect (after > 0.1f, "the EQ's filters weren't poisoned");
+        }
+
+        beginTest ("Edits while the audio is stopped: the newest running order wins");
+        {
+            // No device (or an unplugged one): nothing drains the handover queue.
+            RealtimeHandover<int, 8> handover;
+
+            for (int i = 0; i < 100; ++i)
+                handover.publish (std::make_unique<int> (i));
+
+            expect (handover.getNumOwned() <= 9, "unseen intermediate versions are dropped, not kept forever");
+            expect (handover.hasWaiting());
+
+            // Audio comes back: drain like the audio thread does, with the UI timer running.
+            int last = -1;
+
+            for (int round = 0; round < 4; ++round)
+            {
+                while (auto* next = handover.takeNext())
+                {
+                    last = *next;
+                    handover.retire (next);
+                }
+
+                handover.collectGarbage();
+            }
+
+            expectEquals (last, 99, "the audio thread ends on the newest");
+            expect (! handover.hasWaiting());
+            expectEquals (handover.getNumOwned(), 0);
         }
 
         beginTest ("The engine reports a heartbeat");

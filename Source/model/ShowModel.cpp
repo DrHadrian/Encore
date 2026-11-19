@@ -11,6 +11,27 @@ juce::String newId()
     return juce::Uuid().toDashedString();
 }
 
+ShowWords wordsFor (ShowTemplate t)
+{
+    if (t == ShowTemplate::musical)
+        return { "Cue list", "cue", "cues", "scene", "New scene" };
+
+    return { "Set list", "song", "songs", "set", "New set" };
+}
+
+juce::String describe (ShowTemplate t)
+{
+    switch (t)
+    {
+        case ShowTemplate::musical:  return "Musical / theatre";
+        case ShowTemplate::worship:  return "Worship";
+        case ShowTemplate::solo:     return "Solo";
+        case ShowTemplate::band:     break;
+    }
+
+    return "Band";
+}
+
 RunItem RunItem::makeSection (const juce::String& name, const juce::String& sectionKind)
 {
     RunItem item;
