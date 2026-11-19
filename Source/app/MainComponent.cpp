@@ -136,7 +136,7 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     };
     toolbar.addAndMakeVisible (modeSwitch);
 
-    toolbar.addAndMakeVisible (lcd);
+    toolbar.addAndMakeVisible (statusBar);
 
     tunerButton.setTooltip ("Tuner (T)");
     tunerButton.setClickingTogglesState (false);
@@ -597,7 +597,7 @@ void MainComponent::refreshShowStatus()
     if (showTitle->getIdealWidth() != oldTitleWidth)
         layoutToolbar (toolbar.getLocalBounds());
 
-    refreshLcd();
+    refreshStatusBar();
 
     // "Cue 3 of 12: Solo  →  [Patch: Lead ▾]" when playing from the set list,
     // else the patch name (SCREENS.md §4.3, the centre header line).
@@ -1714,7 +1714,7 @@ void MainComponent::refreshStatus()
         latencyLine.setTooltip ({});
         stageDeviceLine = deviceLine.getText();
         roundTripMs = 0.0;
-        refreshLcd();
+        refreshStatusBar();
         return;
     }
 
@@ -1726,7 +1726,7 @@ void MainComponent::refreshStatus()
         latencyLine.setTooltip ({});
         stageDeviceLine = deviceLine.getText();
         roundTripMs = sampleRate = 0.0;
-        refreshLcd();
+        refreshStatusBar();
         return;
     }
 
@@ -1763,7 +1763,7 @@ void MainComponent::refreshStatus()
 
     sampleRate = rate;
     roundTripMs = rate > 0.0 ? 1000.0 * (inLatency + outLatency + chainLatency) / rate : 0.0;
-    refreshLcd();
+    refreshStatusBar();
 
     if (typeName != "ASIO")
         setWarning ("Not using ASIO: expect higher latency. Pick an ASIO driver in Audio settings for the stage.");
@@ -1771,7 +1771,7 @@ void MainComponent::refreshStatus()
         setWarning ({});
 }
 
-void MainComponent::refreshLcd()
+void MainComponent::refreshStatusBar()
 {
     if (session == nullptr)
         return;
@@ -1790,14 +1790,14 @@ void MainComponent::refreshLcd()
     if (name.isEmpty() && patch != nullptr)
         name = patch->name;
 
-    lcd.setItems ({
+    statusBar.setItems ({
         { (playing ? juce::String (cue + 1) : dash) + " / " + juce::String ((int) cues.size()), words.item, 0 },
         { name.isNotEmpty() ? name : dash, "Patch " + (patch != nullptr ? patch->name : dash), size::lcdMinPatch, size::lcdNameMaxW },
         { roundTripMs > 0.0 ? juce::String (roundTripMs, 1) + " ms" : dash, "Round trip", 0 },
         { sampleRate > 0.0 ? juce::String (sampleRate / 1000.0, 1) + "k" : dash, "Rate", 0 },
     });
 
-    if (lcd.getIdealWidth() != lcd.getWidth())
+    if (statusBar.getIdealWidth() != statusBar.getWidth())
         layoutToolbar (toolbar.getLocalBounds());
 }
 
@@ -2128,10 +2128,10 @@ void MainComponent::layoutToolbar (juce::Rectangle<int> bar)
 
     // The LCD centred between the two groups; hidden if it doesn't fit.
     const auto space = right + size::toolbarGap - left;
-    lcd.setAvailableWidth (space);
-    const auto lcdW = lcd.getIdealWidth(), lcdH = kit::Lcd::heightFor (false);
-    lcd.setVisible (lcdW <= space);
-    place (lcd, left + (space - lcdW) / 2, lcdW, lcdH, (bar.getHeight() - 1 - (lcdH - 1)) / 2);
+    statusBar.setAvailableWidth (space);
+    const auto barW = statusBar.getIdealWidth(), barH = kit::StatusBar::heightFor (false);
+    statusBar.setVisible (barW <= space);
+    place (statusBar, left + (space - barW) / 2, barW, barH, (bar.getHeight() - 1 - barH) / 2);
 }
 
 void MainComponent::layoutBottomRow (juce::Rectangle<int> row)

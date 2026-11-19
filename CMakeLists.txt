@@ -268,6 +268,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/InfoList.h
     Source/ui/kit/StageBackdrop.cpp
     Source/ui/kit/StageBackdrop.h
+    Source/ui/kit/StatusBar.cpp
+    Source/ui/kit/StatusBar.h
     Source/ui/kit/Lcd.cpp
     Source/ui/kit/Lcd.h
     Source/ui/kit/MeterBar.cpp

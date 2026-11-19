@@ -128,7 +128,11 @@ namespace colour
     constexpr juce::uint32 lcdText         = 0xffD5E4F7;
     constexpr juce::uint32 lcdLabel        = 0xff7F95B3;
     constexpr juce::uint32 lcdShadow       = 0xA6000000;   // inner shadow (black 65 %)
-    constexpr juce::uint32 lcdHighlight    = 0x0DFFFFFF;   // 1 px bottom highlight (white 5 %)
+    constexpr juce::uint32 lcdHighlight    = 0x0DFFFFFF;   // 1 px bottom highlight (white 5 %)   (the LCD stays for the tuner readout)
+    constexpr juce::uint32 statusBarBg     = 0xff121214;   // the toolbars' status bar (v3.2, replaces the LCD)
+    constexpr juce::uint32 statusBarEdge   = 0xff2A2A2F;   // its border and the lines between fields
+    constexpr juce::uint32 statusBarLabel  = 0xff8C8C93;
+    constexpr juce::uint32 statusBarText   = 0xffF2F2F4;
 
     // Stage widgets
     constexpr juce::uint32 widget          = 0xff1C1E23;
@@ -596,6 +600,7 @@ namespace size
     constexpr int lcdRadius = 6, lcdEdit = 32, lcdStage = 36, lcdShadowH = 5;
     constexpr int lcdPadX = 14, lcdGap = 18, lcdPadXStage = 16, lcdGapStage = 20;
     constexpr int lcdMinPatch = 110, lcdMinPatchStage = 140;   // the name item keeps its width
+    constexpr int statusBarRadius = 7, statusBarPadX = 14;      // the status bar (v3.2): its fields' padding, 1 px lines between
 
     // Full list columns (CueListEditor): number, name 45 % of flex, bar, note (rest), patch, MIDI
     constexpr int colNumber = 64, colBar = 150, colPatch = 190, colMidi = 90;
@@ -659,6 +664,10 @@ namespace type
     constexpr Style buttonBold      { 12.0f, Weight::bold };                // PANIC, MUTED, Mute
     constexpr Style lcdValueStage   { 16.0f, Weight::semibold, 0.0f, false, true };
     constexpr Style lcdLabelStage   {  9.0f, Weight::semibold };
+    constexpr Style statusValue     { 14.0f, Weight::semibold, 0.0f, false, true };   // status bar value (Edit)
+    constexpr Style statusLabel     {  8.5f, Weight::bold };                          // its label, above it (caps)
+    constexpr Style statusValueStage{ 16.0f, Weight::semibold, 0.0f, false, true };   // on the Stage toolbar
+    constexpr Style statusLabelStage{  9.0f, Weight::semibold };
     constexpr Style meterValue      { 11.0f, Weight::regular, 0.0f, false, true };
     constexpr Style meterScale      { 9.0f, Weight::regular, 0.0f, false, true };
     constexpr Style miniMeterLabel  {  9.0f, Weight::bold };                // Stage toolbar CPU / DROPOUTS

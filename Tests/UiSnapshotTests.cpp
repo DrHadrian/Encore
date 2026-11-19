@@ -12,6 +12,7 @@
 #include "ui/kit/MeterBar.h"
 #include "ui/kit/NoticeBar.h"
 #include "ui/kit/Lcd.h"
+#include "ui/kit/StatusBar.h"
 
 namespace encore::test
 {
@@ -184,6 +185,15 @@ public:
             lcd.setItems ({ { juce::String::repeatedString ("W", 300), "Song", 0 } });
             lcd.setBounds (0, 0, 50, kit::Lcd::heightFor (true));
             lcd.createComponentSnapshot (lcd.getLocalBounds());
+
+            // The status bar: empty, then a value far too long for its room.
+            kit::StatusBar status (false);
+            status.setItems ({});
+            expectEquals (status.getIdealWidth(), 2);   // the border alone
+            status.setItems ({ { juce::String::repeatedString ("W", 300), "Song", 0 }, { "x", "Patch", 0, 200 } });
+            status.setAvailableWidth (120);
+            status.setBounds (0, 0, 50, kit::StatusBar::heightFor (false));
+            status.createComponentSnapshot (status.getLocalBounds());
         }
     }
 };

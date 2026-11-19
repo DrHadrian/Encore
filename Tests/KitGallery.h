@@ -12,6 +12,7 @@
 #include "ui/kit/KeyCap.h"
 #include "ui/kit/KnobView.h"
 #include "ui/kit/Lcd.h"
+#include "ui/kit/StatusBar.h"
 #include "ui/kit/MeterBar.h"
 #include "ui/kit/NoticeBar.h"
 #include "ui/kit/Pane.h"
@@ -42,8 +43,8 @@ public:
         toolbar.addAndMakeVisible (mode);
         mode.setSegments ({ "Stage", "Edit", "Layout" });
         mode.setSelected (1);
-        toolbar.addAndMakeVisible (lcd);
-        lcd.setItems ({ { "1 / 8", "Song", 0 }, { "Clean", "Patch Clean", size::lcdMinPatch }, { "20.0 ms", "Round trip", 0 }, { "48.0k", "Rate", 0 } });
+        toolbar.addAndMakeVisible (statusBar);
+        statusBar.setItems ({ { "1 / 8", "Song", 0 }, { "Clean", "Patch Clean", size::lcdMinPatch }, { "20.0 ms", "Round trip", 0 }, { "48.0k", "Rate", 0 } });
 
         const std::pair<const char*, Variant> buttonKinds[] = {
             { "Tuner", Variant::standard }, { "Done", Variant::primary }, { "PANIC", Variant::danger },
@@ -199,7 +200,7 @@ public:
         toolbar.setBounds (0, 0, getWidth(), size::toolbarEdit + 1);
         toolbar.setLogoBounds ({ 14, 12, 98, 17 });
         mode.setBounds (287, 8, 194, 28);
-        lcd.setBounds (529, 5, lcd.getIdealWidth(), kit::Lcd::heightFor (false));
+        statusBar.setBounds (529, 5, statusBar.getIdealWidth(), kit::StatusBar::heightFor (false));
 
         auto x = 20;
 
@@ -280,7 +281,8 @@ public:
 private:
     kit::Toolbar toolbar;
     kit::SegmentedControl mode;
-    kit::Lcd lcd { false }, stageLcd { true };
+    kit::StatusBar statusBar { false };   // the toolbars (v3.2)
+    kit::Lcd stageLcd { true };            // the LCD look stays for the tuner readout
     juce::OwnedArray<juce::TextButton> buttons;
     juce::OwnedArray<kit::IconButton> iconButtons;
     kit::NoticeBar notice { kit::NoticeBar::Kind::notice }, stageNotice { kit::NoticeBar::Kind::stageNotice },

@@ -29,7 +29,7 @@
 #include "ui/SetList.h"
 #include "ui/StageView.h"
 #include "ui/TunerDisplay.h"
-#include "ui/kit/Lcd.h"
+#include "ui/kit/StatusBar.h"
 #include "ui/kit/MeterBar.h"
 #include "ui/kit/NoticeBar.h"
 #include "ui/kit/Pane.h"
@@ -155,7 +155,7 @@ private:
     void layoutBottomRow (juce::Rectangle<int>);
 
     // Status
-    void refreshLcd();
+    void refreshStatusBar();
     void refreshWarningLine();
     void setWarning (const juce::String& text);
 
@@ -178,7 +178,7 @@ private:
     std::unique_ptr<ShowTitle> showTitle;
     juce::TextButton showButton { "Show" };
     kit::SegmentedControl modeSwitch;
-    kit::Lcd lcd { false };
+    kit::StatusBar statusBar { false };   // the toolbar's status bar (v3.2; was the LCD)
     juce::TextButton settingsButton { "Settings..." };   // Audio | MIDI | Plugins, on the tab used last (v3.2)
     juce::TextButton tunerButton { "Tuner" }, panicButton { "PANIC" };
     juce::Label outLabel { {}, "Out" };

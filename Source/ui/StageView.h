@@ -8,7 +8,7 @@
 #include "engine/AudioEngine.h"
 #include "session/ShowSession.h"
 #include "ui/TunerDisplay.h"
-#include "ui/kit/Lcd.h"
+#include "ui/kit/StatusBar.h"
 #include "ui/kit/NoticeBar.h"
 #include "ui/kit/Pane.h"
 #include "ui/kit/SegmentedControl.h"
@@ -133,7 +133,7 @@ private:
     kit::SegmentedControl modeSwitch;
     std::unique_ptr<Caption> layoutName, hint;
     std::unique_ptr<juce::Component> separator;
-    kit::Lcd lcd { true };
+    kit::StatusBar statusBar { true };   // the toolbar's status bar (v3.2; was the LCD)
     std::unique_ptr<MiniMeters> miniMeters;
     juce::TextButton lockButton, tunerButton { "Tuner" }, muteButton { "Mute" };
     juce::TextButton layoutsButton, addWidgetButton { "+ Widget" }, doneButton { "Done" }, inspectorButton { "Inspector" };

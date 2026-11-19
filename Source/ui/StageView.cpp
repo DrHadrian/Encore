@@ -2007,7 +2007,7 @@ StageView::StageView (AudioEngine& e, ShowSession& s) : engine (e), session (s)
     inspectorButton.onClick = [this] { setLayoutInspectorShown (! inspectorShown); };
     hint->setText ("Drag to move, drag the edges to resize, right-click for options, double-click empty space to add");
 
-    for (auto* c : std::initializer_list<juce::Component*> { &modeSwitch, layoutName.get(), &lcd, miniMeters.get(), &lockButton,
+    for (auto* c : std::initializer_list<juce::Component*> { &modeSwitch, layoutName.get(), &statusBar, miniMeters.get(), &lockButton,
                                                              &tunerButton, &muteButton, &layoutsButton, &addWidgetButton,
                                                              &doneButton, &inspectorButton, hint.get(), separator.get() })
     {
@@ -2316,8 +2316,8 @@ void StageView::refreshToolbar()
     const auto name = cue != nullptr ? cue->name : ! cues.empty() ? juce::String ("Ready") : (chain != nullptr ? chain->label : dash);
     const auto number = cue != nullptr ? (cue->number.isNotEmpty() ? cue->number : juce::String (index + 1)) : dash;
 
-    const auto lcdWidth = lcd.getIdealWidth();
-    lcd.setItems ({ { number, words.item, 0 }, { name, session.getSectionPath (index), size::lcdMinPatchStage, size::lcdNameMaxW } });
+    const auto lcdWidth = statusBar.getIdealWidth();
+    statusBar.setItems ({ { number, words.item, 0 }, { name, session.getSectionPath (index), size::lcdMinPatchStage, size::lcdNameMaxW } });
 
     const auto oldName = layoutName->getIdealWidth();
     layoutName->setText (juce::String (juce::CharPointer_UTF8 ("Layout \xe2\x80\x9c")) + current.name + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9d")));
@@ -2342,7 +2342,7 @@ void StageView::refreshToolbar()
     // The lock button sits in the toolbar when the layout has no Lock widget, and while locked.
     const auto lockShown = ! editing && (locked || ! layoutHas (StageWidgetType::lockButton));
 
-    if (lcd.getIdealWidth() != lcdWidth || layoutName->getIdealWidth() != oldName || lockButton.isVisible() != lockShown)
+    if (statusBar.getIdealWidth() != lcdWidth || layoutName->getIdealWidth() != oldName || lockButton.isVisible() != lockShown)
         layoutToolbar();
 }
 
@@ -2463,7 +2463,7 @@ void StageView::setEditingLayout (bool shouldEdit)
                                                              hint.get(), separator.get(), &widgetPane, &canvasPane })
         c->setVisible (editing);
 
-    for (auto* c : std::initializer_list<juce::Component*> { &lcd, miniMeters.get(), &tunerButton, &muteButton, layoutName.get() })
+    for (auto* c : std::initializer_list<juce::Component*> { &statusBar, miniMeters.get(), &tunerButton, &muteButton, layoutName.get() })
         c->setVisible (! editing);
 
     if (! editing)
@@ -2710,10 +2710,10 @@ void StageView::layoutToolbar()
 
     // The LCD centred in the space between the two groups; hidden if it doesn't fit.
     const auto space = right - left;
-    lcd.setAvailableWidth (space);
-    const auto lcdW = lcd.getIdealWidth(), lcdH = kit::Lcd::heightFor (true);
-    lcd.setVisible (lcdW <= space);
-    lcd.setBounds (left + (space - lcdW) / 2, (h - (lcdH - 1)) / 2, lcdW, lcdH);
+    statusBar.setAvailableWidth (space);
+    const auto barW = statusBar.getIdealWidth(), barH = kit::StatusBar::heightFor (true);
+    statusBar.setVisible (barW <= space);
+    statusBar.setBounds (left + (space - barW) / 2, (h - barH) / 2, barW, barH);
 }
 
 void StageView::layoutEditor (juce::Rectangle<int> body)
