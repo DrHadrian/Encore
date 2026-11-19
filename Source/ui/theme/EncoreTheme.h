@@ -163,9 +163,9 @@ namespace colour
     constexpr juce::uint32 pedalBar        = 0xff6EA5FA;   // inspector value bar of a parameter a pedal moves
 
     // Menus, dialogs, scrollbars
-    constexpr juce::uint32 menu            = 0xF72C2C30;   // rgba(44,44,48,.97)
-    constexpr juce::uint32 menuHighlightBorder = 0x14FFFFFF;
-    constexpr juce::uint32 menuSeparator   = 0xff3A3A3F;
+    constexpr juce::uint32 menu            = 0xFA232327;   // rgba(35,35,39,.98) (v3.2 menus)
+    constexpr juce::uint32 menuInnerRing   = 0x0FFFFFFF;   // 1 px ring inside the border (white 6 %)
+    constexpr juce::uint32 menuSeparator   = 0xff34343A;
     constexpr juce::uint32 menuShortcut    = 0xff9A9AA1;
     constexpr juce::uint32 dialog          = 0xff232326;
     constexpr juce::uint32 dialogTitleTop  = 0xff38383C;
@@ -399,8 +399,10 @@ namespace size
     constexpr int swatch = 9, swatchRadius = 2, rowRadius = 4, headingPadBottom = 2;
     constexpr int paneFooterPadX = 10, paneFooterPadY = 8, headerButtonGap = 1, headerSmallButtonMargin = 4;
     constexpr int menuItemHeight    = 24;
-    constexpr int menuPadding       = 5;
-    constexpr int menuRadius        = 7;
+    constexpr int menuPadding       = 4;
+    constexpr int menuRadius        = 10;
+    constexpr int menuItemRadius    = 6;
+    constexpr int menuHeaderIndent  = 20;    // section header text from the item's left edge
     constexpr int menuSeparatorH    = 9;     // 1 px line + 4 px above and below
     constexpr int dialogRadius      = 10;
     constexpr int dialogTitleBar    = 30;
@@ -648,7 +650,7 @@ namespace type
     constexpr Style tableSection    { 14.0f, Weight::bold };
     constexpr Style tableKind       { 11.0f, Weight::bold, 0.06f, true };
     constexpr Style tableMidi       { 12.0f, Weight::regular, 0.0f, false, true };             // "PC 5  OUT"
-    constexpr Style menuItem        { 12.5f, Weight::regular };
+    constexpr Style menuItem        { 12.0f, Weight::regular };
     constexpr Style menuShortcut    { 11.0f, Weight::regular };
     constexpr Style dialogTitle     { 12.5f, Weight::semibold };
     constexpr Style summaryLarge    { 20.0f, Weight::bold };                // pre-show summary

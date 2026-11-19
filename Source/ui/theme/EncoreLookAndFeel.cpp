@@ -537,10 +537,12 @@ void EncoreLookAndFeel::drawPopupMenuBackgroundWithOptions (juce::Graphics& g, i
 {
     const auto r = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height);
     const auto radius = (float) size::menuRadius;
+    // v3.2 (V3.2-CHANGES §6): a dark fill, the 1 px border and a faint inner
+    // ring just inside it; the window's own drop shadow goes around it.
     g.setColour (c (colour::menu));
     g.fillRoundedRectangle (r, radius);
-    g.setColour (c (colour::menuHighlightBorder));
-    paint::hline (g, r.getX() + radius, 1.0f, r.getWidth() - radius * 2.0f);
+    g.setColour (c (colour::menuInnerRing));
+    g.drawRoundedRectangle (r.reduced (1.5f), radius - 1.0f, 1.0f);
     g.setColour (c (colour::paneBorder));
     g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
 }
@@ -563,7 +565,7 @@ void EncoreLookAndFeel::drawPopupMenuItemWithOptions (juce::Graphics& g, const j
     if (lit)
     {
         g.setColour (c (colour::menuHighlight));
-        g.fillRoundedRectangle (r, 4.0f);
+        g.fillRoundedRectangle (r, (float) size::menuItemRadius);
     }
 
     auto textColour = c (colour::text);
@@ -611,8 +613,8 @@ void EncoreLookAndFeel::drawPopupMenuSectionHeaderWithOptions (juce::Graphics& g
 {
     g.setFont (font (type::paneHeader));
     g.setColour (c (colour::textDim));
-    g.drawText (name.toUpperCase(), area.toFloat().withTrimmedLeft ((float) menuTickInset + 4.0f).withTrimmedBottom (3.0f),
-                juce::Justification::bottomLeft, true);
+    g.drawText (name.toUpperCase(), area.toFloat().withTrimmedLeft ((float) size::menuHeaderIndent),
+                juce::Justification::centredLeft, true);
 }
 
 void EncoreLookAndFeel::getIdealPopupMenuItemSizeWithOptions (const juce::String& text, bool isSeparator, int,
@@ -638,7 +640,7 @@ void EncoreLookAndFeel::getIdealPopupMenuItemSizeWithOptions (const juce::String
 void EncoreLookAndFeel::getIdealPopupMenuSectionHeaderSizeWithOptions (const juce::String& text, int, int& idealWidth,
                                                                        int& idealHeight, const juce::PopupMenu::Options&)
 {
-    idealWidth = juce::roundToInt (textWidth (font (type::paneHeader), text.toUpperCase())) + 24;
+    idealWidth = juce::roundToInt (textWidth (font (type::paneHeader), text.toUpperCase())) + size::menuHeaderIndent + menuRightPad;
     idealHeight = menuHeaderHeight;
 }
 
