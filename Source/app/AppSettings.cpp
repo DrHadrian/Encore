@@ -17,6 +17,7 @@ namespace keys
     static constexpr auto midiMap     = "midiBindings";
     static constexpr auto midiOut     = "midiOutput";
     static constexpr auto layoutInspector = "layoutEditorInspector";
+    static constexpr auto settingsTab = "settingsTab";
     static constexpr auto routing     = "routing";
     static constexpr auto outputStrips = "outputStripsFull";
 }
@@ -102,6 +103,9 @@ bool AppSettings::hasRouting() const
 
 bool AppSettings::getOutputStripsFull() const        { return file().getBoolValue (keys::outputStrips, false); }
 void AppSettings::setOutputStripsFull (bool full)    { file().setValue (keys::outputStrips, full); }
+
+juce::String AppSettings::getSettingsTab() const               { return file().getValue (keys::settingsTab, "audio"); }
+void AppSettings::setSettingsTab (const juce::String& tab)      { file().setValue (keys::settingsTab, tab); }
 
 bool AppSettings::getLayoutInspectorShown() const
 {

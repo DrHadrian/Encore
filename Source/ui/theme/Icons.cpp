@@ -61,6 +61,7 @@ namespace
                 { Icon::plug,         { plug_svg,         plug_svgSize } },
                 { Icon::plus,         { plus_svg,         plus_svgSize } },
                 { Icon::route,        { route_svg,        route_svgSize } },
+                { Icon::settings,     { settings_svg,     settings_svgSize } },
                 { Icon::sidebarRight, { sidebarright_svg, sidebarright_svgSize } },
                 { Icon::sliders,      { sliders_svg,      sliders_svgSize } },
                 { Icon::split,        { split_svg,        split_svgSize } },

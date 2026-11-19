@@ -55,6 +55,11 @@ public:
     bool getLayoutInspectorShown() const;
     void setLayoutInspectorShown (bool shown);
 
+    /** The Settings window's tab used last ("audio", "midi" or "plugins"):
+        Settings… opens on it (design v3.2). First time: "audio". */
+    juce::String getSettingsTab() const;
+    void setSettingsTab (const juce::String& tab);
+
     /** Last file loaded into a block type (e.g. the amp), reloaded at start-up
         until shows and patches (milestone 4) remember this properly. */
     juce::File getLastFile (const juce::String& blockTypeId) const;

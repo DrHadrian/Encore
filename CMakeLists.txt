@@ -216,6 +216,7 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/icons/plus.svg
         Resources/ui/icons/route.svg
         Resources/ui/icons/sidebar-right.svg
+        Resources/ui/icons/settings.svg
         Resources/ui/icons/sliders.svg
         Resources/ui/icons/split.svg
         Resources/ui/icons/trash.svg

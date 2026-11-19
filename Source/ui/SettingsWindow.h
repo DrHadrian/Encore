@@ -33,6 +33,13 @@ public:
     void showTab (Tab);
     Tab getTab() const noexcept { return tab; }
 
+    /** Every tab shown, by a click on its tab or from outside: the main window
+        remembers it on this computer (Settings… opens on it next time). */
+    std::function<void (Tab)> onTabShown;
+
+    static juce::String tabName (Tab);       // "audio", "midi", "plugins"
+    static Tab tabNamed (const juce::String&);   // anything else: audio
+
     /** From the main window's timer, a few times a second. */
     void setAudioStatus (const AudioSettingsView::Status&);
 

@@ -5,6 +5,8 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
+#include <optional>
+
 #include "app/AppSettings.h"
 #include "engine/AudioEngine.h"
 #include "platform/SystemTuning.h"
@@ -65,10 +67,13 @@ public:
     std::function<void()> onViewChanged;
     bool isShowingStage() const noexcept { return stageView != nullptr && stageView->isVisible(); }
 
-    /** Settings — Audio | MIDI (Audio..., MIDI..., the pre-show check's fixes). */
+    /** Settings — Audio | MIDI | Plugins (Settings... on the tab used last; the
+        pre-show check's fixes, Routing and Find plugins... on their own tab). */
     void openSettings (SettingsWindow::Tab);
+    void openSettingsOnLastTab();
     void closeSettings();
     bool isShowingSettings() const noexcept { return settingsWindow != nullptr; }
+    std::optional<SettingsWindow::Tab> getShownSettingsTab() const   { return settingsWindow != nullptr ? std::optional (settingsWindow->getTab()) : std::nullopt; }
 
     /** This computer's plugin catalog (Settings › Plugins). */
     PluginCatalog& getPluginCatalog() noexcept { return *plugins; }
@@ -174,8 +179,7 @@ private:
     juce::TextButton showButton { "Show" };
     kit::SegmentedControl modeSwitch;
     kit::Lcd lcd { false };
-    juce::TextButton audioSettingsButton { "Audio..." };
-    juce::TextButton midiSettingsButton { "MIDI..." };
+    juce::TextButton settingsButton { "Settings..." };   // Audio | MIDI | Plugins, on the tab used last (v3.2)
     juce::TextButton tunerButton { "Tuner" }, panicButton { "PANIC" };
     juce::Label outLabel { {}, "Out" };
     kit::NoticeBar noticeBar { kit::NoticeBar::Kind::notice };

@@ -146,7 +146,7 @@ public:
         // Settings and the pre-show check
         main.openSettings (SettingsWindow::Tab::audio);
         pump (400);
-        shot ("Settings: Audio", 4.0, centreOf (button ("Audio...")), true);
+        shot ("Settings: Audio", 4.0, centreOf (button ("Settings...")), true);
         main.openSettings (SettingsWindow::Tab::midi);
         shot ("Settings: MIDI mappings for foot controllers", 4.0, { 761, 140 }, true);
         main.closeSettings();

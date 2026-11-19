@@ -253,7 +253,7 @@ Since milestone 11 a stereo plugin keeps the patch stereo from there on (see bel
    footswitch or Space: everything follows. **F11** toggles full screen;
    **Edit view** (top right) or F5 goes back.
 2. **Tuner**: press **T**, click **Tuner**, or map a footswitch to *Tuner*
-   in **MIDI...**. Without a tuner widget in the layout it covers the screen.
+   in **Settings...** (MIDI tab). Without a tuner widget in the layout it covers the screen.
    Play each string: the note turns green within about 2 cents. The output is
    muted while tuning (Show → *Stage settings* → *Tuner mutes the output* to
    change that; *Concert pitch* for A = 442 etc.). Close with T, Esc or a click.
@@ -282,7 +282,7 @@ Since milestone 11 a stereo plugin keeps the patch stereo from there on (see bel
 A USB MIDI keyboard works as a stand-in foot controller: its sustain pedal is a
 footswitch and its mod wheel an expression pedal.
 
-1. **Connect**: plug in the keyboard, click **MIDI...** and tick it under
+1. **Connect**: plug in the keyboard, click **Settings...**, open the MIDI tab and tick it under
    *Listen to*. Press keys: *Last received* shows each message. Encore remembers
    the device and reopens it when you plug it back in.
 2. **Next cue**: the default mappings are *sustain pedal (CC 64) = next cue*,
@@ -304,7 +304,7 @@ footswitch and its mod wheel an expression pedal.
 6. **Program change recall**: right-click a cue → *Recall with a program
    change...* → e.g. 5. A program change 5 from the controller jumps straight
    to that cue (the cue shows *PC 5*).
-7. **MIDI out**: choose an output in **MIDI...** (or none), then right-click a
+7. **MIDI out**: choose an output in **Settings...** › MIDI (or none), then right-click a
    cue → *MIDI out when this cue starts...*: e.g. `PC 1 5` or `CC 1 20 127`
    (one per line). They are sent whenever that cue starts, by footswitch,
    keyboard or click. With a synth or a MIDI monitor on that output you can see

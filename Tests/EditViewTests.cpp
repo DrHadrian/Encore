@@ -275,6 +275,31 @@ public:
 
             main.closeSettings();
             expect (! main.isShowingSettings());
+
+            // Settings... (v3.2): one button, on the tab used last (here MIDI), remembered on this computer.
+            expectEquals (settings.getSettingsTab(), juce::String ("midi"));
+            juce::TextButton* settingsButton = nullptr;
+            std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+            {
+                for (auto* child : c.getChildren())
+                {
+                    if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && b->getButtonText() == "Settings...")
+                        settingsButton = b;
+
+                    find (*child);
+                }
+            };
+            find (main);
+            expect (settingsButton != nullptr, "the toolbar's Settings... button");
+            expect (settingsButton != nullptr && settingsButton->getTooltip() == "Settings: Audio, MIDI and Plugins (opens on the tab you used last)");
+
+            if (settingsButton != nullptr && settingsButton->onClick != nullptr)
+                settingsButton->onClick();
+
+            expect (main.getShownSettingsTab() == SettingsWindow::Tab::midi, "Settings... opens the tab used last");
+            main.openSettings (SettingsWindow::Tab::plugins);
+            main.closeSettings();
+            expectEquals (settings.getSettingsTab(), juce::String ("plugins"));
         }
 
         beginTest ("Edit view: no audio device at all");

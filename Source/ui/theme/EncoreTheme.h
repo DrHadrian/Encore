@@ -374,6 +374,9 @@ namespace size
     constexpr int patchPickerW      = 130, headerArrow = 14;   // the centre header line
     constexpr int iconButton        = 20;
     constexpr int iconSize          = 12;
+    constexpr int settingsIcon      = 13;   // the gear on Settings… (v3.2)
+    constexpr int buttonIconGap     = 6;    // icon to text in a button
+    constexpr int settingsIconGap   = 11;   // Settings…: the button's 6 + the gear's own 5 (v3.2 board)
     constexpr float nameMinSqueeze  = 0.96f;   // a name squeezed this far before it's shortened with "..."
     constexpr int infoButtonIcon    = 11;   // Open routing's icon in the inspector
     constexpr int rowHeight         = 26;    // pane lists

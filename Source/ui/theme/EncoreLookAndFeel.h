@@ -35,7 +35,8 @@ Segment getSegment (const juce::Component&);
 
 /** An icon in a text button: before the text ("Control panel") or after it
     (the chevron of "Show ▾"), 6 px from the text. */
-void setButtonIcon (juce::Button&, Icon, float iconSize, bool afterText);
+/** `gap`: space between icon and text; below 0 = the usual 6 px. */
+void setButtonIcon (juce::Button&, Icon, float iconSize, bool afterText, float gap = -1.0f);
 
 /** A control showing something missing on this computer (a channel the
     interface hasn't, a name that isn't here): amber border and text. */

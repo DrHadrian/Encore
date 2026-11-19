@@ -91,8 +91,13 @@ Segment getSegment (const juce::Component& c)          { return (Segment) (int) 
 
 namespace
 {
-    const juce::Identifier iconId { "encoreIcon" }, iconSizeId { "encoreIconSize" }, iconAfterId { "encoreIconAfter" };
-    constexpr int iconGap = 6;
+    const juce::Identifier iconId { "encoreIcon" }, iconSizeId { "encoreIconSize" }, iconAfterId { "encoreIconAfter" }, iconGapId { "encoreIconGap" };
+
+    /** Space between a button's icon and its text: 6, or the button's own. */
+    float iconGapOf (const juce::Component& c)
+    {
+        return (float) c.getProperties().getWithDefault (iconGapId, (float) size::buttonIconGap);
+    }
 
     /** The button's icon, if it has one: icon, size, after the text. */
     std::optional<std::tuple<Icon, float, bool>> buttonIcon (const juce::Component& c)
@@ -130,12 +135,18 @@ void setButtonKeyCap (juce::Button& b, const juce::String& key)
     b.repaint();
 }
 
-void setButtonIcon (juce::Button& b, Icon icon, float iconSize, bool afterText)
+void setButtonIcon (juce::Button& b, Icon icon, float iconSize, bool afterText, float gap)
 {
     auto& p = b.getProperties();
     p.set (iconId, (int) icon);
     p.set (iconSizeId, iconSize);
     p.set (iconAfterId, afterText);
+
+    if (gap >= 0.0f)
+        p.set (iconGapId, gap);
+    else
+        p.remove (iconGapId);
+
     b.repaint();
 }
 
@@ -280,7 +291,7 @@ int EncoreLookAndFeel::getTextButtonWidthToFitText (juce::TextButton& b, int but
     auto w = juce::roundToInt (textWidth (getTextButtonFont (b, buttonHeight), b.getButtonText())) + size::buttonPadX * 2 + 2;
 
     if (const auto icon = buttonIcon (b))
-        w += juce::roundToInt (std::get<1> (*icon)) + iconGap;
+        w += juce::roundToInt (std::get<1> (*icon) + iconGapOf (b));
 
     if (const auto key = b.getProperties()["encoreKeyCap"].toString(); key.isNotEmpty())
         w += kit::KeyCap::widthFor (key) + size::keyCapGap;
@@ -393,7 +404,7 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
     {
         // [icon] text and key cap centred together (Routing F7).
         const auto icon = buttonIcon (button);
-        const auto iconW = icon ? std::get<1> (*icon) + (float) iconGap : 0.0f;
+        const auto iconW = icon ? std::get<1> (*icon) + iconGapOf (button) : 0.0f;
         const auto capW = (float) kit::KeyCap::widthFor (key);
         const auto textW = juce::jmin ((float) area.getWidth() - capW - iconW - (float) size::keyCapGap, textWidth (f, button.getButtonText()) + 1.0f);
         auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (iconW + textW + (float) size::keyCapGap + capW, (float) area.getWidth()),
@@ -405,7 +416,7 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
         {
             const auto size = std::get<1> (*icon);
             drawIcon (g, std::get<0> (*icon), row.removeFromLeft (size).withSizeKeepingCentre (size, size), colourToUse);
-            row.removeFromLeft ((float) iconGap);
+            row.removeFromLeft (iconGapOf (button));
         }
 
         g.setFont (f);
@@ -419,7 +430,7 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
         // Text and icon centred together (single line).
         const auto [which, iconSize, after] = *icon;
         const auto hasText = button.getButtonText().isNotEmpty();   // icon-only buttons centre the icon
-        const auto gapW = hasText ? (float) iconGap : 0.0f;
+        const auto gapW = hasText ? iconGapOf (button) : 0.0f;
         const auto textW = hasText ? juce::jmin ((float) area.getWidth() - iconSize - gapW, textWidth (f, button.getButtonText()) + 1.0f) : 0.0f;
         const auto groupW = textW + gapW + iconSize;
         auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (groupW, (float) area.getWidth()), (float) area.getHeight());

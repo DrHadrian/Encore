@@ -143,13 +143,12 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     tunerButton.onClick = [this] { engine.setTunerOpen (! engine.isTunerOpen()); };
     toolbar.addAndMakeVisible (tunerButton);
 
-    midiSettingsButton.onClick = [this] { openMidiSettings(); };
-    midiSettingsButton.setTooltip ("Foot controller, expression pedals, MIDI learn and MIDI out");
-    toolbar.addAndMakeVisible (midiSettingsButton);
-
-    audioSettingsButton.onClick = [this] { openAudioSettings(); };
-    audioSettingsButton.setTooltip ("Audio settings: interface, driver, buffer and channels");
-    toolbar.addAndMakeVisible (audioSettingsButton);
+    // One button for Audio | MIDI | Plugins (design v3.2); the pre-show fixes and
+    // Routing still open the Audio, MIDI or Plugins tab directly.
+    settingsButton.onClick = [this] { openSettingsOnLastTab(); };
+    settingsButton.setTooltip ("Settings: Audio, MIDI and Plugins (opens on the tab you used last)");
+    setButtonIcon (settingsButton, Icon::settings, (float) size::settingsIcon, false, (float) size::settingsIconGap);
+    toolbar.addAndMakeVisible (settingsButton);
 
     styleLabel (outLabel, type::label, colour::textTertiary);
     toolbar.addAndMakeVisible (outLabel);
@@ -1586,6 +1585,7 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
 
 //==============================================================================
 void MainComponent::openAudioSettings()   { openSettings (SettingsWindow::Tab::audio); }
+void MainComponent::openSettingsOnLastTab() { openSettings (SettingsWindow::tabNamed (settings.getSettingsTab())); }
 void MainComponent::openMidiSettings()    { openSettings (SettingsWindow::Tab::midi); }
 
 void MainComponent::openSettings (SettingsWindow::Tab tab)
@@ -1606,6 +1606,8 @@ void MainComponent::openSettings (SettingsWindow::Tab tab)
                         safe->closeSettings();
                 });
             });
+
+        settingsWindow->onTabShown = [this] (SettingsWindow::Tab t) { settings.setSettingsTab (SettingsWindow::tabName (t)); };
 
         auto& overlay = settingsWindow->getOverlay();
         addAndMakeVisible (overlay);
@@ -2121,8 +2123,7 @@ void MainComponent::layoutToolbar (juce::Rectangle<int> bar)
     const auto outW = (int) std::ceil (textWidth (font (type::label), outLabel.getText()));
     fromRight (outLabel, outW, bar.getHeight() - 1, 0, size::outMargin + size::toolbarGap);
 
-    fromRight (audioSettingsButton, widthOf (audioSettingsButton), buttonH, buttonY, size::toolbarGap);
-    fromRight (midiSettingsButton, widthOf (midiSettingsButton), buttonH, buttonY, size::toolbarGap);
+    fromRight (settingsButton, widthOf (settingsButton), buttonH, buttonY, size::toolbarGap);
     fromRight (tunerButton, widthOf (tunerButton), buttonH, buttonY, size::toolbarGap);
 
     // The LCD centred between the two groups; hidden if it doesn't fit.
