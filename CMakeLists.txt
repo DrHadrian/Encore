@@ -223,6 +223,19 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/icons/warn.svg
         Resources/ui/icons/window.svg)
 
+# The amp builder's art (design/textures/AMP-BUILDER-LAYERS.md): 227 WebP layers at 2x
+# (body, panel, grille, corners; rendered by docs/design/textures/render_amp_parts.py)
+# and the knob, switch and light sprites (TEXTURES.md). JUCE decodes WebP itself
+# (JUCE_USE_WEBP); kit::ampArt loads them lazily on the message thread.
+file(GLOB ENCORE_AMP_PARTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui/amp_parts/*.webp")
+file(GLOB ENCORE_AMP_SPRITES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui/amp_sprites/*.png")
+list(SORT ENCORE_AMP_PARTS)
+list(SORT ENCORE_AMP_SPRITES)
+juce_add_binary_data(EncoreAmpArt
+    HEADER_NAME EncoreAmpArt.h
+    NAMESPACE EncoreAmpArt
+    SOURCES ${ENCORE_AMP_PARTS} ${ENCORE_AMP_SPRITES})
+
 # The UI's look (theme) and kit: shared by the app and the UI snapshot tests.
 add_library(EncoreUi INTERFACE)
 target_sources(EncoreUi INTERFACE
@@ -282,6 +295,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/MixerStrip.h
     Source/ui/kit/DropBox.cpp
     Source/ui/kit/DropBox.h
+    Source/ui/kit/AmpArt.cpp
+    Source/ui/kit/AmpArt.h
     Source/ui/kit/Lcd.cpp
     Source/ui/kit/Lcd.h
     Source/ui/kit/MeterBar.cpp
@@ -304,7 +319,7 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/Toolbar.h
     Source/ui/kit/UtilityTile.cpp
     Source/ui/kit/UtilityTile.h)
-target_link_libraries(EncoreUi INTERFACE EncoreUiAssets)
+target_link_libraries(EncoreUi INTERFACE EncoreUiAssets EncoreAmpArt)
 
 # ------------------------------------------------------------------------------
 # Build speed (decision 0049). Parsing JUCE's headers is ~95 % of compiling a
@@ -479,6 +494,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/HardeningTests.cpp
         Tests/ShowcaseTests.cpp
         Tests/StageBoardTests.cpp
+        Tests/AmpBuilderTests.cpp
         # Screens tested off-screen (rendered into images, no window).
         Source/app/AppSettings.cpp
         Source/app/EventLog.cpp
