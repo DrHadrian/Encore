@@ -483,6 +483,44 @@ public:
                 builder.dragNewPart ("screw", {}, { -40, 900 }, true);
                 expectEquals (builder.getAmp().parts.size(), before + 1, "off the face: nothing");
 
+                // Templates: each replaces the look and the parts; the examples are offered from the library.
+                for (const auto& t : kit::ampTemplates::all())
+                {
+                    builder.applyTemplate (t.key);
+                    expect (builder.getAmp().look == t.amp.look && builder.getAmp().parts == t.amp.parts, t.name);
+                    expect (builder.countText().endsWith ("template: " + t.name), builder.countText());
+                    expect (hasContent (renderSnapshot (builder, "v32-amp-builder-template-" + t.key)));
+                }
+
+                {
+                    auto choices = builder.libraryChoices();
+                    juce::StringArray names;
+
+                    for (const auto& c : choices)
+                        names.add (c.name);
+
+                    for (const auto& e : kit::ampTemplates::examples())
+                        expect (names.contains (e.amp.name) == (session.getAmp (e.amp.id) == nullptr),
+                                e.amp.name + (session.getAmp (e.amp.id) == nullptr ? " is offered" : " is in the show already (saved above)"));
+
+                    // One saved to the library is offered once, as the library's.
+                    expect (library.save (kit::ampTemplates::examples()[2].amp).wasOk());
+                    choices = builder.libraryChoices();
+                    expectEquals ((int) std::count_if (choices.begin(), choices.end(), [] (const AmpPreset& a) { return a.name == "Super Crush 100"; }), 1);
+
+                    // In the show: not offered at all.
+                    session.saveAmp (kit::ampTemplates::examples()[3].amp);
+                    choices = builder.libraryChoices();
+                    expect (std::none_of (choices.begin(), choices.end(), [] (const AmpPreset& a) { return a.name == "Blues Junior"; }));
+                }
+
+                // A new amp from a template: its own id, the name given, no capture.
+                const auto fresh = kit::ampTemplates::makeFrom ("tweed", "Practice combo");
+                builder.edit (fresh);
+                expectEquals (builder.getAmp().name, juce::String ("Practice combo"));
+                expect (builder.getAmp().id != kit::ampTemplates::find ("tweed")->amp.id);
+                expect (builder.save(), "a template's knobs are all set: it saves as it is");
+
                 // Every example amp in the builder (the board's five).
                 for (const auto& e : kit::ampTemplates::examples())
                 {

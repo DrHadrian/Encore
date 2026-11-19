@@ -100,6 +100,11 @@ public:
 
     /** The footer's line: "12 parts · 6 turnable knobs · 1 fixed · template: British gold". */
     juce::String countText() const;
+
+    /** "Add from the library...": this computer's amps not in the show, then
+        the example amps (Encore Gold 30, JC-120, Super Crush 100, Blues
+        Junior, 5150 III 50W) not in either. */
+    std::vector<AmpPreset> libraryChoices() const;
     juce::String usedByText() const;
 
     /** The drag from the parts list (tests): a point on the face, and whether it was let go there. */

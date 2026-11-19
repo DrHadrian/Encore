@@ -1927,6 +1927,22 @@ juce::String AmpBuilderView::countText() const
          + juce::String (fixed) + " fixed" + (t != nullptr ? middot() + "template: " + t->name : juce::String());
 }
 
+std::vector<AmpPreset> AmpBuilderView::libraryChoices() const
+{
+    std::vector<AmpPreset> choices;
+
+    for (const auto& a : library.loadAll())
+        if (session.getAmp (a.id) == nullptr)
+            choices.push_back (a);
+
+    // The examples ship built in, so a first start has amps to pick.
+    for (const auto& e : kit::ampTemplates::examples())
+        if (session.getAmp (e.amp.id) == nullptr && ! library.fileFor (e.amp.id).existsAsFile())
+            choices.push_back (e.amp);
+
+    return choices;
+}
+
 juce::String AmpBuilderView::usedByText() const
 {
     juce::StringArray names;
@@ -1999,8 +2015,11 @@ void AmpBuilderView::showAmpMenu()
 
     juce::PopupMenu fromLibrary;
 
-    for (const auto& a : library.loadAll())
-        fromLibrary.addItem (a.name, session.getAmp (a.id) == nullptr, false, [safe, a] { if (safe != nullptr) safe->edit (a); });
+    for (const auto& a : libraryChoices())
+        fromLibrary.addItem (a.name, [safe, a] { if (safe != nullptr) safe->edit (a); });
+
+    if (fromLibrary.getNumItems() == 0)
+        fromLibrary.addItem ("(every amp is in this show)", false, false, nullptr);
 
     menu.addSubMenu ("Add from the library...", fromLibrary);
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&ampPicker).withMinimumWidth (260));
