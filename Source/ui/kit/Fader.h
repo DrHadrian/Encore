@@ -24,13 +24,16 @@ namespace faderLaw
       (+6, 0, −6, −12, −24, −40, −∞), the fill from the thumb down, a
       28 × 14 cap with a centre line;
     - horizontal (an output's row): a 4 px track filled to a 12 px round
-      thumb, as the volume slider.
+      thumb, as the volume slider;
+    - mixer (a mixer-view strip, V3.2-CHANGES §3.3): a bare 4 px track
+      inset 6 px top and bottom so the thumb never leaves its column, a
+      0 dB line across it, a 22 × 12 cap with a centre line.
     Drag to change, double-click for 0 dB, the wheel nudges. onChange gets
     the new level while it moves; onGestureEnd when the mouse lets go. */
-class Fader final : public juce::Component
+class Fader final : public juce::Component, public juce::SettableTooltipClient
 {
 public:
-    enum class Orientation { vertical, horizontal };
+    enum class Orientation { vertical, horizontal, mixer };
 
     explicit Fader (Orientation);
 

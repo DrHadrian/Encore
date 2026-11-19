@@ -382,7 +382,7 @@ public:
         if (juce::isPositiveAndBelow (owner.selectedOutput, (int) owner.engine.getRouting().outputs.size()))
         {
             const auto slot = owner.engine.getOutputSlot (owner.engine.getRouting().outputs[(size_t) owner.selectedOutput].name);
-            const auto reduction = slot >= 0 ? owner.engine.takeOutputLimiterReductionDb (slot) : 0.0f;
+            const auto reduction = juce::isPositiveAndBelow (slot, (int) s.outputLimiterDb.size()) ? s.outputLimiterDb[(size_t) slot] : 0.0f;   // taken once per frame for every view
             const auto now = juce::Time::getMillisecondCounter();
 
             if (reduction > 0.05f)

@@ -30,6 +30,8 @@
 #include "ui/StageView.h"
 #include "ui/TunerDisplay.h"
 #include "ui/kit/StatusBar.h"
+#include "ui/kit/HealthStatus.h"
+#include "ui/kit/PaneTab.h"
 #include "ui/kit/MeterBar.h"
 #include "ui/kit/NoticeBar.h"
 #include "ui/kit/Pane.h"
@@ -92,6 +94,19 @@ public:
     void openPreShowCheck();
     void closePreShowCheck();
     bool isShowingPreShowCheck() const noexcept { return checkDialog != nullptr; }
+
+    // The bottom row (tests): the mixer view, the health status and its details.
+    bool isMixerOpen() const noexcept { return mixerOpen; }
+    void setMixerOpen (bool);
+    kit::PaneTab& getMixerTab() noexcept { return mixerTab; }
+    InputSummary& getInputSummary() noexcept { return inputSummary; }
+    OutputsPane& getOutputsPane() noexcept { return outputsPane; }
+    kit::HealthStatus& getHealthStatus() noexcept { return healthStatus; }
+    bool isShowingHealthDetails() const noexcept { return healthDialog != nullptr; }
+    HealthDetailsDialog* getHealthDetails() noexcept { return healthDialog.get(); }
+    void openHealthDetails();
+    void closeHealthDetails();
+    void showInputPicker (juce::Component& anchor);
 
 private:
     // Audio
@@ -208,8 +223,16 @@ private:
     Chain* shownChain = nullptr;
     int shownBlockIndex = -1;
 
-    // Bottom row (NEW-FEATURES-M10-M11 §B.4): the playing input, the outputs, system health.
-    kit::Pane inputPane, metersPane, healthPane;
+    // Bottom row (V3.2-CHANGES §3): the playing input, the outputs, the health status; the mixer view's tab.
+    kit::Pane inputPane, metersPane;
+    kit::HealthStatus healthStatus;
+    kit::PaneTab mixerTab;
+    bool mixerOpen = false;
+    std::unique_ptr<HealthDetailsDialog> healthDialog;
+    juce::StringArray healthProblems;   // what the health status counts (the warning line's, without plain info)
+    juce::String healthDetail;          // "CPU 9% · 5.3 ms"
+    void refreshHealthStatus();
+    std::vector<HealthDetailsDialog::Line> healthDetailLines();
     std::unique_ptr<Inspector> inspector;
     juce::Label deviceLine;   // not shown: the stage footer and Routing read it
     InputSummary inputSummary;
@@ -217,9 +240,7 @@ private:
     OutputsPane outputsPane;
     void refreshBottomRow();
     void refreshChainJacks();
-    juce::Label healthTitle { {}, "System health" };
-    juce::TextButton resetCountersButton { "Reset counters" };
-    juce::Label healthLine, latencyLine, warningLine;   // full text in their tooltips
+    juce::Label healthLine, latencyLine, warningLine;   // not shown: the health details read them (full text in their tooltips)
 
     // What the warning line shows (the most important first: lost, a device
     // or input problem, not ASIO, then the Windows / power line).

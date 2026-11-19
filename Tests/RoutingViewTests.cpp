@@ -281,22 +281,33 @@ public:
 
         logMessage ("  window closed");
 
-        beginTest ("The bottom row with 1, 3 and 8 outputs, compact and full (m11-bottom-row)");
+        beginTest ("The bottom row with 1, 3 and 8 outputs, collapsed and in the mixer view (v32-bottom-row, v32-mixer-view)");
         {
-            // The sheet: each band is the real Edit window's bottom row (input,
-            // outputs, system health), under the board's caption for it.
-            struct Variant { const char* caption; int outputs; bool full; };
+            // The board (BBottomRow): each band is the real Edit window's bottom row
+            // (input, outputs, health), under the board's caption for it.
+            struct Variant { const char* caption; int outputs; bool mixer; };
             const Variant variants[] {
                 { "Default after updating: one output \xe2\x80\x9cMain\xe2\x80\x9d = all outputs (today's behaviour)", 1, false },
-                { "3 outputs \xc2\xb7 compact (the default)", 3, false },
-                { "8 outputs \xc2\xb7 compact: strips shrink, names shorten, nothing hides", 8, false },
-                { "8 outputs \xc2\xb7 full: strips keep 170 px and the row scrolls sideways (the toggle is remembered on this computer)", 8, true },
+                { "Collapsed (the default) \xc2\xb7 3 outputs \xc2\xb7 the tab on top opens the mixer view", 3, false },
+                { "8 outputs: strips shrink, names shorten (full name on hover), nothing hides or scrolls", 8, false },
+                { "Mixer view \xc2\xb7 3 outputs", 3, true },
+                { "Mixer view \xc2\xb7 8 outputs: strips keep their width; a row wider than the pane scrolls with the wheel", 8, true },
             };
 
-            constexpr int sheetH = 760, captionTop = 16, captionH = 14, bandTop = 36, bandPitch = 142;
+            constexpr int captionTop = 16, captionH = 14, captionGap = 6, bandGap = 18;
+            const auto sheetH = [&]
+            {
+                auto h = captionTop;
+
+                for (const auto& v : variants)
+                    h += captionH + captionGap + (v.mixer ? theme::size::mixerRow : theme::size::bottomRow) + 2 * theme::size::paneTabRise + bandGap;
+
+                return h;
+            }();
             juce::Image sheet (juce::Image::RGB, theme::size::referenceWidth, sheetH, true);
             juce::Graphics sheetG (sheet);
             sheetG.fillAll (theme::paint::c (theme::colour::window));
+            auto top = captionTop;
             int index = 0;
 
             for (const auto& v : variants)
@@ -309,52 +320,151 @@ public:
 
                 Rig rig (root.getChildFile ("Settings bottom " + juce::String (index)), show);
                 rig.settings.setRouting (bottomRowRouting (v.outputs));
-                rig.settings.setOutputStripsFull (v.full);
+                rig.settings.setMixerViewOpen (v.mixer);
 
                 MainComponent main (rig.settings, std::make_unique<BoardDeviceType> (spec));
                 main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
                 pump (800);
 
-                auto* outputs = findChild<OutputsPane> (main);
-                expect (outputs != nullptr);
-                expectEquals (outputs != nullptr ? outputs->getNumStrips() : 0, v.outputs);
+                expect (main.isMixerOpen() == v.mixer, "the mixer view as this computer left it");
+                auto& outputs = main.getOutputsPane();
+                expectEquals (outputs.getNumStrips(), v.outputs);
 
-                if (outputs != nullptr && outputs->getParentComponent() != nullptr)
+                for (int i = 0; i < outputs.getNumStrips(); ++i)
                 {
-                    auto* pane = outputs->getParentComponent();
-                    const auto row = main.getLocalArea (pane, pane->getLocalBounds()).withX (0).withWidth (main.getWidth());
-                    const auto band = main.createComponentSnapshot (row, false, 1.0f);
-                    expect (hasContent (band));
-                    writeSnapshot (band, "m11-bottom-row-" + juce::String (index + 1));
-
-                    const auto top = bandTop + index * bandPitch;
-                    sheetG.drawImageAt (band, 0, top);
-                    const theme::type::Style captionStyle { 11.0f, theme::type::Weight::bold, 0.08f, true };
-                    theme::paint::text (sheetG, theme::paint::caps (captionStyle, juce::String::fromUTF8 (v.caption)),
-                                        { 16.0f, (float) (top - bandTop + captionTop), 1408.0f, (float) captionH },
-                                        captionStyle, theme::colour::textDisabled);
+                    expect (outputs.getStrip (i)->isVisible() != v.mixer);
+                    expect (outputs.getMixerStrip (i)->isVisible() == v.mixer);
                 }
 
-                // Full: wider than the pane, the row scrolls sideways with the wheel (no scroll bar).
-                if (v.full && outputs != nullptr)
-                {
-                    auto* viewport = findChild<juce::Viewport> (*outputs);
-                    expect (viewport != nullptr && ! viewport->isHorizontalScrollBarShown(), "no scroll bar");
+                if (! v.mixer && v.outputs == 8)
+                    expect (outputs.getStrip (0)->isValueOnOwnLine(), "narrow strips put the level under the meters");
 
-                    if (viewport != nullptr)
-                    {
-                        expect (viewport->getViewedComponent()->getWidth() > viewport->getViewWidth(), "the strips are wider than the pane");
-                        juce::MouseWheelDetails wheel {};
-                        wheel.deltaY = -1.0f;
-                        viewport->mouseWheelMove (eventAt (*viewport), wheel);
-                        expect (viewport->getViewPositionX() > 0, "the wheel scrolls the row sideways");
-                    }
+                if (! v.mixer && v.outputs == 3)
+                    expect (! outputs.getStrip (0)->isValueOnOwnLine(), "wide strips keep the level beside the meters");
+
+                if (auto* pane = outputs.getParentComponent())
+                {
+                    // The band from the tab's top to the row's bottom.
+                    const auto paneArea = main.getLocalArea (pane, pane->getLocalBounds());
+                    const auto row = juce::Rectangle<int> (0, paneArea.getY() - theme::size::paneTabRise, main.getWidth(),
+                                                           paneArea.getHeight() + theme::size::paneTabRise);
+                    const auto band = main.createComponentSnapshot (row, false, 1.0f);
+                    expect (hasContent (band));
+                    writeSnapshot (band, (v.mixer ? "v32-mixer-view-" : "v32-bottom-row-") + juce::String (index + 1));
+
+                    const theme::type::Style captionStyle { 11.0f, theme::type::Weight::bold, 0.08f, true };
+                    theme::paint::text (sheetG, theme::paint::caps (captionStyle, juce::String::fromUTF8 (v.caption)),
+                                        { 16.0f, (float) top, 1408.0f, (float) captionH }, captionStyle, theme::colour::textDim);
+                    top += captionH + captionGap;
+                    sheetG.drawImageAt (band, 0, top);
+                    top += band.getHeight() + theme::size::paneTabRise + bandGap;
+                }
+
+                // The mixer view with 8 outputs: wider than the pane, the row scrolls sideways with the wheel (no scroll bar).
+                if (v.mixer && v.outputs == 8 && outputs.getViewport().getViewedComponent()->getWidth() > outputs.getViewport().getViewWidth())
+                {
+                    auto& viewport = outputs.getViewport();
+                    expect (! viewport.isHorizontalScrollBarShown(), "no scroll bar");
+                    juce::MouseWheelDetails wheel {};
+                    wheel.deltaY = -1.0f;
+                    viewport.mouseWheelMove (eventAt (viewport), wheel);
+                    expect (viewport.getViewPositionX() > 0, "the wheel scrolls the row sideways");
                 }
 
                 ++index;
             }
 
-            writeSnapshot (sheet, "m11-bottom-row");
+            writeSnapshot (sheet, "v32-bottom-row");
+        }
+
+        beginTest ("The bottom row works: the mixer tab, a fader, the peak, M, the health status");
+        {
+            auto spec = focusriteSpec();
+            Rig rig (root.getChildFile ("Settings bottom works"), show);
+            rig.settings.setRouting (bottomRowRouting (3));
+            MainComponent main (rig.settings, std::make_unique<BoardDeviceType> (spec));
+            main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            pump (800);
+
+            // The tab opens the mixer view (remembered on this computer); the patch area gives up 92 px.
+            auto& outputs = main.getOutputsPane();
+            const auto collapsedH = outputs.getParentComponent()->getHeight();
+            expect (! main.isMixerOpen());
+            expectEquals (main.getMixerTab().getTooltip(), juce::String ("Open the mixer view: vertical meters, peaks and level faders"));
+            main.getMixerTab().onClick();
+            expect (main.isMixerOpen() && rig.settings.getMixerViewOpen());
+            expectEquals (outputs.getParentComponent()->getHeight() - collapsedH, theme::size::mixerRow - theme::size::bottomRow);
+            expectEquals (main.getMixerTab().getTooltip(), juce::String ("Close the mixer view"));
+            expect (main.getInputSummary().getWidth() < theme::size::sidebarWidth, "the input pane narrows to its strip");
+
+            // A fader drives the output's level (double-click: 0 dB), saved with the routing.
+            const auto inEar = [&]
+            {
+                const auto& outs = rig.settings.getRouting().outputs;
+
+                for (int i = 0; i < (int) outs.size(); ++i)
+                    if (std::abs (outs[(size_t) i].levelDb) > 0.5f)
+                        return i;
+
+                return -1;
+            }();
+            expect (inEar >= 0, "an output below 0 dB in the fixture");
+
+            if (auto* strip = outputs.getMixerStrip (inEar))
+            {
+                strip->getFader().mouseDoubleClick (eventAt (strip->getFader()));
+                expectWithinAbsoluteError (rig.settings.getRouting().outputs[(size_t) inEar].levelDb, 0.0f, 0.001f);
+                expectEquals (strip->getValueCell().getText(), juce::String ("0.0"));
+                expectEquals (strip->getFader().getTooltip(), "Level of " + strip->getName() + ". Double-click for 0 dB.");
+
+                // The peak since reset: hot from -1 dBFS; a click resets it.
+                strip->setPeaks (1.0f, 0.5f);
+                expectEquals (strip->getPeakCell().getText(), juce::String ("0.0"));
+                expect (strip->getPeakCell().getColour() == theme::colour::peakHot);
+                strip->getPeakCell().onClick();
+                expectEquals (strip->getPeakCell().getText(), juce::String::fromUTF8 ("\xe2\x80\x94"));
+
+                // LIM lights while the limiter works.
+                strip->setLimiterReduction (2.0f);
+                expect (strip->isLimiting());
+                expect (strip->getPeakCell().getTooltip() == "Highest level since reset. Click to reset.");
+
+                // M mutes it, here and in the engine; the health status counts it.
+                strip->getMuteButton().setToggleState (true, juce::dontSendNotification);
+                strip->getMuteButton().onClick();
+                pump (200);
+                expect (main.getHealthStatus().getNumProblems() >= 1, "a muted output is a thing to check");
+                expect (main.getHealthStatus().getTooltip().contains ("muted"), "what to check comes first in the tooltip");
+                expect (main.getHealthStatus().getTooltip().endsWith ("Click for system health details (CPU, dropouts, device, latency)."));
+            }
+
+            // The health status opens today's health lines (Edit only), with Reset counters.
+            main.getHealthStatus().onClick();
+            expect (main.isShowingHealthDetails());
+
+            if (auto* details = main.getHealthDetails())
+            {
+                expectEquals (details->getFrame().getDialogTitle(), juce::String ("System health"));
+                auto found = false;
+
+                for (auto* child : details->getFrame().getChildren())
+                    if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && b->getButtonText() == "Reset counters")
+                        found = true;
+
+                expect (found, "Reset counters in the footer");
+            }
+
+            main.closeHealthDetails();
+            expect (! main.isShowingHealthDetails());
+
+            // The tab again closes it.
+            main.getMixerTab().onClick();
+            expect (! main.isMixerOpen() && ! rig.settings.getMixerViewOpen());
+
+            // The input picker shows the playing patch's input.
+            expect (main.getInputSummary().getPicker().getName().isNotEmpty());
+            expectEquals (main.getInputSummary().getPicker().getTooltip(),
+                          juce::String ("Input of the playing patch. Pick another to change it for that patch."));
         }
 
         beginTest ("Pre-show check with the routing lines and their Routing... buttons (m11-preshow-check)");

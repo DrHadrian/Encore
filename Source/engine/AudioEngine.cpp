@@ -232,6 +232,12 @@ float AudioEngine::takeOutputLimiterReductionDb (int slot) noexcept
     return juce::isPositiveAndBelow (slot, routing::maxOutputs) ? strips[(size_t) slot].takeLimiterReductionDb() : 0.0f;
 }
 
+void AudioEngine::resetOutputClips (int slot) noexcept
+{
+    if (juce::isPositiveAndBelow (slot, routing::maxOutputs))
+        outputClips[(size_t) slot].store (0, std::memory_order_relaxed);
+}
+
 int AudioEngine::getOutputClipCount (int slot) const noexcept
 {
     return juce::isPositiveAndBelow (slot, routing::maxOutputs) ? outputClips[(size_t) slot].load (std::memory_order_relaxed) : 0;

@@ -145,6 +145,7 @@ public:
 
     /** Buffers in which an output's hard ceiling had to act (since the counters were reset). */
     int getOutputClipCount (int slot) const noexcept;
+    void resetOutputClips (int slot) noexcept;   // the mixer view's peak reset
 
     /** Buffers of broken audio silenced in the outputs (should stay 0). */
     int getBadOutputBufferCount() const noexcept;

@@ -19,7 +19,7 @@ namespace keys
     static constexpr auto layoutInspector = "layoutEditorInspector";
     static constexpr auto settingsTab = "settingsTab";
     static constexpr auto routing     = "routing";
-    static constexpr auto outputStrips = "outputStripsFull";
+    static constexpr auto mixerView = "mixerViewOpen";   // replaces "outputStripsFull" (v3.2: the Compact | Full toggle is gone)
 }
 
 AppSettings::AppSettings() : AppSettings (juce::File()) {}
@@ -101,8 +101,8 @@ bool AppSettings::hasRouting() const
     return file().containsKey (keys::routing);
 }
 
-bool AppSettings::getOutputStripsFull() const        { return file().getBoolValue (keys::outputStrips, false); }
-void AppSettings::setOutputStripsFull (bool full)    { file().setValue (keys::outputStrips, full); }
+bool AppSettings::getMixerViewOpen() const           { return file().getBoolValue (keys::mixerView, false); }
+void AppSettings::setMixerViewOpen (bool open)       { file().setValue (keys::mixerView, open); }
 
 juce::String AppSettings::getSettingsTab() const               { return file().getValue (keys::settingsTab, "audio"); }
 void AppSettings::setSettingsTab (const juce::String& tab)      { file().setValue (keys::settingsTab, tab); }

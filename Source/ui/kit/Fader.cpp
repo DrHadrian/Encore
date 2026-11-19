@@ -68,7 +68,7 @@ namespace faderLaw
 Fader::Fader (Orientation o) : orientation (o)
 {
     setWantsKeyboardFocus (false);
-    setMouseCursor (orientation == Orientation::vertical ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::LeftRightResizeCursor);
+    setMouseCursor (orientation == Orientation::horizontal ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::UpDownResizeCursor);
 }
 
 void Fader::setDb (float dB)
@@ -96,6 +96,12 @@ juce::Rectangle<float> Fader::getTrackBounds() const
     const auto r = getLocalBounds().toFloat();
     const auto t = (float) size::faderTrackW;
 
+    if (orientation == Orientation::mixer)
+    {
+        const auto inset = (float) size::mixerFaderInset;
+        return { r.getCentreX() - (float) size::mixerTrackW * 0.5f, inset, (float) size::mixerTrackW, juce::jmax (0.0f, r.getHeight() - 2.0f * inset) };
+    }
+
     if (orientation == Orientation::vertical)
     {
         const auto x = (float) (size::faderScaleW + size::faderTickGap + size::faderTickW + size::faderTickGap + 4);
@@ -111,7 +117,7 @@ float Fader::positionOf (juce::Point<float> p) const
 {
     const auto track = getTrackBounds();
 
-    if (orientation == Orientation::vertical)
+    if (orientation != Orientation::horizontal)
         return (p.y - track.getY()) / juce::jmax (1.0f, track.getHeight());
 
     // Horizontal: left is −∞, so the law runs the other way.
@@ -126,6 +132,30 @@ void Fader::paint (juce::Graphics& g)
 
     g.setColour (paint::c (colour::meterTrack).withMultipliedAlpha (alpha));
     g.fillRoundedRectangle (track, 2.0f);
+
+    if (orientation == Orientation::mixer)
+    {
+        // The 0 dB line across the track, then the cap: no fill, no scale (the strip has the meter's).
+        const auto zeroY = track.getY() + track.getHeight() * faderLaw::positionFor (0.0f);
+        g.setColour (paint::c (colour::faderZeroMark).withMultipliedAlpha (alpha));
+        g.fillRect (juce::Rectangle<float> ((float) size::mixerZeroMarkW, 1.0f).withCentre ({ track.getCentreX(), zeroY + 0.5f }));
+
+        const auto thumb = juce::Rectangle<float> ((float) size::mixerThumbW, (float) size::mixerThumbH)
+                               .withCentre ({ track.getCentreX(), track.getY() + track.getHeight() * p });
+        const auto radius = (float) size::mixerThumbRadius;
+        g.setColour (paint::c (colour::mixerThumbShadow).withMultipliedAlpha (alpha));
+        g.fillRoundedRectangle (thumb.translated (0.0f, 1.0f), radius);
+        g.setGradientFill (juce::ColourGradient::vertical (paint::c (colour::mixerThumbTop).withMultipliedAlpha (alpha), thumb.getY(),
+                                                           paint::c (colour::mixerThumbBot).withMultipliedAlpha (alpha), thumb.getBottom()));
+        g.fillRoundedRectangle (thumb, radius);
+        g.setColour (paint::c (colour::mixerThumbShine).withMultipliedAlpha (alpha));
+        g.fillRect (thumb.reduced (radius, 0.0f).withHeight (1.0f).translated (0.0f, 1.0f));
+        g.setColour (paint::c (colour::buttonBorder).withMultipliedAlpha (alpha));
+        g.drawRoundedRectangle (thumb.reduced (0.5f), radius - 0.5f, 1.0f);
+        g.setColour (paint::c (colour::mixerThumbLine).withMultipliedAlpha (alpha));
+        g.fillRect (thumb.reduced (4.0f, 0.0f).withHeight (1.0f).withY (thumb.getY() + 5.0f));
+        return;
+    }
 
     if (orientation == Orientation::vertical)
     {
@@ -152,7 +182,7 @@ void Fader::paint (juce::Graphics& g)
         g.fillRoundedRectangle (track.withTop (thumbY), 2.0f);
 
         const auto thumb = juce::Rectangle<float> ((float) size::faderThumbW, (float) size::faderThumbH).withCentre ({ track.getCentreX(), thumbY });
-        g.setColour (juce::Colours::black.withAlpha (0.35f * alpha));
+        g.setColour (paint::c (colour::thumbShadow).withMultipliedAlpha (alpha));
         g.fillRoundedRectangle (thumb.translated (0.0f, 2.0f), (float) size::faderThumbRadius);
         g.setGradientFill (juce::ColourGradient::vertical (paint::c (colour::thumbTop).withMultipliedAlpha (alpha), thumb.getY(),
                                                            paint::c (colour::thumbBot).withMultipliedAlpha (alpha), thumb.getBottom()));
@@ -169,7 +199,7 @@ void Fader::paint (juce::Graphics& g)
     g.fillRoundedRectangle (track.withRight (thumbX), 2.0f);
 
     const auto thumb = juce::Rectangle<float> ((float) size::faderHThumb, (float) size::faderHThumb).withCentre ({ thumbX, track.getCentreY() });
-    g.setColour (juce::Colours::black.withAlpha (0.35f * alpha));
+    g.setColour (paint::c (colour::thumbShadow).withMultipliedAlpha (alpha));
     g.fillEllipse (thumb.translated (0.0f, 1.0f));
     g.setGradientFill (juce::ColourGradient::vertical (paint::c (colour::thumbTop).withMultipliedAlpha (alpha), thumb.getY(),
                                                        paint::c (colour::thumbBot).withMultipliedAlpha (alpha), thumb.getBottom()));
@@ -196,9 +226,10 @@ void Fader::mouseDown (const juce::MouseEvent& e)
     const auto track = getTrackBounds();
     const auto thumbPos = faderLaw::positionFor (db);
     const auto clicked = juce::jlimit (0.0f, 1.0f, positionOf (e.position));
-    const auto thumbCentre = orientation == Orientation::vertical ? track.getY() + track.getHeight() * thumbPos
-                                                                  : track.getX() + track.getWidth() * (1.0f - thumbPos);
-    const auto onThumb = std::abs ((orientation == Orientation::vertical ? e.position.y : e.position.x) - thumbCentre) <= 8.0f;
+    const auto upright = orientation != Orientation::horizontal;
+    const auto thumbCentre = upright ? track.getY() + track.getHeight() * thumbPos
+                                     : track.getX() + track.getWidth() * (1.0f - thumbPos);
+    const auto onThumb = std::abs ((upright ? e.position.y : e.position.x) - thumbCentre) <= 8.0f;
 
     if (! onThumb)
         setFromUser (faderLaw::dbFor (clicked));
@@ -209,7 +240,7 @@ void Fader::mouseDown (const juce::MouseEvent& e)
 void Fader::mouseDrag (const juce::MouseEvent& e)
 {
     const auto track = getTrackBounds();
-    const auto delta = orientation == Orientation::vertical ? (float) e.getDistanceFromDragStartY() / juce::jmax (1.0f, track.getHeight())
+    const auto delta = orientation != Orientation::horizontal ? (float) e.getDistanceFromDragStartY() / juce::jmax (1.0f, track.getHeight())
                                                             : -(float) e.getDistanceFromDragStartX() / juce::jmax (1.0f, track.getWidth());
     const auto fine = e.mods.isShiftDown() ? 0.25f : 1.0f;
     setFromUser (faderLaw::dbFor (juce::jlimit (0.0f, 1.0f, dragStartPosition + delta * fine)));

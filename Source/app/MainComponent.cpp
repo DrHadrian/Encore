@@ -207,13 +207,19 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     addChildComponent (noticeBar);
 
     // Bottom row (SCREENS.md §4.4)
-    for (auto* pane : { &inputPane, &metersPane, &healthPane })
+    for (auto* pane : { &inputPane, &metersPane })
         addAndMakeVisible (pane);
 
     inputPane.addAndMakeVisible (inputSummary);
+    inputSummary.onPickInput = [this] (juce::Component& anchor) { showInputPicker (anchor); };
     metersPane.addAndMakeVisible (outputsPane);
-    outputsPane.setFull (settings.getOutputStripsFull());
-    outputsPane.onFullChanged = [this] (bool full) { settings.setOutputStripsFull (full); };
+
+    const auto outputSlotAt = [this] (int index)
+    {
+        const auto& outputs = engine.getRouting().outputs;
+        return juce::isPositiveAndBelow (index, (int) outputs.size()) ? engine.getOutputSlot (outputs[(size_t) index].name) : -1;
+    };
+
     outputsPane.onMuteClicked = [this] (int index, bool muted)
     {
         const auto& outputs = engine.getRouting().outputs;
@@ -221,22 +227,38 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
         if (juce::isPositiveAndBelow (index, (int) outputs.size()))
             setOutputMuted (outputs[(size_t) index].name, muted);
     };
-
-    styleLabel (healthTitle, type::healthTitle, colour::textTertiary);
-    healthPane.addAndMakeVisible (healthTitle);
-
-    setVariant (resetCountersButton, Variant::small);
-    resetCountersButton.setTooltip ("Start the overrun, dropout and clip counts again from zero");
-    resetCountersButton.onClick = [this] { engine.resetCounters(); };
-    healthPane.addAndMakeVisible (resetCountersButton);
-
-    for (auto* line : { &healthLine, &latencyLine, &warningLine })
+    outputsPane.onLevelChange = [this, outputSlotAt] (int index, float dB)
     {
-        styleLabel (*line, type::caption, colour::textSecondary);
-        healthPane.addAndMakeVisible (line);
-    }
+        // Live while the fader moves; saved with the routing when it lets go.
+        if (const auto slot = outputSlotAt (index); slot >= 0)
+            engine.setOutputLevel (slot, dB);
+    };
+    outputsPane.onLevelCommit = [this] (int index, float dB)
+    {
+        auto routing = engine.getRouting();
 
-    warningLine.setJustificationType (juce::Justification::topLeft);
+        if (juce::isPositiveAndBelow (index, (int) routing.outputs.size()) && routing.outputs[(size_t) index].levelDb != dB)
+        {
+            routing.outputs[(size_t) index].levelDb = dB;
+            setRouting (routing);
+        }
+    };
+    outputsPane.onPeakReset = [this, outputSlotAt] (int index)
+    {
+        if (const auto slot = outputSlotAt (index); slot >= 0)
+            engine.resetOutputClips (slot);
+    };
+
+    healthStatus.onClick = [this] { openHealthDetails(); };
+    addAndMakeVisible (healthStatus);
+
+    mixerTab.setTooltips ("Open the mixer view: vertical meters, peaks and level faders", "Close the mixer view");
+    mixerTab.onClick = [this] { setMixerOpen (! mixerOpen); };
+    addAndMakeVisible (mixerTab);
+    mixerOpen = settings.getMixerViewOpen();
+    mixerTab.setOpen (mixerOpen);
+    inputSummary.setMixer (mixerOpen);
+    outputsPane.setMixer (mixerOpen);
 
     styleLabel (chainLabel, type::headerLine, colour::text);
     addAndMakeVisible (chainLabel);
@@ -425,6 +447,7 @@ MainComponent::~MainComponent()
     // Settings windows hold references to the engine, devices and session.
     settingsWindow = nullptr;
     checkDialog = nullptr;
+    healthDialog = nullptr;
 
     stageView = nullptr;
     cueEditor = nullptr;
@@ -902,6 +925,121 @@ void MainComponent::refreshWarningLine()
     warningLine.setText (shown, juce::dontSendNotification);
     warningLine.setTooltip (all.joinIntoString ("\n"));
     warningLine.setColour (juce::Label::textColourId, paint::c (colourToken));
+
+    // The health status counts the problems (plain Windows / power info isn't one).
+    healthProblems = all;
+
+    if (systemText.isNotEmpty() && ! systemProblem)
+        healthProblems.removeString (systemText);
+
+    refreshHealthStatus();
+}
+
+void MainComponent::refreshHealthStatus()
+{
+    healthStatus.setStatus (healthProblems, healthDetail);
+
+    if (healthDialog != nullptr)
+        healthDialog->setLines (healthDetailLines());
+}
+
+std::vector<HealthDetailsDialog::Line> MainComponent::healthDetailLines()
+{
+    // Today's lines: CPU and counters, latency, the device; then what to check, and plain info.
+    std::vector<HealthDetailsDialog::Line> lines;
+
+    for (auto* label : { &healthLine, &latencyLine, &deviceLine })
+        if (label->getText().isNotEmpty())
+            lines.push_back ({ label->getText(), label->getTooltip(), false });
+
+    for (const auto& p : healthProblems)
+        lines.push_back ({ p, p, true });
+
+    if (systemText.isNotEmpty() && ! systemProblem)
+        lines.push_back ({ systemText, systemText, false });
+
+    return lines;
+}
+
+void MainComponent::openHealthDetails()
+{
+    if (healthDialog != nullptr || isShowingStage())
+        return;
+
+    healthDialog = std::make_unique<HealthDetailsDialog> (
+        [this] { engine.resetCounters(); },
+        [this]
+        {
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
+            {
+                if (safe != nullptr)
+                    safe->closeHealthDetails();
+            });
+        });
+    healthDialog->setLines (healthDetailLines());
+
+    auto& overlay = healthDialog->getOverlay();
+    addAndMakeVisible (overlay);
+    overlay.setBounds (getLocalBounds());
+    overlay.enterModalState (isShowing());
+}
+
+void MainComponent::closeHealthDetails()
+{
+    if (healthDialog == nullptr)
+        return;
+
+    healthDialog->getOverlay().exitModalState (0);
+    healthDialog = nullptr;
+
+    if (isShowing())
+        grabKeyboardFocus();
+}
+
+void MainComponent::setMixerOpen (bool open)
+{
+    if (open == mixerOpen)
+        return;
+
+    mixerOpen = open;
+    settings.setMixerViewOpen (open);
+    mixerTab.setOpen (open);
+    inputSummary.setMixer (open);
+    outputsPane.setMixer (open);
+    resized();   // the patch area above gives up (or gets back) 92 px
+}
+
+void MainComponent::showInputPicker (juce::Component& anchor)
+{
+    // This computer's inputs; the pick is the playing patch's input from now on (saved with the show).
+    const auto& routing = engine.getRouting();
+    const auto* patch = session->getPatch (session->getActivePatchId());
+
+    if (patch == nullptr || routing.inputs.empty())
+        return;
+
+    const auto wanted = patch->inputName();
+    const auto& playing = routing.inputFor (wanted);
+    juce::PopupMenu menu;
+    int id = 1;
+
+    for (const auto& input : routing.inputs)
+        menu.addItem (id++, input.name + juce::String (juce::CharPointer_UTF8 (" \xc2\xb7 ")) + juce::String (input.channel), true, input.name == playing.name);
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&anchor).withMinimumWidth (anchor.getWidth()),
+                        [safe = juce::Component::SafePointer<MainComponent> (this)] (int chosen)
+                        {
+                            if (safe == nullptr || chosen <= 0)
+                                return;
+
+                            const auto& inputs = safe->engine.getRouting().inputs;
+
+                            if (juce::isPositiveAndBelow (chosen - 1, (int) inputs.size()))
+                            {
+                                safe->session->setPatchInput (safe->session->getActivePatchId(), inputs[(size_t) chosen - 1].name);
+                                safe->refreshBottomRow();
+                            }
+                        });
 }
 
 void MainComponent::watchAudioDevice()
@@ -1152,7 +1290,7 @@ void MainComponent::refreshBottomRow()
     {
         const auto slot = engine.getOutputSlot (o.name);
         const auto muted = slot >= 0 ? engine.isOutputMuted (slot) : o.mute;
-        outputs.push_back ({ o.name, describeShortChannels (o), describeLevel (o.levelDb), o.isStereo(), muted });
+        outputs.push_back ({ o.name, describeShortChannels (o), describeLevel (o.levelDb), o.levelDb, o.isStereo(), muted });
     }
 
     outputsPane.setOutputs (outputs);
@@ -1460,6 +1598,9 @@ void MainComponent::setStageVisible (bool shouldShow)
 {
     if (stageView == nullptr || shouldShow == stageView->isVisible())
         return;
+
+    if (shouldShow)
+        closeHealthDetails();   // Edit only: nothing modal on Stage
 
     if (! shouldShow)
     {
@@ -1907,6 +2048,10 @@ void MainComponent::timerCallback()
         for (int ch = 0; ch < 2; ++ch)
             snapshot.outputSlotPeaks[(size_t) slot][(size_t) ch] = engine.getOutputSlotMeter (slot, ch).take();
 
+    // The safety limiters' gain reduction (the engine gives it as a negative dB value): the mixer view and Routing read it from here.
+    for (int slot = 0; slot < routing::maxOutputs; ++slot)
+        snapshot.outputLimiterDb[(size_t) slot] = juce::jmax (0.0f, -engine.takeOutputLimiterReductionDb (slot));
+
     snapshot.cpu = engine.getCpuLoad();
     snapshot.overruns = engine.getOverrunCount();
    #if JUCE_WINDOWS
@@ -1931,7 +2076,10 @@ void MainComponent::timerCallback()
         const auto slot = engine.getOutputSlot (engine.getRouting().outputs[(size_t) i].name);
 
         if (slot >= 0)
+        {
             outputsPane.setPeaks (i, snapshot.outputSlotPeaks[(size_t) slot][0], snapshot.outputSlotPeaks[(size_t) slot][1]);
+            outputsPane.setLimiterReduction (i, snapshot.outputLimiterDb[(size_t) slot]);
+        }
     }
 
     if (deviceLost)
@@ -2065,6 +2213,23 @@ void MainComponent::timerCallback()
 
     healthLine.setText (shortHealth, juce::dontSendNotification);
     healthLine.setTooltip (health);
+
+    // The health status's second line: "CPU 9% · 5.3 ms".
+    juce::String detail;
+    detail << "CPU " << juce::roundToInt (engine.getCpuLoad() * 100.0) << "%";
+
+    if (roundTripMs > 0.0)
+        detail << sep() << juce::String (roundTripMs, 1) << " ms";
+
+    if (detail != healthDetail)
+    {
+        healthDetail = detail;
+        refreshHealthStatus();
+    }
+    else if (healthDialog != nullptr)
+    {
+        healthDialog->setLines (healthDetailLines());
+    }
 }
 
 //==============================================================================
@@ -2136,32 +2301,28 @@ void MainComponent::layoutToolbar (juce::Rectangle<int> bar)
 
 void MainComponent::layoutBottomRow (juce::Rectangle<int> row)
 {
-    inputPane.setBounds (row.removeFromLeft (size::sidebarWidth));
+    // Input | outputs | health (116), gap 8; the input pane narrows to its strip in the mixer view.
+    inputPane.setBounds (row.removeFromLeft (mixerOpen ? InputSummary::mixerWidth() : size::sidebarWidth));
     row.removeFromLeft (size::gap);
-    healthPane.setBounds (row.removeFromRight (size::inspectorWidth));
+    auto health = row.removeFromRight (size::healthColW);
     row.removeFromRight (size::gap);
     metersPane.setBounds (row);
 
     inputSummary.setBounds (inputPane.getLocalBounds());
     outputsPane.setBounds (metersPane.getLocalBounds().reduced (1));
 
-    // System health: title and Reset counters, then three lines (gap 3).
-    {
-        auto r = healthPane.getLocalBounds().reduced (1 + size::healthPadX, 1 + size::healthPadY);
-        auto header = r.removeFromTop (size::healthHeaderH);
-        const auto resetW = resetCountersButton.getBestWidthForHeight (size::buttonSmallHeight);
-        resetCountersButton.setBounds (header.removeFromRight (resetW).withHeight (size::buttonSmallHeight + size::buttonDrop));
-        healthTitle.setBounds (header);
+    // The health status: a flat button whose text lines up with the column (its padding hangs out left);
+    // centred, or at the bottom in the mixer view.
+    const auto statusH = 2 * size::healthLineH + size::healthLineGap + 2 * size::healthStatusPad;
+    auto status = health.withTrimmedLeft (-size::healthStatusPad).withHeight (statusH);
+    healthStatus.setBounds (mixerOpen ? status.withY (health.getBottom() - size::healthMixerBottom - statusH)
+                                      : status.withY (health.getCentreY() - statusH / 2));
 
-        for (auto* line : { &healthLine, &latencyLine })
-        {
-            r.removeFromTop (size::healthGap);
-            line->setBounds (r.removeFromTop (size::healthLineH));
-        }
-
-        r.removeFromTop (size::healthGap);
-        warningLine.setBounds (r);   // may wrap to two lines
-    }
+    // The mixer view's tab, centred on the outputs pane, rising 7 px over its top edge.
+    mixerTab.setBounds (juce::Rectangle<int> (size::paneTabW, size::paneTabH)
+                            .withCentre ({ metersPane.getBounds().getCentreX(), 0 })
+                            .withY (metersPane.getY() - size::paneTabRise));
+    mixerTab.toFront (false);
 }
 
 void MainComponent::resized()
@@ -2174,6 +2335,9 @@ void MainComponent::resized()
     if (checkDialog != nullptr)
         checkDialog->getOverlay().setBounds (area);
 
+    if (healthDialog != nullptr)
+        healthDialog->getOverlay().setBounds (area);
+
     if (settingsWindow != nullptr)
         settingsWindow->getOverlay().setBounds (area);
 
@@ -2184,7 +2348,7 @@ void MainComponent::resized()
         noticeBar.setBounds (area.removeFromTop (size::noticeBar + 1));
 
     area.reduce (size::outerPadding, size::outerPadding);
-    layoutBottomRow (area.removeFromBottom (size::bottomRow));
+    layoutBottomRow (area.removeFromBottom (mixerOpen ? size::mixerRow : size::bottomRow));
     area.removeFromBottom (size::outerPadding);
 
     // Main grid: sidebar 250 | centre | inspector 272 (SCREENS.md §4.3).

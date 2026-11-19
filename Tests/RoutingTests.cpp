@@ -161,12 +161,12 @@ public:
                 const auto migrated = settings.getRouting();
                 expectEquals (migrated.inputs[0].channel, 3);
                 expect (migrated.outputs[0].isAllOutputs());
-                expect (! settings.getOutputStripsFull());
+                expect (! settings.getMixerViewOpen());
 
                 auto rig = makeRig();
                 rig.inputs[0].channel = 4;
                 settings.setRouting (rig);
-                settings.setOutputStripsFull (true);
+                settings.setMixerViewOpen (true);
                 expectEquals (settings.getGuitarInputChannel(), 3, "older code reading the guitar input keeps working");
                 settings.save();
             }
@@ -175,7 +175,7 @@ public:
             auto expected = makeRig();
             expected.inputs[0].channel = 4;
             expect (reopened.getRouting() == expected);
-            expect (reopened.getOutputStripsFull());
+            expect (reopened.getMixerViewOpen());
             folder.getFile().deleteRecursively();
         }
     }

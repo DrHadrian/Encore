@@ -270,6 +270,16 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/StageBackdrop.h
     Source/ui/kit/StatusBar.cpp
     Source/ui/kit/StatusBar.h
+    Source/ui/kit/DbfsMeter.cpp
+    Source/ui/kit/DbfsMeter.h
+    Source/ui/kit/PopupField.cpp
+    Source/ui/kit/PopupField.h
+    Source/ui/kit/PaneTab.cpp
+    Source/ui/kit/PaneTab.h
+    Source/ui/kit/HealthStatus.cpp
+    Source/ui/kit/HealthStatus.h
+    Source/ui/kit/MixerStrip.cpp
+    Source/ui/kit/MixerStrip.h
     Source/ui/kit/Lcd.cpp
     Source/ui/kit/Lcd.h
     Source/ui/kit/MeterBar.cpp

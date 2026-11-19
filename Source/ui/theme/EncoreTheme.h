@@ -154,6 +154,25 @@ namespace colour
     constexpr juce::uint32 meterTrack      = 0xff0E0E10;
     constexpr juce::uint32 meterGreen      = 0xff2BC24F;
     constexpr juce::uint32 meterYellow     = 0xffE8CF3A;
+    constexpr juce::uint32 meterRed        = 0xffE8483E;   // a mixer meter's top (from 98.5 %)
+
+    // The bottom row (v3.2, V3.2-CHANGES §3)
+    constexpr juce::uint32 stripDivider    = 0xff26262B;   // 1 px between output strips
+    constexpr juce::uint32 stripValue      = 0xffC4C4C9;   // an output's level and peak readouts
+    constexpr juce::uint32 faderZeroMark   = 0xff6E6E75;   // the 0 dB line across a mixer fader
+    constexpr juce::uint32 mixerThumbTop   = 0xff5A5A60;
+    constexpr juce::uint32 mixerThumbBot   = 0xff3A3A3E;
+    constexpr juce::uint32 mixerThumbShine = 0x26FFFFFF;   // its top highlight (white 15 %)
+    constexpr juce::uint32 mixerThumbLine  = 0xffF2F2F4;   // its centre line
+    constexpr juce::uint32 mixerThumbShadow= 0x99000000;   // under it (black 60 %)
+    constexpr juce::uint32 thumbShadow     = 0x59000000;   // under a send fader's or the slider's thumb (black 35 %)
+    constexpr juce::uint32 limText         = 0xff5E5E64;   // LIM while the limiter rests
+    constexpr juce::uint32 limDot          = 0xff2E2E33;
+    constexpr juce::uint32 limOn           = 0xffFFB340;   // LIM while it works (flat, no glow)
+    constexpr juce::uint32 peakHot         = 0xffFF8A80;   // a peak that reached the −1 dBFS limiter
+    constexpr juce::uint32 healthHover     = 0xff232326;   // the health status under the mouse
+    constexpr juce::uint32 pickerTop       = 0xff46464B;   // the input picker (a popup field)
+    constexpr juce::uint32 pickerBot       = 0xff38383C;
     constexpr juce::uint32 meterPeak       = 0xffE8E8EB;
     constexpr juce::uint32 meterScale      = 0xff8F8F96;
     constexpr juce::uint32 expressionFill  = 0xff6EA5FA;   // EXP bars, assigned parameter bars
@@ -345,7 +364,8 @@ namespace size
     constexpr int inspectorWidth    = 272;   // Edit right column
     constexpr int widgetPanelWidth  = 220;   // layout editor "+ Widget" panel
     constexpr int layoutInspectorWidth = 280; // layout editor widget inspector
-    constexpr int bottomRow         = 104;   // Edit: input / meters / health row
+    constexpr int bottomRow         = 104;   // Edit: input / outputs / health row, collapsed
+    constexpr int mixerRow          = 196;   // ... with the mixer view open (the patch area gives up 92)
 
     // Edit toolbar (SCREENS.md §4.1): padding 10, gaps 10
     constexpr int toolbarPadX = 10, toolbarGap = 10, logoMargin = 4, logoW = 98, logoH = 17;
@@ -522,6 +542,23 @@ namespace size
     constexpr int stageOutputMeterTop = 62, stageOutputMeterW = 8, stageOutputMeterGap = 3, stageOutputMeterToMute = 8, stageOutputStateX = 28;
     constexpr int stageOutputMuteH = 52, stageOutputBottom = 21;
     constexpr int levelBarH = 4, levelBarGap = 2;
+    // The bottom row, v3.2: collapsed (104) and the mixer view (196).
+    constexpr int healthColW = 116, bottomPanePad = 10, bottomLineGap = 5, bottomLineH = 14;
+    constexpr int inputPickerH = 22, inputPickerRadius = 5, inputPickerPadX = 8, inputPickerChevron = 9;
+    constexpr int inputMeterH = 8, inputPeakTickW = 2;
+    constexpr int outputStripPad = 12, outputValueW = 46, outputInlineGap = 6, outputInlineMinW = 140;   // value moves under the meters below this
+    constexpr int mixerPadX = 12, mixerStripW = 94, mixerFirstStripW = 82, mixerRowGap = 6;
+    constexpr int mixerScaleW = 18, mixerScaleGap = 4, mixerMetersW = 12, mixerMeterGap = 6, mixerFaderW = 28;   // a strip's columns
+    constexpr int mixerNameH = 28, mixerLimH = 12, mixerBottomH = 20, mixerNameLineH = 14;                       // ... and rows
+    constexpr int mixerBarW = 5, mixerBarGap = 2, mixerBarRadius = 2, mixerPeakTickH = 1;
+    constexpr int mixerFaderInset = 6, mixerTrackW = 4, mixerZeroMarkW = 18, mixerThumbW = 22, mixerThumbH = 12, mixerThumbRadius = 3;
+    constexpr int limDotSize = 5, limDotGap = 3;
+    constexpr int mixerInputMeterW = 5, mixerInputPickerH = 20, mixerInputPickerPadX = 6, mixerInputLabelH = 14, mixerInputPeakH = 12;
+    constexpr int mixerInputCols = 68;   // its grid: 18 | 4 | 5 | 41
+    constexpr int paneTabW = 44, paneTabH = 12, paneTabRise = 7, paneTabRadius = 6, paneTabChevron = 10;
+    constexpr int healthStatusPad = 6, healthStatusRadius = 5, healthDot = 6, healthDotGap = 6, healthIcon = 12, healthIconGap = 5;
+    constexpr int healthLineGap = 3, healthMixerBottom = 4;
+    constexpr int healthDialogW = 460, healthDialogH = 250, healthDialogPad = 16, healthDialogLineH = 20;   // System health, in full
     constexpr int outputStripFullW = 170, outputStripH = 71, outputStripRadius = 5, outputStripPadX = 9, outputStripNameTop = 7;
     constexpr int outputStripBarsTop = 31, outputStripValueTop = 51, outputStripGap = 6, outputStripMuteTop = 26;
     constexpr int outputsPaneTop = 30, outputsHeaderTop = 10, outputsSegmentW = 89, outputsSegmentCompactW = 57, outputsSegmentH = 18;
@@ -751,6 +788,15 @@ namespace type
     constexpr Style muteLetter      { 10.0f, Weight::extraBold };           // "M"
     constexpr Style outputName      { 11.5f, Weight::semibold };            // an output's name on its strip
     constexpr Style outputChannels  { 9.5f, Weight::regular, 0.0f, false, true };             // "1/2"
+    constexpr Style mixerName       { 11.0f, Weight::semibold };            // an output's name over its mixer strip (two lines)
+    constexpr Style limLabel        {  8.5f, Weight::bold, 0.06f, true };   // LIM
+    constexpr Style peakValue       { 10.0f, Weight::regular, 0.0f, false, true };   // "−8.2" over the fader
+    constexpr Style dbScaleLabel    {  9.0f, Weight::regular, 0.0f, false, true };   // 0 −6 −12 −24 −48 beside a mixer meter
+    constexpr Style healthStatus    { 11.0f, Weight::regular, 0.0f, false, true };   // "Healthy" / "CPU 9% · 5.3 ms"
+    constexpr Style healthStatusStrong { 11.0f, Weight::semibold, 0.0f, false, true }; // "1 thing to check"
+    constexpr Style pickerName      { 12.0f, Weight::semibold };            // the input picker: "Guitar"
+    constexpr Style pickerCaption   { 12.0f, Weight::regular };             // ... " · 1 · Input 1 (Mic/Inst)"
+    constexpr Style pickerCompact   { 11.0f, Weight::semibold };            // the mixer view's "Guitar"
     constexpr Style outputValue     { 10.5f, Weight::regular, 0.0f, false, true };             // "-6.0 dB", "muted"
     constexpr Style inputSummaryName{ 13.0f, Weight::semibold };            // the playing patch's input
     constexpr Style stageMute       { 15.0f, Weight::extraBold, 0.04f };    // Mute / MUTED on the Outputs widget

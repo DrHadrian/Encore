@@ -44,9 +44,9 @@ public:
     /** Whether routing was ever saved on this computer (false: before milestone 11). */
     bool hasRouting() const;
 
-    /** The bottom row's output strips: full width (scrolling) or compact. */
-    bool getOutputStripsFull() const;
-    void setOutputStripsFull (bool full);
+    /** The bottom row: the mixer view open (vertical meters and faders) or collapsed. */
+    bool getMixerViewOpen() const;
+    void setMixerViewOpen (bool open);
 
     float getMasterGainDecibels() const;
     void setMasterGainDecibels (float dB);
