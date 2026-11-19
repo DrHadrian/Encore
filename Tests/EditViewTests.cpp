@@ -33,6 +33,23 @@ public:
             juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
     }
 
+    /** Pumps until `done` (or `maxMs` passed): for what the app does in the background
+        (loading a show, building a patch), which a slow Debug runner can take seconds for. */
+    static bool pumpUntil (const std::function<bool()>& done, int maxMs = 15000)
+    {
+        const auto end = juce::Time::getMillisecondCounter() + (juce::uint32) maxMs;
+
+        while (! done())
+        {
+            if (juce::Time::getMillisecondCounter() >= end)
+                return false;
+
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+        }
+
+        return true;
+    }
+
     void runTest() override
     {
         ScopedEncoreLook look;
@@ -85,17 +102,15 @@ public:
             {
                 MainComponent main (settings, std::make_unique<BoardDeviceType>());
                 main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
-                pump (1500);
+                // The amp block (the board's patch starts with it), once the show has loaded and the patch is built.
+                expect (main.getChainStrip() != nullptr);
+                expect (pumpUntil ([&main]
+                        {
+                            if (auto* strip = main.getChainStrip())
+                                strip->selectBlock (0);
 
-                // The amp block (the board's patch starts with it).
-                auto* strip = main.getChainStrip();
-                expect (strip != nullptr);
-
-                if (strip != nullptr)
-                    strip->selectBlock (0);
-
-                pump (100);
-                expect (main.getBlockPanel() != nullptr && main.getBlockPanel()->getAmpFace() != nullptr, "the amp block shows a face");
+                            return main.getBlockPanel() != nullptr && main.getBlockPanel()->getAmpFace() != nullptr;
+                        }), "the amp block shows a face");
 
                 expect (main.getMixerTab().isVisible(), "the mixer tab shows with the bottom row");
                 main.keyPressed (juce::KeyPress (juce::KeyPress::F8Key));
@@ -108,9 +123,11 @@ public:
                     renderSnapshot (main, "v32-amp-builder-edit");
                     builder->applyTemplate ("jazz");
                     expect (builder->save());
-                    pump (50);
-                    expect (main.getBlockPanel() != nullptr && main.getBlockPanel()->getAmpFace() != nullptr
-                            && main.getBlockPanel()->getAmpFace()->getAmp().look.body == "thin", "the block shows the saved amp");
+                    expect (pumpUntil ([&main]
+                            {
+                                return main.getBlockPanel() != nullptr && main.getBlockPanel()->getAmpFace() != nullptr
+                                    && main.getBlockPanel()->getAmpFace()->getAmp().look.body == "thin";
+                            }), "the block shows the saved amp");
                 }
 
                 main.keyPressed (juce::KeyPress (juce::KeyPress::F8Key));

@@ -4,6 +4,7 @@
 #include "ui/kit/AmpFaceView.h"
 
 #include "ui/theme/EncoreFonts.h"
+#include "ui/theme/EncoreAmpTheme.h"
 #include "ui/theme/EncoreTheme.h"
 #include "ui/theme/Paint.h"
 

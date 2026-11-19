@@ -630,3 +630,32 @@ widget shows the input the patch plays, amber when it isn't the patch's own.
   inspector's lines do (font metrics differ a little between renderers).
 - The global button padding stayed as it was: a wider one improved the
   routing boards but made the existing Edit boards worse.
+
+## 0057 — One build of JUCE and of Encore's code for the app and the tests; the amp art as one zip
+
+The first CI run of PR #15 took 14 minutes: its caches were cold (a new pull
+request can only reuse caches from itself, its base branch and main), and the
+build had grown:
+- **The amp art** was 236 compile units (JUCE makes one source file per
+  resource). It now goes in as **one zip**, built by CMake from the same files
+  during every build (rebuilt when a layer is added or changed, never by hand,
+  not stored in the repo), and `kit::ampArt` reads it with `juce::ZipFile`. The
+  app stays one .exe.
+- **JUCE and Encore's own code are compiled once** and linked by both programs
+  (OBJECT libraries `EncoreJuce`, `EncoreEngine`, `EncoreUi`, as `nam_core`
+  already was: every object is linked, so no static initialiser is dropped).
+  Before, the app and the tests each compiled them, with different JUCE
+  settings. Now there is **one JUCE configuration**: the tests run exactly what
+  ships. It includes `JUCE_MODAL_LOOPS_PERMITTED=1`, which the tests need to
+  pump the message loop; it only makes JUCE's modal-loop functions available,
+  and Encore still never runs a modal loop. `JUCE_UNIT_TESTS` (JUCE's own tests)
+  is gone; Encore's test count is unchanged. With `ENCORE_LTO` the shared code
+  is compiled for LTO too.
+- **The amp tokens** (`theme::amp`) moved to `EncoreAmpTheme.h`, included only
+  by the files that draw amps: tuning an amp no longer rebuilds the whole UI.
+
+A cold Release build on CI compiled 673 files; it now compiles roughly half.
+Warm runs reuse the cache as before. Still open: new pull requests in a stack
+start cold until main has the stack's code (merging the stack fixes that for
+every later pull request).
+

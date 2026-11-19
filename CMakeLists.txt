@@ -95,13 +95,59 @@ if(MSVC)
 endif()
 
 # ------------------------------------------------------------------------------
-# Engine sources, shared by the app and the tests.
-# An INTERFACE library: each target compiles them with its own JUCE modules,
-# which avoids linking JUCE twice.
+# JUCE, compiled ONCE for the app and the tests, in ONE configuration: the tests
+# run the same JUCE (and, below, the same Encore code) as the app players get,
+# and CI compiles it once instead of once per program. OBJECT libraries (like
+# nam_core): every object is linked, so no static initialiser can be dropped.
+# Each program links EncoreJuce, EncoreEngine and EncoreUi directly (objects
+# don't pass through other libraries).
 # ------------------------------------------------------------------------------
-add_library(EncoreEngine INTERFACE)
+add_library(EncoreJuce OBJECT)
+target_link_libraries(EncoreJuce
+    PRIVATE
+        juce::juce_audio_utils
+        juce::juce_audio_devices
+        juce::juce_audio_formats
+        juce::juce_dsp
+        juce::juce_audio_basics
+        juce::juce_gui_basics
+        juce::juce_events
+        juce::juce_core
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
+target_compile_definitions(EncoreJuce
+    PUBLIC
+        JUCE_STANDALONE_APPLICATION=1
+        # Audio drivers. ASIO is the one we play through; WASAPI stays as a fallback
+        # for laptops without an ASIO driver. JUCE ships the ASIO header itself.
+        JUCE_ASIO=1
+        JUCE_WASAPI=1
+        JUCE_USE_WINRT_MIDI=1          # Bluetooth MIDI pedals (Windows 10+)
+        JUCE_DIRECTSOUND=0
+        # Linux only builds the tests (no audio hardware or its headers needed).
+        $<$<PLATFORM_ID:Linux>:JUCE_ALSA=0>
+        $<$<PLATFORM_ID:Linux>:JUCE_JACK=0>
+        JUCE_PLUGINHOST_VST3=1         # VST3 plugins as blocks (milestone 10)
+        # Features we don't use: keep the binary lean and avoid network code.
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        # The tests pump the message loop (runDispatchLoopUntil), which needs this.
+        # It only makes JUCE's modal-loop functions available: Encore never runs a
+        # modal loop (nothing in the show path is blocking or modal).
+        JUCE_MODAL_LOOPS_PERMITTED=1
+        JUCE_APPLICATION_NAME_STRING="Encore"
+        JUCE_APPLICATION_VERSION_STRING="${PROJECT_VERSION}"
+    INTERFACE
+        $<TARGET_PROPERTY:EncoreJuce,COMPILE_DEFINITIONS>)
+target_include_directories(EncoreJuce INTERFACE $<TARGET_PROPERTY:EncoreJuce,INCLUDE_DIRECTORIES>)
 
-target_sources(EncoreEngine INTERFACE
+# ------------------------------------------------------------------------------
+# Engine sources (compiled once; the app and the tests link the same objects).
+# ------------------------------------------------------------------------------
+add_library(EncoreEngine OBJECT)
+
+target_sources(EncoreEngine PRIVATE
     Source/engine/AudioEngine.cpp
     Source/engine/AudioEngine.h
     Source/engine/PeakMeter.h
@@ -181,7 +227,8 @@ target_sources(EncoreEngine INTERFACE
     Source/session/ShowSession.cpp
     Source/session/ShowSession.h)
 
-target_include_directories(EncoreEngine INTERFACE Source)
+target_include_directories(EncoreEngine PUBLIC Source)
+target_link_libraries(EncoreEngine PUBLIC EncoreJuce nam_core)   # (their usage; the programs link their objects)
 
 # ------------------------------------------------------------------------------
 # The app
@@ -234,23 +281,39 @@ juce_add_binary_data(EncoreUiAssets
 # (body, panel, grille, corners; rendered by docs/design/textures/render_amp_parts.py)
 # and the knob, switch and light sprites (TEXTURES.md). JUCE decodes WebP itself
 # (JUCE_USE_WEBP); kit::ampArt loads them lazily on the message thread.
-file(GLOB ENCORE_AMP_PARTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui/amp_parts/*.webp")
-file(GLOB ENCORE_AMP_SPRITES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui/amp_sprites/*.png")
+#
+# They go in as ONE zip (built here from the same files; kit::ampArt reads it
+# with juce::ZipFile): JUCE makes one source file per resource, and 236 small
+# compiles cost minutes on CI where one large one costs seconds. The app stays
+# one .exe. The zip is rebuilt when a layer changes.
+file(GLOB ENCORE_AMP_PARTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui" CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui/amp_parts/*.webp"
+     "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui/amp_sprites/*.png")
 list(SORT ENCORE_AMP_PARTS)
-list(SORT ENCORE_AMP_SPRITES)
+list(TRANSFORM ENCORE_AMP_PARTS PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui/" OUTPUT_VARIABLE ENCORE_AMP_PART_FILES)
+set(ENCORE_AMP_ZIP "${CMAKE_CURRENT_BINARY_DIR}/amp-art/amp-art.zip")
+add_custom_command(
+    OUTPUT "${ENCORE_AMP_ZIP}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/amp-art"
+    COMMAND "${CMAKE_COMMAND}" -E tar cf "${ENCORE_AMP_ZIP}" --format=zip --mtime=2026-01-01 ${ENCORE_AMP_PARTS}
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui"
+    DEPENDS ${ENCORE_AMP_PART_FILES}
+    COMMENT "Packing the amp art (${CMAKE_CURRENT_BINARY_DIR}/amp-art/amp-art.zip)"
+    VERBATIM)
 juce_add_binary_data(EncoreAmpArt
     HEADER_NAME EncoreAmpArt.h
     NAMESPACE EncoreAmpArt
-    SOURCES ${ENCORE_AMP_PARTS} ${ENCORE_AMP_SPRITES} Resources/amps/amp-templates.json)
+    SOURCES "${ENCORE_AMP_ZIP}" Resources/amps/amp-templates.json)
 
 # The UI's look (theme) and kit: shared by the app and the UI snapshot tests.
-add_library(EncoreUi INTERFACE)
-target_sources(EncoreUi INTERFACE
+add_library(EncoreUi OBJECT)
+target_sources(EncoreUi PRIVATE
     Source/ui/theme/EncoreFonts.cpp
     Source/ui/theme/EncoreFonts.h
     Source/ui/theme/EncoreLookAndFeel.cpp
     Source/ui/theme/EncoreLookAndFeel.h
     Source/ui/theme/EncoreTheme.h
+    Source/ui/theme/EncoreAmpTheme.h
     Source/ui/theme/Icons.cpp
     Source/ui/theme/Icons.h
     Source/ui/theme/Paint.cpp
@@ -334,39 +397,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/Toolbar.h
     Source/ui/kit/UtilityTile.cpp
     Source/ui/kit/UtilityTile.h)
-target_link_libraries(EncoreUi INTERFACE EncoreUiAssets EncoreAmpArt)
-
-# ------------------------------------------------------------------------------
-# Build speed (decision 0049). Parsing JUCE's headers is ~95 % of compiling a
-# typical Encore file: precompile them once per target. JUCE's own module
-# sources (each one big file, configured by macros) and generated files keep
-# compiling as before.
-# ------------------------------------------------------------------------------
-option(ENCORE_PCH "Precompile the JUCE headers for Encore's own sources" ON)
-
-function(encore_precompile_headers target)
-    if(NOT ENCORE_PCH)
-        return()
-    endif()
-
-    # C++ only (the target also compiles a few C files).
-    target_precompile_headers(${target} PRIVATE
-        "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/Source/EncorePrecompiled.h>")
-
-    file(GLOB_RECURSE juce_module_sources CONFIGURE_DEPENDS
-        "${juce_SOURCE_DIR}/modules/*.cpp" "${juce_SOURCE_DIR}/modules/*.mm" "${juce_SOURCE_DIR}/modules/*.c")
-    set_source_files_properties(${juce_module_sources} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
-endfunction()
-
-juce_add_gui_app(Encore
-    PRODUCT_NAME "Encore"
-    COMPANY_NAME "Encore"
-    VERSION ${PROJECT_VERSION}
-    ICON_BIG Resources/ui/logo/encore-app-icon-256.png
-    ICON_SMALL Resources/ui/logo/encore-app-icon-256.png)
-
-target_sources(Encore PRIVATE
-    Source/Main.cpp
+# The screens: the app's windows and views, also tested off-screen (rendered into images).
+target_sources(EncoreUi PRIVATE
     Source/app/AppSettings.cpp
     Source/app/EventLog.cpp
     Source/app/EventLog.h
@@ -411,45 +443,60 @@ target_sources(Encore PRIVATE
     Source/ui/PluginWindow.h
     Source/ui/SetList.cpp
     Source/ui/SetList.h)
+target_link_libraries(EncoreUi PUBLIC EncoreEngine EncoreUiAssets EncoreAmpArt)
 
-target_compile_definitions(Encore PRIVATE
-    # Audio drivers. ASIO is the one we play through; WASAPI stays as a fallback
-    # for laptops without an ASIO driver. JUCE ships the ASIO header itself.
-    JUCE_ASIO=1
-    JUCE_WASAPI=1
-    JUCE_USE_WINRT_MIDI=1          # Bluetooth MIDI pedals (Windows 10+)
-    JUCE_PLUGINHOST_VST3=1         # VST3 plugins as blocks (milestone 10)
-    JUCE_DIRECTSOUND=0
-    # Features we don't use: keep the binary lean and avoid network code.
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:Encore,JUCE_PRODUCT_NAME>"
-    JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:Encore,JUCE_VERSION>")
+# ------------------------------------------------------------------------------
+# Build speed (decision 0049). Parsing JUCE's headers is ~95 % of compiling a
+# typical Encore file: precompile them once per target. JUCE's own module
+# sources (each one big file, configured by macros) and generated files keep
+# compiling as before.
+# ------------------------------------------------------------------------------
+option(ENCORE_PCH "Precompile the JUCE headers for Encore's own sources" ON)
+
+function(encore_precompile_headers target)
+    if(NOT ENCORE_PCH)
+        return()
+    endif()
+
+    # C++ only (the target also compiles a few C files).
+    target_precompile_headers(${target} PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/Source/EncorePrecompiled.h>")
+
+    file(GLOB_RECURSE juce_module_sources CONFIGURE_DEPENDS
+        "${juce_SOURCE_DIR}/modules/*.cpp" "${juce_SOURCE_DIR}/modules/*.mm" "${juce_SOURCE_DIR}/modules/*.c")
+    set_source_files_properties(${juce_module_sources} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+endfunction()
+
+juce_add_gui_app(Encore
+    PRODUCT_NAME "Encore"
+    COMPANY_NAME "Encore"
+    VERSION ${PROJECT_VERSION}
+    ICON_BIG Resources/ui/logo/encore-app-icon-256.png
+    ICON_SMALL Resources/ui/logo/encore-app-icon-256.png)
+
+target_sources(Encore PRIVATE
+    Source/Main.cpp)
 
 target_link_libraries(Encore
     PRIVATE
+        EncoreJuce
         EncoreEngine
         EncoreUi
-        nam_core
-        juce::juce_audio_utils
-        juce::juce_audio_devices
-        juce::juce_audio_formats
-        juce::juce_dsp
-        juce::juce_audio_basics
-        juce::juce_gui_basics
-    PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_warning_flags)
+        nam_core)
 
 # Link-time optimisation for the app players use; CI's quick checks skip it
 # (it makes linking the slowest step and isn't needed to test behaviour).
 option(ENCORE_LTO "Link-time optimisation for Encore (Release)" ON)
 
 if(ENCORE_LTO)
-    target_link_libraries(Encore PUBLIC juce::juce_recommended_lto_flags)
+    # The shared code is compiled for LTO too (the tests then link with it as well).
+    foreach(target Encore EncoreJuce EncoreEngine EncoreUi)
+        target_link_libraries(${target} PUBLIC juce::juce_recommended_lto_flags)
+    endforeach()
 endif()
 
-encore_precompile_headers(Encore)
+encore_precompile_headers(EncoreEngine)
+encore_precompile_headers(EncoreUi)
 
 # ------------------------------------------------------------------------------
 # Tests: a console app that runs every engine unit test.
@@ -487,7 +534,10 @@ if(ENCORE_BUILD_TESTS)
             juce::juce_recommended_warning_flags)
 
     juce_add_console_app(EncoreTests PRODUCT_NAME "EncoreTests")
-    add_dependencies(EncoreTests EncoreTestPlugin_VST3)
+    # The tests load the test plugin when they run, so only linking waits for it:
+    # add_dependencies() would hold back every test file until the plugin is
+    # built, leaving the tests' compiles as a serial tail at the end of CI.
+    set_property(TARGET EncoreTests APPEND PROPERTY LINK_DEPENDS "$<TARGET_FILE:EncoreTestPlugin_VST3>")
 
     target_sources(EncoreTests PRIVATE
         Tests/TestMain.cpp
@@ -512,29 +562,6 @@ if(ENCORE_BUILD_TESTS)
         Tests/ShowcaseTests.cpp
         Tests/StageBoardTests.cpp
         Tests/AmpBuilderTests.cpp
-        # Screens tested off-screen (rendered into images, no window).
-        Source/app/AppSettings.cpp
-        Source/app/EventLog.cpp
-        Source/app/MainComponent.cpp
-        Source/ui/BlockPanel.cpp
-        Source/ui/AmpBuilderView.cpp
-        Source/ui/JackStage.cpp
-        Source/ui/RoutingView.cpp
-        Source/ui/BottomRow.cpp
-        Source/ui/ChainStrip.cpp
-        Source/ui/Inspector.cpp
-        Source/ui/MidiSettings.cpp
-        Source/ui/AudioSettingsView.cpp
-        Source/ui/SettingsWindow.cpp
-        Source/ui/PatchList.cpp
-        Source/ui/PluginSettings.cpp
-        Source/ui/PluginWindow.cpp
-        Source/ui/PreShowCheckView.cpp
-        Source/ui/SetList.cpp
-        Source/ui/CueDialogs.cpp
-        Source/ui/CueListEditor.cpp
-        Source/ui/StageView.cpp
-        Source/ui/TunerDisplay.cpp
         Tests/PatchBuilderTests.cpp
         Tests/PatchPlayerTests.cpp
         Tests/PluginTests.cpp
@@ -548,14 +575,8 @@ if(ENCORE_BUILD_TESTS)
         Tests/SplitPathTests.cpp
         Tests/TestSignals.h)
 
+    # JUCE's settings are EncoreJuce's (the app's): the tests run what ships.
     target_compile_definitions(EncoreTests PRIVATE
-        JUCE_WEB_BROWSER=0
-        JUCE_USE_CURL=0
-        JUCE_UNIT_TESTS=1
-        JUCE_PLUGINHOST_VST3=1
-        JUCE_MODAL_LOOPS_PERMITTED=1     # tests pump the message loop themselves
-        JUCE_ALSA=0                      # no audio hardware needed (or headers, on Linux CI)
-        JUCE_JACK=0
         # Real captures shipped with NeuralAmpModelerCore, used as test fixtures.
         ENCORE_NAM_EXAMPLE_MODELS="${nam_SOURCE_DIR}/example_models"
         # The test plugin's .vst3 bundle.
@@ -563,20 +584,10 @@ if(ENCORE_BUILD_TESTS)
 
     target_link_libraries(EncoreTests
         PRIVATE
+            EncoreJuce
             EncoreEngine
             EncoreUi
-            nam_core
-            juce::juce_audio_basics
-            juce::juce_audio_utils
-            juce::juce_audio_devices
-            juce::juce_audio_formats
-            juce::juce_dsp
-            juce::juce_events
-            juce::juce_gui_basics
-            juce::juce_core
-        PUBLIC
-            juce::juce_recommended_config_flags
-            juce::juce_recommended_warning_flags)
+            nam_core)
 
     encore_precompile_headers(EncoreTests)
 

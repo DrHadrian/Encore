@@ -5,7 +5,7 @@ description: "Use for any UI work in the Encore repo (C++/JUCE): screens, settin
 
 # Encore UI (design v3.2, native JUCE)
 
-Encore's UI follows one design system. The full kit is in `docs/design/` of the repo (start with `docs/design/README.md`), also in the Claude project "Encore" under `design/kit/`. The current design is **v3.2** (16–18 Nov 2026): v3 + the v3.1 audit fixes + `design/kit/V3.2-CHANGES.md`, which wins over the other kit docs where they differ until it is merged into them. This skill is the short version; the docs win if they differ.
+Encore's UI follows one design system. The full kit is in `docs/design/` of the repo (start with `docs/design/README.md`), also in the Claude project "Encore" under `design/kit/`. The current design is **v3.2** (16–18 Nov 2026): v3 + the v3.1 audit fixes + `design/kit/V3.2-CHANGES.md`, which wins over the other kit docs where they differ until it is merged into them. This skill is the short version; the docs win if they differ. The master copy is `.claude/skills/encore-ui/SKILL.md` in the repo.
 
 ## Before you change UI
 1. Read `docs/design/DESIGN-SYSTEM.md` (look), `docs/design/SCREENS.md` (screens, strings, parity map) and `docs/design/JUCE-ARCHITECTURE.md` (structure, performance, robustness).
@@ -17,7 +17,7 @@ Encore's UI follows one design system. The full kit is in `docs/design/` of the 
 
 ## Rules
 - **Native JUCE only**: `Graphics`, `Component`, `LookAndFeel`. Never a web view, HTML/CSS/JS, React or a new UI library. The `.dc.html` boards are drawings to read values from, never code to port.
-- **Tokens only**: colours, sizes, fonts come from `Source/ui/theme/EncoreTheme.h` (+ `EncoreFonts`). No literals in screens. New value → new named token.
+- **Tokens only**: colours, sizes, fonts come from `Source/ui/theme/EncoreTheme.h` (+ `EncoreFonts`); amp faces and the amp builder from `Source/ui/theme/EncoreAmpTheme.h` (`theme::amp`). No literals in screens. New value → new named token.
 - **Kit only**: compose `Source/ui/kit` components (Pane, Toolbar, Lcd, SegmentedControl, IconButton, NoticeBar, DialogFrame, MeterBar, StatusBadge, KeyCap, GearPlaceholder/GearView, KnobView, Group, RowList) and `EncoreLookAndFeel`. Missing piece → add a generic kit component. Milestones 10/11 add: ProgressBar, UtilityTile (JackTile, PluginTile, Split/Merge), FaultCard, ParameterList, Fader (vertical/horizontal, send law), MuteButton, Chip, OutputStrip, SendMatrix, SmallKnob, EqCurve, stereo MeterBar, OutputsWidget. v3.2 adds: StatusBar (replaces the toolbar LCD; `Lcd` stays for the tuner), MixerStrip, InputStrip, PaneTab, HealthStatus, DropBox, AmpFace, AmpFaceView.
 - **Inter, bundled**; uppercase labels tracked; tabular numbers, slashed zero in readouts; icons as cached paths; the logo is the wordmark SVG, never typed.
 - **Behaviour is sacred**: never drop or change an action, key, menu item, tooltip or message. Words from the code; running-order words from `ShowSession::getWords()`. Routing words: Output, Send, Path A / Path B, Routing (F7, in Edit); a name missing on this computer → amber chip NOT HERE; pre-show fix button "Routing…". Settings: one "Settings…" button opens Audio | MIDI | Plugins on the last-used tab; every old shortcut to a tab still works.
