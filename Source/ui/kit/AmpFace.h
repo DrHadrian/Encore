@@ -62,6 +62,9 @@ public:
         (0..1), a switch up/out when value >= 0.5, a light lit or not. */
     static void paintBody (juce::Graphics&, const AmpPreset&, const AmpPart&, float value, bool lit);
 
+    /** A knob style's picture alone (no shadow, no pointer; a chickenhead at its middle frame), in r: the builder's Knob choice. */
+    static void paintKnobPicture (juce::Graphics&, const juce::String& style, juce::Rectangle<float> r);
+
     /** Where a part's label, top text, ticks and numbers reach (face pixels), for hit areas and selection. */
     static juce::Rectangle<int> partBounds (const AmpPart&);
 

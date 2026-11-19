@@ -97,8 +97,10 @@ public:
                 pump (100);
                 expect (main.getBlockPanel() != nullptr && main.getBlockPanel()->getAmpFace() != nullptr, "the amp block shows a face");
 
+                expect (main.getMixerTab().isVisible(), "the mixer tab shows with the bottom row");
                 main.keyPressed (juce::KeyPress (juce::KeyPress::F8Key));
                 expect (main.isShowingAmpBuilder());
+                expect (! main.getMixerTab().isVisible(), "the builder covers the bottom row, its tab too");
 
                 if (auto* builder = main.getAmpBuilder())
                 {
@@ -113,6 +115,14 @@ public:
 
                 main.keyPressed (juce::KeyPress (juce::KeyPress::F8Key));
                 expect (! main.isShowingAmpBuilder(), "F8 again: back to the patches");
+                expect (main.getMixerTab().isVisible());
+
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F5Key));
+                expect (main.isShowingStage());
+                expect (! main.getMixerTab().isVisible(), "no mixer tab on Stage");
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F5Key));
+                expect (! main.isShowingStage(), "F5 again: back to Edit");
+                expect (main.getMixerTab().isVisible());
             }
         }
 

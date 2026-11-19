@@ -678,44 +678,93 @@ private:
     };
 
     /** A note in a box (NOT SET amber, Fixed grey) or plain (the hints). */
+    /** A note: plain (11 px, line height 1.5, #9A9AA1) or filled (padding 8 10, radius 6,
+        11.5 px, line height 1.45), as the board's notes. `marginTop` px stay empty above it. */
     struct Note final : public juce::Component
     {
-        Note (juce::String t, juce::uint32 f, juce::uint32 b, juce::uint32 i) : text (std::move (t)), fill (f), border (b), ink (i) {}
+        Note (juce::String t, juce::uint32 f, juce::uint32 b, juce::uint32 i, int margin = 0)
+            : text (std::move (t)), fill (f), border (b), ink (i), marginTop (margin) {}
 
         int heightFor (int width) const
         {
-            juce::AttributedString s;
-            s.append (text, fontOfSize (type::Weight::regular, 11.5f), paint::c (ink));
-            juce::TextLayout l;
-            l.createLayout (s, (float) juce::jmax (10, width - (fill != 0 ? 20 : 0)));
-            return juce::roundToInt (l.getHeight() * 1.1f) + (fill != 0 ? 16 : 2);
+            const auto layout = layoutFor ((float) width - (fill != 0 ? 2.0f * (float) amp::notePadX : 0.0f));
+            return marginTop + juce::roundToInt ((float) layout.getNumLines() * lineHeight()) + (fill != 0 ? 2 * amp::notePadY : 0);
         }
 
         void paint (juce::Graphics& g) override
         {
-            auto r = getLocalBounds().toFloat();
+            auto r = getLocalBounds().withTrimmedTop (marginTop).toFloat();
 
             if (fill != 0)
             {
                 g.setColour (paint::c (fill));
-                g.fillRoundedRectangle (r, 6.0f);
+                g.fillRoundedRectangle (r, (float) amp::noteRadius);
 
                 if (border != 0)
                 {
                     g.setColour (paint::c (border));
-                    g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
+                    g.drawRoundedRectangle (r.reduced (0.5f), (float) amp::noteRadius, 1.0f);
                 }
 
-                r = r.reduced (10.0f, 8.0f);
+                r = r.reduced ((float) amp::notePadX, (float) amp::notePadY);
             }
 
-            g.setColour (paint::c (ink));
-            g.setFont (fontOfSize (type::Weight::regular, fill != 0 ? 11.5f : 11.0f));
-            g.drawFittedText (text, r.toNearestInt(), juce::Justification::topLeft, 8, 1.0f);
+            // CSS puts each line's text in the middle of its line box.
+            const auto font = noteFont();
+            const auto halfLeading = (lineHeight() - font.getHeight()) * 0.5f;
+            layoutFor (r.getWidth()).draw (g, r.withTrimmedTop (halfLeading));
         }
 
         juce::String text;
         juce::uint32 fill, border, ink;
+        int marginTop;
+
+    private:
+        juce::Font noteFont() const { return fontOfSize (type::Weight::regular, fill != 0 ? amp::filledNoteSize : amp::noteSize); }
+        float lineHeight() const    { return fill != 0 ? amp::filledNoteSize * amp::filledNoteLineH : amp::noteSize * amp::noteLineH; }
+
+        juce::TextLayout layoutFor (float width) const
+        {
+            const auto font = noteFont();
+            juce::AttributedString s;
+            s.append (text, font, paint::c (ink));
+            s.setJustification (juce::Justification::topLeft);
+            s.setLineSpacing (lineHeight() - font.getHeight());
+            juce::TextLayout l;
+            l.createLayout (s, juce::jmax (10.0f, width));
+            return l;
+        }
+    };
+
+    /** One line of small print in the value column (the capture's sample rate and cost). */
+    struct InfoLine final : public juce::Component
+    {
+        explicit InfoLine (juce::String t) : text (std::move (t)) {}
+        void paint (juce::Graphics& g) override
+        {
+            g.setColour (paint::c (colour::textMuted));
+            g.setFont (fontOfSize (type::Weight::regular, amp::noteSize));
+            g.drawText (text, getLocalBounds(), juce::Justification::centredLeft, true);
+        }
+        juce::String text;
+    };
+
+    /** The line and title over the Sound rows: the line runs the inspector's full width
+        (board: margin 10 -12 6), the title 10/700 caps #9A9AA1 with 2 px under it. */
+    struct SectionTitle final : public juce::Component
+    {
+        explicit SectionTitle (juce::String t) : title (std::move (t)) {}
+        static int height() { return amp::sectionLineTop + 1 + amp::sectionLineBottom + amp::rowGapY + amp::sectionTitleH + amp::sectionTitlePadBottom; }
+        void paint (juce::Graphics& g) override
+        {
+            g.setColour (paint::c (colour::paneHeaderLine));
+            g.fillRect (0, amp::sectionLineTop, getWidth(), 1);
+            const auto top = (float) (amp::sectionLineTop + 1 + amp::sectionLineBottom + amp::rowGapY);
+            paint::text (g, paint::caps (type::groupTitle, title),
+                         juce::Rectangle<float> ((float) amp::inspectorPadX, top, (float) (getWidth() - 2 * amp::inspectorPadX), (float) amp::sectionTitleH),
+                         type::groupTitle, colour::textMuted);
+        }
+        juce::String title;
     };
 
     /** Buttons in a grid, one of them chosen (radio). */
@@ -743,6 +792,8 @@ private:
             rowH = height;
         }
 
+        void setButtonHeight (int height) { rowH = height; }
+
         int heightFor() const { return ((buttons.size() + cols - 1) / cols) * (rowH + 4) - 4; }
 
         void resized() override
@@ -756,7 +807,8 @@ private:
         void paintOverChildren (juce::Graphics& g) override
         {
             for (int i = 0; i < buttons.size() && i < (int) icons.size(); ++i)
-                g.drawImage (icons[(size_t) i], buttons[i]->getBounds().toFloat().withSizeKeepingCentre (24.0f, 24.0f), juce::RectanglePlacement::centred);
+                g.drawImage (icons[(size_t) i], buttons[i]->getBounds().toFloat().withSizeKeepingCentre ((float) amp::knobPictureSize, (float) amp::knobPictureSize),
+                             juce::RectanglePlacement::centred);
         }
 
         int cols, rowH = 22;
@@ -764,23 +816,24 @@ private:
         std::vector<juce::Image> icons;
     };
 
-    /** The five knob styles, drawn once (24 px at 2x). */
+    /** The five knob styles in the board's order, each its picture only (no shadow, no pointer), 24 px at 2x. */
+    static const juce::StringArray& knobStyles()
+    {
+        static const juce::StringArray styles { "chicken", "black", "plain", "cream", "silver" };
+        return styles;
+    }
+
     static const std::vector<juce::Image>& knobIcons()
     {
         static const std::vector<juce::Image> icons = []
         {
             std::vector<juce::Image> list;
 
-            for (const auto* style : { "chicken", "black", "cream", "silver", "plain" })
+            for (const auto& style : knobStyles())
             {
-                AmpPart k;
-                k.type = "knob";
-                k.style = style;
-                k.size = "S";
-                juce::Image icon (juce::Image::ARGB, 48, 48, true);
+                juce::Image icon (juce::Image::ARGB, 2 * amp::knobPictureSize, 2 * amp::knobPictureSize, true);
                 juce::Graphics g (icon);
-                g.addTransform (juce::AffineTransform::scale (48.0f / 26.0f));
-                kit::AmpFace::paintBody (g, {}, k, 0.5f, false);
+                kit::AmpFace::paintKnobPicture (g, style, icon.getBounds().toFloat());
                 list.push_back (icon);
             }
 
@@ -790,76 +843,151 @@ private:
         return icons;
     }
 
-    /** Swatches (22 px), the chosen one ringed; each its own tooltip. */
+    /** Swatches (board `.ab-sw`): 22 × 22, radius 5, a 1 px #0A0A0B border and a
+        white 6 % inner ring, wrapped with 6 px across and down. The chosen one
+        has a 2 px #E8E8EB ring 1 px outside (CSS outline, offset 1); keyboard
+        focus draws the same ring in the accent and wins. No hover look (the
+        board has none). Each its own tooltip; Tab focuses the group, arrows
+        move, Space or Enter picks. The component reaches amp::swatchMargin
+        past the swatches on every side, so the ring is never cut. */
     struct Swatches final : public juce::Component, public juce::TooltipClient
     {
         struct Item { juce::String name; std::function<void (juce::Graphics&, juce::Rectangle<float>)> draw; };
 
         Swatches (std::vector<Item> list, int chosen, std::function<void (int)> pick) : items (std::move (list)), selected (chosen), onPick (std::move (pick))
         {
-            setWantsKeyboardFocus (false);
+            setWantsKeyboardFocus (true);
+            setMouseClickGrabsKeyboardFocus (false);
+            focused = juce::jmax (0, selected);
         }
 
-        /** Wrapped into rows that fit the width. */
-        int perRow() const { return juce::jmax (1, (getWidth() - 2 + 6) / (amp::swatch + 6)); }
+        static constexpr int pitch = amp::swatch + amp::swatchGap;
 
+        static int perRowFor (int width) { return juce::jmax (1, (width + amp::swatchGap) / pitch); }
+
+        /** The row's height for a value column `width` wide (without the margin): one line is
+            rowMinH with the swatches centred, more lines are just the swatches. */
         int heightFor (int width) const
         {
-            const auto n = juce::jmax (1, (width - 2 + 6) / (amp::swatch + 6));
-            const auto rowsNeeded = ((int) items.size() + n - 1) / n;
-            return juce::jmax (amp::rowMinH, rowsNeeded * (amp::swatch + 6) - 6 + 2);
+            const auto lines = ((int) items.size() + perRowFor (width) - 1) / perRowFor (width);
+            return juce::jmax (amp::rowMinH, lines * pitch - amp::swatchGap);
         }
 
         juce::Rectangle<float> box (int i) const
         {
-            const auto n = perRow();
-            return { (float) ((i % n) * (amp::swatch + 6)) + 1.0f, (float) ((i / n) * (amp::swatch + 6)) + 1.0f, (float) amp::swatch, (float) amp::swatch };
+            const auto inner = getLocalBounds().reduced (amp::swatchMargin);
+            const auto n = perRowFor (inner.getWidth());
+            const auto top = inner.getY() + juce::jmax (0, (inner.getHeight() - heightOfLines (inner.getWidth())) / 2);
+            return { (float) (inner.getX() + (i % n) * pitch), (float) (top + (i / n) * pitch), (float) amp::swatch, (float) amp::swatch };
         }
 
         void paint (juce::Graphics& g) override
         {
+            const auto radius = (float) amp::swatchRadius;
+
             for (int i = 0; i < (int) items.size(); ++i)
             {
                 const auto r = box (i);
                 {
+                    // The fill inside the border (CSS padding box), then the inner ring, then the border.
                     const juce::Graphics::ScopedSaveState state (g);
                     juce::Path clip;
-                    clip.addRoundedRectangle (r, 5.0f);
+                    clip.addRoundedRectangle (r.reduced (1.0f), radius - 1.0f);
                     g.reduceClipRegion (clip);
-                    items[(size_t) i].draw (g, r);
+                    items[(size_t) i].draw (g, r.reduced (1.0f));
+                    g.setColour (paint::c (amp::swatchShine));
+                    g.drawRoundedRectangle (r.reduced (1.5f), radius - 1.5f, 1.0f);
                 }
                 g.setColour (paint::c (colour::paneBorder));
-                g.drawRoundedRectangle (r.reduced (0.5f), 5.0f, 1.0f);
+                g.drawRoundedRectangle (r.reduced (0.5f), radius - 0.5f, 1.0f);
 
-                if (i == selected)
+                const auto focusHere = keyboardFocus && i == focused;
+
+                if (i == selected || focusHere)
                 {
-                    g.setColour (paint::c (amp::swatchRing));
-                    g.drawRoundedRectangle (r.expanded (1.5f), 6.0f, 2.0f);
+                    g.setColour (paint::c (focusHere ? colour::accent : amp::swatchRing));
+                    g.drawRoundedRectangle (r.expanded ((float) amp::swatchRingOut), (float) amp::swatchRingRadius, (float) amp::swatchRingW);
                 }
             }
         }
 
         juce::String getTooltip() override
         {
-            const auto p = getMouseXYRelative();
-
-            for (int i = 0; i < (int) items.size(); ++i)
-                if (box (i).contains (p.toFloat()))
-                    return items[(size_t) i].name;
-
-            return {};
+            const auto i = indexAt (getMouseXYRelative().toFloat());
+            return i >= 0 ? items[(size_t) i].name : juce::String();
         }
 
         void mouseUp (const juce::MouseEvent& e) override
         {
-            for (int i = 0; i < (int) items.size(); ++i)
-                if (box (i).contains (e.position) && onPick != nullptr)
-                    onPick (i);
+            if (const auto i = indexAt (e.position); i >= 0)
+                pick (i);
+        }
+
+        bool keyPressed (const juce::KeyPress& key) override
+        {
+            const auto n = perRowFor (getWidth() - 2 * amp::swatchMargin), count = (int) items.size();
+            const auto code = key.getKeyCode();
+            auto to = focused;
+
+            if (code == juce::KeyPress::leftKey)       to = juce::jmax (0, focused - 1);
+            else if (code == juce::KeyPress::rightKey) to = juce::jmin (count - 1, focused + 1);
+            else if (code == juce::KeyPress::upKey)    to = focused - n >= 0 ? focused - n : focused;
+            else if (code == juce::KeyPress::downKey)  to = focused + n < count ? focused + n : focused;
+            else if (code == juce::KeyPress::spaceKey || code == juce::KeyPress::returnKey) { pick (focused); return true; }
+            else return false;
+
+            showFocus (to);
+            return true;
+        }
+
+        void focusGained (FocusChangeType cause) override
+        {
+            if (cause != focusChangedByMouseClick)
+                showFocus (juce::jmax (0, selected));
+        }
+
+        void focusLost (FocusChangeType) override
+        {
+            keyboardFocus = false;
+            repaint();
+        }
+
+        /** The keyboard-focus ring on swatch `i` (-1: none). Also the tests' way to show it off-screen. */
+        void showFocus (int i)
+        {
+            keyboardFocus = juce::isPositiveAndBelow (i, (int) items.size());
+            focused = keyboardFocus ? i : focused;
+            repaint();
         }
 
         std::vector<Item> items;
         int selected;
         std::function<void (int)> onPick;
+
+    private:
+        int focused = 0;
+        bool keyboardFocus = false;
+
+        int heightOfLines (int width) const
+        {
+            const auto lines = ((int) items.size() + perRowFor (width) - 1) / perRowFor (width);
+            return lines * pitch - amp::swatchGap;
+        }
+
+        int indexAt (juce::Point<float> p) const
+        {
+            for (int i = 0; i < (int) items.size(); ++i)
+                if (box (i).contains (p))
+                    return i;
+
+            return -1;
+        }
+
+        void pick (int i)
+        {
+            if (onPick != nullptr)
+                onPick (i);   // (the inspector is rebuilt with the new choice)
+        }
     };
 
     /** A field (text or a number): applied on Enter or when it loses focus. */
@@ -867,6 +995,7 @@ private:
     {
         auto f = std::make_unique<juce::TextEditor>();
         setVariant (*f, Variant::field);
+        f->setIndents (amp::fieldPadX, f->getTopIndent());   // board .fld: padding 0 8
         f->setText (value, false);
         f->setSelectAllWhenFocused (true);
         auto* raw = f.get();
@@ -889,10 +1018,12 @@ private:
         rows.push_back ({ label, std::move (editor), height });
     }
 
+    /** A grid of option buttons, `buttonH` tall with 4 px gaps (board: Template and Body 24, Drives 22). */
     void addChoice (const juce::String& label, const juce::StringArray& names, int chosen, int columns, std::function<void (int)> pick,
-                    const juce::StringArray& tips = {})
+                    const juce::StringArray& tips = {}, int buttonH = amp::choiceH)
     {
         auto c = std::make_unique<Choice> (names, chosen, columns, std::move (pick), tips);
+        c->setButtonHeight (buttonH);
         const auto h = juce::jmax (amp::rowMinH, c->heightFor());
         add (label, std::move (c), h);
     }
@@ -902,13 +1033,16 @@ private:
         auto seg = std::make_unique<kit::SegmentedControl>();
         seg->setSegments (names);
         seg->setSelected (chosen);
+
+        for (int i = 0; i < seg->getNumSegments(); ++i)
+            seg->getSegmentButton (i)->getProperties().set ("encoreCompact", true);   // board .ab-seg: 11 px, padding 0 4
         seg->onClick = std::move (pick);
         add (label, std::move (seg));
     }
 
-    void addNote (const juce::String& text, juce::uint32 fill, juce::uint32 border, juce::uint32 ink)
+    void addNote (const juce::String& text, juce::uint32 fill, juce::uint32 border, juce::uint32 ink, int marginTop = 0)
     {
-        auto n = std::make_unique<Note> (text, fill, border, ink);
+        auto n = std::make_unique<Note> (text, fill, border, ink, marginTop);
         add ({}, std::move (n), 0);   // its height from the width, in layoutRows()
     }
 
@@ -917,17 +1051,38 @@ private:
         add (label, std::make_unique<Swatches> (std::move (items), chosen, std::move (pick)));
     }
 
-    static Swatches::Item imageSwatch (const juce::String& name, const juce::String& file, float fx = 0.5f, float fy = 0.5f)
+    /** An image cropped like CSS `background-size: cover; background-position: center`. */
+    static Swatches::Item imageSwatch (const juce::String& name, const juce::String& file)
     {
-        return { name, [file, fx, fy] (juce::Graphics& g, juce::Rectangle<float> r)
+        return { name, [file] (juce::Graphics& g, juce::Rectangle<float> r)
         {
-            const auto image = kit::ampArt::get (file);
+            // At the screen's pixels, averaged (a straight downscale of the big layer aliases the weave).
+            const auto scale = juce::jmax (1.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+            if (const auto image = kit::ampArt::cover (file, juce::roundToInt (r.getWidth() * scale), juce::roundToInt (r.getHeight() * scale)); image.isValid())
+                g.drawImage (image, r, juce::RectanglePlacement::stretchToFit);
+        } };
+    }
 
-            if (image.isValid())
+    /** Tweed: repeating-linear-gradient(135deg, dark 0 1px, light 1px 3.4px). */
+    static Swatches::Item tweedSwatch (const juce::String& name)
+    {
+        return { name, [] (juce::Graphics& g, juce::Rectangle<float> r)
+        {
+            g.setColour (paint::c (amp::tweedLight));
+            g.fillRect (r);
+            g.setColour (paint::c (amp::tweedDark));
+            const auto step = amp::tweedPeriod * juce::MathConstants<float>::sqrt2;   // along x, for lines at 45°
+            const auto line = amp::tweedLine * juce::MathConstants<float>::sqrt2;
+
+            for (auto x = r.getX() - r.getHeight(); x < r.getRight(); x += step)
             {
-                const auto src = juce::Rectangle<int> (64, 64).withCentre ({ juce::roundToInt ((float) image.getWidth() * fx), juce::roundToInt ((float) image.getHeight() * fy) });
-                g.drawImage (image, r.getSmallestIntegerContainer().getX(), r.getSmallestIntegerContainer().getY(), (int) r.getWidth(), (int) r.getHeight(),
-                             src.getX(), src.getY(), src.getWidth(), src.getHeight());
+                juce::Path band;   // "/" lines, perpendicular to the 135° gradient
+                band.startNewSubPath (x, r.getBottom());
+                band.lineTo (x + line, r.getBottom());
+                band.lineTo (x + line + r.getHeight(), r.getY());
+                band.lineTo (x + r.getHeight(), r.getY());
+                band.closeSubPath();
+                g.fillPath (band);
             }
         } };
     }
@@ -946,7 +1101,8 @@ private:
         {
             static const juce::StringArray drives { "Input", "Bass", "Mid", "Treble", "Output", "Fixed" };
             static const juce::StringArray keys { "input", "bass", "mid", "treble", "output", "fixed" };
-            addChoice ("Drives", drives, keys.indexOf (p.drives), 3, [&o] (int i) { o.changeSelected ([i] (AmpPart& q) { q.drives = keys[i]; }); });
+            addChoice ("Drives", drives, keys.indexOf (p.drives), 3, [&o] (int i) { o.changeSelected ([i] (AmpPart& q) { q.drives = keys[i]; }); },
+                       {}, amp::drivesH);
 
             if (p.isFixed())
             {
@@ -988,11 +1144,10 @@ private:
                 addNote (juce::String (juce::CharPointer_UTF8 ("Not set yet. Pick what it drives, or Fixed. A knob that is neither can\xe2\x80\x99t be saved.")),
                          amp::notSetNoteFill, amp::notSetNoteBorder, amp::notSetNoteText);
 
-            static const juce::StringArray styles { "chicken", "black", "cream", "silver", "plain" };
-            static const juce::StringArray styleNames { "Chickenhead", "Black knurled", "Cream dome", "Silver", "Black, white line" };
-            auto knobs = std::make_unique<Choice> (juce::StringArray { "", "", "", "", "" }, styles.indexOf (p.style), 4,
-                                                   [&o] (int i) { o.changeSelected ([i] (AmpPart& q) { q.style = styles[i]; }); }, styleNames);
-            knobs->setIcons (knobIcons(), 34);
+            static const juce::StringArray styleNames { "Chickenhead", "Black knurled", "Black, white line", "Cream dome", "Silver" };
+            auto knobs = std::make_unique<Choice> (juce::StringArray { "", "", "", "", "" }, knobStyles().indexOf (p.style), 4,
+                                                   [&o] (int i) { o.changeSelected ([i] (AmpPart& q) { q.style = knobStyles()[i]; }); }, styleNames);
+            knobs->setIcons (knobIcons(), amp::knobPictureButtonH);
             const auto knobsH = knobs->heightFor();
             add ("Knob", std::move (knobs), knobsH);
 
@@ -1124,25 +1279,56 @@ private:
 
         // Position and size (a knob's size is its S / M / L / XL).
         const auto pairOfFields = [this] (const juce::String& a, int va, std::function<void (int)> setA, const juce::String& b, int vb,
-                                          std::function<void (int)> setB, bool enabledB)
+                                          std::function<void (int)> setB, bool enabledB, bool editable)
         {
+            // Two fields side by side, each starting with its letter, as the board writes "x 278".
             struct Pair final : public juce::Component
             {
                 std::unique_ptr<juce::TextEditor> l, r;
+                juce::String letterL, letterR;
+
                 void resized() override
                 {
                     auto area = getLocalBounds();
-                    l->setBounds (area.removeFromLeft ((area.getWidth() - 6) / 2).withSizeKeepingCentre (area.getWidth(), 24));
-                    area.removeFromLeft (6);
-                    r->setBounds (area.withSizeKeepingCentre (area.getWidth(), 24));
+                    const auto w = (area.getWidth() - amp::fieldPairGap) / 2;
+                    l->setBounds (area.removeFromLeft (w).withSizeKeepingCentre (w, amp::fieldH));
+                    area.removeFromLeft (amp::fieldPairGap);
+                    r->setBounds (area.withSizeKeepingCentre (area.getWidth(), amp::fieldH));
+
+                    l->setIndents (baseIndent + prefixW (letterL), l->getTopIndent());
+                    r->setIndents (baseIndent + prefixW (letterR), r->getTopIndent());
                 }
+
+                void paintOverChildren (juce::Graphics& g) override
+                {
+                    g.setFont (fontOfSize (type::Weight::regular, 12.0f));
+                    g.setColour (paint::c (colour::fieldText));
+                    for (const auto& [f, letter] : { std::pair { l.get(), letterL }, std::pair { r.get(), letterR } })
+                        g.drawText (letter, f->getBounds().withTrimmedLeft (baseIndent), juce::Justification::centredLeft, false);
+                }
+
+                int baseIndent = 0;
+
+            private:
+                static int prefixW (const juce::String& letter) { return juce::roundToInt (textWidth (fontOfSize (type::Weight::regular, 12.0f), letter + " ")); }
             };
             auto pair = std::make_unique<Pair>();
             pair->l = field (juce::String (va), [setA] (const juce::String& t) { setA (t.getIntValue()); });
             pair->r = field (juce::String (vb), [setB] (const juce::String& t) { setB (t.getIntValue()); });
             pair->l->setTooltip (a);
             pair->r->setTooltip (b);
+            pair->letterL = a;
+            pair->letterR = b;
+            pair->baseIndent = pair->l->getLeftIndent();
             pair->r->setEnabled (enabledB);
+            pair->l->setReadOnly (! editable);
+            pair->r->setReadOnly (! editable);
+
+            if (! editable)
+            {
+                pair->l->setTooltip (a + ": a knob's size is its S / M / L / XL");
+                pair->r->setTooltip (b + ": a knob's size is its S / M / L / XL");
+            }
             pair->addAndMakeVisible (*pair->l);
             pair->addAndMakeVisible (*pair->r);
             return pair;
@@ -1150,18 +1336,18 @@ private:
 
         add ("Position", pairOfFields ("x", p.x, [&o] (int v) { o.changeSelected ([v] (AmpPart& q) { q.x = snapTo (juce::jlimit (0, amp::faceW - q.width(), v)); }); },
                                        "y", p.y, [&o] (int v) { o.changeSelected ([v] (AmpPart& q) { q.y = snapTo (juce::jlimit (0, amp::faceH - q.height(), v)); }); },
-                                       true));
+                                       true, true));
 
-        if (! p.isKnob())
-            add ("Size", pairOfFields ("w", p.w, [&o] (int v) { o.changeSelected ([v] (AmpPart& q) { q.w = juce::jlimit (2, amp::faceW, v); }); },
-                                       "h", p.h, [&o] (int v) { o.changeSelected ([v] (AmpPart& q)
+        // A knob's size is its S / M / L / XL: its w and h are shown, not typed.
+        add ("Size", pairOfFields ("w", p.width(), [&o] (int v) { o.changeSelected ([v] (AmpPart& q) { q.w = juce::jlimit (2, amp::faceW, v); }); },
+                                       "h", p.height(), [&o] (int v) { o.changeSelected ([v] (AmpPart& q)
                                        {
                                            q.h = juce::jlimit (2, amp::faceH, v);
 
                                            if (q.type == "logo")
                                                q.logoSize = q.h;
                                        }); },
-                                       true));
+                                       true, ! p.isKnob()));
 
         struct Buttons final : public juce::Component
         {
@@ -1174,10 +1360,10 @@ private:
             }
             void resized() override
             {
-                auto r = getLocalBounds().withTrimmedTop (6);
-                duplicate.setBounds (r.removeFromLeft ((r.getWidth() - 6) / 2).withHeight (24));
-                r.removeFromLeft (6);
-                remove.setBounds (r.withHeight (24));
+                auto r = getLocalBounds().withTrimmedTop (amp::buttonsRowTop);
+                duplicate.setBounds (r.removeFromLeft ((r.getWidth() - amp::fieldPairGap) / 2).withHeight (size::buttonHeight));
+                r.removeFromLeft (amp::fieldPairGap);
+                remove.setBounds (r.withHeight (size::buttonHeight));
             }
         };
         auto buttons = std::make_unique<Buttons>();
@@ -1185,7 +1371,7 @@ private:
         buttons->remove.setTooltip ("Remove (Delete)");
         buttons->duplicate.onClick = [&o] { o.duplicateSelected(); };
         buttons->remove.onClick = [&o] { o.removeSelected(); };
-        add ({}, std::move (buttons), 32);
+        add ({}, std::move (buttons), amp::buttonsRowTop + size::buttonHeight);   // board: margin-top 6, buttons 24
     }
 
     //== Several parts ==========================================================
@@ -1229,10 +1415,11 @@ private:
 
         static const juce::StringArray tolex { "tweed", "black", "orange", "white", "cream", "brown", "red", "blonde" };
         static const juce::StringArray tolexNames { "Tweed", "Black", "Orange", "White", "Cream", "Brown", "Red", "Blonde" };
-        std::vector<Swatches::Item> tolexItems;
-
-        for (int i = 0; i < tolex.size(); ++i)
-            tolexItems.push_back (imageSwatch (tolexNames[i], "body_tall_" + tolex[i] + "_none.webp", 0.02f, 0.6f));
+        std::vector<Swatches::Item> tolexItems { tweedSwatch ("Tweed"), colourSwatch ("Black", amp::tolexBlack), colourSwatch ("Orange", amp::tolexOrange),
+                                                 colourSwatch ("White", amp::tolexWhite), colourSwatch ("Cream", amp::tolexCream),
+                                                 colourSwatch ("Brown", amp::tolexBrown), colourSwatch ("Red", amp::tolexRed),
+                                                 colourSwatch ("Blonde", amp::tolexBlonde) };
+        jassert ((int) tolexItems.size() == tolex.size());
 
         addSwatches ("Tolex", std::move (tolexItems), tolex.indexOf (look.tolex), [&o] (int i) { o.changeLook ([i] (AmpLook& l) { l.tolex = tolex[i]; }); });
 
@@ -1243,8 +1430,10 @@ private:
                                                     {
                                                         g.setColour (paint::c (amp::pipingNone));
                                                         g.fillRect (r);
+                                                        // linear-gradient(135deg, transparent 44%, #FF8A80 44% 56%, transparent 56%)
+                                                        const auto length = (r.getWidth() + r.getHeight()) * juce::MathConstants<float>::sqrt2 * 0.5f;
                                                         g.setColour (paint::c (amp::pipingNoneSlash));
-                                                        g.drawLine ({ r.getBottomLeft(), r.getTopRight() }, 2.5f);
+                                                        g.drawLine ({ r.getBottomLeft(), r.getTopRight() }, length * amp::pipingNoneBand);
                                                     } } };
         addSwatches ("Piping", std::move (pipingItems), piping.indexOf (look.piping), [&o] (int i) { o.changeLook ([i] (AmpLook& l) { l.piping = piping[i]; }); });
 
@@ -1277,40 +1466,51 @@ private:
     //== The sound ==============================================================
     void buildSound()
     {
-        struct Divider final : public juce::Component
-        {
-            void paint (juce::Graphics& g) override
-            {
-                g.setColour (paint::c (colour::paneHeaderLine));
-                g.fillRect (getLocalBounds().withHeight (1).withY (10).expanded (amp::inspectorPadX, 0));
-                paint::text (g, paint::caps (type::groupTitle, "Sound"), getLocalBounds().toFloat().withTrimmedTop (18.0f), type::groupTitle, colour::textMuted);
-            }
-        };
-        add ({}, std::make_unique<Divider>(), 34);
+        add ({}, std::make_unique<SectionTitle> ("Sound"), SectionTitle::height());
 
         auto name = std::make_unique<juce::TextEditor>();
         setVariant (*name, Variant::field);
+        name->setIndents (amp::fieldPadX, name->getTopIndent());
         name->setReadOnly (true);
         name->setText (owner.amp.capture.isEmpty() ? juce::String ("(none)") : juce::File::createFileWithoutCheckingPath (owner.amp.capture).getFileName(), false);
         name->setTooltip (owner.amp.capture);
         add ("NAM capture", std::move (name));
 
         if (owner.captureInfo.isNotEmpty())
-            addNote (owner.captureInfo, 0, 0, colour::textMuted);
+            add (" ", std::make_unique<InfoLine> (owner.captureInfo));
 
         struct Load final : public juce::Component
         {
             juce::TextButton button { "Load capture" + ellipsis() };
             Load() { addAndMakeVisible (button); }
-            void resized() override { button.setBounds (0, 1, button.getBestWidthForHeight (size::buttonHeight), size::buttonHeight); }
+            void resized() override { button.setBounds (getLocalBounds().withSizeKeepingCentre (getWidth(), size::buttonHeight)); }   // the value column's width
         };
         auto load = std::make_unique<Load>();
         load->button.setTooltip ("The NAM capture this amp plays (the amp block loads it)");
         load->button.onClick = [&o = owner] { o.loadCapture(); };
         add (" ", std::move (load));
-        addNote ("The knobs' positions here are the amp's starting settings. Each patch that uses the amp keeps its own.", 0, 0, colour::textMuted);
+        addNote ("The knobs' positions here are the amp's starting settings. Each patch that uses the amp keeps its own.", 0, 0, colour::textMuted,
+                 amp::closingNoteTop);
     }
 
+public:
+    /** Test hook: the keyboard-focus ring on swatch `index` of the row `rowLabel` (empty: none anywhere). */
+    bool showSwatchFocus (const juce::String& rowLabel, int index)
+    {
+        auto found = false;
+
+        for (auto& row : rows)
+            if (auto* sw = dynamic_cast<Swatches*> (row.editor.get()))
+            {
+                const auto here = row.label == rowLabel;
+                sw->showFocus (here ? index : -1);
+                found = found || (here && index >= 0);
+            }
+
+        return found;
+    }
+
+private:
     void layoutRows()
     {
         const auto width = juce::jmax (100, getWidth() - 2 * amp::inspectorPadX - (viewport.isVerticalScrollBarShown() ? 8 : 0));
@@ -1327,9 +1527,18 @@ private:
             else if (auto* swatches = dynamic_cast<Swatches*> (row.editor.get()))
                 h = swatches->heightFor (editorW);
 
-            row.editor->setBounds (amp::inspectorPadX + (full ? 0 : amp::rowLabelW + amp::rowGap), y + (full ? 0 : juce::jmax (0, (h - row.height) / 2)),
-                                   editorW, h);
-            y += h + 6;
+            // An editor shorter than the row is centred in it (board: align-items center); swatch groups and notes are as tall as their row.
+            const auto measured = dynamic_cast<Swatches*> (row.editor.get()) != nullptr || dynamic_cast<Note*> (row.editor.get()) != nullptr;
+            const auto bounds = juce::Rectangle<int> (amp::inspectorPadX + (full ? 0 : amp::rowLabelW + amp::rowGap),
+                                                      y + (full || measured ? 0 : juce::jmax (0, (h - row.height) / 2)), editorW, h);
+            if (dynamic_cast<juce::TextEditor*> (row.editor.get()) != nullptr)
+                row.editor->setBounds (bounds.withSizeKeepingCentre (bounds.getWidth(), amp::fieldH));   // board .fld: 24 in a 26 row
+            else if (dynamic_cast<SectionTitle*> (row.editor.get()) != nullptr)
+                row.editor->setBounds (0, y, juce::jmax (1, getWidth()), h);   // its line runs the full width
+            else
+                row.editor->setBounds (dynamic_cast<Swatches*> (row.editor.get()) != nullptr ? bounds.expanded (amp::swatchMargin) : bounds);
+
+            y += h + amp::rowGapY;
         }
 
         content.setBounds (0, 0, juce::jmax (1, getWidth()), y + amp::inspectorPadY);
@@ -1337,7 +1546,16 @@ private:
 
         for (auto& row : rows)
             if (row.label.isNotEmpty() && row.label != " ")
-                content.labelRows.push_back ({ row.label, row.editor->getBounds().withX (amp::inspectorPadX).withWidth (amp::rowLabelW) });
+            {
+                // Centred on the whole row (board: align-items center), a wrapped group too;
+                // Body and Symbol at the top (padding-top 4 / 6).
+                auto r = row.editor->getBounds();
+                if (dynamic_cast<Swatches*> (row.editor.get()) != nullptr)
+                    r = r.reduced (amp::swatchMargin);
+                r = r.withX (amp::inspectorPadX).withWidth (amp::rowLabelW);
+                const auto topPad = row.label == "Body" ? amp::labelTopBody : row.label == "Symbol" ? amp::labelTopSymbol : -1;
+                content.labelRows.push_back ({ row.label, topPad >= 0 ? r.withTrimmedTop (topPad).withHeight (amp::labelLineH) : r });
+            }
 
         content.repaint();
     }
@@ -1349,7 +1567,7 @@ private:
         void paint (juce::Graphics& g) override
         {
             for (const auto& [text, r] : labelRows)
-                paint::text (g, text, r.toFloat().withHeight ((float) amp::rowMinH), type::label, colour::textTertiary);
+                paint::text (g, text, r.toFloat(), type::label, colour::textTertiary);
         }
     };
 
@@ -1407,6 +1625,11 @@ AmpBuilderView::~AmpBuilderView()
 const juce::Component* AmpBuilderView::getDropBox() const noexcept { return face.get(); }
 juce::Component* AmpBuilderView::getFace() const noexcept           { return face.get(); }
 juce::Component* AmpBuilderView::getInspector() const noexcept      { return inspector.get(); }
+
+bool AmpBuilderView::showSwatchFocus (const juce::String& rowLabel, int index)
+{
+    return inspector != nullptr && inspector->showSwatchFocus (rowLabel, index);
+}
 
 void AmpBuilderView::edit (const AmpPreset& preset)
 {
@@ -2091,7 +2314,7 @@ void AmpBuilderView::paint (juce::Graphics& g)
 
     const auto header = [&g] (juce::Rectangle<int> col, const juce::String& left, const juce::String& right)
     {
-        const auto r = col.withHeight (size::paneHeader).toFloat();
+        const auto r = col.withHeight (amp::headerH).toFloat();
         paint::paneHeader (g, r, 0.0f);
         paint::text (g, paint::caps (type::paneHeader, left), r.withTrimmedLeft ((float) size::paneHeaderPadL), type::paneHeader, colour::textMuted);
         paint::text (g, right, r.withTrimmedRight ((float) size::paneHeaderPadR + 2.0f), type::paneHeaderNote, colour::textMuted, juce::Justification::centredRight);
@@ -2116,7 +2339,7 @@ void AmpBuilderView::paint (juce::Graphics& g)
                       note.reduced (10, 8), juce::Justification::topLeft, 4, 1.0f);
 
     // The work area: dots every 16 px, the face's shadow.
-    const auto work = faceCol.withTrimmedTop (size::paneHeader).withTrimmedBottom (amp::footerH);
+    const auto work = faceCol.withTrimmedTop (amp::headerH).withTrimmedBottom (amp::footerH);
     g.setColour (paint::c (amp::workArea));
     g.fillRect (work);
     g.setColour (paint::c (amp::workDots));
@@ -2171,13 +2394,13 @@ void AmpBuilderView::resized()
     auto inspectorCol = columns.removeFromRight (amp::inspectorW);
     const auto faceCol = columns;
 
-    partsViewport.setBounds (partsCol.withTrimmedTop (size::paneHeader).withTrimmedBottom (64).withTrimmedRight (1));
+    partsViewport.setBounds (partsCol.withTrimmedTop (amp::headerH).withTrimmedBottom (64).withTrimmedRight (1));
     parts->setSize (partsViewport.getWidth() - (partsViewport.getHeight() < parts->idealHeight() ? partsViewport.getScrollBarThickness() : 0),
                     parts->idealHeight());
-    inspector->setBounds (inspectorCol.withTrimmedTop (size::paneHeader));
+    inspector->setBounds (inspectorCol.withTrimmedTop (amp::headerH));
 
     // The face at 1:1, centred; smaller when the window is (never bigger).
-    const auto work = faceCol.withTrimmedTop (size::paneHeader).withTrimmedBottom (amp::footerH).reduced (12);
+    const auto work = faceCol.withTrimmedTop (amp::headerH).withTrimmedBottom (amp::footerH).reduced (12);
     const auto scale = juce::jmax (0.1f, juce::jmin (1.0f, (float) work.getWidth() / (float) amp::faceW, (float) work.getHeight() / (float) amp::faceH));
     face->setTransform (juce::AffineTransform::scale (scale));
     const auto centre = work.getCentre().toFloat() / scale;

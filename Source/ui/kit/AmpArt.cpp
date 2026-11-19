@@ -153,6 +153,54 @@ juce::Image jewel (const juce::String& colour, bool lit)
     return made;
 }
 
+juce::Image cover (const juce::String& fileName, int width, int height)
+{
+    JUCE_ASSERT_MESSAGE_THREAD
+
+    const auto key = "cover:" + fileName + ":" + juce::String (width) + "x" + juce::String (height);
+    auto& images = cache();
+
+    if (const auto found = images.find (key); found != images.end())
+        return found->second;
+
+    juce::Image made;
+    const auto source = get (fileName);
+
+    if (source.isValid() && width > 0 && height > 0)
+    {
+        // CSS background-size: cover, background-position: center: the largest centred area with the box's shape,
+        // each target pixel the average of the source pixels under it (as a browser's downscale looks).
+        const auto scale = juce::jmin ((float) source.getWidth() / (float) width, (float) source.getHeight() / (float) height);
+        const auto x0 = ((float) source.getWidth() - scale * (float) width) * 0.5f, y0 = ((float) source.getHeight() - scale * (float) height) * 0.5f;
+        made = juce::Image (juce::Image::ARGB, width, height, true);
+        const juce::Image::BitmapData in (source, juce::Image::BitmapData::readOnly);
+        const juce::Image::BitmapData out (made, juce::Image::BitmapData::writeOnly);
+
+        for (int y = 0; y < height; ++y)
+            for (int x = 0; x < width; ++x)
+            {
+                const auto sx0 = (int) (x0 + scale * (float) x), sx1 = juce::jmax (sx0 + 1, (int) (x0 + scale * (float) (x + 1)));
+                const auto sy0 = (int) (y0 + scale * (float) y), sy1 = juce::jmax (sy0 + 1, (int) (y0 + scale * (float) (y + 1)));
+                float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+                int n = 0;
+
+                for (int sy = juce::jmax (0, sy0); sy < juce::jmin (source.getHeight(), sy1); ++sy)
+                    for (int sx = juce::jmax (0, sx0); sx < juce::jmin (source.getWidth(), sx1); ++sx, ++n)
+                    {
+                        const auto c = in.getPixelColour (sx, sy);
+                        const auto alpha = c.getFloatAlpha();
+                        r += c.getFloatRed() * alpha; g += c.getFloatGreen() * alpha; b += c.getFloatBlue() * alpha; a += alpha;
+                    }
+
+                if (n > 0 && a > 0.0f)
+                    out.setPixelColour (x, y, juce::Colour::fromFloatRGBA (r / a, g / a, b / a, a / (float) n));
+            }
+    }
+
+    images[key] = made;
+    return made;
+}
+
 juce::StringArray names()
 {
     juce::StringArray all;

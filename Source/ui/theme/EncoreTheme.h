@@ -903,6 +903,9 @@ namespace amp
 
     // Knobs: shadow; the plain black knob; the pointer line.
     constexpr juce::uint32 knobShadow = 0x8C000000;
+    // A knob's CSS drop-shadow: Y = max(2, s/18) down, blur B = max(1, s/30) (sigma B/2), black 55 %, every style.
+    constexpr float knobShadowMinY = 2.0f, knobShadowYDiv = 18.0f, knobShadowMinBlur = 1.0f, knobShadowBlurDiv = 30.0f;
+    constexpr int knobShadowCacheMax = 256;   // shadow images kept (per look, size, frame, pixel scale)
     constexpr juce::uint32 plainLight = 0xff4A4A4F, plainMid = 0xff1C1C1F, plainDark = 0xff0B0B0C, plainRing = 0xff050506, plainShine = 0x40FFFFFF;
     constexpr juce::uint32 pointer = 0xffF2F2F4, pointerShade = 0x99000000;
 
@@ -956,7 +959,13 @@ namespace amp
     constexpr juce::uint32 dropFill = 0x294C8DF6;    // where a dragged part lands: accent at 16 %
     constexpr juce::uint32 notSetNoteFill = 0xff2A251C, notSetNoteBorder = 0xff3D2F12, notSetNoteText = 0xffFFD27A;
     constexpr juce::uint32 fixedNoteFill = 0xff232326;
-    constexpr juce::uint32 swatchRing = 0xffE8E8EB, swatchShine = 0x0FFFFFFF;
+    constexpr juce::uint32 swatchRing = 0xffE8E8EB, swatchShine = 0x0FFFFFFF;   // selected ring (CSS outline), inner ring
+    // Tolex swatches: flat colours, the tweed as stripes (board TOLEX).
+    constexpr juce::uint32 tolexBlack = 0xff1C1B1A, tolexOrange = 0xffC8601E, tolexWhite = 0xffE0DED6, tolexCream = 0xffD6C6A0,
+                           tolexBrown = 0xff4E3220, tolexRed = 0xff6E1C18, tolexBlonde = 0xffC4A470;
+    constexpr juce::uint32 tweedDark = 0xff7A5228, tweedLight = 0xffD9B878;
+    constexpr float tweedPeriod = 3.4f, tweedLine = 1.0f;   // repeating-linear-gradient(135deg, dark 0 1px, light 1px 3.4px)
+    constexpr float pipingNoneBand = 0.12f;                 // the None slash: 44 % .. 56 % of the 135° gradient line
     // Swatches the builder can't cut from the layers: piping cords, light colours.
     constexpr juce::uint32 pipingGold = 0xffD6C080, pipingWhite = 0xffE4E2DC, pipingBlack = 0xff1E1E20, pipingNone = 0xff2A2A2E, pipingNoneSlash = 0xffFF8A80;
     constexpr juce::uint32 lightRed = 0xffFF6E3C, lightAmber = 0xffFFAA28, lightGreen = 0xff50E65A, lightBlue = 0xff5096FF;
@@ -965,6 +974,18 @@ namespace amp
     constexpr int dotPitch = 16, faceShadowY = 24, faceShadowBlur = 20;
     constexpr int handleSize = 7, bindH = 16, bindPadX = 6, outlineGap = 3;
     constexpr int rowLabelW = 86, rowGap = 8, rowMinH = 26, inspectorPadX = 12, inspectorPadY = 10, swatch = 22;
+    constexpr int headerH = 25;                                               // the builder's column headers: .hd 24 + its 1 px line
+    constexpr int knobPictureSize = 24, knobPictureButtonH = 34;              // the Knob choice: 24 px pictures in 34 px buttons
+    constexpr int fieldH = 24, fieldPairGap = 6, fieldPadX = 8, buttonsRowTop = 6;   // Duplicate | Remove: 6 px above                              // Position / Size: two fields, "x 278"
+    constexpr int rowGapY = 6;                                                // the inspector's rows: a column with gap 6
+    constexpr float noteSize = 11.0f, noteLineH = 1.5f, filledNoteSize = 11.5f, filledNoteLineH = 1.45f;
+    constexpr int notePadX = 10, notePadY = 8, noteRadius = 6, closingNoteTop = 4;
+    constexpr int sectionLineTop = 10, sectionLineBottom = 6, sectionTitleH = 12, sectionTitlePadBottom = 2;   // the line and "SOUND"
+    constexpr int choiceH = 24, drivesH = 22;                                  // option buttons: Template, Body (24), Drives (22)
+    constexpr int swatchGap = 6, swatchRadius = 5;                          // .ab-sw: 6 px across and down
+    constexpr int swatchRingOut = 2, swatchRingRadius = 7, swatchRingW = 2;  // outline 2 px, offset 1: stroke centred 2 px out
+    constexpr int swatchMargin = 3;                                          // room for the ring around a swatch group
+    constexpr int labelTopBody = 4, labelTopSymbol = 6, labelLineH = 14;     // Body / Symbol labels sit at the top
     constexpr int dropBorder = 2, dropRadius = 6, gapLabelH = 12;
     constexpr int undoDepth = 100;
 }

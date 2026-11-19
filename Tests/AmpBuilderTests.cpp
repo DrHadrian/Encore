@@ -784,6 +784,139 @@ public:
             engine.audioDeviceStopped();
             temp.deleteRecursively();
         }
+
+        beginTest ("v3.2 targets: the inspector's swatches, the faces and the knob sheets (docs/design/reference/v32-README.md)");
+        {
+            ScopedEncoreLook look;
+
+            // The knob sheets: every style (rows) in every size (columns) on a panel strip, value 0.5;
+            // and the three scales around a chickenhead. Built as the target page builds them.
+            const auto knobSheet = [this] (const juce::String& panel, const juce::StringArray& styles, const juce::StringArray& scales,
+                                           const juce::String& name)
+            {
+                const auto rows = juce::jmax (styles.size(), scales.size());
+                for (const auto scale : { 1.0f, 2.0f })
+                {
+                    juce::Image image (juce::Image::ARGB, juce::roundToInt (588 * scale), juce::roundToInt ((16 + 154 * rows) * scale), true);
+                    juce::Graphics g (image);
+                    g.addTransform (juce::AffineTransform::scale (scale));
+                    g.fillAll (juce::Colour (theme::colour::window));
+                    AmpPreset preset;
+                    preset.look.panel = panel;
+
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        const auto stripY = 16 + 154 * row;
+                        g.drawImage (kit::ampArt::get ("panel_tall_" + panel + ".webp"), juce::Rectangle<float> (16.0f, (float) stripY, 556.0f, 138.0f));
+                        const juce::StringArray letters { "S", "M", "L", "XL" };
+
+                        for (int col = 0; col < 4; ++col)
+                        {
+                            AmpPart part;
+                            part.id = "k";
+                            part.type = "knob";
+                            part.style = styles.isEmpty() ? juce::String ("chicken") : styles[row];
+                            part.size = letters[col];
+                            part.scale = scales.isEmpty() ? juce::String ("none") : scales[row];
+                            part.drives = "input";
+                            part.value = 0.5f;
+                            const auto size = part.width();
+                            part.x = 16 + 86 + 128 * col - size / 2;
+                            part.y = stripY + 69 - size / 2;
+                            kit::AmpFace::paintPrint (g, preset, part);
+                            kit::AmpFace::paintBody (g, preset, part, 0.5f, false);
+                        }
+                    }
+
+                    writeSnapshot (image, name + (scale > 1.0f ? "@2x" : ""));
+                    expect (image.isValid());
+                }
+            };
+
+            const juce::StringArray styles { "chicken", "black", "plain", "cream", "silver" };
+            knobSheet ("gold", styles, {}, "v32-knobs-gold");
+            knobSheet ("black", styles, {}, "v32-knobs-black");
+            knobSheet ("gold", {}, { "ticks", "n10", "n12" }, "v32-knob-scales-gold");
+            knobSheet ("black", {}, { "ticks", "n10", "n12" }, "v32-knob-scales-black");
+
+            // The faces, 600 x 430, transparent around the amp.
+            const auto example = [] (const juce::String& id) -> const AmpPreset*
+            {
+                for (const auto& e : kit::ampTemplates::examples())
+                    if (e.amp.id == id)
+                        return &e.amp;
+                return nullptr;
+            };
+            const std::pair<const char*, const AmpPreset*> faces[] { { "v32-face-gold", &kit::ampTemplates::defaultFace() },
+                                                                       { "v32-face-jc120", example ("example-jc-120") },
+                                                                       { "v32-face-5150", example ("example-5150-iii-50w") } };
+            for (const auto& [name, amp] : faces)
+            {
+                expect (amp != nullptr, name);
+
+                if (amp != nullptr)
+                {
+                    writeSnapshot (kit::AmpFace::compose (*amp, kit::AmpFace::Layer::everything, 1.0f), name);
+                    writeSnapshot (kit::AmpFace::compose (*amp, kit::AmpFace::Layer::everything, 2.0f), juce::String (name) + "@2x");
+                }
+            }
+
+            // The inspector column (from its header), as the board's 1440 x 900 page shows it.
+            FakeDevice device;
+            AudioEngine engine;
+            engine.audioDeviceAboutToStart (&device);
+            const auto temp = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                  .getChildFile ("encore-targets-" + juce::String (juce::Random::getSystemRandom().nextInt()));
+            temp.createDirectory();
+
+            {
+                ShowSession session (engine);
+                expect (session.newShow (temp.getChildFile ("Targets.encore"), "Targets").wasOk());
+                pumpUntil (engine, [&] { return ! session.isBuilding(); });
+                AmpLibrary library (temp.getChildFile ("Amps"));
+                AmpBuilderView builder (session, library);
+                builder.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight - 44);
+
+                const auto inspectorShot = [&] (const juce::String& name, int height)
+                {
+                    const auto* inspector = builder.getInspector();
+                    expect (inspector != nullptr);
+                    const auto top = inspector->getY() - theme::amp::headerH;   // the column header, then the inspector
+                    const auto area = juce::Rectangle<int> (inspector->getX() - 1, top, 300, height);
+                    for (const auto scale : { 1.0f, 2.0f })
+                        writeSnapshot (builder.createComponentSnapshot (area, false, scale), name + (scale > 1.0f ? "@2x" : ""));
+                };
+
+                builder.edit (kit::ampTemplates::defaultFace());
+                builder.select ({});
+                inspectorShot ("v32-amp-inspector-gold", 650);
+
+                expect (builder.showSwatchFocus ("Tolex", 4), "keyboard focus on the Tolex swatch Cream");
+                inspectorShot ("v32-amp-inspector-focus", 650);
+                builder.showSwatchFocus ({}, -1);
+
+                if (const auto* amp = example ("example-5150-iii-50w"))
+                {
+                    builder.edit (*amp);
+                    builder.select ({});
+                    inspectorShot ("v32-amp-inspector-grille-head", 650);
+                }
+
+                builder.edit (kit::ampTemplates::defaultFace());
+                builder.select ("k4");
+                inspectorShot ("v32-amp-inspector-knob", 598);
+
+                if (const auto* amp = example ("example-jc-120"))
+                {
+                    builder.edit (*amp);
+                    builder.select ("s1");
+                    inspectorShot ("v32-amp-inspector-section", 370);
+                }
+            }
+
+            engine.audioDeviceStopped();
+            temp.deleteRecursively();
+        }
     }
 };
 

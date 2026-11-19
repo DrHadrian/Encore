@@ -112,6 +112,7 @@ public:
     const juce::Component* getDropBox() const noexcept;
     juce::Component* getFace() const noexcept;
     juce::Component* getInspector() const noexcept;
+    bool showSwatchFocus (const juce::String& rowLabel, int index);   // test hook: the focus ring on a swatch (off-screen)
 
     juce::Button& getSaveButton() noexcept { return saveButton; }
 

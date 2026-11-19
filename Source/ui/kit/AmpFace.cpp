@@ -243,50 +243,111 @@ namespace
         }
     }
 
-    void paintKnobBody (juce::Graphics& g, const AmpPart& p, float value)
+    /** A knob's body without its pointer (board: the knob element, `border-radius: 50%`,
+        which clips its picture to the circle), drawn at r. */
+    void paintKnobCap (juce::Graphics& g, const juce::String& style, juce::Rectangle<float> r, int frame)
     {
-        const auto s = (float) p.width();
-        const auto r = juce::Rectangle<float> ((float) p.x, (float) p.y, s, s);
+        const auto s = r.getWidth();
         const auto circle = ellipse (r);
+        const juce::Graphics::ScopedSaveState state (g);
+        g.reduceClipRegion (circle);
 
-        circleShadow (g, r, amp::knobShadow, juce::jmax (1.0f, s / 30.0f), juce::jmax (2.0f, s / 18.0f));
-
-        if (p.style == "chicken")
+        if (style == "chicken")
         {
-            // The chickenhead strip: 41 frames for 0..1, one per knob width.
-            const auto strip = ampArt::get ("chicken_strip.png");
-
-            if (strip.isValid())
+            // The chickenhead strip: 41 frames for 0..1, one per knob width; its baked contact shadow inside the circle.
+            if (const auto strip = ampArt::get ("chicken_strip.png"); strip.isValid())
             {
                 const auto frameSize = strip.getWidth();
-                const auto frame = juce::jlimit (0, strip.getHeight() / frameSize - 1, juce::roundToInt (value * 40.0f));
-                g.drawImage (strip, juce::roundToInt (r.getX()), juce::roundToInt (r.getY()), juce::roundToInt (s), juce::roundToInt (s),
-                             0, frame * frameSize, frameSize, frameSize);
+                const auto at = juce::jlimit (0, strip.getHeight() / frameSize - 1, frame);
+                g.drawImage (strip.getClippedImage ({ 0, at * frameSize, frameSize, frameSize }), r, juce::RectanglePlacement::stretchToFit);
             }
 
-            return;   // its pointer is in the picture
+            return;
         }
 
-        if (p.style == "plain")
+        if (style == "plain")
         {
             g.setGradientFill (radial (r, 0.4f, 0.32f, { { 0.0, amp::plainLight }, { 0.38, amp::plainMid }, { 0.70, amp::plainDark }, { 1.0, amp::plainDark } }));
             g.fillPath (circle);
             const auto ring = juce::jmax (1.0f, s / 14.0f);
             g.setColour (c (amp::plainRing));
             g.drawEllipse (r.reduced (ring * 0.5f), ring);
-
-            const juce::Graphics::ScopedSaveState state (g);
-            g.reduceClipRegion (circle);
             g.setColour (c (amp::plainShine));
             g.drawEllipse (r.reduced (0.5f).translated (0.0f, 1.0f), 1.0f);
-        }
-        else
-        {
-            const auto file = p.style == "cream" ? "knob_cream.png" : p.style == "silver" ? "knob_silver.png" : "knob_black.png";
-            drawImageInto (g, ampArt::get (file), r);
+            return;
         }
 
-        // The pointer: a white line from the centre, -135° .. +135°.
+        const auto file = style == "cream" ? "knob_cream.png" : style == "silver" ? "knob_silver.png" : "knob_black.png";
+        drawImageInto (g, ampArt::get (file), r);
+    }
+
+    /** The knob's CSS `filter: drop-shadow(0 Y B rgba(0,0,0,0.55))`, Y = max(2, s/18), B = max(1, s/30):
+        the cap's alpha blurred (Gaussian, sigma B/2) and moved Y down. Made once per look, size,
+        frame and pixel scale, and kept (the cache is bounded). */
+    struct KnobShadowCache final : private juce::DeletedAtShutdown
+    {
+        ~KnobShadowCache() override { clearSingletonInstance(); }
+        std::map<juce::String, juce::Image> images;
+        JUCE_DECLARE_SINGLETON_INLINE (KnobShadowCache, false)
+    };
+
+    void paintKnobShadow (juce::Graphics& g, const juce::String& style, juce::Rectangle<float> r, int frame)
+    {
+        const auto s = r.getWidth();
+        const auto dy = juce::jmax (amp::knobShadowMinY, s / amp::knobShadowYDiv);
+        const auto blur = juce::jmax (amp::knobShadowMinBlur, s / amp::knobShadowBlurDiv);
+        const auto pad = std::ceil (blur * 2.0f) + 1.0f;   // room for the blur (3 sigma) around the cap
+        const auto scale = juce::jlimit (1.0f, 4.0f, std::ceil (g.getInternalContext().getPhysicalPixelScaleFactor()));
+        const auto key = style + "|" + juce::String (s) + "|" + juce::String (style == "chicken" ? frame : 0) + "|" + juce::String (scale);
+        auto& images = KnobShadowCache::getInstance()->images;
+        auto it = images.find (key);
+
+        if (it == images.end())
+        {
+            if (images.size() > (size_t) amp::knobShadowCacheMax)
+                images.clear();
+
+            const auto side = juce::roundToInt ((s + pad * 2.0f) * scale);
+            juce::Image alpha (juce::Image::ARGB, side, side, true);
+            {
+                juce::Graphics ag (alpha);
+                ag.addTransform (juce::AffineTransform::scale (scale));
+                paintKnobCap (ag, style, { pad, pad, s, s }, frame);
+            }
+
+            const auto sigma = blur * 0.5f * scale;
+            juce::ImageConvolutionKernel kernel (juce::jmax (3, 2 * (int) std::ceil (sigma * 3.0f) + 1));
+            kernel.createGaussianBlur (sigma);
+            juce::Image blurred (juce::Image::ARGB, side, side, true);
+
+            {
+                // Black, with the cap's alpha × 0.55.
+                const juce::Image::BitmapData src (alpha, juce::Image::BitmapData::readWrite);
+                for (int y = 0; y < side; ++y)
+                    for (int x = 0; x < side; ++x)
+                        src.setPixelColour (x, y, c (amp::knobShadow).withMultipliedAlpha (src.getPixelColour (x, y).getFloatAlpha()));
+            }
+
+            kernel.applyToImage (blurred, alpha, blurred.getBounds());
+            it = images.emplace (key, blurred).first;
+        }
+
+        g.drawImage (it->second, juce::Rectangle<float> (r.getX() - pad, r.getY() - pad + dy, s + pad * 2.0f, s + pad * 2.0f));
+    }
+
+    void paintKnobBody (juce::Graphics& g, const AmpPart& p, float value)
+    {
+        const auto s = (float) p.width();
+        const auto r = juce::Rectangle<float> ((float) p.x, (float) p.y, s, s);
+        const auto frame = juce::roundToInt (value * 40.0f);   // the chickenhead's 41 frames
+
+        paintKnobShadow (g, p.style, r, frame);
+        paintKnobCap (g, p.style, r, frame);
+
+        if (p.style == "chicken")
+            return;   // its pointer is in the picture
+
+        // The pointer: 2 px #F2F2F4, radius 1, round(s × 0.36) from the centre, -135° .. +135°, a 1 px dark halo.
         const auto length = (float) juce::roundToInt (s * 0.36f);
         juce::Path line;
         line.addRoundedRectangle (-1.0f, -length, 2.0f, length, 1.0f);
@@ -778,6 +839,11 @@ juce::Image AmpFace::compose (const AmpPreset& preset, Layer layer, float scale)
 
     cache[std::move (key)] = { image, ++clock };
     return image;
+}
+
+void AmpFace::paintKnobPicture (juce::Graphics& g, const juce::String& style, juce::Rectangle<float> r)
+{
+    paintKnobCap (g, style, r, 20);   // value 0.5 of the 41 frames
 }
 
 void AmpFace::clearCache()  { faceCache().clear(); }

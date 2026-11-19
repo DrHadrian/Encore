@@ -29,6 +29,11 @@ juce::Image get (const juce::String& fileName);
     does (brightness 0.4, saturation 0.6). */
 juce::Image jewel (const juce::String& colour, bool lit);
 
+/** A layer cropped and shrunk as CSS `background-size: cover; background-position:
+    center` shows it in a width × height box (pixels), each pixel averaged
+    from the layer (the inspector's swatches). Cached by name and size. */
+juce::Image cover (const juce::String& fileName, int width, int height);
+
 /** Every file built in, sorted. */
 juce::StringArray names();
 

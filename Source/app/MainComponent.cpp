@@ -257,7 +257,7 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
 
     mixerTab.setTooltips ("Open the mixer view: vertical meters, peaks and level faders", "Close the mixer view");
     mixerTab.onClick = [this] { setMixerOpen (! mixerOpen); };
-    addAndMakeVisible (mixerTab);
+    addChildComponent (mixerTab);   // shown with the bottom row (layoutBottomRow)
     mixerOpen = settings.getMixerViewOpen();
     mixerTab.setOpen (mixerOpen);
     inputSummary.setMixer (mixerOpen);
@@ -2413,7 +2413,14 @@ void MainComponent::layoutBottomRow (juce::Rectangle<int> row)
     mixerTab.setBounds (juce::Rectangle<int> (size::paneTabW, size::paneTabH)
                             .withCentre ({ metersPane.getBounds().getCentreX(), 0 })
                             .withY (metersPane.getY() - size::paneTabRise));
-    mixerTab.toFront (false);
+
+    // Only with the bottom row: never over Stage or the amp builder (F8), which cover it.
+    const auto rowShown = ! (stageView != nullptr && stageView->isVisible())
+                       && ! (ampBuilder != nullptr && ampBuilder->isVisible());
+    mixerTab.setVisible (rowShown);
+
+    if (rowShown)
+        mixerTab.toFront (false);
 }
 
 void MainComponent::resized()
