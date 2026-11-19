@@ -20,6 +20,9 @@ void Parameter::setValue (float newValue) noexcept
 
 juce::String Parameter::toText (float v) const
 {
+    if (spec.textFunction != nullptr)
+        return spec.textFunction (v);
+
     // Note: juce::String (v, 0) means "full precision", not "no decimals".
     auto text = spec.decimals <= 0 ? juce::String (juce::roundToInt (v)) : juce::String (v, spec.decimals);
     return spec.unit.isEmpty() ? text : text + " " + spec.unit;

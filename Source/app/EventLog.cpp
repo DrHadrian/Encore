@@ -3,6 +3,10 @@
 
 #include "app/EventLog.h"
 
+#include "engine/blocks/PluginBlock.h"
+#include "engine/core/Realtime.h"
+#include "platform/CrashReport.h"
+
 namespace encore::eventlog
 {
 
@@ -12,12 +16,65 @@ namespace
     juce::File folder;
 
     // Prepared up front: the crash handler should do as little as possible.
-    std::string crashFilePrefix;
+    std::string crashFilePrefix, pluginCrashFile;
 
-    void onCrash (void*)
+    /** "the audio thread" etc., for the crash report. */
+    juce::String threadName()
     {
+        if (rt::isInRealtimeSection())
+            return "the audio thread";
+
+        if (auto* mm = juce::MessageManager::getInstanceWithoutCreating(); mm != nullptr && mm->isThisTheMessageThread())
+            return "the message thread (windows, editing)";
+
+        return "another thread (started by a plugin or a driver), id " + juce::String::toHexString ((juce::pointer_sized_int) juce::Thread::getCurrentThreadId());
+    }
+
+    void onCrash (void* exceptionPointers)
+    {
+        const auto facts = system::describeCrash (exceptionPointers);
+
+        // Which plugin: the one Encore was calling on this thread, else every
+        // block whose plugin the crashing code (or, deeper, its caller)
+        // belongs to. Those blocks start switched off next time.
+        juce::String plugins;
+
+        if (const auto* label = PluginBlock::getPluginInUseOnThisThread())
+            plugins = juce::String::fromUTF8 (label);
+
+        if (plugins.isEmpty())
+            plugins = PluginBlock::getCrashLabelsForModule (facts.module);
+
+        for (int i = 0; plugins.isEmpty() && i < facts.stackModules.size(); ++i)
+            plugins = PluginBlock::getCrashLabelsForModule (facts.stackModules[i]);
+
+        if (plugins.isNotEmpty() && ! pluginCrashFile.empty())
+            juce::File (juce::String (pluginCrashFile)).replaceWithText (plugins);
+
+        juce::StringArray pluginNames;
+
+        for (const auto& [blockId, name] : PluginBlock::parseCrashLabels (plugins))
+            pluginNames.addIfNotAlreadyThere (name);
+
         const auto when = juce::Time::getCurrentTime().formatted ("%Y-%m-%d_%H-%M-%S");
-        const auto text = "Encore crashed at " + when + "\n\n" + juce::SystemStats::getStackBacktrace();
+        juce::String text;
+        text << "Encore crashed at " << when << "\n\n";
+
+        if (facts.what.isNotEmpty())
+            text << "What:   " << facts.what << "\n";
+
+        if (facts.module.isNotEmpty())
+            text << "Where:  " << facts.module << " + " << facts.moduleOffset << "\n";
+
+        text << "Thread: " << threadName() << "\n";
+
+        if (! pluginNames.isEmpty())
+            text << "Plugin: " << pluginNames.joinIntoString (", ") << " (its blocks start switched off next time)\n";
+
+        if (! facts.stack.isEmpty())
+            text << "\nStack, by file:\n" << facts.stack.joinIntoString ("\n") << "\n";
+
+        text << "\nStack, by name (where known):\n" << juce::SystemStats::getStackBacktrace();
 
         juce::File (juce::String (crashFilePrefix) + when + ".txt").replaceWithText (text);
 
@@ -51,6 +108,7 @@ void start (const juce::File& logsFolder, const juce::String& appVersion)
     juce::Logger::setCurrentLogger (logger.get());
 
     crashFilePrefix = folder.getChildFile ("crash-").getFullPathName().toStdString();
+    pluginCrashFile = getPluginCrashFile().getFullPathName().toStdString();
     juce::SystemStats::setApplicationCrashHandler (onCrash);
 }
 
@@ -67,5 +125,7 @@ void write (const juce::String& message)
 }
 
 juce::File getLogsFolder() { return folder; }
+
+juce::File getPluginCrashFile() { return folder.getParentDirectory().getChildFile ("plugin-crash.txt"); }
 
 } // namespace encore::eventlog

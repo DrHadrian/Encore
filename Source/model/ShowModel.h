@@ -29,7 +29,25 @@ namespace encore
 /** A fresh, unique, stable ID. */
 juce::String newId();
 
+/** The block type of a plugin (VST3) block. */
+inline constexpr const char* pluginBlockType = "plugin";
+
 //==============================================================================
+/** Which plugin a "plugin" block uses: enough to find the same plugin on
+    another computer (where it may be installed somewhere else). */
+struct PluginRef
+{
+    juce::String format;                     // "VST3"
+    juce::String name;
+    juce::String maker;
+    int uid = 0;                             // the format's unique ID for the plugin
+    juce::String version;
+    juce::String file;                       // where it was installed when saved (a hint)
+
+    bool isEmpty() const noexcept { return name.isEmpty(); }
+    bool operator== (const PluginRef&) const = default;
+};
+
 struct BlockModel
 {
     juce::String id;
@@ -39,6 +57,8 @@ struct BlockModel
     juce::String file;                       // show-relative ("models/x.nam") or absolute until collected
     int stomp = 0;                           // which stomp switch toggles it (1..8), 0 = none
     std::map<juce::String, ExpressionAssignment> expression;   // parameter id -> pedal and range
+    PluginRef plugin;                        // "plugin" blocks: which plugin
+    juce::String state;                      // "plugin" blocks: the plugin's own settings, base64
 
     bool operator== (const BlockModel&) const = default;
 };
@@ -109,7 +129,9 @@ enum class ShowTemplate { band, musical, worship, solo };
 
 struct ShowModel
 {
-    static constexpr int currentSchemaVersion = 1;
+    // 2: plugin blocks (milestone 10). A show without plugins is still saved
+    // as 1, so older Encore versions keep opening it.
+    static constexpr int currentSchemaVersion = 2;
 
     juce::String id;
     juce::String name;
@@ -124,6 +146,12 @@ struct ShowModel
 
     PatchModel* findPatch (const juce::String& patchId);
     const PatchModel* findPatch (const juce::String& patchId) const;
+
+    /** Whether any patch (library or a cue's own) has a plugin block. */
+    bool usesPlugins() const;
+
+    /** The schema version this show needs: the oldest that can hold it. */
+    int requiredSchemaVersion() const { return usesPlugins() ? 2 : 1; }
 
     bool operator== (const ShowModel&) const = default;
 };

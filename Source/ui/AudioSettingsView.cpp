@@ -46,11 +46,13 @@ AudioSettingsView::AudioSettingsView (juce::AudioDeviceManager& dm, const system
     for (auto* group : { &deviceGroup, &channelsGroup, &tuningGroup, &statusGroup, &tipGroup })
         addAndMakeVisible (group);
 
-    driverTypes.onClick = [this] (int index)
+    driverTypes.setTitle ("Driver type");
+    driverTypes.onChange = [this]
     {
         const auto& types = deviceManager.getAvailableDeviceTypes();
+        const auto index = driverTypes.getSelectedId() - 1;
 
-        if (juce::isPositiveAndBelow (index, types.size()))
+        if (juce::isPositiveAndBelow (index, types.size()) && types[index] != deviceManager.getCurrentDeviceTypeObject())
             deviceManager.setCurrentAudioDeviceType (types[index]->getTypeName(), true);
 
         refresh();
@@ -174,17 +176,17 @@ void AudioSettingsView::refresh()
         }
 
         if (names != juce::StringArray ([&] { juce::StringArray shown;
-                                              for (int i = 0; i < driverTypes.getNumSegments(); ++i)
-                                                  shown.add (driverTypes.getSegmentButton (i)->getButtonText());
+                                              for (int i = 0; i < driverTypes.getNumItems(); ++i)
+                                                  shown.add (driverTypes.getItemText (i));
                                               return shown; }()))
         {
-            driverTypes.setSegments (names);
+            driverTypes.clear (juce::dontSendNotification);
 
-            for (int i = 0; i < driverTypes.getNumSegments(); ++i)
-                noFocus (*driverTypes.getSegmentButton (i));
+            for (int i = 0; i < names.size(); ++i)
+                driverTypes.addItem (names[i], i + 1);
         }
 
-        driverTypes.setSelected (selected);
+        driverTypes.setSelectedId (selected + 1, juce::dontSendNotification);
     }
 
     // Devices
@@ -329,7 +331,7 @@ void AudioSettingsView::setStatus (const Status& s)
 int AudioSettingsView::deviceBoxHeight() const
 {
     const auto rows = separateInputs ? 5 : 4;   // type, device (+ input device), rate, buffer
-    return 2 * size::groupPad + size::segmentHeight * 2 + size::buttonHeight * (rows - 2) + size::deviceRowGap * rows
+    return 2 * size::groupPad + size::segmentHeight + size::buttonHeight * (rows - 1) + size::deviceRowGap * rows
            + size::latencyBarH + size::latencyTextGap + juce::roundToInt (font (type::noteText).getHeight());
 }
 
@@ -361,8 +363,8 @@ void AudioSettingsView::resized()
         const auto x = box.getX() + controlX;
         const auto rowH = size::buttonHeight + size::buttonDrop;
 
-        driverTypes.setBounds (x, y, juce::jmax (1, driverTypes.getNumSegments()) * size::driverSegmentW + 2, size::segmentHeight);
-        y += size::segmentHeight + size::deviceRowGap;
+        driverTypes.setBounds (x, y, size::devicePopupW, rowH);
+        y += size::buttonHeight + size::deviceRowGap;
         outputDevice.setBounds (x, y, size::devicePopupW, rowH);
         controlPanel.setBounds (outputDevice.getRight() + size::deviceRowGap, y, controlPanel.getBestWidthForHeight (rowH), rowH);
         y += size::buttonHeight + size::deviceRowGap;

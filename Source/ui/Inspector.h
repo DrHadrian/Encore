@@ -16,7 +16,9 @@ namespace encore
     block in words and numbers.
       BLOCK        type, model file (full path in the tooltip), format,
                    stomp switch (same as the chain's "Stomp switch" menu),
-                   on/off parameters as tick boxes
+                   on/off parameters as tick boxes; for a plugin: which,
+                   its status (with "Turn back on" after the crash guard
+                   switched it off) and "Open plugin window..."
       PARAMETERS   every continuous parameter: a bar, the exact value
                    (double-click to type one) and the pedal that moves it
       ASSIGNMENTS  the patch's stomp switches and expression pedals
@@ -36,6 +38,9 @@ public:
 
     /** Called after an edit made here (a tick box, a typed value, the stomp switch). */
     std::function<void()> onEdited;
+
+    /** Plugin blocks: "Open plugin window...". */
+    std::function<void()> onOpenPluginWindow;
 
     void resized() override;
 

@@ -3,6 +3,8 @@
 
 #include "model/ShowModel.h"
 
+#include <algorithm>
+
 namespace encore
 {
 
@@ -65,6 +67,33 @@ PatchModel* ShowModel::findPatch (const juce::String& patchId)
 const PatchModel* ShowModel::findPatch (const juce::String& patchId) const
 {
     return const_cast<ShowModel*> (this)->findPatch (patchId);
+}
+
+namespace
+{
+    bool hasPlugin (const PatchModel& patch)
+    {
+        for (const auto& lane : patch.lanes)
+            for (const auto& b : lane.blocks)
+                if (b.type == pluginBlockType)
+                    return true;
+
+        return false;
+    }
+
+    bool hasPlugin (const RunItem& item)
+    {
+        if (item.uniquePatch && hasPlugin (*item.uniquePatch))
+            return true;
+
+        return std::any_of (item.children.begin(), item.children.end(), [] (const RunItem& c) { return hasPlugin (c); });
+    }
+}
+
+bool ShowModel::usesPlugins() const
+{
+    return std::any_of (patches.begin(), patches.end(), [] (const PatchModel& p) { return hasPlugin (p); })
+           || hasPlugin (runningOrder);
 }
 
 PatchModel makeDefaultPatch (const juce::String& name)

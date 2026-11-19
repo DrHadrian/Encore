@@ -8,6 +8,7 @@
 #include "app/AppSettings.h"
 #include "engine/AudioEngine.h"
 #include "platform/SystemTuning.h"
+#include "session/PluginCatalog.h"
 #include "session/ShowSession.h"
 #include "ui/BlockPanel.h"
 #include "ui/ChainStrip.h"
@@ -17,6 +18,7 @@
 #include "session/RecoveryFile.h"
 #include "ui/CueListEditor.h"
 #include "ui/PatchList.h"
+#include "ui/PluginWindow.h"
 #include "ui/PreShowCheckView.h"
 #include "ui/SetList.h"
 #include "ui/StageView.h"
@@ -63,6 +65,13 @@ public:
     void openSettings (SettingsWindow::Tab);
     void closeSettings();
     bool isShowingSettings() const noexcept { return settingsWindow != nullptr; }
+
+    /** The first start (no plugin list yet): scan for plugins in the background. */
+    void startFirstPluginScanIfNeeded();
+
+    /** A plugin block's own window (the plugin's editor). */
+    void openPluginWindow (PluginBlock&);
+    bool isShowingPluginWindow (const juce::String& blockId) const { return pluginWindows.count (blockId) > 0; }
 
     /** The Show menu (the Show ▾ button opens it). */
     juce::PopupMenu buildShowMenu();
@@ -131,6 +140,7 @@ private:
     // and the session (which saves on close) must go before both.
     AudioEngine engine;
     juce::AudioDeviceManager deviceManager;
+    std::shared_ptr<PluginCatalog> plugins;
     std::unique_ptr<ShowSession> session;
     system::TuningReport tuning;
 
@@ -190,6 +200,15 @@ private:
     std::unique_ptr<PreShowCheckDialog> checkDialog;
     std::unique_ptr<SettingsWindow> settingsWindow;
     AudioSettingsView::Status audioStatus;
+
+    // Plugin windows by block ID; closed before their plugin, reopened after a rebuild.
+    void closePluginWindow (const juce::String& blockId, bool reopenWhenRebuilt);
+    void syncPluginWindows();
+    bool isPluginWindowActive() const;
+    std::map<juce::String, std::unique_ptr<PluginWindow>> pluginWindows;
+    std::map<juce::String, juce::Rectangle<int>> pluginWindowBounds;
+    juce::StringArray pluginWindowsToReopen;
+    juce::String crashedPluginNote;
 
     // Crash recovery: where the show is, kept on disk while running.
     std::unique_ptr<RecoveryFile> recovery;

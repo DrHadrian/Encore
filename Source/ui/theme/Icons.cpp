@@ -56,6 +56,7 @@ namespace
                 { Icon::lock,         { lock_svg,         lock_svgSize } },
                 { Icon::midiPort,     { midiport_svg,     midiport_svgSize } },
                 { Icon::minus,        { minus_svg,        minus_svgSize } },
+                { Icon::plug,         { plug_svg,         plug_svgSize } },
                 { Icon::plus,         { plus_svg,         plus_svgSize } },
                 { Icon::sidebarRight, { sidebarright_svg, sidebarright_svgSize } },
                 { Icon::sliders,      { sliders_svg,      sliders_svgSize } },

@@ -22,6 +22,7 @@ set(ENCORE_JUCE_DIR "" CACHE PATH "Optional local JUCE checkout (skips download)
 
 if(ENCORE_JUCE_DIR)
     add_subdirectory("${ENCORE_JUCE_DIR}" "${CMAKE_BINARY_DIR}/juce" EXCLUDE_FROM_ALL)
+    set(juce_SOURCE_DIR "${ENCORE_JUCE_DIR}")   # where JUCE's module sources are (see ENCORE_PCH)
 else()
     include(FetchContent)
     FetchContent_Declare(juce
@@ -116,12 +117,16 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/blocks/NamAmpBlock.h
     Source/engine/blocks/NoiseGateBlock.cpp
     Source/engine/blocks/NoiseGateBlock.h
+    Source/engine/blocks/PluginBlock.cpp
+    Source/engine/blocks/PluginBlock.h
     Source/engine/core/BackgroundJobs.h
     Source/engine/core/Block.cpp
     Source/engine/core/Block.h
     Source/engine/core/Chain.cpp
     Source/engine/core/Chain.h
     Source/engine/core/LockFreeFifo.h
+    Source/engine/core/MessageThread.cpp
+    Source/engine/core/MessageThread.h
     Source/engine/core/PatchPlayer.cpp
     Source/engine/core/PatchPlayer.h
     Source/engine/core/Parameter.cpp
@@ -150,9 +155,13 @@ target_sources(EncoreEngine INTERFACE
     Source/model/StageLayout.cpp
     Source/model/StageLayout.h
     Source/model/ShowModel.h
+    Source/platform/CrashReport.cpp
+    Source/platform/CrashReport.h
     Source/platform/SystemTuning.cpp
     Source/platform/SystemTuning.h
     Source/session/PatchBuilder.cpp
+    Source/session/PluginCatalog.cpp
+    Source/session/PluginCatalog.h
     Source/session/PreShowCheck.cpp
     Source/session/PreShowCheck.h
     Source/session/RecoveryFile.cpp
@@ -189,6 +198,7 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/icons/lock.svg
         Resources/ui/icons/midi-port.svg
         Resources/ui/icons/minus.svg
+        Resources/ui/icons/plug.svg
         Resources/ui/icons/plus.svg
         Resources/ui/icons/sidebar-right.svg
         Resources/ui/icons/sliders.svg
@@ -237,6 +247,28 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/Toolbar.h)
 target_link_libraries(EncoreUi INTERFACE EncoreUiAssets)
 
+# ------------------------------------------------------------------------------
+# Build speed (decision 0049). Parsing JUCE's headers is ~95 % of compiling a
+# typical Encore file: precompile them once per target. JUCE's own module
+# sources (each one big file, configured by macros) and generated files keep
+# compiling as before.
+# ------------------------------------------------------------------------------
+option(ENCORE_PCH "Precompile the JUCE headers for Encore's own sources" ON)
+
+function(encore_precompile_headers target)
+    if(NOT ENCORE_PCH)
+        return()
+    endif()
+
+    # C++ only (the target also compiles a few C files).
+    target_precompile_headers(${target} PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/Source/EncorePrecompiled.h>")
+
+    file(GLOB_RECURSE juce_module_sources CONFIGURE_DEPENDS
+        "${juce_SOURCE_DIR}/modules/*.cpp" "${juce_SOURCE_DIR}/modules/*.mm" "${juce_SOURCE_DIR}/modules/*.c")
+    set_source_files_properties(${juce_module_sources} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+endfunction()
+
 juce_add_gui_app(Encore
     PRODUCT_NAME "Encore"
     COMPANY_NAME "Encore"
@@ -276,6 +308,10 @@ target_sources(Encore PRIVATE
     Source/ui/TunerDisplay.h
     Source/ui/PatchList.cpp
     Source/ui/PatchList.h
+    Source/ui/PluginSettings.cpp
+    Source/ui/PluginSettings.h
+    Source/ui/PluginWindow.cpp
+    Source/ui/PluginWindow.h
     Source/ui/SetList.cpp
     Source/ui/SetList.h)
 
@@ -285,6 +321,7 @@ target_compile_definitions(Encore PRIVATE
     JUCE_ASIO=1
     JUCE_WASAPI=1
     JUCE_USE_WINRT_MIDI=1          # Bluetooth MIDI pedals (Windows 10+)
+    JUCE_PLUGINHOST_VST3=1         # VST3 plugins as blocks (milestone 10)
     JUCE_DIRECTSOUND=0
     # Features we don't use: keep the binary lean and avoid network code.
     JUCE_WEB_BROWSER=0
@@ -305,8 +342,17 @@ target_link_libraries(Encore
         juce::juce_gui_basics
     PUBLIC
         juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+# Link-time optimisation for the app players use; CI's quick checks skip it
+# (it makes linking the slowest step and isn't needed to test behaviour).
+option(ENCORE_LTO "Link-time optimisation for Encore (Release)" ON)
+
+if(ENCORE_LTO)
+    target_link_libraries(Encore PUBLIC juce::juce_recommended_lto_flags)
+endif()
+
+encore_precompile_headers(Encore)
 
 # ------------------------------------------------------------------------------
 # Tests: a console app that runs every engine unit test.
@@ -317,7 +363,34 @@ option(ENCORE_BUILD_TESTS "Build the engine unit tests" ON)
 if(ENCORE_BUILD_TESTS)
     enable_testing()
 
+    # A tiny VST3 the tests host (gain + ways to misbehave), never shipped.
+    juce_add_plugin(EncoreTestPlugin
+        PRODUCT_NAME "Encore Test Plugin"
+        COMPANY_NAME "Encore"
+        PLUGIN_MANUFACTURER_CODE Enco
+        PLUGIN_CODE Etst
+        FORMATS VST3
+        IS_SYNTH FALSE
+        NEEDS_MIDI_INPUT FALSE
+        NEEDS_MIDI_OUTPUT FALSE
+        COPY_PLUGIN_AFTER_BUILD FALSE)
+
+    target_sources(EncoreTestPlugin PRIVATE Tests/plugin/EncoreTestPlugin.cpp)
+
+    target_compile_definitions(EncoreTestPlugin PUBLIC
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_VST3_CAN_REPLACE_VST2=0)
+
+    target_link_libraries(EncoreTestPlugin
+        PRIVATE
+            juce::juce_audio_processors
+        PUBLIC
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags)
+
     juce_add_console_app(EncoreTests PRODUCT_NAME "EncoreTests")
+    add_dependencies(EncoreTests EncoreTestPlugin_VST3)
 
     target_sources(EncoreTests PRIVATE
         Tests/TestMain.cpp
@@ -351,6 +424,8 @@ if(ENCORE_BUILD_TESTS)
         Source/ui/AudioSettingsView.cpp
         Source/ui/SettingsWindow.cpp
         Source/ui/PatchList.cpp
+        Source/ui/PluginSettings.cpp
+        Source/ui/PluginWindow.cpp
         Source/ui/PreShowCheckView.cpp
         Source/ui/SetList.cpp
         Source/ui/CueDialogs.cpp
@@ -359,6 +434,8 @@ if(ENCORE_BUILD_TESTS)
         Source/ui/TunerDisplay.cpp
         Tests/PatchBuilderTests.cpp
         Tests/PatchPlayerTests.cpp
+        Tests/PluginTests.cpp
+        Tests/PluginViewTests.cpp
         Tests/ResamplerTests.cpp
         Tests/SessionTests.cpp
         Tests/TestSignals.h)
@@ -367,11 +444,14 @@ if(ENCORE_BUILD_TESTS)
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_UNIT_TESTS=1
+        JUCE_PLUGINHOST_VST3=1
         JUCE_MODAL_LOOPS_PERMITTED=1     # tests pump the message loop themselves
         JUCE_ALSA=0                      # no audio hardware needed (or headers, on Linux CI)
         JUCE_JACK=0
         # Real captures shipped with NeuralAmpModelerCore, used as test fixtures.
-        ENCORE_NAM_EXAMPLE_MODELS="${nam_SOURCE_DIR}/example_models")
+        ENCORE_NAM_EXAMPLE_MODELS="${nam_SOURCE_DIR}/example_models"
+        # The test plugin's .vst3 bundle.
+        ENCORE_TEST_PLUGIN="$<GENEX_EVAL:$<TARGET_PROPERTY:EncoreTestPlugin_VST3,JUCE_PLUGIN_ARTEFACT_FILE>>")
 
     target_link_libraries(EncoreTests
         PRIVATE
@@ -390,7 +470,23 @@ if(ENCORE_BUILD_TESTS)
             juce::juce_recommended_config_flags
             juce::juce_recommended_warning_flags)
 
-    add_test(NAME EncoreTests COMMAND EncoreTests)
+    encore_precompile_headers(EncoreTests)
+
+    # The tests run as four processes in parallel (ctest -j): the long ones
+    # (robustness and its soak, plugins, screens) each on their own, the
+    # rest together. ENCORE_TEST_ONLY / ENCORE_TEST_SKIP take names joined by |.
+    set(encore_slow_tests "Robustness" "Plugins|Plugins in the UI"
+        "Edit view (design v3)|Stage view (design v3)|Design v3 hardening|UI design system|Stage view")
+    set(encore_test_groups robustness plugins screens)
+
+    foreach(name tests IN ZIP_LISTS encore_test_groups encore_slow_tests)
+        add_test(NAME EncoreTests.${name} COMMAND EncoreTests)
+        set_tests_properties(EncoreTests.${name} PROPERTIES ENVIRONMENT "ENCORE_TEST_ONLY=${tests}")
+    endforeach()
+
+    list(JOIN encore_slow_tests "|" encore_all_slow)
+    add_test(NAME EncoreTests.engine COMMAND EncoreTests)
+    set_tests_properties(EncoreTests.engine PROPERTIES ENVIRONMENT "ENCORE_TEST_SKIP=${encore_all_slow}")
 endif()
 
 if(MSVC)

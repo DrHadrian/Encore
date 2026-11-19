@@ -51,6 +51,9 @@ public:
     std::function<int (const juce::String& paramId)> getExpressionPedal;
     std::function<void (const juce::String& paramId, int pedal)> onExpressionChosen;
 
+    /** Plugin blocks: "Open plugin window..." in the header. */
+    std::function<void()> onOpenPluginWindow;
+
     /** Loads a file into the block as if picked in the chooser. */
     void loadFile (const juce::File& file);
 
@@ -93,6 +96,7 @@ private:
     void chooseFile();
     void setLoading (bool isLoading);
     void updateHeader();
+    juce::uint32 headerDot() const;
     void layOutGear();
     juce::String headerLabel() const;
 
@@ -106,6 +110,7 @@ private:
 
     std::unique_ptr<juce::FileChooser> chooser;
     bool loading = false;
+    bool shownProblem = false;   // a plugin not loaded or switched off by the guard
     juce::String shownFile, shownInfo, shownCpu;
 
     juce::String statusLabel, statusLabelCaps;

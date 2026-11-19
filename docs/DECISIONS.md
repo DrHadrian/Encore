@@ -423,3 +423,121 @@ interface, at the exact boxes of the future artwork, so real gear art can
 replace them without touching a screen. Snapshot tests render every screen
 and `docs/design/tools/ui-compare.py` compares them with the design targets.
 
+
+## 0045 — Plugins are scanned, and tried, in a separate process (milestone 10)
+
+Encore never loads an unknown plugin into itself. A scan lists the VST3 files
+in the chosen folders (default: the standard VST3 folder) and starts a copy of
+Encore for each new or changed file (`Encore --scan-plugin <file> <result>`).
+That copy lists the plugins in the file **and loads and plays each one
+briefly** (VST3 can list from `moduleinfo.json` without loading anything, which
+would prove nothing). If the copy crashes, or doesn't finish within 60 s, the
+file goes on a blocklist with the reason, and Encore carries on; a full scan
+(or "try again") retries it. The plugin list, the blocklist and the folders
+belong to the computer, not the show (0006), in one XML file in the app-data
+folder. Known, unchanged files aren't scanned again. Instruments without an
+audio input aren't offered.
+
+The scanner treats plugins as a host does (after the first real-world test):
+each one gets time on the message loop to finish starting and closing
+(tearing one down at once made some report a crash on their next start); the
+"time limit" counts from the last plugin finished, so a shell holding many
+plugins isn't cut off; a plugin that loads but can't be used (no audio input
+or output, failed to create) is listed under Blocked with why, never silently
+dropped; main buses switched off by default are switched on; each scanned
+file gets a line in plugin-scan.log next to the plugin list. Plugins are
+matched to scanned files by the .vst3 folder they're in: without a
+moduleinfo.json, JUCE names the DLL inside the folder (UAD's plugins
+vanished at the end of every scan). Instruments are skipped without being
+loaded. Plugins get a play head (stopped, 120 BPM, 4/4), as hosts provide.
+
+## 0046 — Plugin blocks: created on the message thread, guarded while playing (milestone 10)
+
+A plugin is a block like the built-in ones (stomps, expression pedals,
+gapless switching, tails). VST3 plugins are created, set up (buses, saved
+state), prepared, reset and closed on the message thread; a loader thread asks
+the message thread and waits, giving up if the show closes or Encore quits.
+Encore is mono until routing (milestone 11): the guitar feeds every input of
+the plugin and a stereo output is averaged back to mono.
+
+In-process crash guard (process isolation is milestone 12):
+- a plugin that crashes inside its audio processing (Windows: a structured
+  exception), outputs NaN/inf, or takes longer than the whole buffer three
+  callbacks in a row is switched off at once; the dry signal passes and the
+  fault is reported. A crashed plugin is never called again, not even to be
+  closed, because it may still hold its own locks: it stays in memory until
+  Encore quits. The other faults can be turned back on.
+- the crash handler records which plugin the crash was in; after such a
+  crash that plugin's blocks start switched off, with a notice, until turned
+  back on. It's the plugin Encore was calling on that thread, or else the
+  plugin whose file the crashing code (or a caller further down the stack)
+  is in: plugins also crash in their own windows and threads, where Encore
+  isn't calling them. The crash report names what happened (e.g. an access
+  violation), the file and offset, the thread, and every frame by file,
+  since plugins and a Release Encore have no symbols.
+- a reset (panic, a patch finished ringing) is done on the message thread,
+  since a plugin's reset may allocate. Switched off, a plugin is fed silence
+  until its tail has died away, so switching it back on doesn't replay an old
+  tail. Plugins always count as having a tail (many report none).
+
+## 0047 — The plugin's own state holds its settings; shows with plugins are schema 2 (milestone 10)
+
+A plugin block saves which plugin it is (format, name, maker, unique ID,
+version and where it was installed, as a hint) and the plugin's own state
+(base64). Its parameters aren't saved one by one, except knobs on an
+expression pedal, which keep their own saved value like any block's. The
+state is read from the plugin only when something changed (parameters,
+programs, the plugin saying so), so autosave stays cheap. On a computer
+without the plugin (or with it blocked) the block passes the signal through
+and keeps everything it saved. A show that contains a plugin is written as
+schema 2; a show without one stays schema 1, so older Encore versions keep
+opening it. Adding, removing or moving a block reloads the patch's plugins
+(their settings carry over).
+
+## 0048 — Plugins in the UI: thin, from the kit, ready to be redesigned (milestone 10)
+
+The design is still moving, so the plugin screens hold no logic: the catalog
+(session) and the plugin block (engine) do everything, and each screen is a
+small file built from `Source/ui/kit` and the theme tokens. Settings gets a
+**Plugins** tab (the plugin list where MIDI has its mappings, folders and the
+blocklist on the right). Plugins are added from the chain's Add block menu
+(*Plugin* → maker → plugin); the Library panel in PROPOSALS can replace that
+later on the same catalog. The block stage shows a plugin's first 8
+parameters as knobs and the inspector its first 48, because plugins can have
+hundreds; the rest are in the plugin's own window, a native window around the
+plugin's editor. That window closes before its plugin does and comes back
+when the patch is rebuilt (an edit reloads the patch's plugins); the
+main window doesn't pull keyboard focus away from it (decision 0025 still
+holds otherwise). Encore's own on/off replaces the plugin's bypass parameter.
+Encore never asks a plugin `hasEditor()`: for VST3 that makes the plugin
+build its window and throw it away (JUCE notes it crashes some plugins), and
+the screens refreshing 30 times a second did exactly that until a plugin
+crashed. "Open plugin window..." is on whenever the plugin is loaded; the
+window is created once, and shows a parameter list if the plugin has none.
+
+## 0049 — Build and test speed: compiler cache, precompiled JUCE, parallel tests, nightly soak
+
+CI took about 17 minutes a run, ~14 of them compiling (MSBuild, every file
+from scratch each time); the tests took ~1.5. Now:
+- CI builds with **Ninja** (as the CMake presets do) and **sccache**, the
+  compiler cache that works with MSVC (it needs debug info embedded in the
+  objects, `/Z7`). Only what changed compiles. Debug and Release run side by side.
+- Encore's own sources compile against a **precompiled header** of JUCE
+  (`ENCORE_PCH`, on by default): parsing JUCE's headers is ~95 % of compiling
+  a typical Encore file (measured: 5.2 s of 5.5 s). JUCE's module sources
+  keep compiling as they were. CI turns it off: sccache can't reuse files
+  compiled against a precompiled header, and building without it proves every
+  file includes what it uses.
+- The tests run as **four processes in parallel** (robustness, plugins,
+  screens, the rest); together they run exactly the full suite.
+- **Link-time optimisation** (`ENCORE_LTO`) stays on for the app players use;
+  pull requests skip it.
+- The **4-hour soak** runs every night (and on demand); every change runs a
+  2-minute one. Documentation-only changes don't build.
+- Not adopted (yet): C++20 modules / `import std` (still behind an
+  experimental switch in CMake, and JUCE is built from headers and macros);
+  CMake unity builds (JUCE's modules already are one, and they would merge
+  Encore's files); another linker (MSVC's is needed with LTO, and linking
+  isn't the slow step here). The app and the tests compile the shared sources
+  twice on purpose (different JUCE settings); sharing a library is the next
+  step if builds grow.

@@ -9,6 +9,7 @@
 #include "ui/theme/EncoreLookAndFeel.h"
 #include "ui/theme/EncoreTheme.h"
 #include "engine/core/Realtime.h"
+#include "session/PluginCatalog.h"
 
 namespace encore
 {
@@ -22,6 +23,7 @@ public:
     {
         setViewedComponent (content.get(), false);
         setScrollBarsShown (true, true);
+        content->startFirstPluginScanIfNeeded();
         setScrollBarThickness (theme::size::scrollbar);
 
         content->onViewChanged = [this]
@@ -90,10 +92,25 @@ public:
 
     // Two copies would fight over the same ASIO driver, which most drivers
     // handle badly. A second launch just brings the first one to the front.
-    bool moreThanOneInstanceAllowed() override { return false; }
+    // The plugin scanner (a copy of Encore that examines one plugin file) is
+    // the exception: it opens no audio and no window.
+    bool moreThanOneInstanceAllowed() override
+    {
+        return PluginCatalog::isScannerCommandLine (getCommandLineParameterArray());
+    }
 
     void initialise (const juce::String&) override
     {
+        if (PluginCatalog::isScannerCommandLine (getCommandLineParameterArray()))
+        {
+            PluginCatalog::startScanner (getCommandLineParameterArray(), [this] (int exitCode)
+            {
+                setApplicationReturnValue (exitCode);
+                quit();
+            });
+            return;
+        }
+
         // Debug builds: count any allocation made on the audio thread.
         rt::installAllocationTripwire();
 
@@ -109,6 +126,9 @@ public:
 
     void shutdown() override
     {
+        if (settings == nullptr)
+            return;   // the plugin scanner: nothing was opened
+
         mainWindow = nullptr;   // closes the audio device first
         settings->save();
         settings = nullptr;
