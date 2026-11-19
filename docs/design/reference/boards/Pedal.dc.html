@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Encore — Pedal component</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;family=Pacifico&amp;family=Righteous&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.shell{position:absolute;inset:0;isolation:isolate;box-sizing:border-box;box-shadow:inset 0 2px 1px rgba(255,255,255,0.45),inset 0 -5px 7px rgba(0,0,0,0.38),inset 2px 0 2px rgba(255,255,255,0.12),inset -2px 0 3px rgba(0,0,0,0.25),0 1px 0 rgba(0,0,0,0.9),0 10px 14px -4px rgba(0,0,0,0.75),0 24px 30px -12px rgba(0,0,0,0.6)}
+.shell::before{content:'';position:absolute;inset:0;border-radius:inherit;background-image:url(/_blob/a71b9321d213c34f162508c0002c0987);background-size:96px 96px;mix-blend-mode:overlay;z-index:-1;pointer-events:none}
+.shell::after{content:'';position:absolute;inset:0;border-radius:inherit;background:linear-gradient(162deg,rgba(255,255,255,0.34) 0%,rgba(255,255,255,0.07) 22%,rgba(255,255,255,0) 40%,rgba(0,0,0,0) 62%,rgba(0,0,0,0.32) 100%);z-index:-1;pointer-events:none}
+.silver{background:url(/_blob/1503142138f2ba8bf42c6907b26dab50) 0 0/256px 64px,#c9ccd0}
+.darkmetal{background:url(/_blob/3300ebb17d9250b0fb9da48236c8955a) 0 0/256px 64px,#7a7e83}
+.knob{display:block;filter:drop-shadow(0 4px 3px rgba(0,0,0,0.55)) drop-shadow(0 1px 1px rgba(0,0,0,0.7))}
+.screw{position:absolute;width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffffff,#a5a9ae 45%,#4a4d52);box-shadow:0 1px 1px rgba(0,0,0,0.7)}
+.screw::after{content:'';position:absolute;left:1px;right:1px;top:4px;height:1px;background:#3a3d41;transform:rotate(30deg)}
+.print{text-shadow:0 1px 0 rgba(255,255,255,0.18),0 -1px 0 rgba(0,0,0,0.25)}
+</style>
+</helmet>
+<div style="width: 160px; height: 210px; position: relative; font-family: Inter, sans-serif; filter: {{filter}}">
+
+  <sc-if value="{{isComp}}" hint-placeholder-val="{{ false }}">
+    <div class="shell silver" style="border-radius: 10px; border: 1px solid #55595e; display: flex; flex-direction: column; align-items: center; padding: 14px 14px 12px">
+      <span class="screw" style="left: 5px; top: 5px"></span><span class="screw" style="right: 5px; top: 5px"></span>
+      <div style="display: flex; justify-content: space-between; width: 100%">
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 3px">
+          <span style="width: 40px; height: 40px; position: relative; display: block"><img class="knob" src="/_blob/7bd2416c143ab3d7528e080820ae3a09" alt="" style="width: 40px; height: 40px"><span style="position: absolute; inset: 0; transform: rotate(-40deg)"><span style="position: absolute; left: 19px; top: 2px; width: 2px; height: 9px; background: #ffffff; border-radius: 1px"></span></span></span>
+          <span class="print" style="font-size: 9px; font-weight: 800; letter-spacing: 0.1em; color: #1d1e20">SUSTAIN</span>
+        </span>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 3px">
+          <span style="width: 40px; height: 40px; position: relative; display: block"><img class="knob" src="/_blob/7bd2416c143ab3d7528e080820ae3a09" alt="" style="width: 40px; height: 40px"><span style="position: absolute; inset: 0; transform: rotate(30deg)"><span style="position: absolute; left: 19px; top: 2px; width: 2px; height: 9px; background: #ffffff; border-radius: 1px"></span></span></span>
+          <span class="print" style="font-size: 9px; font-weight: 800; letter-spacing: 0.1em; color: #1d1e20">LEVEL</span>
+        </span>
+      </div>
+      <span style="margin-top: 6px; width: 10px; height: 10px; border-radius: 50%; background: {{ledBlue}}; box-shadow: inset 0 1px 2px rgba(255,255,255,0.7), 0 0 0 2px #2a2b2d, 0 0 0 3px #9a9ea3, {{glowBlue}}"></span>
+      <div style="margin-top: 9px; width: 100%; padding: 6px 0; background: linear-gradient(180deg, #232427, #141517); border-radius: 3px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.5); text-align: center; font-size: 18px; font-weight: 800; letter-spacing: 0.16em; color: #e9eaec">SQUEEZE</div>
+      <span style="flex-grow: 1"></span>
+      <img class="knob" src="/_blob/922a56e9d1212bf6411d51e587efbf21" alt="" style="width: 50px; height: 50px">
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isDrive}}" hint-placeholder-val="{{ false }}">
+    <div class="shell" style="border-radius: 14px; border: 1px solid #0f2a17; background: radial-gradient(ellipse at 30% 15%, #4cbb6c, #2a8545 45%, #175a2b); display: flex; flex-direction: column; align-items: center; padding: 10px 12px 12px">
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: {{ledRed}}; box-shadow: inset 0 1px 2px rgba(255,255,255,0.7), 0 0 0 2px #1a1a1a, 0 0 0 3px #a0a4a8, {{glowRed}}"></span>
+      <div style="display: flex; justify-content: space-between; width: 100%; margin-top: 4px">
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 1px">
+          <span style="width: 44px; height: 44px; position: relative; display: block"><img class="knob" src="/_blob/b30d42bb78b0962c58562d03e5c128aa" alt="" style="width: 44px; height: 44px"><span style="position: absolute; inset: 0; transform: rotate(20deg)"><span style="position: absolute; left: 21px; top: 4px; width: 2px; height: 12px; background: #3a2a1a; border-radius: 1px"></span></span></span>
+          <span style="font-family: Pacifico, cursive; font-size: 13px; color: #f4ecd6; text-shadow: 0 1px 1px rgba(0,0,0,0.4)">drive</span>
+        </span>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 1px">
+          <span style="width: 44px; height: 44px; position: relative; display: block"><img class="knob" src="/_blob/b30d42bb78b0962c58562d03e5c128aa" alt="" style="width: 44px; height: 44px"><span style="position: absolute; inset: 0; transform: rotate(-25deg)"><span style="position: absolute; left: 21px; top: 4px; width: 2px; height: 12px; background: #3a2a1a; border-radius: 1px"></span></span></span>
+          <span style="font-family: Pacifico, cursive; font-size: 13px; color: #f4ecd6; text-shadow: 0 1px 1px rgba(0,0,0,0.4)">level</span>
+        </span>
+      </div>
+      <div style="margin-top: 2px; font-family: Pacifico, cursive; font-size: 25px; line-height: 1.15; color: #f7f0dc; text-shadow: 0 2px 0 rgba(0,0,0,0.25), 0 0 1px rgba(0,0,0,0.4)">Overdrive</div>
+      <span style="flex-grow: 1"></span>
+      <img class="knob" src="/_blob/922a56e9d1212bf6411d51e587efbf21" alt="" style="width: 48px; height: 48px">
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isBoost}}" hint-placeholder-val="{{ false }}">
+    <div class="shell" style="border-radius: 12px; border: 1px solid #8f8264; background: radial-gradient(ellipse at 30% 15%, #fffaf0, #eadfc6 50%, #cbbd9b); display: flex; flex-direction: column; align-items: center; padding: 12px 12px 12px">
+      <span style="width: 60px; height: 60px; position: relative; display: block">
+        <img class="knob" src="/_blob/d063a5ea76bbc07282c40fdb188ccc4b" alt="" style="width: 60px; height: 60px; position: absolute; inset: 0">
+        <img class="knob" src="/_blob/01d0890fd28fd5ff2b3d5628e5f31827" alt="" style="position: absolute; left: 21px; top: -3px; width: 18px; height: 66px; transform: rotate(35deg)">
+      </span>
+      <span class="print" style="margin-top: 3px; font-size: 9px; font-weight: 800; letter-spacing: 0.16em; color: #6a2018">BOOST</span>
+      <span style="margin-top: 6px; width: 10px; height: 10px; border-radius: 50%; background: {{ledRed}}; box-shadow: inset 0 1px 2px rgba(255,255,255,0.7), 0 0 0 2px #2a2a2a, 0 0 0 3px #a0a4a8, {{glowRed}}"></span>
+      <div style="margin-top: 5px; font-family: Righteous, sans-serif; font-size: 22px; line-height: 1; color: #b3261c; text-align: center; text-shadow: 0 1px 0 rgba(255,255,255,0.6)">Clean<br>Boost</div>
+      <span style="flex-grow: 1"></span>
+      <img class="knob" src="/_blob/922a56e9d1212bf6411d51e587efbf21" alt="" style="width: 46px; height: 46px">
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isChorus}}" hint-placeholder-val="{{ false }}">
+    <div class="shell" style="border-radius: 8px; border: 1px solid #1a0d04; background: linear-gradient(90deg, #6e300b 0, #b5642a 3px, #8a3f10 8px, #2a1406 10px, #1c1c1e 11px, #242427 50%, #1c1c1e calc(100% - 11px), #2a1406 calc(100% - 10px), #8a3f10 calc(100% - 8px), #b5642a calc(100% - 3px), #6e300b 100%); padding: 10px 18px 12px; display: flex; flex-direction: column; align-items: center">
+      <div style="display: flex; justify-content: space-between; width: 100%; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: #ece7dc"><span>RATE</span><span>DEPTH</span></div>
+      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 3px">
+        <span style="width: 38px; height: 38px; position: relative; display: block"><img class="knob" src="/_blob/d063a5ea76bbc07282c40fdb188ccc4b" alt="" style="width: 38px; height: 38px"><span style="position: absolute; inset: 0; transform: rotate(-50deg)"><span style="position: absolute; left: 18px; top: 2px; width: 2px; height: 10px; background: #fff; border-radius: 1px"></span></span></span>
+        <span style="width: 9px; height: 9px; border-radius: 50%; background: {{ledAmber}}; box-shadow: inset 0 1px 2px rgba(255,255,255,0.7), 0 0 0 2px #0b0b0b, 0 0 0 3px #6a6d72, {{glowAmber}}"></span>
+        <span style="width: 38px; height: 38px; position: relative; display: block"><img class="knob" src="/_blob/d063a5ea76bbc07282c40fdb188ccc4b" alt="" style="width: 38px; height: 38px"><span style="position: absolute; inset: 0; transform: rotate(40deg)"><span style="position: absolute; left: 18px; top: 2px; width: 2px; height: 10px; background: #fff; border-radius: 1px"></span></span></span>
+      </div>
+      <div style="margin-top: 8px; width: 100%; border-top: 1px solid #0c0c0d; box-shadow: 0 1px 0 rgba(255,255,255,0.08); padding-top: 6px; display: flex; flex-direction: column; align-items: center">
+        <span style="font-family: Righteous, sans-serif; font-size: 12px; color: #d8d2c4; line-height: 1">the</span>
+        <span style="font-family: Righteous, sans-serif; font-size: 31px; color: #f2ede2; line-height: 1; text-shadow: 0 2px 2px rgba(0,0,0,0.6)">Swirl</span>
+      </div>
+      <span style="flex-grow: 1"></span>
+      <div style="display: flex; align-items: center; justify-content: space-between; width: 100%">
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 3px"><span style="width: 26px; height: 16px; border-radius: 3px; background: linear-gradient(180deg, #ff6a5e, #d1281d 45%, #7a1009); box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 0 0 2px #0b0b0b, 0 2px 3px rgba(0,0,0,0.7)"></span><span style="font-size: 8px; font-weight: 700; color: #ece7dc">OFF ON</span></span>
+        <img class="knob" src="/_blob/922a56e9d1212bf6411d51e587efbf21" alt="" style="width: 44px; height: 44px">
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isDelay}}" hint-placeholder-val="{{ false }}">
+    <div class="shell silver" style="border-radius: 8px; border: 1px solid #5a5e63; padding: 9px; display: flex; flex-direction: column; gap: 6px">
+      <div style="height: 58px; border-radius: 4px; background: radial-gradient(ellipse at 30% 0%, #9be35e, #5fae2e 55%, #3f8a1a); box-shadow: inset 0 2px 1px rgba(255,255,255,0.45), inset 0 -2px 4px rgba(0,0,0,0.35), 0 0 0 1px #2a5a12; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px">
+        <span style="width: 40px; height: 20px; border-radius: 3px; background: linear-gradient(180deg, #ff6a5e 0, #d93a2e 45%, #7e140c 50%, #a01c13 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 0 0 2px #1a1a1a, 0 3px 4px rgba(0,0,0,0.6)"></span>
+        <span style="font-size: 8px; font-weight: 800; letter-spacing: 0.06em; color: #12300a">NORM · REVERSE</span>
+      </div>
+      <div class="print" style="padding: 3px 0; text-align: center; font-size: 15px; font-weight: 800; letter-spacing: 0.08em; color: #1a1a1a">TAPE ECHO</div>
+      <div style="flex-grow: 1; border-radius: 4px; background: radial-gradient(ellipse at 30% 0%, #9be35e, #5fae2e 55%, #3f8a1a); box-shadow: inset 0 2px 1px rgba(255,255,255,0.45), inset 0 -2px 4px rgba(0,0,0,0.35), 0 0 0 1px #2a5a12; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly">
+        <span style="width: 10px; height: 10px; border-radius: 50%; background: {{ledRed}}; box-shadow: inset 0 1px 2px rgba(255,255,255,0.7), 0 0 0 2px #1a1a1a, 0 0 0 3px #a0a4a8, {{glowRed}}"></span>
+        <img class="knob" src="/_blob/922a56e9d1212bf6411d51e587efbf21" alt="" style="width: 46px; height: 46px">
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isReverb}}" hint-placeholder-val="{{ false }}">
+    <div class="shell" style="border-radius: 10px; border: 1px solid #0b1626; background: radial-gradient(ellipse at 30% 10%, #3f6797, #23406a 50%, #142740); padding: 12px; display: flex; flex-direction: column; align-items: center">
+      <span class="screw" style="left: 5px; top: 5px"></span><span class="screw" style="right: 5px; top: 5px"></span>
+      <div style="display: flex; justify-content: space-between; width: 100%">
+        <sc-for list="{{revKnobs}}" as="k" hint-placeholder-count="3">
+          <span style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <span style="width: 32px; height: 32px; position: relative; display: block"><img class="knob" src="/_blob/bef9d65d89507fd501ebf2cdc52be7e7" alt="" style="width: 32px; height: 32px"><span style="position: absolute; inset: 0; transform: rotate({{k.deg}}deg)"><span style="position: absolute; left: 15px; top: 3px; width: 2px; height: 8px; background: #1a1a1a; border-radius: 1px"></span></span></span>
+            <span style="font-size: 8px; font-weight: 800; letter-spacing: 0.08em; color: #cfdcef">{{k.l}}</span>
+          </span>
+        </sc-for>
+      </div>
+      <div style="margin-top: 9px; width: 100%; height: 32px; border-radius: 4px; background: repeating-linear-gradient(180deg, #08111d 0 2px, #6d8db8 2px 3px, #3a5a85 3px 5px); box-shadow: inset 0 2px 4px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.15)"></div>
+      <div style="margin-top: 5px; font-size: 16px; font-weight: 800; letter-spacing: 0.12em; color: #e3ecf8; text-shadow: 0 1px 2px rgba(0,0,0,0.5)">SPRING</div>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: {{ledRed}}; box-shadow: inset 0 1px 2px rgba(255,255,255,0.7), 0 0 0 2px #0b0b0b, 0 0 0 3px #8a96a8, {{glowRed}}"></span>
+      <span style="flex-grow: 1"></span>
+      <img class="knob" src="/_blob/922a56e9d1212bf6411d51e587efbf21" alt="" style="width: 46px; height: 46px">
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isGate}}" hint-placeholder-val="{{ false }}">
+    <div class="shell" style="border-radius: 10px; border: 1px solid #111; background: radial-gradient(ellipse at 30% 10%, #4a4b4f, #2c2d30 50%, #1b1c1e); padding: 12px; display: flex; flex-direction: column; align-items: center">
+      <span style="width: 46px; height: 46px; position: relative; display: block"><img class="knob" src="/_blob/7bd2416c143ab3d7528e080820ae3a09" alt="" style="width: 46px; height: 46px"><span style="position: absolute; inset: 0; transform: rotate(-20deg)"><span style="position: absolute; left: 22px; top: 2px; width: 2px; height: 10px; background: #f2c21b; border-radius: 1px"></span></span></span>
+      <span style="margin-top: 3px; font-size: 9px; font-weight: 800; letter-spacing: 0.12em; color: #d9d9dc">THRESHOLD</span>
+      <div style="margin-top: 8px; width: 100%; height: 28px; background: repeating-linear-gradient(135deg, #f2c21b 0 8px, #1d1d1f 8px 16px); border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -2px 3px rgba(0,0,0,0.4)"></div>
+      <div style="margin-top: 5px; font-size: 20px; font-weight: 800; letter-spacing: 0.16em; color: #f2c21b; text-shadow: 0 1px 2px rgba(0,0,0,0.6)">GATE</div>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: {{ledRed}}; box-shadow: inset 0 1px 2px rgba(255,255,255,0.7), 0 0 0 2px #0b0b0b, 0 0 0 3px #6a6d72, {{glowRed}}"></span>
+      <span style="flex-grow: 1"></span>
+      <img class="knob" src="/_blob/922a56e9d1212bf6411d51e587efbf21" alt="" style="width: 46px; height: 46px">
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isEq}}" hint-placeholder-val="{{ false }}">
+    <div class="shell darkmetal" style="border-radius: 8px; border: 1px solid #2a2c2f; padding: 10px; display: flex; flex-direction: column; align-items: center">
+      <div style="width: 100%; height: 86px; border-radius: 3px; background: linear-gradient(180deg, #1d1e21, #2c2e31); box-shadow: inset 0 2px 4px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.35); display: flex; justify-content: space-around; padding: 6px 4px; box-sizing: border-box">
+        <sc-for list="{{eqBands}}" as="e" hint-placeholder-count="7">
+          <span style="width: 12px; height: 100%; position: relative; display: block">
+            <span style="position: absolute; left: 5px; top: 0; bottom: 0; width: 2px; background: #050505; box-shadow: 1px 0 0 rgba(255,255,255,0.08)"></span>
+            <span style="position: absolute; left: 0; top: {{e.top}}; width: 12px; height: 10px; border-radius: 2px; background: linear-gradient(180deg, #ffffff, #d6d8db 40%, #8d9196 55%, #c7cacd); box-shadow: 0 2px 3px rgba(0,0,0,0.7)"></span>
+          </span>
+        </sc-for>
+      </div>
+      <div style="margin-top: 7px; font-family: 'Share Tech Mono', monospace; font-size: 18px; color: #16171a; text-shadow: 0 1px 0 rgba(255,255,255,0.25)">Graphic EQ</div>
+      <span style="margin-top: 3px; width: 10px; height: 10px; border-radius: 50%; background: {{ledRed}}; box-shadow: inset 0 1px 2px rgba(255,255,255,0.7), 0 0 0 2px #1a1a1a, 0 0 0 3px #a0a4a8, {{glowRed}}"></span>
+      <span style="flex-grow: 1"></span>
+      <img class="knob" src="/_blob/922a56e9d1212bf6411d51e587efbf21" alt="" style="width: 46px; height: 46px">
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isJack}}" hint-placeholder-val="{{ false }}">
+    <div class="shell darkmetal" style="border-radius: 10px; border: 1px solid #2a2c2f; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px">
+      <span class="screw" style="left: 6px; top: 6px"></span><span class="screw" style="right: 6px; top: 6px"></span><span class="screw" style="left: 6px; bottom: 6px"></span><span class="screw" style="right: 6px; bottom: 6px"></span>
+      <img class="knob" src="/_blob/922a56e9d1212bf6411d51e587efbf21" alt="" style="width: 62px; height: 62px; filter: grayscale(1) brightness(0.85) drop-shadow(0 3px 3px rgba(0,0,0,0.6))">
+      <span class="print" style="font-size: 17px; font-weight: 800; letter-spacing: 0.14em; color: #141517">{{jackLabel}}</span>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{diff}}" hint-placeholder-val="{{ false }}">
+    <span style="position: absolute; right: -5px; top: -5px; width: 14px; height: 14px; border-radius: 50%; background: #FF9F0A; box-shadow: 0 0 0 2px #121214"></span>
+  </sc-if>
+  <sc-if value="{{selected}}" hint-placeholder-val="{{ false }}">
+    <span style="position: absolute; inset: -5px; border-radius: 14px; border: 3px solid #4FA3FF; pointer-events: none"></span>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kind":{"editor":"enum","options":["comp","drive","boost","chorus","delay","reverb","gate","eq","in","out"],"default":"drive"},"on":{"editor":"boolean","default":true},"selected":{"editor":"boolean","default":false},"diff":{"editor":"boolean","default":false},"$preview":{"width":160,"height":210}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var k = this.props.kind ?? 'drive';
+    var on = this.props.on ?? true;
+    var jack = k === 'in' || k === 'out';
+    return {
+      isComp: k === 'comp', isDrive: k === 'drive', isBoost: k === 'boost', isChorus: k === 'chorus',
+      isDelay: k === 'delay', isReverb: k === 'reverb', isGate: k === 'gate', isEq: k === 'eq', isJack: jack,
+      jackLabel: k === 'in' ? 'INPUT 1' : 'OUTPUT',
+      selected: this.props.selected ?? false,
+      diff: this.props.diff ?? false,
+      filter: (on || jack) ? 'none' : 'brightness(0.55) saturate(0.7)',
+      ledRed: on ? 'radial-gradient(circle at 40% 35%, #ffd2cc, #ff3b30 45%, #a3140c)' : 'radial-gradient(circle at 40% 35%, #6a2a24, #3a0f0b)',
+      glowRed: on ? '0 0 10px #FF3B30, 0 0 18px rgba(255,59,48,0.5)' : '0 0 0 transparent',
+      ledBlue: on ? 'radial-gradient(circle at 40% 35%, #e0f0ff, #4aa8ff 45%, #134e8f)' : 'radial-gradient(circle at 40% 35%, #2a3a4c, #0c1826)',
+      glowBlue: on ? '0 0 10px #5AB0FF, 0 0 18px rgba(90,176,255,0.5)' : '0 0 0 transparent',
+      ledAmber: on ? 'radial-gradient(circle at 40% 35%, #fff0cc, #ffa020 45%, #8f4d05)' : 'radial-gradient(circle at 40% 35%, #4a3412, #241805)',
+      glowAmber: on ? '0 0 10px #FFA020, 0 0 18px rgba(255,160,32,0.5)' : '0 0 0 transparent',
+      revKnobs: [{ l: 'DWELL', deg: -30 }, { l: 'TONE', deg: 20 }, { l: 'MIX', deg: -10 }],
+      eqBands: [{ top: '40%' }, { top: '30%' }, { top: '20%' }, { top: '45%' }, { top: '55%' }, { top: '35%' }, { top: '45%' }]
+    };
+  }
+}
+</script>
+</body>
+</html>

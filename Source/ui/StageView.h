@@ -8,6 +8,11 @@
 #include "engine/AudioEngine.h"
 #include "session/ShowSession.h"
 #include "ui/TunerDisplay.h"
+#include "ui/kit/Lcd.h"
+#include "ui/kit/NoticeBar.h"
+#include "ui/kit/Pane.h"
+#include "ui/kit/SegmentedControl.h"
+#include "ui/kit/Toolbar.h"
 
 namespace encore
 {
@@ -21,12 +26,17 @@ struct StageSnapshot
     int overruns = 0;
     bool onBattery = false;
     Tuner::Reading tuner;
-    juce::String audioProblem;   // e.g. "Audio interface lost - reconnecting"
+    juce::String audioProblem;   // e.g. "AUDIO INTERFACE LOST - reconnecting to <device>..."
     juce::String notice;         // shown along the top for a while (e.g. after a crash recovery)
+    juce::String deviceLine;     // footer: "ASIO · 48 kHz · 64 samples · 5.3 ms round trip" (the lost text while lost)
+    juce::String footswitch;     // footer: "Footswitch connected" / "No footswitch connected"
+    double roundTripMs = 0.0;    // 0: no device
 };
 
-/** The performance screen: widgets placed on a 24 x 16 grid by the show's
-    layouts (see StageLayout). Each cue can pick its own layout.
+/** The performance screen (SCREENS.md §3): a toolbar, strips for a lost
+    interface, a notice and the muted output, then widgets placed on a 24 x 16
+    grid by the show's layouts (see StageLayout), and a footer. Each cue can
+    pick its own layout.
 
     Edit layout mode: drag widgets to move them, drag a corner or edge to
     resize (snapping to the grid), right-click for options, "+ Widget" to add.
@@ -51,29 +61,54 @@ public:
     /** The main window shows the edit view again. */
     std::function<void()> onLeave;
 
+    /** The layout editor's widget inspector (SCREENS.md §6): the Inspector
+        toggle (key I). The main window remembers it per computer. */
+    void setLayoutInspectorShown (bool);
+    bool isLayoutInspectorShown() const noexcept { return inspectorShown; }
+    std::function<void (bool shown)> onLayoutInspectorChanged;
+
+    /** Layout editor: selects a widget by its position in the layout (-1: none). */
+    void selectLayoutWidget (int index);
+
     void paint (juce::Graphics&) override;
     void resized() override;
-
-    static const juce::Colour background, accent;
 
 private:
     class Widget;
     class Editor;
+    class MiniMeters;
+    class Caption;
+    class WidgetPanel;
+    class Artboard;
+    class LayoutInspector;
 
     void rebuildWidgets();
     void layoutWidgets();
+    void layoutToolbar();
     void showLayoutMenu();
     void showAddWidgetMenu();
     void commitWidgets (std::vector<StageWidget> widgets);
     juce::Rectangle<int> getGridArea() const;
+    int stripHeight (const kit::NoticeBar&) const;
     juce::Rectangle<int> cellBounds (const StageWidget&) const;
+    float getContentScale() const noexcept { return contentScale; }
+    float getChromeScale() const noexcept;
+    int getGap() const noexcept;
+    juce::Component& widgetParent();
+    void layoutEditor (juce::Rectangle<int> body);
+    void addWidgetAtFreeCell (StageWidgetType);
+    juce::Point<int> nextFreeCell() const;
+    void selectionChanged();
 
     void beginUnlockPress();
     void endUnlockPress();
     juce::String unlockProgressText() const;
 
     const StageLayout& shownLayout() const;
-    bool layoutHasTuner() const;
+    bool layoutHas (StageWidgetType) const;
+    void refreshToolbar();
+    void refreshStrips (const StageSnapshot&);
+    void refreshFooter (const StageSnapshot&);
 
     AudioEngine& engine;
     ShowSession& session;
@@ -81,14 +116,37 @@ private:
     bool locked = false, editing = false;
     juce::String editingLayoutId;   // in edit mode, the layout being edited
     StageLayout current;            // what's on screen
+    float contentScale = 1.0f;      // widget content: the window against the reference size
 
     juce::OwnedArray<Widget> widgets;
     std::unique_ptr<Editor> editor;
     TunerDisplay tunerOverlay;
 
-    juce::TextButton editViewButton { "Edit view" }, editLayoutButton { "Edit layout" }, lockStripButton { "Lock" };
-    juce::TextButton layoutsButton, addWidgetButton { "+ Widget" }, doneButton { "Done" };
-    juce::Label hint, noticeLabel;
+    // Toolbar (SCREENS.md §3.1)
+    kit::Toolbar toolbar;
+    kit::SegmentedControl modeSwitch;
+    std::unique_ptr<Caption> layoutName, hint;
+    std::unique_ptr<juce::Component> separator;
+    kit::Lcd lcd { true };
+    std::unique_ptr<MiniMeters> miniMeters;
+    juce::TextButton lockButton, tunerButton { "Tuner" }, muteButton { "Mute" };
+    juce::TextButton layoutsButton, addWidgetButton { "+ Widget" }, doneButton { "Done" }, inspectorButton { "Inspector" };
+
+    // Layout editor (§6): widget list, the artboard with the stage preview, the widget inspector.
+    kit::Pane widgetPane, canvasPane, inspectorPane;
+    std::unique_ptr<WidgetPanel> widgetPanel;
+    std::unique_ptr<Artboard> artboard;
+    std::unique_ptr<LayoutInspector> layoutInspector;
+    bool inspectorShown = true;
+
+    // Strips under the toolbar (§3.2)
+    kit::NoticeBar lostBar { kit::NoticeBar::Kind::lost }, noticeBar { kit::NoticeBar::Kind::stageNotice },
+                   mutedBar { kit::NoticeBar::Kind::muted };
+
+    // Footer (§3.4): drawn by paint(), placed by refreshFooter().
+    juce::String footerDevice, footerFootswitch, footerHelp, stageHelp;
+    bool footerAlert = false;
+    juce::Rectangle<float> footerDeviceBox, footerFootswitchBox, footerHelpBox;
 
     StageSnapshot last;
     int lastOverruns = 0;

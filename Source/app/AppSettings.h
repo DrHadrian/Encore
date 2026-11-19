@@ -21,6 +21,9 @@ class AppSettings
 public:
     AppSettings();
 
+    /** Settings kept in `folder` instead of the user's app-data folder (tests). */
+    explicit AppSettings (const juce::File& folder);
+
     /** %APPDATA%\Encore: settings, logs, the crash recovery file. */
     juce::File getFolder() const;
 
@@ -32,6 +35,10 @@ public:
 
     float getMasterGainDecibels() const;
     void setMasterGainDecibels (float dB);
+
+    /** The layout editor's widget inspector (Inspector toggle, key I). */
+    bool getLayoutInspectorShown() const;
+    void setLayoutInspectorShown (bool shown);
 
     /** Last file loaded into a block type (e.g. the amp), reloaded at start-up
         until shows and patches (milestone 4) remember this properly. */

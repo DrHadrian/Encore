@@ -6,6 +6,9 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "session/ShowSession.h"
+#include "ui/kit/IconButton.h"
+#include "ui/kit/Pane.h"
+#include "ui/kit/RowList.h"
 
 namespace encore
 {
@@ -16,9 +19,10 @@ namespace encore
     window handles those). Double-click to rename; right-click for options.
 
     The same list opens full size (all columns, cut items, fast typing) with
-    the expand button: that's CueListEditor, on the same data. */
-class SetList final : public juce::Component,
-                      private juce::ListBoxModel
+    the Full list button: that's CueListEditor, on the same data.
+    Looks: docs/design/SCREENS.md §4.3. */
+class SetList final : public kit::Pane,
+                      private kit::RowList::Model
 {
 public:
     explicit SetList (ShowSession& session);
@@ -26,7 +30,7 @@ public:
     /** Re-reads the running order and the playing position from the session. */
     void refresh();
 
-    /** The expand button: open the full list. */
+    /** The Full list button: open the full list. */
     std::function<void()> onExpand;
 
     void resized() override;
@@ -36,28 +40,29 @@ private:
     {
         juce::String id;
         int cueIndex = -1;       // -1: a section heading
-        juce::String heading;
+        juce::String heading;   // in capitals
     };
 
     int getNumRows() override;
-    void paintListBoxItem (int row, juce::Graphics&, int width, int height, bool selected) override;
-    void listBoxItemClicked (int row, const juce::MouseEvent&) override;
-    void listBoxItemDoubleClicked (int row, const juce::MouseEvent&) override;
-    void selectedRowsChanged (int lastRowSelected) override;
+    int getRowHeight (int row) override;
+    void paintRow (juce::Graphics&, int row, juce::Rectangle<int>) override;
+    void rowClicked (int row, const juce::MouseEvent&) override;
+    void rowDoubleClicked (int row, const juce::MouseEvent&) override;
 
     int cueIndexOfRow (int row) const;
+    void selectRow (int row);
     void rename (int cueIndex);
     void showCueMenu (int cueIndex);
     void updateButtons();
 
     ShowSession& session;
     std::vector<Row> rows;
+    int selectedRow = -1;
 
-    juce::Label header;
     juce::TextButton expandButton { "Full list" };
-    juce::ListBox list { "Running order", this };
-    juce::TextButton addButton { "+ Add" }, removeButton { "Remove" }, upButton { "Up" }, downButton { "Down" };
-    bool updating = false;
+    kit::RowList list { *this };
+    kit::IconButton addButton { theme::Icon::plus, {} }, removeButton { theme::Icon::minus, {} },
+                    upButton { theme::Icon::chevronUp, {} }, downButton { theme::Icon::chevronDown, {} };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SetList)
 };

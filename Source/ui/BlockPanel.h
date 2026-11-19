@@ -4,31 +4,40 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
-#include <functional>
 
 #include "engine/core/Block.h"
 #include "model/MidiMapping.h"
+#include "ui/kit/GearPlaceholder.h"
+#include "ui/kit/KnobView.h"
+#include "ui/kit/Pane.h"
 
 namespace encore
 {
 
-/** The editor for one block: name, on/off switch, CPU use, a file row for
-    blocks that load one (amp captures, IRs), and a control per parameter,
-    built automatically from the block's parameter list (on/off parameters
-    become switches). The same panel becomes the parameter area of the edit
-    view in milestone 4.
+/** The block stage (docs/design/SCREENS.md §4.3): the selected block as a
+    piece of gear. The header shows whether the block is on (dot), what it
+    is ("AMP · <model>"), its CPU and the file button ("Load amp...").
+    Below, on a lit stage, the block's placeholder panel with a knob per
+    parameter and a switch per on/off parameter, built automatically from
+    the block's parameter list, the power LED (turns the block on and off)
+    and, for the amp, the cab beside it. The whole panel shrinks to fit a
+    small window; it never grows past its design size.
 
     Message thread only. It reads and writes the block's atomics, so it never
     waits on the audio thread.
 */
-class BlockPanel final : public juce::Component
+class BlockPanel final : public kit::Pane
 {
 public:
     explicit BlockPanel (Block& blockToEdit);
     ~BlockPanel() override;
 
     /** Optional activity light (e.g. "gate open"). */
-    void setStatusLight (juce::String label, std::function<bool()> isLit);
+    void setStatusLight (juce::String text, std::function<bool()> isLit);
+
+    /** Shows this cab beside the amp (the block after it); clicking it calls onCabClicked. */
+    void setCabBeside (const Block* cab);
+    std::function<void()> onCabClicked;
 
     /** Called after any change made in this panel (knob, switch, on/off, file). */
     std::function<void()> onEdited;
@@ -45,11 +54,13 @@ public:
     /** Loads a file into the block as if picked in the chooser. */
     void loadFile (const juce::File& file);
 
-    /** Call from a UI timer: syncs controls changed elsewhere (MIDI later), CPU and file info. */
+    /** Call from a UI timer: syncs controls changed elsewhere (MIDI), CPU and file info. */
     void refresh();
 
-    int getPreferredWidth() const;
-    int getPreferredHeight() const;
+    Block& getBlock() const noexcept { return block; }
+
+    /** The scale the gear is drawn at (1 = design size), for tests. */
+    float getGearScale() const noexcept { return gearScale; }
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -61,13 +72,12 @@ private:
 
         Parameter& parameter;
         bool isSwitch = false;
-        juce::Slider slider { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow };
-        juce::TextButton switchButton;
-        juce::Label label;
+        std::unique_ptr<kit::KnobView> knob;
+        std::unique_ptr<kit::GearToggle> toggle;
         int shownPedal = -1;
     };
 
-    /** Right-click on a knob or its name: the expression pedal menu. */
+    /** Right-click on a knob: the expression pedal menu. */
     struct KnobMenu final : public juce::MouseListener
     {
         KnobMenu (BlockPanel& p, Control& c) : panel (p), control (c) {}
@@ -77,25 +87,35 @@ private:
         Control& control;
     };
 
+    class Gear;
+    class CabColumn;
+
     void chooseFile();
     void setLoading (bool isLoading);
+    void updateHeader();
+    void layOutGear();
+    juce::String headerLabel() const;
 
     Block& block;
-    juce::Label title, cpu;
-    juce::TextButton power { "ON" };
+    juce::TextButton loadButton;
     std::vector<std::unique_ptr<Control>> controls;
     std::vector<std::unique_ptr<KnobMenu>> knobMenus;
+    std::unique_ptr<Gear> gear;
+    std::unique_ptr<CabColumn> cabColumn;
+    float gearScale = 1.0f;
 
-    // File row (only for blocks with a FileSlot).
-    juce::TextButton loadButton;
-    juce::Label fileName, fileInfo;
     std::unique_ptr<juce::FileChooser> chooser;
     bool loading = false;
-    juce::String shownFile, shownInfo;
+    juce::String shownFile, shownInfo, shownCpu;
 
-    juce::String statusLabel;
+    juce::String statusLabel, statusLabelCaps;
     std::function<bool()> statusLit;
     bool statusWasLit = false;
+
+    // The lit stage behind the gear, drawn once per size and screen scale.
+    juce::Image stageImage;
+    juce::Path stageClip;
+    float stageScale = 0.0f;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE (BlockPanel)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BlockPanel)

@@ -3,51 +3,42 @@
 
 #include "ui/SetList.h"
 #include "ui/CueDialogs.h"
+#include "ui/theme/EncoreFonts.h"
+#include "ui/theme/EncoreLookAndFeel.h"
+#include "ui/theme/Paint.h"
 
 namespace encore
 {
 
-namespace
-{
-    const auto playingGreen = juce::Colour (0xff2e9e5b);
-    const auto amber = juce::Colour (0xfff0b429);
-}
+using namespace theme;
 
 SetList::SetList (ShowSession& s) : session (s)
 {
-    header.setFont (juce::FontOptions (17.0f, juce::Font::bold));
-    header.setColour (juce::Label::textColourId, juce::Colours::white);
-    addAndMakeVisible (header);
-
+    setVariant (expandButton, Variant::small);
     expandButton.setTooltip ("The full list: sections, bar marks, notes, cut items, fast typing (F6)");
     expandButton.onClick = [this] { if (onExpand != nullptr) onExpand(); };
     addAndMakeVisible (expandButton);
 
-    list.setRowHeight (38);
-    list.setWantsKeyboardFocus (false);   // Space/arrows always step the show (main window)
-    list.setColour (juce::ListBox::backgroundColourId, juce::Colour (0xff1b1e23));
     addAndMakeVisible (list);
 
     // A new item plays the current patch, right after the playing one.
     addButton.onClick = [this] { session.addCue (session.getActivePatchId(), session.getCurrentCue()); };
-    removeButton.onClick = [this] { session.removeCue (cueIndexOfRow (list.getSelectedRow())); };
+    removeButton.onClick = [this] { session.removeCue (cueIndexOfRow (selectedRow)); };
 
     for (auto [button, direction] : { std::pair { &upButton, -1 }, std::pair { &downButton, 1 } })
     {
         button->onClick = [this, direction = direction]
         {
-            const auto row = list.getSelectedRow();
-
-            if (! juce::isPositiveAndBelow (row, (int) rows.size()))
+            if (! juce::isPositiveAndBelow (selectedRow, (int) rows.size()))
                 return;
 
-            const auto id = rows[(size_t) row].id;
+            const auto id = rows[(size_t) selectedRow].id;
             session.moveItem (id, direction);   // steps in and out of sections too
             refresh();
 
             for (int i = 0; i < (int) rows.size(); ++i)
                 if (rows[(size_t) i].id == id)
-                    list.selectRow (i, false, true);
+                    selectRow (i);
         };
     }
 
@@ -59,40 +50,64 @@ SetList::SetList (ShowSession& s) : session (s)
 
 void SetList::refresh()
 {
-    const juce::ScopedValueSetter<bool> guard (updating, true);
     const auto words = session.getWords();
 
-    header.setText (words.list, juce::dontSendNotification);
+    setHeader (words.list);
     list.setTooltip ("Click to go to a " + words.item + ". Space or arrow keys step through.\n"
                      "Double-click to rename, right-click for options.");
     addButton.setTooltip ("New " + words.item + " after the playing one");
+    addButton.setTitle ("New " + words.item + " after the playing one");
+    removeButton.setTooltip ("Remove " + words.item);
+    removeButton.setTitle ("Remove " + words.item);
+    upButton.setTooltip ("Move " + words.item + " up");
+    upButton.setTitle ("Move " + words.item + " up");
+    downButton.setTooltip ("Move " + words.item + " down");
+    downButton.setTitle ("Move " + words.item + " down");
 
     // Sections as headings, playable items; cut items only show in the full list.
+    const auto oldSelectedId = juce::isPositiveAndBelow (selectedRow, (int) rows.size()) ? rows[(size_t) selectedRow].id : juce::String();
     rows.clear();
 
     for (auto& r : session.getRunningOrderRows())
     {
         if (r.item->kind == RunItem::Kind::section)
-            rows.push_back ({ r.item->id, -1, r.item->name });
+            rows.push_back ({ r.item->id, -1, r.item->name.toUpperCase() });
         else if (r.cueIndex >= 0)
             rows.push_back ({ r.item->id, r.cueIndex, {} });
     }
 
     list.updateContent();
 
+    // The playing item is selected (as before); otherwise keep the selection.
+    selectedRow = -1;
     const auto current = session.getCurrentCue();
 
     for (int i = 0; i < (int) rows.size(); ++i)
     {
-        if (rows[(size_t) i].cueIndex == current && current >= 0)
+        if (current >= 0 && rows[(size_t) i].cueIndex == current)
         {
-            list.selectRow (i, false, true);
+            selectedRow = i;
             list.scrollToEnsureRowIsOnscreen (i);
+            break;
         }
+
+        if (oldSelectedId.isNotEmpty() && rows[(size_t) i].id == oldSelectedId)
+            selectedRow = i;
     }
 
     updateButtons();
-    list.repaint();
+}
+
+void SetList::selectRow (int row)
+{
+    if (row != selectedRow)
+    {
+        list.repaintRow (selectedRow);
+        selectedRow = row;
+        list.repaintRow (selectedRow);
+        list.scrollToEnsureRowIsOnscreen (selectedRow);
+        updateButtons();
+    }
 }
 
 int SetList::cueIndexOfRow (int row) const
@@ -102,7 +117,7 @@ int SetList::cueIndexOfRow (int row) const
 
 void SetList::updateButtons()
 {
-    const auto row = list.getSelectedRow();
+    const auto row = selectedRow;
     const auto hasSelection = juce::isPositiveAndBelow (row, (int) rows.size());
     removeButton.setEnabled (hasSelection && rows[(size_t) row].cueIndex >= 0);
     upButton.setEnabled (hasSelection);
@@ -114,18 +129,23 @@ int SetList::getNumRows()
     return (int) rows.size();
 }
 
-void SetList::paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected)
+int SetList::getRowHeight (int row)
+{
+    return juce::isPositiveAndBelow (row, (int) rows.size()) && rows[(size_t) row].cueIndex < 0 ? size::sectionHeadingH : size::rowHeight;
+}
+
+void SetList::paintRow (juce::Graphics& g, int row, juce::Rectangle<int> bounds)
 {
     if (! juce::isPositiveAndBelow (row, (int) rows.size()))
         return;
 
+    auto area = bounds.toFloat().reduced ((float) size::rowPadX, 0.0f);
+
     if (rows[(size_t) row].cueIndex < 0)
     {
-        // A section heading (act, scene, set...).
-        g.setColour (amber.withAlpha (0.85f));
-        g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
-        g.drawText (rows[(size_t) row].heading.toUpperCase(), juce::Rectangle<int> (10, 0, width - 14, height - 4),
-                    juce::Justification::bottomLeft, true);
+        // A section heading (act, scene, set...): amber caps, at the bottom.
+        paint::text (g, rows[(size_t) row].heading, area.withTrimmedBottom ((float) size::headingPadBottom),
+                     type::sectionHeading, colour::amberSection, juce::Justification::bottomLeft);
         return;
     }
 
@@ -137,54 +157,49 @@ void SetList::paintListBoxItem (int row, juce::Graphics& g, int width, int heigh
 
     const auto& cue = *cues[(size_t) index];
     const auto playing = index == session.getCurrentCue();
-    auto area = juce::Rectangle<int> (0, 0, width, height).reduced (4, 2);
+    const auto selected = row == selectedRow;
 
-    if (selected || playing)
+    if (playing || selected)
     {
-        g.setColour (juce::Colour (0xff2a3140));
-        g.fillRoundedRectangle (area.toFloat(), 6.0f);
+        g.setColour (paint::c (playing ? colour::selectedRow : colour::patchSelected));
+        g.fillRoundedRectangle (bounds.toFloat(), (float) size::rowRadius);
     }
+
+    // Playing bar, number, name ... patch (PC, OUT).
+    const auto bar = area.removeFromLeft ((float) size::paneBarW);
 
     if (playing)
     {
-        g.setColour (playingGreen);
-        g.fillRoundedRectangle (area.removeFromLeft (6).toFloat().reduced (0.0f, 4.0f), 3.0f);
-    }
-    else
-    {
-        area.removeFromLeft (6);
+        g.setColour (paint::c (colour::healthy));
+        g.fillRoundedRectangle (bar.withSizeKeepingCentre (bar.getWidth(), (float) size::paneBarH), (float) size::paneBarRadius);
     }
 
-    g.setColour (juce::Colours::white.withAlpha (0.5f));
-    g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
-    g.drawText (cue.number, area.removeFromLeft (38).withTrimmedLeft (6), juce::Justification::centredLeft);
+    area.removeFromLeft ((float) size::rowGap);
+    paint::text (g, cue.number, area.removeFromLeft ((float) size::rowNumberW), type::body,
+                 playing ? colour::textStrong : colour::textDim);
+    area.removeFromLeft ((float) size::rowGap);
 
-    // Patch name on the right.
     const auto* patch = cue.uniquePatch ? &*cue.uniquePatch : session.getShow().findPatch (cue.patchId);
-    g.setFont (juce::FontOptions (13.0f));
-    g.setColour (patch != nullptr ? juce::Colours::white.withAlpha (0.5f) : amber);
     const auto patchText = patch != nullptr ? patch->name : juce::String ("(patch missing)");
     const auto midiText = juce::String (cue.programChange >= 0 ? "PC " + juce::String (cue.programChange) + "  " : "")
                         + (cue.midiOut.empty() ? "" : "OUT  ");
-    g.drawText (midiText + patchText, area.removeFromRight (juce::jmin (110, width / 3)), juce::Justification::centredRight, true);
+    const auto trailing = midiText + patchText;
+    const auto trailingW = juce::jmin (area.getWidth() * 0.5f, textWidth (font (type::rowTrailing), trailing) + 1.0f);
+    paint::text (g, trailing, area.removeFromRight (trailingW), type::rowTrailing,
+                 patch == nullptr ? colour::amber : playing ? colour::selectedRowSub : colour::textMuted,
+                 juce::Justification::centredRight);
+    area.removeFromRight ((float) size::rowGap);
 
-    g.setColour (juce::Colours::white.withAlpha (playing ? 1.0f : 0.85f));
-    g.setFont (juce::FontOptions (16.0f, playing ? juce::Font::bold : juce::Font::plain));
-    g.drawText (cue.name.isNotEmpty() ? cue.name : patchText, area.reduced (4, 0), juce::Justification::centredLeft, true);
+    paint::text (g, cue.name.isNotEmpty() ? cue.name : patchText, area, playing ? type::rowStrong : type::body, colour::text);
 }
 
-void SetList::selectedRowsChanged (int)
-{
-    if (! updating)
-        updateButtons();
-}
-
-void SetList::listBoxItemClicked (int row, const juce::MouseEvent& e)
+void SetList::rowClicked (int row, const juce::MouseEvent& e)
 {
     const auto index = cueIndexOfRow (row);
+    selectRow (row);   // a heading too: Up / Down move whole sections
 
     if (index < 0)
-        return;   // a heading
+        return;
 
     if (e.mods.isPopupMenu())
         showCueMenu (index);
@@ -192,8 +207,11 @@ void SetList::listBoxItemClicked (int row, const juce::MouseEvent& e)
         session.goToCue (index);
 }
 
-void SetList::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
+void SetList::rowDoubleClicked (int row, const juce::MouseEvent& e)
 {
+    if (e.mods.isPopupMenu())
+        return;
+
     if (const auto index = cueIndexOfRow (row); index >= 0)
         rename (index);
     else if (onExpand != nullptr)
@@ -273,20 +291,23 @@ void SetList::showCueMenu (int index)
 
 void SetList::resized()
 {
-    auto area = getLocalBounds();
-    auto top = area.removeFromTop (30);
-    expandButton.setBounds (top.removeFromRight (80).reduced (0, 3));
-    header.setBounds (top);
+    Pane::resized();
 
-    auto buttons = area.removeFromBottom (34);
-    const auto w = buttons.getWidth() / 4;
-    addButton.setBounds (buttons.removeFromLeft (w).reduced (2));
-    removeButton.setBounds (buttons.removeFromLeft (w).reduced (2));
-    upButton.setBounds (buttons.removeFromLeft (w).reduced (2));
-    downButton.setBounds (buttons.reduced (2));
+    // Header: Full list, then + − ↑ ↓ (1 px apart), right-aligned.
+    auto header = getHeaderBounds().withTrimmedRight (size::paneHeaderPadR);
 
-    area.removeFromBottom (6);
-    list.setBounds (area);
+    for (auto* b : { &downButton, &upButton, &removeButton, &addButton })
+    {
+        b->setBounds (header.removeFromRight (size::iconButton).withSizeKeepingCentre (size::iconButton, size::iconButton));
+        header.removeFromRight (size::headerButtonGap);
+    }
+
+    header.removeFromRight (size::headerSmallButtonMargin);
+    const auto w = expandButton.getBestWidthForHeight (size::buttonSmallHeight);
+    expandButton.setBounds (header.removeFromRight (w).withTrimmedTop ((header.getHeight() - size::buttonSmallHeight) / 2)
+                                                      .withHeight (size::buttonSmallHeight + size::buttonDrop));
+
+    list.setBounds (getContentBounds());
 }
 
 } // namespace encore

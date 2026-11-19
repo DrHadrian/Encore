@@ -16,13 +16,17 @@ namespace keys
     static constexpr auto lastShow    = "lastShowFolder";
     static constexpr auto midiMap     = "midiBindings";
     static constexpr auto midiOut     = "midiOutput";
+    static constexpr auto layoutInspector = "layoutEditorInspector";
 }
 
-AppSettings::AppSettings()
+AppSettings::AppSettings() : AppSettings (juce::File()) {}
+
+AppSettings::AppSettings (const juce::File& folder)
 {
     juce::PropertiesFile::Options options;
     options.applicationName     = "Encore";
-    options.folderName          = "Encore";
+    // An absolute folder name is used as it is (JUCE's getChildFile).
+    options.folderName          = folder == juce::File() ? juce::String ("Encore") : folder.getFullPathName();
     options.filenameSuffix      = ".settings";
     options.osxLibrarySubFolder = "Application Support";
     options.storageFormat       = juce::PropertiesFile::storeAsXML;   // human-readable for support
@@ -67,6 +71,16 @@ float AppSettings::getMasterGainDecibels() const
 void AppSettings::setMasterGainDecibels (float dB)
 {
     file().setValue (keys::masterGain, (double) dB);
+}
+
+bool AppSettings::getLayoutInspectorShown() const
+{
+    return file().getBoolValue (keys::layoutInspector, true);
+}
+
+void AppSettings::setLayoutInspectorShown (bool shown)
+{
+    file().setValue (keys::layoutInspector, shown);
 }
 
 juce::File AppSettings::getLastFile (const juce::String& blockTypeId) const

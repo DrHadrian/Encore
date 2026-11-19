@@ -3,19 +3,21 @@
 
 #include "ui/CueListEditor.h"
 #include "ui/CueDialogs.h"
+#include "ui/kit/KeyCap.h"
+#include "ui/theme/EncoreFonts.h"
+#include "ui/theme/EncoreLookAndFeel.h"
+#include "ui/theme/Paint.h"
 
 namespace encore
 {
 
+using namespace theme;
+
 namespace
 {
-    const auto background   = juce::Colour (0xff16181c);
-    const auto headerColour = juce::Colour (0xff202329);
-    const auto accent       = juce::Colour (0xff4c9aff);
-    const auto playingGreen = juce::Colour (0xff2e9e5b);
-    const auto amber        = juce::Colour (0xfff0b429);
-
-    constexpr int rowHeight = 28, headerHeight = 24, toolbarHeight = 34, indentPerLevel = 18;
+    // Rows 28 + the 1 px line under them; header 24 + line; toolbar 40 + line.
+    constexpr int rowHeight = size::tableRowHeight + 1, headerHeight = size::tableHeaderHeight + 1,
+                  toolbarHeight = size::subToolbar + 1, indentPerLevel = size::indentPerLevel;
 
     juce::String sectionKindLabel (const juce::String& kind)
     {
@@ -30,11 +32,16 @@ class CueListEditor::CellEditor final : public juce::TextEditor
 public:
     explicit CellEditor (CueListEditor& o) : owner (o)
     {
-        setFont (juce::FontOptions (15.0f));
-        setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xff0e1013));
-        setColour (juce::TextEditor::outlineColourId, accent);
-        setColour (juce::TextEditor::focusedOutlineColourId, accent);
-        setIndents (6, 4);
+        // The editing field (DESIGN-SYSTEM.md §5.3): dark, accent border, radius 3.
+        setFont (font (type::tableRow));
+        setColour (juce::TextEditor::backgroundColourId, paint::c (colour::cellEditorFill));
+        setColour (juce::TextEditor::textColourId, paint::c (colour::textStrong));
+        setColour (juce::TextEditor::outlineColourId, paint::c (colour::accent));
+        setColour (juce::TextEditor::focusedOutlineColourId, paint::c (colour::accent));
+        setColour (juce::TextEditor::highlightColourId, paint::c (colour::textSelection));
+        setColour (juce::CaretComponent::caretColourId, paint::c (colour::textStrong));
+        setJustification (juce::Justification::centredLeft);
+        setIndents (size::cellEditorPadX, 0);
     }
 
     bool keyPressed (const juce::KeyPress& key) override
@@ -67,8 +74,9 @@ private:
 //==============================================================================
 CueListEditor::CueListEditor (ShowSession& s) : session (s)
 {
+    setOpaque (false);
     list.setRowHeight (rowHeight);
-    list.setColour (juce::ListBox::backgroundColourId, background);
+    list.setColour (juce::ListBox::backgroundColourId, paint::c (colour::listBackground));
     list.setColour (juce::ListBox::outlineColourId, juce::Colours::transparentBlack);
     list.setWantsKeyboardFocus (false);
     list.getViewport()->setWantsKeyboardFocus (false);
@@ -96,17 +104,21 @@ CueListEditor::CueListEditor (ShowSession& s) : session (s)
         addAndMakeVisible (b);
     }
 
-    title.setFont (juce::FontOptions (17.0f, juce::Font::bold));
-    title.setColour (juce::Label::textColourId, juce::Colours::white);
+    title.setFont (font (type::subToolbarTitle));
+    title.setColour (juce::Label::textColourId, paint::c (colour::text));
+    title.setBorderSize ({});
     addAndMakeVisible (title);
 
+    setButtonKeyCap (closeButton, "F6");
     closeButton.setTooltip ("Back to the patches and the compact list (F6)");
     closeButton.setWantsKeyboardFocus (false);
     closeButton.onClick = [this] { if (isTyping()) commitEdit(); if (onClose != nullptr) onClose(); };
     addAndMakeVisible (closeButton);
 
-    summary.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.55f));
+    summary.setFont (font (type::subtitle));
+    summary.setColour (juce::Label::textColourId, paint::c (colour::textTertiary));
     summary.setJustificationType (juce::Justification::centredRight);
+    summary.setBorderSize ({});
     addAndMakeVisible (summary);
 
     refresh();
@@ -120,6 +132,12 @@ void CueListEditor::refresh()
 {
     const auto selected = selectedId();
     rows = session.getRunningOrderRows();
+    cutNameWidths.clear();
+
+    // The strike-through of a cut item ends with its name (measured here, not in paint).
+    for (auto& row : rows)
+        cutNameWidths.push_back (row.item->cut ? textWidth (font (type::tableRow), row.item->name) : 0.0f);
+
     list.updateContent();
 
     if (selected.isNotEmpty())
@@ -136,6 +154,7 @@ void CueListEditor::refresh()
 
     const auto words = session.getWords();
     title.setText (words.list, juce::dontSendNotification);
+    itemTitle = words.item.toUpperCase();
     addCueButton.setButtonText ("+ " + words.Item());
     addCueButton.setTooltip ("New " + words.item + " after the selected one (Insert or Ctrl+Enter)");
 
@@ -181,63 +200,71 @@ void CueListEditor::paintListBoxItem (int row, juce::Graphics& g, int width, int
     if (! juce::isPositiveAndBelow (row, (int) rows.size()))
         return;
 
+    // DESIGN-SYSTEM.md §5.5: 28 px rows and a line, sections on the header
+    // gradient, every other row a shade lighter, the playing row with a
+    // green bar and bold, the selected row accent 35 %, cut items faded.
     const auto& r = rows[(size_t) row];
     const auto& item = *r.item;
     const auto indent = r.depth * indentPerLevel;
     const auto playing = r.cueIndex >= 0 && r.cueIndex == session.getCurrentCue();
+    const auto bounds = juce::Rectangle<int> (0, 0, width, height);
+    const auto line = bounds.withHeight (height - 1).toFloat();
 
     if (selected)
-        g.fillAll (accent.withAlpha (0.35f));
+    {
+        g.setColour (paint::c (colour::tableSelection));
+        g.fillRect (line);
+    }
     else if (item.kind == RunItem::Kind::section)
-        g.fillAll (headerColour);
+    {
+        g.setGradientFill (juce::ColourGradient::vertical (paint::c (colour::paneHeaderTop), 0.0f, paint::c (colour::paneHeaderBot), line.getBottom()));
+        g.fillRect (line);
+    }
     else if (row % 2 == 1)
-        g.fillAll (juce::Colours::white.withAlpha (0.025f));
+    {
+        g.setColour (paint::c (colour::rowAlternate));
+        g.fillRect (line);
+    }
 
     if (playing)
     {
-        g.setColour (playingGreen);
-        g.fillRect (0, 0, 4, height);
+        g.setColour (paint::c (colour::healthy));
+        g.fillRect (line.withWidth ((float) size::playingBar));
     }
 
-    g.setColour (juce::Colours::black.withAlpha (0.4f));
-    g.drawHorizontalLine (height - 1, 0.0f, (float) width);
+    g.setColour (paint::c (colour::rowLine));
+    paint::hline (g, 0.0f, (float) height - 1.0f, (float) width);
 
-    const auto cell = [&] (Column c) { return columnBounds (c, width).reduced (6, 0); };
+    const auto cell = [&] (Column c) { return columnBounds (c, width).withHeight (height - 1).reduced (size::cellPadX, 0).toFloat(); };
 
     if (item.kind == RunItem::Kind::section)
     {
-        auto area = juce::Rectangle<int> (indent + 10, 0, width - indent - 10, height);
-        g.setColour (amber.withAlpha (0.85f));
-        g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
-        g.drawText (sectionKindLabel (item.sectionKind), area.removeFromLeft (70), juce::Justification::centredLeft);
-        g.setColour (juce::Colours::white);
-        g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
-        g.drawText (item.name.isEmpty() ? juce::String ("(unnamed)") : item.name, area, juce::Justification::centredLeft, true);
+        auto area = line.withTrimmedLeft ((float) (indent + size::sectionPadX));
+        paint::text (g, sectionKindLabel (item.sectionKind), area.removeFromLeft ((float) size::sectionKindW), type::tableKind, colour::amberSection);
+        paint::text (g, item.name.isEmpty() ? juce::String ("(unnamed)") : item.name, area, type::tableSection, colour::textStrong);
         return;
     }
 
-    const auto alpha = item.cut ? 0.35f : 1.0f;
-    g.setFont (juce::FontOptions (15.0f, playing ? juce::Font::bold : juce::Font::plain));
+    const auto alpha = item.cut ? state::cutAlpha : 1.0f;
+    const auto rowStyle = type::Style { type::tableRow.px, playing ? type::Weight::bold : type::Weight::regular };
+    const auto midiStyle = type::Style { type::tableMidi.px, playing ? type::Weight::bold : type::Weight::regular };
+    const auto tint = [alpha] (juce::uint32 c, float a) { return paint::c (c).withMultipliedAlpha (a * alpha); };
 
-    g.setColour (juce::Colours::white.withAlpha (0.7f * alpha));
+    g.setFont (font (rowStyle));
+    g.setColour (tint (colour::text, 0.7f));
     g.drawText (item.cut ? juce::String ("cut") : item.number, cell (Column::number), juce::Justification::centredRight);
 
-    auto nameArea = cell (Column::name).withTrimmedLeft (indent);
-    g.setColour (juce::Colours::white.withAlpha (alpha));
+    const auto nameArea = cell (Column::name).withTrimmedLeft ((float) indent);
+    g.setColour (tint (colour::text, 1.0f));
     g.drawText (item.name, nameArea, juce::Justification::centredLeft, true);
 
-    if (item.cut)
-    {
-        g.setColour (juce::Colours::white.withAlpha (0.35f));
-        const auto textWidth = juce::jmin ((float) nameArea.getWidth(),
-                                           juce::GlyphArrangement::getStringWidth (juce::Font (juce::FontOptions (15.0f)), item.name));
-        g.drawHorizontalLine (height / 2, (float) nameArea.getX(), (float) nameArea.getX() + textWidth);
-    }
+    if (item.cut && (size_t) row < cutNameWidths.size())
+        paint::hline (g, nameArea.getX(), nameArea.getCentreY(), juce::jmin (nameArea.getWidth(), cutNameWidths[(size_t) row]));
 
-    g.setColour (amber.withAlpha (alpha));
+    g.setColour (tint (colour::amber, 1.0f));
     g.drawText (item.barMark, cell (Column::bar), juce::Justification::centredLeft, true);
 
-    g.setColour (juce::Colours::white.withAlpha (0.75f * alpha));
+    g.setColour (tint (colour::text, 0.75f));
     g.drawText (item.note, cell (Column::note), juce::Justification::centredLeft, true);
 
     juce::String patch;
@@ -249,7 +276,7 @@ void CueListEditor::paintListBoxItem (int row, juce::Graphics& g, int width, int
     else
         patch = "(missing)";
 
-    g.setColour (juce::Colours::white.withAlpha (0.6f * alpha));
+    g.setColour (tint (colour::text, 0.6f));
     g.drawText (patch, cell (Column::patch), juce::Justification::centredLeft, true);
 
     juce::StringArray midi;
@@ -260,7 +287,8 @@ void CueListEditor::paintListBoxItem (int row, juce::Graphics& g, int width, int
     if (! item.midiOut.empty())
         midi.add ("OUT");
 
-    g.drawText (midi.joinIntoString (" "), cell (Column::midi), juce::Justification::centredLeft, true);
+    g.setFont (font (midiStyle));
+    g.drawText (midi.joinIntoString ("  "), cell (Column::midi), juce::Justification::centredLeft, true);
 }
 
 void CueListEditor::listBoxItemClicked (int row, const juce::MouseEvent& e)
@@ -346,7 +374,7 @@ void CueListEditor::startEditing (int row, Column column, bool chaining)
         cell = cell.withTrimmedLeft (rows[(size_t) row].depth * indentPerLevel
                                      + (item.kind == RunItem::Kind::section ? 80 : 0));
 
-    editor->setBounds (cell.expanded (0, 1));
+    editor->setBounds (cell.withTrimmedRight (size::cellEditorInsetR).withSizeKeepingCentre (cell.getWidth() - size::cellEditorInsetR, size::cellEditorH));
     editor->setVisible (true);
     editor->toFront (false);
 
@@ -682,38 +710,52 @@ void CueListEditor::showRowMenu (int row)
 //==============================================================================
 void CueListEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (background);
+    // One pane: the sub-toolbar, the column titles, the table.
+    const auto bounds = getLocalBounds().toFloat();
+    paint::pane (g, bounds);
 
-    // Column titles.
-    auto header = getLocalBounds().withTrimmedTop (toolbarHeight).removeFromTop (headerHeight);
-    g.setColour (headerColour);
+    const auto inner = getLocalBounds().reduced (1);
+    auto bar = inner.withHeight (size::subToolbar).toFloat();
+    g.setGradientFill (juce::ColourGradient::vertical (paint::c (colour::subToolbarTop), bar.getY(), paint::c (colour::subToolbarBot), bar.getBottom()));
+    g.fillRect (bar);
+    g.setColour (paint::c (colour::paneHeaderLine));
+    paint::hline (g, bar.getX(), bar.getBottom(), bar.getWidth());
+
+    auto header = inner.withTrimmedTop (toolbarHeight).withHeight (size::tableHeaderHeight).toFloat();
+    g.setGradientFill (juce::ColourGradient::vertical (paint::c (colour::paneHeaderTop), header.getY(), paint::c (colour::paneHeaderBot), header.getBottom()));
     g.fillRect (header);
-    g.setColour (juce::Colours::white.withAlpha (0.55f));
-    g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+    g.setColour (paint::c (colour::paneHeaderLine));
+    paint::hline (g, header.getX(), header.getBottom(), header.getWidth());
 
     const std::pair<Column, const char*> titles[] = { { Column::number, "#" }, { Column::name, nullptr }, { Column::bar, "BAR" },
                                                       { Column::note, "NOTE" }, { Column::patch, "PATCH" }, { Column::midi, "MIDI" } };
 
-    const auto itemTitle = session.getWords().item.toUpperCase();
-
     for (auto& [column, text] : titles)
-        g.drawText (text != nullptr ? juce::String (text) : itemTitle, columnBounds (column, list.getVisibleRowWidth()).withY (header.getY()).withHeight (headerHeight).reduced (6, 0),
-                    column == Column::number ? juce::Justification::centredRight : juce::Justification::centredLeft);
+        paint::text (g, text != nullptr ? juce::String (text) : itemTitle,
+                     columnBounds (column, list.getVisibleRowWidth()).toFloat().withY (header.getY()).withHeight (header.getHeight())
+                         .translated ((float) list.getX(), 0.0f).reduced ((float) size::cellPadX, 0.0f),
+                     type::paneHeader, colour::textMuted,
+                     column == Column::number ? juce::Justification::centredRight : juce::Justification::centredLeft);
 }
 
 void CueListEditor::resized()
 {
-    auto area = getLocalBounds();
-    auto toolbar = area.removeFromTop (toolbarHeight).reduced (0, 4);
-    title.setBounds (toolbar.removeFromLeft (110));
-    closeButton.setBounds (toolbar.removeFromRight (130));
-    toolbar.removeFromRight (12);
+    // Toolbar: title (98), + Cue, + Section, Cut, Delete, Up, Down, Go to
+    // (70, 90 for + Section; 6 apart), the summary, Back to patches (130).
+    auto area = getLocalBounds().reduced (1);
+    auto toolbar = area.removeFromTop (toolbarHeight).withTrimmedBottom (1).reduced (size::subToolbarPadX, 0);
+    const auto buttonY = toolbar.getY() + (toolbar.getHeight() - size::buttonHeight) / 2;
+    const auto take = [&] (juce::Component& c, int w) { c.setBounds (toolbar.removeFromLeft (w).withY (buttonY).withHeight (size::buttonHeight + size::buttonDrop)); toolbar.removeFromLeft (size::subToolbarGap); };
+
+    title.setBounds (toolbar.removeFromLeft (size::subToolbarTitleW));
+    toolbar.removeFromLeft (size::subToolbarGap);
+
+    const auto backW = juce::jmax (size::backButtonW, closeButton.getBestWidthForHeight (size::buttonHeight));
+    closeButton.setBounds (toolbar.removeFromRight (backW).withY (buttonY).withHeight (size::buttonHeight + size::buttonDrop));
+    toolbar.removeFromRight (size::subToolbarGap);
 
     for (auto* b : { &addCueButton, &addSectionButton, &cutButton, &deleteButton, &upButton, &downButton, &goButton })
-    {
-        b->setBounds (toolbar.removeFromLeft (b == &addSectionButton ? 90 : 70));
-        toolbar.removeFromLeft (6);
-    }
+        take (*b, b == &addSectionButton ? size::subToolbarWideButton : size::subToolbarButton);
 
     summary.setBounds (toolbar);
     area.removeFromTop (headerHeight);

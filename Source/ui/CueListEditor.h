@@ -73,6 +73,8 @@ private:
 
     ShowSession& session;
     std::vector<ShowSession::Row> rows;
+    std::vector<float> cutNameWidths;
+    juce::String itemTitle;
 
     juce::ListBox list { "Cue list", this };
     juce::TextButton addCueButton { "+ Cue" }, addSectionButton { "+ Section" }, cutButton { "Cut" },

@@ -3,18 +3,17 @@
 
 #include "ui/PatchList.h"
 
+#include "ui/theme/EncoreFonts.h"
+#include "ui/theme/Paint.h"
+
 namespace encore
 {
 
+using namespace theme;
+
 PatchList::PatchList (ShowSession& s) : session (s)
 {
-    header.setFont (juce::FontOptions (17.0f, juce::Font::bold));
-    header.setColour (juce::Label::textColourId, juce::Colours::white);
-    addAndMakeVisible (header);
-
-    list.setRowHeight (38);
-    list.setWantsKeyboardFocus (false);   // Space/arrows always step the show (main window)
-    list.setColour (juce::ListBox::backgroundColourId, juce::Colour (0xff1b1e23));
+    setHeader ("Patches");
     list.setTooltip ("Click to play a patch, double-click to rename it, right-click for options");
     addAndMakeVisible (list);
 
@@ -33,17 +32,15 @@ PatchList::PatchList (ShowSession& s) : session (s)
 
 void PatchList::refresh()
 {
-    const juce::ScopedValueSetter<bool> guard (updating, true);
     list.updateContent();
 
     const auto& patches = session.getShow().patches;
 
     for (int i = 0; i < (int) patches.size(); ++i)
         if (patches[(size_t) i].id == session.getActivePatchId())
-            list.selectRow (i, false, true);
+            list.scrollToEnsureRowIsOnscreen (i);
 
     deleteButton.setEnabled (patches.size() > 1);
-    list.repaint();
 }
 
 int PatchList::getNumRows()
@@ -51,7 +48,12 @@ int PatchList::getNumRows()
     return (int) session.getShow().patches.size();
 }
 
-void PatchList::paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected)
+int PatchList::getRowHeight (int)
+{
+    return size::rowHeight;
+}
+
+void PatchList::paintRow (juce::Graphics& g, int row, juce::Rectangle<int> bounds)
 {
     const auto& patches = session.getShow().patches;
 
@@ -59,35 +61,34 @@ void PatchList::paintListBoxItem (int row, juce::Graphics& g, int width, int hei
         return;
 
     const auto& patch = patches[(size_t) row];
-    auto area = juce::Rectangle<int> (0, 0, width, height).reduced (4, 2);
+    const auto selected = patch.id == session.getActivePatchId();
 
     if (selected)
     {
-        g.setColour (juce::Colour (0xff2a3140));
-        g.fillRoundedRectangle (area.toFloat(), 6.0f);
+        g.setColour (paint::c (colour::patchSelected));
+        g.fillRoundedRectangle (bounds.toFloat(), (float) size::rowRadius);
     }
 
-    g.setColour (juce::Colour (patch.colour));
-    g.fillRoundedRectangle (area.removeFromLeft (6).toFloat().reduced (0.0f, 4.0f), 3.0f);
-
-    g.setColour (juce::Colours::white.withAlpha (selected ? 1.0f : 0.8f));
-    g.setFont (juce::FontOptions (16.0f, selected ? juce::Font::bold : juce::Font::plain));
-    g.drawText (patch.name, area.withTrimmedLeft (10), juce::Justification::centredLeft, true);
+    // Colour swatch, name (600 when selected).
+    auto area = bounds.toFloat().reduced ((float) size::rowPadX, 0.0f);
+    const auto swatch = area.removeFromLeft ((float) size::swatch).withSizeKeepingCentre ((float) size::swatch, (float) size::swatch);
+    g.setColour (juce::Colour (patch.colour));   // the patch's own colour (show data)
+    g.fillRoundedRectangle (swatch, (float) size::swatchRadius);
+    area.removeFromLeft ((float) size::rowGap);
+    paint::text (g, patch.name, area, selected ? type::rowStrong : type::body, colour::textRow);
 }
 
-void PatchList::selectedRowsChanged (int lastRowSelected)
+void PatchList::rowClicked (int row, const juce::MouseEvent& e)
 {
-    if (updating)
-        return;
-
+    // As before: a click (also a right-click) selects the patch and plays it.
     const auto& patches = session.getShow().patches;
 
-    if (juce::isPositiveAndBelow (lastRowSelected, (int) patches.size()))
-        session.selectPatch (patches[(size_t) lastRowSelected].id);
-}
+    if (! juce::isPositiveAndBelow (row, (int) patches.size()))
+        return;
 
-void PatchList::listBoxItemClicked (int row, const juce::MouseEvent& e)
-{
+    if (patches[(size_t) row].id != session.getActivePatchId())
+        session.selectPatch (patches[(size_t) row].id);
+
     if (e.mods.isPopupMenu())
         showPatchMenu (row);
 }
@@ -142,9 +143,10 @@ void PatchList::showPatchMenu (int row)
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this));
 }
 
-void PatchList::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
+void PatchList::rowDoubleClicked (int row, const juce::MouseEvent& e)
 {
-    rename (row);
+    if (! e.mods.isPopupMenu())
+        rename (row);
 }
 
 void PatchList::rename (int row)
@@ -195,19 +197,39 @@ void PatchList::confirmDelete()
                                   });
 }
 
+juce::Rectangle<int> PatchList::getFooterBounds() const
+{
+    // 11 px, line height 1.45, padding 8 × 10, a line above (two lines of text).
+    const auto lineH = (int) std::ceil (type::caption.px * 1.45f);
+    return getContentBounds().removeFromBottom (size::paneFooterPadY * 2 + lineH * 2 + 1);
+}
+
+void PatchList::paint (juce::Graphics& g)
+{
+    Pane::paint (g);
+
+    const auto f = getFooterBounds();
+    g.setColour (paint::c (colour::paneHeaderLine));
+    paint::hline (g, (float) f.getX(), (float) f.getY(), (float) f.getWidth());
+    g.setColour (paint::c (colour::textMuted));
+    g.setFont (font (type::caption));
+    g.drawFittedText (footer, f.withTrimmedTop (1).reduced (size::paneFooterPadX, size::paneFooterPadY),
+                      juce::Justification::topLeft, 3, 1.0f);
+}
+
 void PatchList::resized()
 {
-    auto area = getLocalBounds();
-    header.setBounds (area.removeFromTop (30));
+    Pane::resized();
 
-    auto buttons = area.removeFromBottom (34);
-    const auto w = buttons.getWidth() / 3;
-    addButton.setBounds (buttons.removeFromLeft (w).reduced (2));
-    duplicateButton.setBounds (buttons.removeFromLeft (w).reduced (2));
-    deleteButton.setBounds (buttons.reduced (2));
+    auto header = getHeaderBounds().withTrimmedRight (size::paneHeaderPadR);
 
-    area.removeFromBottom (6);
-    list.setBounds (area);
+    for (auto* b : { &deleteButton, &duplicateButton, &addButton })
+    {
+        b->setBounds (header.removeFromRight (size::iconButton).withSizeKeepingCentre (size::iconButton, size::iconButton));
+        header.removeFromRight (size::headerButtonGap);
+    }
+
+    list.setBounds (getContentBounds().withTrimmedBottom (getFooterBounds().getHeight()));
 }
 
 } // namespace encore

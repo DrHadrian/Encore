@@ -3,72 +3,267 @@
 
 #include "ui/BlockPanel.h"
 
+#include "engine/blocks/CabIrBlock.h"
+#include "engine/blocks/NamAmpBlock.h"
+#include "ui/ChainStrip.h"
+#include "ui/theme/EncoreFonts.h"
+#include "ui/theme/EncoreLookAndFeel.h"
+#include "ui/theme/Paint.h"
+
 namespace encore
 {
 
+using namespace theme;
+
 namespace
 {
-    constexpr int controlWidth = 80;
-    constexpr int padding = 12;
-    constexpr int headerHeight = 32;
-    constexpr int fileRowHeight = 50;
-    constexpr int controlsHeight = 118;
-    constexpr int statusHeight = 22;
-
-    const auto panelColour = juce::Colour (0xff1b1e23);
-    const auto onColour    = juce::Colour (0xff2e9e5b);
-    const auto offColour   = juce::Colour (0xff3a3f47);
-    const auto accent      = juce::Colour (0xff4f9dff);
-
     bool isOnOffParameter (const Parameter& p)
     {
         const auto& r = p.getSpec().range;
         return juce::approximatelyEqual (r.start, 0.0f) && juce::approximatelyEqual (r.end, 1.0f)
             && juce::approximatelyEqual (r.interval, 1.0f);
     }
+
+    bool isAmp (const Block& b)  { return b.getTypeId() == NamAmpBlock::typeId; }
+
+    const juce::String& middot()
+    {
+        static const juce::String text (juce::CharPointer_UTF8 (" \xc2\xb7 "));   // " · "
+        return text;
+    }
+
+    /** What the panel's box shows: the amp is the amp; every other block
+        (the cab too, when it's the one selected) gets the 600 × 300 box
+        with the same control strip. */
+    kit::BlockInfo panelInfo (const Block& block)
+    {
+        auto info = ChainStrip::describe (block);
+
+        if (isAmp (block))
+        {
+            info.kindLabel = "Amp" + middot() + "NAM capture";
+        }
+        else
+        {
+            if (block.getTypeId() == CabIrBlock::typeId)
+                info.kindLabel = "Cab" + middot() + "IR";
+
+            info.shape = kit::BlockInfo::Shape::pedal;   // panel size: a block box with a strip
+        }
+
+        return info;
+    }
 }
 
+//==============================================================================
+/** The gear at design size: the placeholder box, and on its control strip
+    the knobs, switches, power LED, group labels and status light. The block
+    panel scales it to fit. */
+class BlockPanel::Gear final : public juce::Component
+{
+public:
+    explicit Gear (BlockPanel& p)
+        : owner (p), box (kit::GearView::Size::panel, panelInfo (p.block))
+    {
+        setInterceptsMouseClicks (false, true);
+        setSize (kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getWidth(),
+                 kit::GearView::idealBounds (kit::GearView::Size::panel, box.getBlock().shape).getHeight());
+        box.setBounds (getLocalBounds());
+        addAndMakeVisible (box);
+
+        strip.setInterceptsMouseClicks (false, true);
+        strip.setBounds (box.getControlArea());
+        addAndMakeVisible (strip);
+
+        power.setOn (owner.block.isEnabled());
+        power.onClick = [this]
+        {
+            owner.block.setEnabled (power.isOn());
+            owner.updateHeader();
+            box.setOn (power.isOn());
+
+            if (owner.onEdited != nullptr)
+                owner.onEdited();
+        };
+        strip.addAndMakeVisible (power);
+    }
+
+    kit::GearPlaceholder& getBox() noexcept { return box; }
+    kit::PowerLed& getPower() noexcept { return power; }
+    juce::Component& getStrip() noexcept { return strip; }
+
+    /** Columns: knobs (74), then on the right the switches, and the LED.
+        The amp groups them: PREAMP (input) · EQ (bass, mid, treble) ·
+        OUTPUT (level match, output, LED). */
+    void layOut()
+    {
+        auto row = strip.getLocalBounds().withTrimmedTop (size::stripPadTop).withTrimmedBottom (size::stripPadBottom)
+                       .reduced (size::stripPadX, 0);
+        labelsRow = row.removeFromTop (size::groupLabelH);
+        row.removeFromTop (size::groupLabelGap);
+
+        std::vector<Control*> knobs, toggles;
+        Control* output = nullptr;
+        const auto amp = isAmp (owner.block);
+
+        for (auto& c : owner.controls)
+        {
+            if (c->isSwitch)
+                toggles.push_back (c.get());
+            else if (amp && c->parameter.getSpec().id == "output")
+                output = c.get();
+            else
+                knobs.push_back (c.get());
+        }
+
+        const auto knobH = kit::KnobView::idealBounds().getHeight();
+        const auto toggleH = kit::GearToggle::idealBounds().getHeight();
+        auto right = row;
+
+        // Right to left: LED, the output knob (amp), the switches.
+        // The LED's halo (54) is wider than its column (40): centred on it, top of the row.
+        const auto ledColumn = right.removeFromRight (size::powerColumn);
+        power.setBounds (juce::Rectangle<int> (size::ledHalo, size::ledHalo).withCentre ({ ledColumn.getCentreX(), ledColumn.getY() + size::ledHalo / 2 }));
+
+        if (output != nullptr)
+            output->knob->setBounds (right.removeFromRight (size::knobColumn).withHeight (knobH));
+
+        for (auto it = toggles.rbegin(); it != toggles.rend(); ++it)
+            (*it)->toggle->setBounds (right.removeFromRight (size::toggleColumn).withHeight (toggleH));
+
+        // Knobs from the left; narrower columns when many (the EQ has seven).
+        const auto columnW = knobs.empty() ? size::knobColumn
+                                           : juce::jmin (size::knobColumn, right.getWidth() / (int) knobs.size());
+        auto left = row.withRight (right.getRight());
+
+        for (auto* c : knobs)
+            c->knob->setBounds (left.removeFromLeft (columnW).withHeight (knobH));
+
+        // Group labels (amp): PREAMP over the first column, OUTPUT over the
+        // last 170 px, EQ between them (10 px in from both).
+        groups.clear();
+
+        if (amp && ! knobs.empty())
+        {
+            const auto first = knobs.front()->knob->getBounds();
+            groups.push_back ({ labelsRow.withLeft (first.getX()).withWidth (first.getWidth()).toFloat(), "PREAMP", false });
+            const auto outputArea = labelsRow.withLeft (labelsRow.getRight() - size::outputGroupW).toFloat();
+            groups.push_back ({ labelsRow.toFloat().withLeft ((float) first.getRight()).withRight (outputArea.getX())
+                                    .reduced ((float) size::groupLabelPadX, 0.0f), "EQ", true });
+            groups.push_back ({ outputArea, "OUTPUT", true });
+
+            for (auto& gr : groups)
+                gr.width = kit::groupLabelWidth (gr.text);
+        }
+
+        repaint();
+    }
+
+    void paint (juce::Graphics&) override {}
+
+    void paintOverChildren (juce::Graphics& g) override
+    {
+        const auto origin = strip.getPosition().toFloat();
+
+        for (auto& gr : groups)
+            kit::paintGroupLabel (g, gr.area + origin, gr.text, gr.width, gr.rules);
+
+        // Status light (gate open): a small LED and its label, top left of the strip.
+        if (owner.statusLit != nullptr)
+        {
+            auto r = (labelsRow.toFloat() + origin);
+            const auto led = r.removeFromLeft ((float) size::statusLed).withSizeKeepingCentre ((float) size::statusLed, (float) size::statusLed);
+            kit::paintLed (g, led, owner.statusWasLit, (float) size::statusLed / (float) size::pedalLed);
+            r.removeFromLeft ((float) size::rowGap);
+            paint::text (g, owner.statusLabelCaps, r, type::gearGroup, colour::gearGroupLabel);
+        }
+    }
+
+private:
+    struct Group
+    {
+        juce::Rectangle<float> area;
+        juce::String text;
+        bool rules = false;
+        float width = 0.0f;
+    };
+
+    BlockPanel& owner;
+    kit::GearPlaceholder box;
+    juce::Component strip;
+    kit::PowerLed power;
+    juce::Rectangle<int> labelsRow;
+    std::vector<Group> groups;
+};
+
+//==============================================================================
+/** The cab beside the amp: its box, "Cab · <IR> (IR)" and what its knobs
+    are; a click selects the cab block. */
+class BlockPanel::CabColumn final : public juce::Component,
+                                    public juce::SettableTooltipClient
+{
+public:
+    CabColumn (BlockPanel& p, const Block& c)
+        : owner (p), cab (c), box (kit::GearView::Size::panel, kit::BlockInfo { kit::BlockInfo::Shape::cab, "Cab" + middot() + "IR", c.getName(), {}, c.isEnabled() })
+    {
+        box.setBounds ((size::cabColumnW - size::cabPanelW) / 2, 0, size::cabPanelW, size::cabPanelH);
+        addAndMakeVisible (box);
+        setSize (size::cabColumnW, size::cabPanelH + size::cabCaptionGap + size::cabCaptionH + size::cabCaptionGap + size::cabHelpH);
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+        setTooltip ("Click to edit the cab");
+
+        juce::StringArray names;
+
+        for (auto& param : cab.getParameters())
+            names.add (param->getSpec().name);
+
+        help = names.joinIntoString (middot()) + juce::String (juce::CharPointer_UTF8 (" \xe2\x80\x94 ")) + "click the Cab block to edit";
+        refresh();
+    }
+
+    void refresh()
+    {
+        const auto file = cab.getLoadedFile();
+        const auto text = "Cab" + middot() + (file == juce::File() ? juce::String ("(none)") : file.getFileNameWithoutExtension() + " (IR)");
+
+        if (text != caption)
+        {
+            caption = text;
+            repaint();
+        }
+
+        box.setOn (cab.isEnabled());
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat().withTrimmedTop ((float) (size::cabPanelH + size::cabCaptionGap));
+        paint::text (g, caption, r.removeFromTop ((float) size::cabCaptionH), type::cabCaption, colour::cabCaption, juce::Justification::centred);
+        r.removeFromTop ((float) size::cabCaptionGap);
+        g.setFont (font (type::bodySmall));
+        g.setColour (paint::c (colour::plusTile));
+        g.drawFittedText (help, r.toNearestInt(), juce::Justification::centredTop, 2, 1.0f);
+    }
+
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        if (! e.mods.isPopupMenu() && getLocalBounds().contains (e.getPosition()) && owner.onCabClicked != nullptr)
+            owner.onCabClicked();
+    }
+
+private:
+    BlockPanel& owner;
+    const Block& cab;
+    kit::GearPlaceholder box;
+    juce::String caption, help;
+};
+
+//==============================================================================
 BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
 {
-    title.setText (block.getName(), juce::dontSendNotification);
-    title.setFont (juce::FontOptions (19.0f, juce::Font::bold));
-    title.setColour (juce::Label::textColourId, juce::Colours::white);
-    addAndMakeVisible (title);
-
-    cpu.setFont (juce::FontOptions (13.0f));
-    cpu.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.55f));
-    cpu.setJustificationType (juce::Justification::centredRight);
-    addAndMakeVisible (cpu);
-
-    power.setClickingTogglesState (true);
-    power.setToggleState (block.isEnabled(), juce::dontSendNotification);
-    power.setColour (juce::TextButton::buttonOnColourId, onColour);
-    power.setColour (juce::TextButton::buttonColourId, offColour);
-    power.onClick = [this]
-    {
-        block.setEnabled (power.getToggleState());
-        power.setButtonText (power.getToggleState() ? "ON" : "OFF");
-        repaint();
-
-        if (onEdited != nullptr)
-            onEdited();
-    };
-    addAndMakeVisible (power);
-
-    if (auto* slot = block.getFileSlot())
-    {
-        loadButton.setButtonText (slot->buttonText);
-        loadButton.onClick = [this] { chooseFile(); };
-        addAndMakeVisible (loadButton);
-
-        fileName.setFont (juce::FontOptions (16.0f, juce::Font::bold));
-        fileName.setColour (juce::Label::textColourId, juce::Colours::white);
-        addAndMakeVisible (fileName);
-
-        fileInfo.setFont (juce::FontOptions (13.0f));
-        fileInfo.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.6f));
-        addAndMakeVisible (fileInfo);
-    }
+    setHeader (headerLabel());
+    setHeaderColours (colour::stageHeaderTop, colour::stageHeaderBot);
+    setTitle (block.getName());
 
     for (auto& p : block.getParameters())
     {
@@ -76,45 +271,33 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
         const auto& spec = p->getSpec();
         auto* param = p.get();
 
-        control->label.setText (spec.name, juce::dontSendNotification);
-        control->label.setFont (juce::FontOptions (14.0f));
-        control->label.setJustificationType (juce::Justification::centred);
-        control->label.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.8f));
-        addAndMakeVisible (control->label);
-
         if (isOnOffParameter (*p))
         {
             // On/off parameters (level match, detect guitar) are switches, not knobs.
             control->isSwitch = true;
-            auto& b = control->switchButton;
-            b.setClickingTogglesState (true);
+            control->toggle = std::make_unique<kit::GearToggle> (spec.name);
+            auto& b = *control->toggle;
             b.setToggleState (p->getValue() >= 0.5f, juce::dontSendNotification);
-            b.setButtonText (b.getToggleState() ? "ON" : "OFF");
-            b.setColour (juce::TextButton::buttonOnColourId, accent.withAlpha (0.8f));
-            b.setColour (juce::TextButton::buttonColourId, offColour);
             b.onClick = [this, param, &b]
             {
                 param->setValue (b.getToggleState() ? 1.0f : 0.0f);
-                b.setButtonText (b.getToggleState() ? "ON" : "OFF");
 
                 if (onEdited != nullptr)
                     onEdited();
             };
-            addAndMakeVisible (b);
         }
         else
         {
             const auto& r = spec.range;
-            auto& s = control->slider;
-            s.setNormalisableRange ({ (double) r.start, (double) r.end, (double) r.interval,
-                                      (double) r.skew, r.symmetricSkew });
+            control->knob = std::make_unique<kit::KnobView>();
+            auto& s = *control->knob;
+            s.setLabel (spec.name);
+            s.setNormalisableRange ({ (double) r.start, (double) r.end, (double) r.interval, (double) r.skew, r.symmetricSkew });
             s.setValue (p->getValue(), juce::dontSendNotification);
             s.setDoubleClickReturnValue (true, spec.defaultValue);
-            s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, controlWidth - 6, 20);
-            s.setColour (juce::Slider::rotarySliderFillColourId, accent);
-            s.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
             s.textFromValueFunction = [param] (double v) { return param->toText ((float) v); };
             s.valueFromTextFunction = [] (const juce::String& text) { return text.getDoubleValue(); };
+            s.setPopupDisplayEnabled (true, false, nullptr);   // the value while dragging
             s.onValueChange = [this, param, &s]
             {
                 param->setValue ((float) s.getValue());
@@ -122,16 +305,28 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
                 if (onEdited != nullptr)
                     onEdited();
             };
-            s.updateText();
             s.setTooltip ("Right-click to assign an expression pedal");
-            addAndMakeVisible (s);
 
             auto& menu = knobMenus.emplace_back (std::make_unique<KnobMenu> (*this, *control));
             s.addMouseListener (menu.get(), false);
-            control->label.addMouseListener (menu.get(), false);
         }
 
         controls.push_back (std::move (control));
+    }
+
+    gear = std::make_unique<Gear> (*this);
+
+    for (auto& c : controls)
+        gear->getStrip().addAndMakeVisible (c->isSwitch ? static_cast<juce::Component*> (c->toggle.get()) : c->knob.get());
+
+    addAndMakeVisible (*gear);
+
+    if (auto* slot = block.getFileSlot())
+    {
+        setVariant (loadButton, Variant::small);
+        loadButton.setButtonText (slot->buttonText);
+        loadButton.onClick = [this] { chooseFile(); };
+        addAndMakeVisible (loadButton);
     }
 
     refresh();
@@ -140,10 +335,8 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
 BlockPanel::~BlockPanel()
 {
     for (auto& menu : knobMenus)
-    {
-        menu->control.slider.removeMouseListener (menu.get());
-        menu->control.label.removeMouseListener (menu.get());
-    }
+        if (menu->control.knob != nullptr)
+            menu->control.knob->removeMouseListener (menu.get());
 }
 
 void BlockPanel::KnobMenu::mouseDown (const juce::MouseEvent& e)
@@ -169,15 +362,28 @@ void BlockPanel::KnobMenu::mouseDown (const juce::MouseEvent& e)
     juce::PopupMenu menu;
     menu.addSectionHeader (control.parameter.getSpec().name);
     menu.addSubMenu ("Expression pedal (heel = min, toe = max)", pedals);
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&control.slider));
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (control.knob.get()));
 }
 
-void BlockPanel::setStatusLight (juce::String label, std::function<bool()> isLit)
+void BlockPanel::setStatusLight (juce::String text, std::function<bool()> isLit)
 {
-    statusLabel = std::move (label);
+    statusLabel = std::move (text);
+    statusLabelCaps = statusLabel.toUpperCase();
     statusLit = std::move (isLit);
+    gear->repaint();
+}
+
+void BlockPanel::setCabBeside (const Block* cab)
+{
+    cabColumn = nullptr;
+
+    if (cab != nullptr)
+    {
+        cabColumn = std::make_unique<CabColumn> (*this, *cab);
+        addAndMakeVisible (*cabColumn);
+    }
+
     resized();
-    repaint();
 }
 
 //==============================================================================
@@ -234,31 +440,33 @@ void BlockPanel::setLoading (bool isLoading)
 {
     loading = isLoading;
     loadButton.setEnabled (! isLoading);
-    shownFile.clear();   // force the file row to redraw
+    shownFile.clear();   // force the header to update
     refresh();
 }
 
 //==============================================================================
-int BlockPanel::getPreferredWidth() const
+juce::String BlockPanel::headerLabel() const
 {
-    const auto minimum = block.getFileSlot() != nullptr ? 360 : 200;
-    return juce::jmax (minimum, (int) controls.size() * controlWidth + 2 * padding);
+    // "AMP · <model>", "CAB · <IR>", "GATE · Noise gate", "EQ".
+    const auto kind = ChainStrip::describe (block).kindLabel;
+
+    if (block.getFileSlot() != nullptr)
+        return kind + middot() + shownFile;
+
+    return block.getName() != kind ? kind + middot() + block.getName() : kind;
 }
 
-int BlockPanel::getPreferredHeight() const
+void BlockPanel::updateHeader()
 {
-    return padding + headerHeight
-         + (block.getFileSlot() != nullptr ? fileRowHeight : 0)
-         + controlsHeight
-         + (statusLit != nullptr ? statusHeight : 0)
-         + padding;
+    setHeader (headerLabel(), shownCpu);
+    setHeaderDot (block.isEnabled() ? colour::healthy : colour::dotOff);
 }
 
 void BlockPanel::refresh()
 {
     for (auto& c : controls)
     {
-        // "Gain  EXP 1" when a pedal moves this knob.
+        // "EXP 1" under a knob a pedal moves.
         if (! c->isSwitch && getExpressionPedal != nullptr)
         {
             const auto pedal = getExpressionPedal (c->parameter.getSpec().id);
@@ -266,10 +474,7 @@ void BlockPanel::refresh()
             if (pedal != c->shownPedal)
             {
                 c->shownPedal = pedal;
-                const auto& name = c->parameter.getSpec().name;
-                c->label.setText (pedal > 0 ? name + "  EXP " + juce::String (pedal) : name, juce::dontSendNotification);
-                c->label.setColour (juce::Label::textColourId,
-                                    pedal > 0 ? accent : juce::Colours::white.withAlpha (0.8f));
+                c->knob->setChip (pedal > 0 ? "EXP " + juce::String (pedal) : juce::String());
             }
         }
 
@@ -279,27 +484,22 @@ void BlockPanel::refresh()
         {
             const auto on = value >= 0.5f;
 
-            if (c->switchButton.getToggleState() != on)
-            {
-                c->switchButton.setToggleState (on, juce::dontSendNotification);
-                c->switchButton.setButtonText (on ? "ON" : "OFF");
-            }
+            if (c->toggle->getToggleState() != on)
+                c->toggle->setToggleState (on, juce::dontSendNotification);
         }
-        else if (! c->slider.isMouseButtonDown()
-                 && ! juce::approximatelyEqual ((float) c->slider.getValue(), value))
+        else if (! c->knob->isMouseButtonDown() && ! juce::approximatelyEqual ((float) c->knob->getValue(), value))
         {
-            c->slider.setValue (value, juce::dontSendNotification);
+            c->knob->setValue (value, juce::dontSendNotification);
         }
     }
 
-    if (power.getToggleState() != block.isEnabled())
+    if (gear->getPower().isOn() != block.isEnabled())
     {
-        power.setToggleState (block.isEnabled(), juce::dontSendNotification);
-        power.setButtonText (block.isEnabled() ? "ON" : "OFF");
+        gear->getPower().setOn (block.isEnabled());
+        gear->getBox().setOn (block.isEnabled());
     }
 
-    cpu.setText (block.isEnabled() ? juce::String (block.getCpuLoad() * 100.0, 1) + " % CPU" : juce::String(),
-                 juce::dontSendNotification);
+    auto cpuText = block.isEnabled() ? juce::String (block.getCpuLoad() * 100.0, 1) + "% CPU" : juce::String();
 
     if (block.getFileSlot() != nullptr)
     {
@@ -312,11 +512,26 @@ void BlockPanel::refresh()
         {
             shownFile = name;
             shownInfo = info;
-            fileName.setText (name, juce::dontSendNotification);
-            fileName.setTooltip (file.getFullPathName());
-            fileInfo.setText (info, juce::dontSendNotification);
+
+            // Until the inspector shows them: the file and its info on the button.
+            loadButton.setTooltip (file == juce::File() ? info : file.getFullPathName() + (info.isNotEmpty() ? "\n" + info : juce::String()));
+            shownCpu = cpuText;
+            updateHeader();
         }
     }
+
+    if (cpuText != shownCpu)
+    {
+        shownCpu = cpuText;
+        updateHeader();
+    }
+    else
+    {
+        setHeaderDot (block.isEnabled() ? colour::healthy : colour::dotOff);
+    }
+
+    if (cabColumn != nullptr)
+        cabColumn->refresh();
 
     if (statusLit != nullptr)
     {
@@ -325,7 +540,7 @@ void BlockPanel::refresh()
         if (lit != statusWasLit)
         {
             statusWasLit = lit;
-            repaint();
+            gear->repaint();
         }
     }
 }
@@ -333,57 +548,90 @@ void BlockPanel::refresh()
 //==============================================================================
 void BlockPanel::paint (juce::Graphics& g)
 {
-    const auto bounds = getLocalBounds().toFloat();
-    g.setColour (panelColour);
-    g.fillRoundedRectangle (bounds, 8.0f);
+    Pane::paint (g);
 
-    g.setColour (block.isEnabled() ? onColour : offColour);
-    g.drawRoundedRectangle (bounds.reduced (1.0f), 8.0f, 2.0f);
+    // The lit stage (radial-gradient at 45 % 25 %), rendered when the size or
+    // the screen scale changes; knob repaints only copy it.
+    const auto area = getContentBounds();
 
-    if (statusLit != nullptr)
+    if (area.isEmpty())
+        return;
+
+    const auto scale = (float) g.getInternalContext().getPhysicalPixelScaleFactor();
+    const auto w = juce::roundToInt ((float) area.getWidth() * scale), h = juce::roundToInt ((float) area.getHeight() * scale);
+
+    if (stageImage.isNull() || stageImage.getWidth() != w || stageImage.getHeight() != h || ! juce::approximatelyEqual (scale, stageScale))
     {
-        auto area = getLocalBounds().reduced (padding, 0).removeFromBottom (statusHeight + padding).removeFromTop (statusHeight);
-        const auto light = area.removeFromLeft (14).toFloat().withSizeKeepingCentre (10.0f, 10.0f);
-        g.setColour (statusWasLit ? onColour : offColour);
-        g.fillEllipse (light);
-        g.setColour (juce::Colours::white.withAlpha (0.6f));
-        g.setFont (juce::FontOptions (13.0f));
-        g.drawText (statusLabel, area.withTrimmedLeft (6), juce::Justification::centredLeft);
+        stageScale = scale;
+        stageImage = juce::Image (juce::Image::RGB, juce::jmax (1, w), juce::jmax (1, h), false);
+        juce::Graphics ig (stageImage);
+        const auto r = stageImage.getBounds().toFloat();
+        const juce::Point<float> centre (r.getWidth() * 0.45f, r.getHeight() * 0.25f);
+
+        // An ellipse through the farthest corner (CSS farthest-corner).
+        const auto rx = juce::jmax (centre.x, r.getWidth() - centre.x) * juce::MathConstants<float>::sqrt2;
+        const auto ry = juce::jmax (centre.y, r.getHeight() - centre.y) * juce::MathConstants<float>::sqrt2;
+        juce::ColourGradient light (paint::c (colour::blockStageTop), 0.0f, 0.0f, paint::c (colour::blockStageBot), 1.0f, 0.0f, true);
+        light.addColour (0.65, paint::c (colour::blockStageMid));
+        juce::FillType fill (light);
+        fill.transform = juce::AffineTransform::scale (rx, ry).translated (centre);
+        ig.setFillType (fill);
+        ig.fillRect (r);
     }
+
+    // Inside the pane's rounded bottom corners.
+    const juce::Graphics::ScopedSaveState state (g);
+    g.reduceClipRegion (stageClip);
+    g.drawImage (stageImage, area.toFloat());
 }
 
 void BlockPanel::resized()
 {
-    auto area = getLocalBounds().reduced (padding);
+    Pane::resized();
 
-    auto header = area.removeFromTop (headerHeight);
-    power.setBounds (header.removeFromLeft (52).reduced (0, 2));
-    header.removeFromLeft (8);
-    cpu.setBounds (header.removeFromRight (90));
-    title.setBounds (header);
+    const auto area = getContentBounds().toFloat();
+    stageClip.clear();
+    stageClip.addRoundedRectangle (area.getX(), area.getY(), area.getWidth(), area.getHeight(),
+                                   (float) size::paneRadius - 1.0f, (float) size::paneRadius - 1.0f, false, false, true, true);
+
+    // Header: "6.9% CPU", then the file button on the right.
+    auto header = getHeaderBounds().withTrimmedRight (size::paneHeaderPadR);
 
     if (block.getFileSlot() != nullptr)
     {
-        auto row = area.removeFromTop (fileRowHeight).reduced (0, 6);
-        loadButton.setBounds (row.removeFromRight (110).reduced (0, 4));
-        row.removeFromRight (8);
-        fileName.setBounds (row.removeFromTop (row.getHeight() / 2));
-        fileInfo.setBounds (row);
+        const auto w = loadButton.getBestWidthForHeight (size::buttonSmallHeight);
+        loadButton.setBounds (header.removeFromRight (w).withTrimmedTop ((header.getHeight() - size::buttonSmallHeight) / 2)
+                                                        .withHeight (size::buttonSmallHeight + size::buttonDrop));
+        setHeaderRightInset (w + size::outGap);
     }
 
-    if (statusLit != nullptr)
-        area.removeFromBottom (statusHeight);
+    layOutGear();
+}
 
-    for (auto& c : controls)
-    {
-        auto column = area.removeFromLeft (controlWidth);
-        c->label.setBounds (column.removeFromTop (20));
+void BlockPanel::layOutGear()
+{
+    gear->layOut();
 
-        if (c->isSwitch)
-            c->switchButton.setBounds (column.withSizeKeepingCentre (controlWidth - 16, 32));
-        else
-            c->slider.setBounds (column);
-    }
+    // Centred, standing on the bottom (padding 6 12 14), the cab 22 px to
+    // the right; scaled down (never up) to fit.
+    const auto area = getContentBounds().withTrimmedTop (size::stagePadTop).withTrimmedBottom (size::stagePadBottom)
+                                        .reduced (size::stagePadX, 0);
+    const auto groupW = gear->getWidth() + (cabColumn != nullptr ? size::cabGap + cabColumn->getWidth() : 0);
+    const auto groupH = juce::jmax (gear->getHeight(), cabColumn != nullptr ? cabColumn->getHeight() : 0);
+
+    gearScale = area.isEmpty() ? 0.0f : juce::jmin (1.0f, (float) area.getWidth() / (float) groupW, (float) area.getHeight() / (float) groupH);
+    gearScale = juce::jmax (0.01f, gearScale);
+
+    const auto left = (float) area.getX() + ((float) area.getWidth() - (float) groupW * gearScale) * 0.5f;
+    const auto bottom = (float) area.getBottom();
+
+    gear->setTransform (juce::AffineTransform::scale (gearScale)
+                            .translated (left, bottom - (float) gear->getHeight() * gearScale));
+
+    if (cabColumn != nullptr)
+        cabColumn->setTransform (juce::AffineTransform::scale (gearScale)
+                                     .translated (left + (float) (gear->getWidth() + size::cabGap) * gearScale,
+                                                  bottom - (float) cabColumn->getHeight() * gearScale));
 }
 
 } // namespace encore

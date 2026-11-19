@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Encore v3 — Audio settings (current features)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#161618}
+*{scrollbar-width:thin;scrollbar-color:#4A4A4F transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#4A4A4F;border:2px solid transparent;border-radius:6px;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#5E5E64;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+a{color:#4C8DF6}a:hover{color:#82AEFA}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #4C8DF6;outline-offset:1px}
+.b{height:24px;padding:0 12px;border:1px solid #0E0E10;border-radius:5px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12),0 1px 0 rgba(0,0,0,0.4);color:#E8E8EB;font-size:12px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.b-on{background:linear-gradient(180deg,#252528,#2E2E31);box-shadow:inset 0 1px 3px rgba(0,0,0,0.7);color:#FFFFFF}
+.pri{border-color:#0B3E86;background:linear-gradient(180deg,#4C8DF6,#2E6FDC);color:#FFFFFF}
+.fld{height:24px;border:1px solid #0C0C0E;border-radius:5px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12);color:#E8E8EB;font-size:12px;padding:0 8px 0 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box}
+.k{font-size:12px;color:#A9A9AF;text-align:right}
+.grp{background:#1A1A1D;border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03)}
+.gt{font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#85858C;padding:0 2px 6px}
+.tab{width:78px;height:54px;border:0;border-radius:6px;background:transparent;color:#A9A9AF;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11px;font-weight:500}
+.tab-on{background:#3A3A3F;color:#FFFFFF;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08)}
+.ghost{position:absolute;background:#1D1D20;border:1px solid #0A0A0B;border-radius:6px}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #161618; color: #E8E8EB; font-family: Inter, -apple-system, system-ui, sans-serif; font-size: 12.5px; position: relative; overflow: hidden">
+  <div aria-hidden="true" style="position: absolute; inset: 0; filter: blur(2px); opacity: 0.55">
+    <div style="position: absolute; left: 0; right: 0; top: 0; height: 44px; background: linear-gradient(180deg, #333337, #28282B)"></div>
+    <div class="ghost" style="left: 8px; top: 52px; width: 250px; height: 728px"></div>
+    <div class="ghost" style="left: 266px; top: 88px; width: 888px; height: 136px"></div>
+    <div class="ghost" style="left: 266px; top: 232px; width: 888px; height: 548px"></div>
+    <div class="ghost" style="left: 1162px; top: 52px; width: 270px; height: 728px"></div>
+    <div class="ghost" style="left: 8px; top: 788px; width: 1424px; height: 104px"></div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.45)"></div>
+
+  <div role="dialog" aria-label="Settings" style="position: absolute; left: 200px; top: 70px; width: 1040px; height: 760px; border-radius: 10px; background: #232326; border: 1px solid #0A0A0B; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 30px 80px rgba(0,0,0,0.7); display: flex; flex-direction: column; overflow: hidden">
+    <div style="height: 30px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; position: relative; font-size: 12.5px; font-weight: 600; color: #C4C4C9; background: linear-gradient(180deg, #38383C, #2E2E31)">
+      Settings — Audio
+      <button aria-label="Close settings" style="position: absolute; right: 8px; top: 5px; width: 20px; height: 20px; border: 0; border-radius: 4px; background: transparent; color: #A9A9AF; font-size: 14px">✕</button>
+    </div>
+    <div role="tablist" aria-label="Settings sections" style="height: 66px; flex-shrink: 0; display: flex; justify-content: center; gap: 4px; padding: 6px; background: linear-gradient(180deg, #2E2E31, #28282B); border-bottom: 1px solid #0A0A0B">
+      <button role="tab" class="tab tab-on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0"></path></svg>Audio</button>
+      <button role="tab" class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><circle cx="8.5" cy="11" r="1"></circle><circle cx="15.5" cy="11" r="1"></circle><circle cx="12" cy="8.5" r="1"></circle><circle cx="10" cy="14.5" r="1"></circle><circle cx="14" cy="14.5" r="1"></circle></svg>MIDI</button>
+      
+      
+      
+      
+    </div>
+
+    <div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 18px 20px">
+      <div style="display: flex; flex-direction: column; gap: 16px">
+        <div>
+          <div class="gt">Device</div>
+          <div class="grp" style="padding: 14px 16px; display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px 12px; align-items: center">
+            <span class="k">Driver type</span>
+            <span style="display: flex; border: 1px solid #0E0E10; border-radius: 5px; overflow: hidden; width: 260px"><button class="b b-on" style="flex: 1 1 0; border: 0; border-radius: 0">ASIO</button><button class="b" style="flex: 1 1 0; border: 0; border-left: 1px solid #0E0E10; border-radius: 0">Windows Audio</button></span>
+            <span class="k">Device</span><span style="display: flex; align-items: center; gap: 8px"><span class="fld" style="width: 340px">Focusrite USB ASIO <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><button class="b" title="Opens the driver's own settings window (ASIO drivers often have one for buffer size, clock and routing)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"></path><circle cx="16" cy="6" r="2"></circle><circle cx="10" cy="12" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg><span>Control panel</span></button></span>
+            <span class="k">Sample rate</span><span class="fld" style="width: 140px">48 000 Hz <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>
+            <span class="k">Buffer size</span>
+            <span style="display: flex; border: 1px solid #0E0E10; border-radius: 5px; overflow: hidden; width: 340px">
+              <sc-for list="{{buffers}}" as="bf" hint-placeholder-count="5"><button class="{{bf.cls}}" style="flex: 1 1 0; border: 0; border-left: {{bf.sep}}; border-radius: 0">{{bf.n}}</button></sc-for>
+            </span>
+            <span class="k">Latency</span>
+            <span style="display: flex; flex-direction: column; gap: 5px">
+              <span style="display: flex; height: 8px; width: 340px; border-radius: 4px; overflow: hidden; background: #0E0E10"><span style="width: 24%; background: #4C8DF6"></span><span style="width: 2px"></span><span style="width: 25%; background: #6EA5FA"></span></span>
+              <span style="font-size: 11.5px; color: #C4C4C9; font-variant-numeric: tabular-nums">In 2.6 ms + Out 2.7 ms = <b style="color: #30C25A">5.3 ms round trip</b> · shown in the main window too</span>
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <div class="gt">Active channels</div>
+          <div class="grp" style="padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px">
+            <div style="display: flex; flex-direction: column; gap: 7px">
+              <span style="font-size: 12px; color: #A9A9AF">Inputs</span>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 12.5px"><input type="checkbox" checked style="accent-color: #4C8DF6; margin: 0"> Input 1 (Inst / Hi-Z)</label>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 12.5px"><input type="checkbox" style="accent-color: #4C8DF6; margin: 0"> Input 2</label>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 7px">
+              <span style="font-size: 12px; color: #A9A9AF">Outputs</span>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 12.5px"><input type="checkbox" checked style="accent-color: #4C8DF6; margin: 0"> Outputs 1 + 2</label>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 12.5px"><input type="checkbox" style="accent-color: #4C8DF6; margin: 0"> Outputs 3 + 4</label>
+            </div>
+          </div>
+          <div style="font-size: 11.5px; color: #8E8E95; padding: 6px 2px 0">Which input is the guitar is chosen under <b style="color: #C4C4C9">Guitar input</b> in the main window.</div>
+        </div>
+
+        <div>
+          <div class="gt">Windows live tuning · automatic</div>
+          <div class="grp" style="padding: 12px 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; font-size: 12.5px">
+            <span style="display: flex; align-items: center; gap: 8px"><span style="color: #30C25A">✓</span> Power throttling off</span>
+            <span style="display: flex; align-items: center; gap: 8px"><span style="color: #30C25A">✓</span> High process priority</span>
+            <span style="display: flex; align-items: center; gap: 8px"><span style="color: #30C25A">✓</span> Pro Audio audio thread</span>
+            <span style="display: flex; align-items: center; gap: 8px"><span style="color: #30C25A">✓</span> Computer and screen kept awake</span>
+            <span style="display: flex; align-items: center; gap: 8px; grid-column: 1 / 3; color: #A9A9AF">Encore always starts muted, and a safety limiter protects the output.</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px">
+        <div>
+          <div class="gt">Status</div>
+          <div class="grp" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: center; gap: 10px"><span style="width: 26px; height: 26px; border-radius: 50%; background: #1E3A24; color: #4CD964; display: flex; align-items: center; justify-content: center; font-weight: 800">✓</span><span style="display: flex; flex-direction: column"><span style="font-weight: 600">ASIO</span><span style="font-size: 11.5px; color: #8E8E95">Focusrite USB ASIO · 48 kHz · 64 samples</span></span></div>
+            <div style="height: 1px; background: #111113"></div>
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; font-size: 12px; font-variant-numeric: tabular-nums">
+              <span style="color: #A9A9AF">CPU</span><span>7%</span>
+              <span style="color: #A9A9AF">Overruns</span><span>0</span>
+              <span style="color: #A9A9AF">Driver dropouts</span><span>0</span>
+              <span style="color: #A9A9AF">Limiter</span><span>idle</span>
+              <span style="color: #A9A9AF">Memory</span><span>101 MB of 15 GB</span>
+              <span style="color: #A9A9AF">Latency</span><span>in 2.6 + out 2.7 = 5.3 ms</span>
+            </div>
+            
+            <button class="b" style="align-self: flex-start">Reset counters</button>
+          </div>
+        </div>
+        <div>
+          <div class="gt">Tip</div>
+          <div class="grp" style="padding: 12px 14px; font-size: 12px; color: #A9A9AF; line-height: 1.5">Use 64 samples for the stage. If you hear clicks, go up one step — Encore shows dropouts here and in the System health widget on stage.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 20px; border-top: 1px solid #0A0A0B; background: #262629">
+      <span style="flex-grow: 1; font-size: 11.5px; color: #85858C">Changes apply immediately; audio restarts for less than a second when you change the device.</span>
+      <button class="b" style="width: 84px">Cancel</button>
+      <button class="b pri" style="width: 84px">Done</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var b = [32, 64, 128, 256, 480];
+    return {
+      buffers: b.map(function (n, i) { return { n: n, cls: n === 64 ? 'b b-on' : 'b', sep: i === 0 ? '0' : '1px solid #0E0E10' }; })
+    };
+  }
+}
+</script>
+</body>
+</html>

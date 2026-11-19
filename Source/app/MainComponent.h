@@ -11,8 +11,9 @@
 #include "session/ShowSession.h"
 #include "ui/BlockPanel.h"
 #include "ui/ChainStrip.h"
-#include "ui/LevelMeter.h"
+#include "ui/Inspector.h"
 #include "ui/MidiSettings.h"
+#include "ui/SettingsWindow.h"
 #include "session/RecoveryFile.h"
 #include "ui/CueListEditor.h"
 #include "ui/PatchList.h"
@@ -20,12 +21,20 @@
 #include "ui/SetList.h"
 #include "ui/StageView.h"
 #include "ui/TunerDisplay.h"
+#include "ui/kit/Lcd.h"
+#include "ui/kit/MeterBar.h"
+#include "ui/kit/NoticeBar.h"
+#include "ui/kit/Pane.h"
+#include "ui/kit/SegmentedControl.h"
+#include "ui/kit/Toolbar.h"
 
 namespace encore
 {
 
-/** The edit view: the show's patches on the left, the selected patch's chain
-    and the selected block's controls on the right, audio status at the bottom.
+/** The edit view (docs/design/SCREENS.md §4): a toolbar, a notice bar while a
+    notice shows, the running order and patches on the left, the selected
+    patch's chain and block in the centre, the inspector on the right, and
+    the guitar input, meters and system health along the bottom.
     F5 (or "Stage") switches to the stage view, which covers the window.
 */
 class MainComponent final : public juce::Component,
@@ -33,20 +42,35 @@ class MainComponent final : public juce::Component,
                             private juce::Timer
 {
 public:
-    explicit MainComponent (AppSettings& settings);
+    /** `deviceType` (tests): the only audio device type offered, instead of
+        the system's drivers. */
+    explicit MainComponent (AppSettings& settings, std::unique_ptr<juce::AudioIODeviceType> deviceType = nullptr);
     ~MainComponent() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
 
-    /** Height needed to show everything at this width (for the scrolling window). */
-    int getRequiredHeight (int width);
+    /** Below this size the edit view scrolls (the stage view always fits the window). */
+    juce::Point<int> getMinimumEditSize() const;
 
     /** The stage view fills the window instead of scrolling: the window
         re-lays out when it's switched. */
     std::function<void()> onViewChanged;
     bool isShowingStage() const noexcept { return stageView != nullptr && stageView->isVisible(); }
+
+    /** Settings — Audio | MIDI (Audio..., MIDI..., the pre-show check's fixes). */
+    void openSettings (SettingsWindow::Tab);
+    void closeSettings();
+    bool isShowingSettings() const noexcept { return settingsWindow != nullptr; }
+
+    /** The Show menu (the Show ▾ button opens it). */
+    juce::PopupMenu buildShowMenu();
+
+    /** The pre-show check (F9, Show → Pre-show check...). */
+    void openPreShowCheck();
+    void closePreShowCheck();
+    bool isShowingPreShowCheck() const noexcept { return checkDialog != nullptr; }
 
 private:
     // Audio
@@ -67,6 +91,7 @@ private:
     void chooseShowToOpen();
     void chooseFolderForCopy();
     void refreshShowStatus();
+    void showPatchPicker();
     void reportProblems();
 
     // Robustness
@@ -74,10 +99,9 @@ private:
     void updateRecoveryFile();
     void watchAudioDevice();
     void reconnectAudioDevice();
-    void openPreShowCheck();
     PreShowFacts gatherPreShowFacts();
     void applyFix (PreShowCheckResult::Fix);
-    void showNotice (const juce::String& text, int seconds);
+    void showNotice (const juce::String& text, int seconds, bool logged = false);
 
     // Cue list
     void setCueListVisible (bool);
@@ -90,7 +114,13 @@ private:
     // Chain view
     void showSelectedBlock();
     void relayout();
-    int layoutContent (int width, bool apply);
+    void layoutToolbar (juce::Rectangle<int>);
+    void layoutBottomRow (juce::Rectangle<int>);
+
+    // Status
+    void refreshLcd();
+    void refreshWarningLine();
+    void setWarning (const juce::String& text);
 
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void timerCallback() override;
@@ -104,12 +134,18 @@ private:
     std::unique_ptr<ShowSession> session;
     system::TuningReport tuning;
 
-    // Top bar
-    juce::Label title, showName, saveState;
+    // Toolbar (SCREENS.md §4.1)
+    class ShowTitle;
+    kit::Toolbar toolbar;
+    std::unique_ptr<ShowTitle> showTitle;
     juce::TextButton showButton { "Show" };
-    juce::TextButton audioSettingsButton { "Audio settings..." };
+    kit::SegmentedControl modeSwitch;
+    kit::Lcd lcd { false };
+    juce::TextButton audioSettingsButton { "Audio..." };
     juce::TextButton midiSettingsButton { "MIDI..." };
-    juce::TextButton stageButton { "Stage" }, tunerButton { "Tuner" }, panicButton { "PANIC" };
+    juce::TextButton tunerButton { "Tuner" }, panicButton { "PANIC" };
+    juce::Label outLabel { {}, "Out" };
+    kit::NoticeBar noticeBar { kit::NoticeBar::Kind::notice };
 
     std::unique_ptr<CueListEditor> cueEditor;
     juce::String goToNumber;
@@ -126,18 +162,34 @@ private:
     std::unique_ptr<ChainStrip> chainStrip;
     std::unique_ptr<BlockPanel> blockPanel;
     juce::Label chainLabel, problemsLabel;
+    juce::TextButton patchPicker;
+    juce::Label loadingLabel { {}, "(loading patches...)" };
+    juce::Rectangle<int> headerArrow;
     Chain* shownChain = nullptr;
     int shownBlockIndex = -1;
 
-    // Audio status
-    juce::Label deviceStatus, latencyStatus, healthStatus, warning, systemStatus;
-    juce::Label inputLabel { {}, "Guitar input" };
+    // Bottom row (SCREENS.md §4.4): guitar input, meters, system health.
+    kit::Pane inputPane, metersPane, healthPane;
+    std::unique_ptr<Inspector> inspector;
+    juce::Label inputLabel { {}, "Guitar input" }, deviceLine;
     juce::ComboBox inputChoice;
+    kit::MeterBar inputMeter { "Input" }, outputMeter { "Output" };
+    kit::MeterScale meterScale;
+    juce::Label healthTitle { {}, "System health" };
     juce::TextButton resetCountersButton { "Reset counters" };
-    LevelMeter inputMeter { "Input" }, outputMeter { "Output" };
+    juce::Label healthLine, latencyLine, warningLine;   // full text in their tooltips
+
+    // What the warning line shows (the most important first: lost, a device
+    // or input problem, not ASIO, then the Windows / power line).
+    juce::String warning, systemText;
+    bool systemProblem = false;
+    double roundTripMs = 0.0, sampleRate = 0.0;
+    juce::String stageDeviceLine, footswitchLine;   // the stage footer (SCREENS.md §3.4)
 
     // Open settings windows (closed before the things they edit go away).
-    juce::Component::SafePointer<juce::DialogWindow> audioDialog, midiDialog, checkDialog;
+    std::unique_ptr<PreShowCheckDialog> checkDialog;
+    std::unique_ptr<SettingsWindow> settingsWindow;
+    AudioSettingsView::Status audioStatus;
 
     // Crash recovery: where the show is, kept on disk while running.
     std::unique_ptr<RecoveryFile> recovery;

@@ -408,3 +408,18 @@ picks the words: band, worship and solo shows have a **Set list** of *songs*
 headings, cut items hidden) and expands into the full table for editing.
 Keeping one model means every feature (go to, cut, MIDI per item, per-item
 stage layouts) works for every kind of gig.
+
+## 0044 — UI is native JUCE with a token-driven LookAndFeel; gear art behind GearView (design v3)
+
+The design v3 look is built in JUCE itself: every colour, size and font comes
+from `Source/ui/theme/EncoreTheme.h`, `EncoreLookAndFeel` draws the standard
+controls from those tokens, and the screens are composed from a small kit
+(`Source/ui/kit`: panes, toolbar, LCD, meters, dialogs, status badges). No web
+view, HTML or new UI library: the UI stays one process, one thread model and
+one set of tools, and costs almost nothing on stage (repaint only on change,
+nothing built in `paint()`, no new timers; the existing 30 Hz timer drives
+it). Amps, cabs and pedals are drawn as placeholders behind the `GearView`
+interface, at the exact boxes of the future artwork, so real gear art can
+replace them without touching a screen. Snapshot tests render every screen
+and `docs/design/tools/ui-compare.py` compares them with the design targets.
+
