@@ -4,6 +4,8 @@ Everything needed to build Encore's designed look natively in the app, and to ke
 
 **Start here:** `AGENT-PROMPT.md` (the brief for whoever builds it — paste it into a new chat together with this folder), then `CONVERSION-PLAN.md`.
 
+**Design v3.2 (16–18 Nov 2026):** `V3.2-CHANGES.md` (everything that changed: v3.1 tokens, Settings button, bottom row and mixer view, status bar, menus, layout drag and drop) and `AMP-BUILDER.md` (the amp builder; its board source in `boards/BAmpBuilder.dc.html`, its layers in `textures/`). Both are merged into `DESIGN-SYSTEM.md` and `SCREENS.md`.
+
 **Milestones 10 and 11 (plugins, routing):** start with `M10-M11-BRIEF.md`, then `NEW-FEATURES-M10-M11.md` (the screens, components and tokens) and `reference/REFERENCES.md` (how to use the images and measurements). The v3 rules below apply unchanged.
 
 | File / folder | What it is |
@@ -17,6 +19,10 @@ Everything needed to build Encore's designed look natively in the app, and to ke
 | `M10-M11-BRIEF.md` | The brief for building the milestone 10 restyle and milestone 11 (routing) screens. |
 | `NEW-FEATURES-M10-M11.md` | Milestone 10 and 11 screens, the new kit components and the new tokens (adds to DESIGN-SYSTEM and SCREENS; wins on these features). |
 | `reference/REFERENCES.md` | Which reference image goes with which screen and state, and how to use target, geometry, boards and ideas. |
+| `V3.2-CHANGES.md` | Design v3.2: what changed since v3, with its tokens and words. |
+| `AMP-BUILDER.md` | The amp builder: decisions, rules, parts, data, rendering, and how it's built. |
+| `boards/BAmpBuilder.dc.html` | The amp builder board's source (values only). |
+| `textures/` | The amp builder's layers: `AMP-BUILDER-LAYERS.md` and `render_amp_parts.py`. |
 | `PROPOSALS.md` | Future features already discussed (not part of the conversion). |
 | `theme/EncoreTheme.h` | All tokens as C++ constants — copy to `Source/ui/theme/`. |
 | `reference/overview.png` | All target screens on one sheet. |

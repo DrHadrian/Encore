@@ -73,6 +73,8 @@ Covers the main grid like the full list (SCREENS §5); toolbar, notice bar, bott
 - **IN selected**: input name popup (the computer's input names + any NOT HERE name), its channel, meter.
 
 ### B.4 Bottom row (M11BottomRow)
+
+> **Superseded in v3.2:** the bottom row is `V3.2-CHANGES.md` §3 and `SCREENS.md` §4.4 (collapsed row without Compact | Full, the mixer view, the health status). The text below is the milestone 11 version.
 - Left pane: "Input" + the playing patch's input name and channel (amber with NOT HERE when missing).
 - Centre pane: "OUTPUTS" + **Compact | Full** segmented (remembered per computer in `AppSettings`). OutputStrip each: name, channels, stereo meter, **M** (MuteButton), level value. Compact: strips share the width (up to 8 fit at 1440). Full: 170 px strips, horizontal scroll. Warning line on the right pane: "⚠ Output “Amp DI” is muted".
 
@@ -96,7 +98,7 @@ Covers the main grid like the full list (SCREENS §5); toolbar, notice bar, bott
 | **Fader** (vertical SendFader / horizontal) | sends, output levels | law above; thumb as the volume slider; meter optional; double-click 0 dB; −∞ at the bottom = Off |
 | **MuteButton** ("M") | per-output mute | 24 × 20; on = MUTED gradient #E8483E → #BF2C25, white |
 | **Chip** | NOT HERE, OUTPUT MUTED, OFF, EXP n, VST3, counts | 16 high, radius 3, 9.5 / 700; variants mute, amber, exp, off, green |
-| **OutputStrip** | bottom row, Routing outputs | compact / full (170) |
+| **OutputStrip** | bottom row (collapsed, v3.2: shares the width, no box) | see DESIGN-SYSTEM §5.16 |
 | **SendMatrix** | Routing › Sends | grid; heads 10.5 caps; cells 26 high |
 | **SmallKnob** | output EQ | 36 px UI knob with a value arc (accent), label + value under |
 | **EqCurve** | output EQ, thumbnails | response of the 5-band EQ, log frequency 20 Hz–20 kHz, ±12 dB, cached path rebuilt on change; later the graphic EQ (PROPOSALS) |

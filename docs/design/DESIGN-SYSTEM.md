@@ -1,4 +1,4 @@
-# Encore design system (v3)
+# Encore design system (v3.2)
 
 The look of every Encore screen, as rules a C++/JUCE implementation can follow exactly. Values are logical pixels at 100 % scale, measured on the 1440 × 900 reference boards in `reference/`. Every value here also exists as a constant in `theme/EncoreTheme.h`; code uses the constants, never literals.
 
@@ -8,6 +8,8 @@ The look of every Encore screen, as rules a C++/JUCE implementation can follow e
 3. `reference/geometry/*.json` — the position, size, colour and font of every visible element on each target board, for exact measurements.
 4. `reference/boards/*.dc.html` — the design sources (HTML used only as a drawing; read the inline styles for any value not listed elsewhere).
 5. `reference/with-gear-art/*.png` — the same boards with the rendered amp, cab and pedals: the later look, **not** the target now.
+
+**v3.2 (16–18 Nov 2026):** `V3.2-CHANGES.md` (in this folder) lists everything that changed since v3: the v3.1 audit tokens, the Settings button, the bottom row and its mixer view, the status bar, the menus, layout-editor drag and drop and the amp builder (`AMP-BUILDER.md`). It is merged into this file and `SCREENS.md`; where they still differ, it wins.
 
 If two of these disagree, the higher one wins. If a board shows something the app can't do yet, it is example data or a proposal: see "Nothing pretends" below and `SCREENS.md` §0.
 
@@ -142,14 +144,14 @@ Fill #1D1D20, border #0A0A0B, radius 6, top highlight. Optional header 24 px: gr
 - **Table (full list):** header 24 px on pane-header gradient (10 px 700 caps #85858C); rows 28 px, line under each row black 40 %, every other row white 2.5 %; section rows on pane-header gradient. See `SCREENS.md` §5 for columns.
 - Lists never animate selection and never fade.
 
-### 5.6 LCD (`ui::kit::Lcd`)
-Inset display: gradient #1C232C → #12171D, border #07090B, radius 6, inner shadow (0,1,4, black 65 %), 1 px bottom highlight white 5 %. Height 32 (Edit) / 36 (Stage), padding 0 14–16, items 18–20 px apart. Each item: value (lcdValue, #D5E4F7, tabular) over label (lcdLabel, #7F95B3, caps).
+### 5.6 LCD (`ui::kit::Lcd`) — the tuner only (v3.2)
+The toolbars use the status bar (§5.16). Inset display: gradient #1C232C → #12171D, border #07090B, radius 6, inner shadow (0,1,4, black 65 %), 1 px bottom highlight white 5 %. Height 32 (Edit) / 36 (Stage), padding 0 14–16, items 18–20 px apart. Each item: value (lcdValue, #D5E4F7, tabular) over label (lcdLabel, #7F95B3, caps).
 
 ### 5.7 Meters (`ui::kit::MeterBar`, restyled `LevelMeter`)
 Horizontal: 8 px tall track #0E0E10 radius 4; fill green #2BC24F to 80 % of the track then yellow #E8CF3A; 2 px white peak mark; value right in 11 px tabular. Scale under it: 9 px #6A6A71 tabular (−60 −48 −36 −24 −12 −6 0). Mini meters in the Stage toolbar: 4 px tracks, 80 px wide, labels 9 px 700 #85858C.
 
-### 5.8 Menus (LookAndFeel popup menu)
-Fill #2C2C30 97 %, border #0A0A0B, radius 7, padding 5, inner top highlight white 8 %, drop shadow. Item 24 px, radius 4, text 12.5 #E8E8EB, left gutter 14 px for ticks (✓ drawn as a path), shortcut right-aligned 11 px #85858C, submenu arrow ▸ #85858C. Highlight #2E62C4 with white text (shortcut #D3E1FA). Separator: 1 px #3A3A3F with 4 px above and below, inset 6. Disabled: #6E6E75. Section header (e.g. "LAYOUTS IN THIS SHOW"): 10 px 700 caps #6E6E75. Danger items (Delete this layout): text #FF8A80.
+### 5.8 Menus (LookAndFeel popup menu) — v3.2
+Fill rgba(35,35,39,0.98), border #0A0A0B, radius 10, padding 4, an inner ring white 6 %, the window's drop shadow. Separators 1 px #34343A, inset 6, 4 above and below. Section headers 10 / 700 caps #8C8C93, 20 px in. Items 24 px, radius 6; the rest as before. (v3:) Item 24 px, radius 4, text 12.5 #E8E8EB, left gutter 14 px for ticks (✓ drawn as a path), shortcut right-aligned 11 px #85858C, submenu arrow ▸ #85858C. Highlight #2E62C4 with white text (shortcut #D3E1FA). Separator: 1 px #3A3A3F with 4 px above and below, inset 6. Disabled: #6E6E75. Section header (e.g. "LAYOUTS IN THIS SHOW"): 10 px 700 caps #6E6E75. Danger items (Delete this layout): text #FF8A80.
 
 ### 5.9 Dialogs (`ui::kit::DialogFrame`)
 Over the dimmed window (black 45 %; the design also blurs the window behind — optional, only if it costs nothing per frame: snapshot once when the dialog opens, blur that image once). Body #232326, radius 10, border #0A0A0B, drop shadow. Title bar 30 px, gradient #38383C → #2E2E31, 12.5 / 600 #C4C4C9 centred, close ✕ 20 px at the right. Footer 48 px (#262629, top line #0A0A0B): help text left (11.5 #85858C), buttons right (Cancel default, Done primary, 84 wide). Settings tabs: 78 × 54 icon tabs centred under the title (icon 22 px over 11 px label; on: fill #3A3A3F, white).
@@ -181,13 +183,26 @@ The spec is `NEW-FEATURES-M10-M11.md` §C; values are tokens in `EncoreTheme.h`.
 - **Fader**: vertical (OUT stage sends, 196 px track with its scale) or horizontal (Routing output level), on the send law (+6 → 0, 0 → 0.1, −6 → 0.25, −12 → 0.4, −24 → 0.6, −40 → 0.8, −∞ → 1); double-click 0 dB; at the bottom = Off.
 - **MuteButton**: "M" (24 × 20, radius 4) or stage **Mute / MUTED** (52 high, radius 6, 15 / 800, text scales with the stage); muted = MUTED gradient #E8483E → #BF2C25, white.
 - **Chip**: 16 high, radius 3, 9.5 / 700 caps; styles mute, amber, exp, off, green, plain.
-- **OutputStrip**: an output in the bottom row: name, channels, stereo bars, M, level; compact or 170 px.
+- **OutputStrip**: an output in the collapsed bottom row (v3.2, §5.16).
 - **LevelBars**: one or two bars, horizontal or vertical, green → yellow; the stereo meters of outputs and inputs.
 - **SmallKnob** (36, value arc) and **EqCurve** (the 5-band response, log 20 Hz–20 kHz, ±12 dB, cached path): the Routing view's output EQ and its row thumbnails.
 - **InfoList**: read-only inspector sections (title, right note, key/value rows with a muted tail, amber or a chip, a note, one button with an icon and key cap): the IN / OUT tiles' inspector.
 - **StageBackdrop**: the block stage's lit radial background with the pane's rounded bottom (`BlockPanel`, `JackStage`).
-- **SegmentedControl** gains per-segment widths (Compact | Full); **Group** gains `setGroupTitle`.
+- **SegmentedControl** gains per-segment widths; **Group** gains `setGroupTitle`.
 - Not kit components: the Sends matrix is a `ListBox` in `RoutingView`; the Stage Outputs widget is a `StageView` widget type (`outputs`).
+
+### 5.16 v3.2 components (`Source/ui/kit`, as built)
+Values are tokens in `EncoreTheme.h`; the spec is `V3.2-CHANGES.md` §3–§9.
+- **StatusBar** (toolbars, replaces the LCD there): flat #121214, border #2A2A2F, radius 7, height = the LCD's + 2; fields padded 14 with 1 px #2A2A2F dividers, label 8.5 / 700 caps #8C8C93 above value 14 / 600 #F2F2F4 (Stage 9 / 16), readout font.
+- **OutputStrip** (collapsed bottom row): no box; strips share the pane's width, 12 px in, 1 px #26262B between; name 11.5 / 600 + channels 9.5 #8C8C93; two 4 px bars (one for a mono output), the level ("0.0 dB", always shown; #8C8C93 while muted) and M (24 × 20). Under 140 px the level moves under the bars.
+- **MixerStrip** (mixer view): 94 wide (the first 82), columns 18 | 4 | 12 | 6 | 28, rows 28 | 12 | 1fr | 20, gap 6: name (two lines), LIM (dot + caps; #FFB340 while the −1 dBFS limiter works, held 1 s), the peak since reset (10 px readout; #FF8A80 from −1 dBFS; "—" muted or below −60; a click resets it and the output's clip count), the dBFS scale (0 −6 −12 −24 −48), a **DbfsMeter** (5 px bars, law 0→100 %, −6→82, −12→64, −24→38, −48→8, −60→0; zones green to 80 %, yellow 90–97 %, red from 98.5 %; 1 px peak tick), the **Fader** in its mixer style (4 px track inset 6, 0 dB mark 18 × 1 #6E6E75, 22 × 12 cap #5A5A60 → #3A3A3E with a #F2F2F4 centre line; send law; double-click 0 dB), the level without unit ("−∞" at the bottom) and M.
+- **InputStrip** (mixer view): "Input", the compact **PopupField**, the peak, the scale and one bar.
+- **PopupField**: a raised field that opens a menu: 22 (compact 20) high, radius 5, #46464B → #38383C, border #0C0C0E; name semibold, caption #9A9AA1, 9 px chevron; amber name when it isn't on this computer.
+- **PaneTab**: 44 × 12 on a pane's top edge (7 px above it), the pane's fill and border without its bottom edge, top corners 6, a 10 px chevron (up closed, down open).
+- **HealthStatus**: a flat two-line button (hover #232326, radius 5): a 6 px green dot + "Healthy" #9A9AA1, or the amber warn icon + "1 thing to check" / "N things to check" (600, #FFB340); under it "CPU 9% · 5.3 ms" #8C8C93.
+- **DropBox**: where a drag lands: dashed 2 px #4C8DF6, fill the accent at 14 %, radius 6, "Drop: <widget>" / "Move: <widget>" 12 / 600 #EEF3FD; refused: amber.
+- **AmpFace / AmpFaceView**: an amp built in the amp builder (`AMP-BUILDER.md`): the face composed to one cached 2× image; in Edit the driving knobs and switches are real controls on top, Fixed ones only a tooltip, lights follow the block.
+- **Readout fonts:** numbers people read off the screen (status bar, meters, peaks, values) use "Inter Readout": Inter with the slashed zero baked in (`Resources/ui/fonts/make_readout_fonts.py`); a style's fifth field `readout` picks it.
 
 ---
 
@@ -215,6 +230,8 @@ The spec is `NEW-FEATURES-M10-M11.md` §C; values are tokens in `EncoreTheme.h`.
 ---
 
 ## 8. Gear placeholders (amp, cab, pedals)
+
+**v3.2:** the amp in Edit is no longer a placeholder: every amp block shows a face (`AmpFaceView`, §5.16): its own amp from the amp builder, or Encore Gold 30. The cab, pedals, chain tiles and stage pedals keep the placeholders below.
 
 Real rendered gear comes later as its own feature. Until then every amp, cab and pedal is a **placeholder** with the exact size and position the art will have, so the art can drop in later without changing any layout (see `EXTENDING.md` §6, the `GearView` interface).
 

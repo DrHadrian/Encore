@@ -156,3 +156,8 @@ Encore runs during shows on laptops; the UI must cost almost nothing and never c
 ## 9. Order of work
 
 See `CONVERSION-PLAN.md`: theme and LookAndFeel first, then the kit, then screens one by one (Edit frame, sidebar, chain + block, inspector, bottom row, full list, Stage, layout editor, settings, pre-show, dialogs), each with its snapshot, each leaving the app working.
+
+## Amp faces (v3.2, the amp builder)
+- **Assets** are binary data (`EncoreAmpArt`: `Resources/ui/amp_parts/*.webp`, `Resources/ui/amp_sprites/*.png`, `Resources/amps/amp-templates.json`). JUCE 9 decodes WebP itself (`JUCE_USE_WEBP`). `kit::ampArt::get()` decodes on first use, on the message thread, and keeps the image (released at JUCE's shutdown, before the leak checks).
+- **Composing** (`kit::AmpFace::compose`) happens when an amp is loaded, saved or edited: never in `paint()`, never on the audio thread. A face is one 2× image cached by the amp's content; Edit draws it and puts the driving controls on top (`kit::AmpFaceView`), whose bodies are images made when their value changes.
+- **The builder** draws from the composed image too; while a part is dragged it shows a face composed without that part and the part's own image, so a drag costs a blit per frame.

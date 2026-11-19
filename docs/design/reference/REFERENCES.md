@@ -59,7 +59,7 @@ Common fixture:
 | `m11-edit-split-merge` | M11Merge | Dual amp: IN, gate, SPLIT (A + B), path A (amp + cab) over path B (amp + cab), MERGE selected (stereo), delay, +, OUT. Merge Level/Pan A and B on the block stage; bottom row compact. |
 | `m11-edit-out-sends` | M11Sends | OUT selected: 4 vertical send faders: Front of house 0 dB, In-ear −6 dB, Amp DI (OUTPUT MUTED), Monitor wedge (NOT HERE). |
 | `m11-edit-in-missing` | M11Input | IN selected: the patch uses an input name not on this computer (amber, NOT HERE, plays input 1 instead). |
-| `m11-bottom-row` (1440 × 760) | M11BottomRow | A sheet of bottom-row variants: 3 outputs compact (the default), 8 compact, 8 full (scrolling). Snapshot each variant as its own image at its row's size and compare it with the matching band of the target. |
+| `m11-bottom-row` (1440 × 760) | M11BottomRow | A sheet of bottom-row variants: 3 outputs compact (the default), 8 compact, 8 full (scrolling). Snapshot each variant as its own image at its row's size and compare it with the matching band of the target. **Superseded in v3.2** by the BBottomRow board: the tests now write `v32-bottom-row-1..3.png` (1, 3 and 8 outputs, collapsed), `v32-mixer-view-4/5.png` and the sheet `v32-bottom-row.png`; there's no v3.2 target image yet (compare with the board). |
 | `m11-stage-outputs` | M11Stage | Stage with the **Outputs** widget (meter + Mute/MUTED per output; Amp DI MUTED) and the Patch widget showing its input. |
 | `m11-preshow-check` | M11PreShow | Pre-show with the routing lines (plan §3.8) and **Routing...** buttons. |
 | `m11-settings-midi-mute-output` | M11Midi | MIDI tab: action menu open at **Mute output ▸** (submenu of outputs); a binding to "Monitor wedge" in amber. |
