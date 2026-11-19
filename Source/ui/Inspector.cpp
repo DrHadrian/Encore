@@ -97,7 +97,7 @@ public:
         }
 
         setVariant (pluginActionButton, Variant::primary);   // Turn back on: the fix (18 px: small text)
-        openWindowButton.setButtonText ("Open plugin window...");
+        openWindowButton.setButtonText (juce::String (juce::CharPointer_UTF8 ("Open plugin window\xe2\x80\xa6")));
         setButtonIcon (openWindowButton, Icon::window, (float) size::smallButtonIcon, false);
         openWindowButton.onClick = [this]
         {

@@ -1223,7 +1223,8 @@ private:
         addChoice ("Template", names, keys.indexOf (owner.templateKey()), 2, [&o, keys] (int i) { o.applyTemplate (keys[i]); }, tips);
 
         static const juce::StringArray bodies { "tall", "thin", "top", "head", "headg" };
-        addChoice ("Body", { "Tall", "Thin", "Top panel", "Head", "Grille head" }, bodies.indexOf (look.body), 3,
+        // 2 columns (the board has 3): at this inspector's width "Grille head" fits whole only in 2.
+        addChoice ("Body", { "Tall", "Thin", "Top panel", "Head", "Grille head" }, bodies.indexOf (look.body), 2,
                    [&o] (int i) { o.changeLook ([i] (AmpLook& l) { l.body = bodies[i]; }); });
 
         static const juce::StringArray tolex { "tweed", "black", "orange", "white", "cream", "brown", "red", "blonde" };
@@ -2011,7 +2012,7 @@ void AmpBuilderView::showAmpMenu()
                 safe->edit (kit::ampTemplates::makeFrom (key, name));
         });
 
-    menu.addSubMenu ("New amp from a template...", templates);
+    menu.addSubMenu (juce::String (juce::CharPointer_UTF8 ("New amp from a template\xe2\x80\xa6")), templates);
 
     juce::PopupMenu fromLibrary;
 
@@ -2021,7 +2022,7 @@ void AmpBuilderView::showAmpMenu()
     if (fromLibrary.getNumItems() == 0)
         fromLibrary.addItem ("(every amp is in this show)", false, false, nullptr);
 
-    menu.addSubMenu ("Add from the library...", fromLibrary);
+    menu.addSubMenu (juce::String (juce::CharPointer_UTF8 ("Add from the library\xe2\x80\xa6")), fromLibrary);
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&ampPicker).withMinimumWidth (260));
 }
 

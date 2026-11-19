@@ -38,7 +38,7 @@ Both must be **native, fast, hardened JUCE code** that looks practically identic
    - The spec's small additions to milestone 10 (scan progress, FaultCard, ParameterList, the hint in Settings › Plugins) are wanted. Add only the read-only accessors they need, e.g. `PluginCatalog` scan (index, total).
 3. **Words.**
    - Milestone 10: from the code.
-   - Milestone 11: **Output, Send, Path A / Path B, Routing**; a missing name gets **NOT HERE**; the pre-show fix button is **"Routing..."**; the pre-show texts are in plan §3.8.
+   - Milestone 11: **Output, Send, Path A / Path B, Routing**; a missing name gets **NOT HERE**; the pre-show fix button is **"Routing…"**; the pre-show texts are in plan §3.8.
    - Running-order words come from `ShowSession::getWords()`.
 4. **Tokens only.**
    - No colour, size or font literal outside `Source/ui/theme/`.

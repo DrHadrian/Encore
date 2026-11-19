@@ -317,20 +317,20 @@ public:
             {
                 for (auto* child : c.getChildren())
                 {
-                    if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && b->getButtonText() == "Settings...")
+                    if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && b->getButtonText() == juce::String (juce::CharPointer_UTF8 ("Settings\xe2\x80\xa6")))
                         settingsButton = b;
 
                     find (*child);
                 }
             };
             find (main);
-            expect (settingsButton != nullptr, "the toolbar's Settings... button");
+            expect (settingsButton != nullptr, juce::String (juce::CharPointer_UTF8 ("the toolbar's Settings\xe2\x80\xa6 button")));
             expect (settingsButton != nullptr && settingsButton->getTooltip() == "Settings: Audio, MIDI and Plugins (opens on the tab you used last)");
 
             if (settingsButton != nullptr && settingsButton->onClick != nullptr)
                 settingsButton->onClick();
 
-            expect (main.getShownSettingsTab() == SettingsWindow::Tab::midi, "Settings... opens the tab used last");
+            expect (main.getShownSettingsTab() == SettingsWindow::Tab::midi, juce::String (juce::CharPointer_UTF8 ("Settings\xe2\x80\xa6 opens the tab used last")));
             main.openSettings (SettingsWindow::Tab::plugins);
             main.closeSettings();
             expectEquals (settings.getSettingsTab(), juce::String ("plugins"));

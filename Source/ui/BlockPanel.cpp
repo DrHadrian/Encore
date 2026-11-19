@@ -609,7 +609,7 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
     {
         // The header button opens the plugin's own window instead.
         setVariant (loadButton, Variant::small);
-        loadButton.setButtonText ("Open plugin window...");
+        loadButton.setButtonText (juce::String (juce::CharPointer_UTF8 ("Open plugin window\xe2\x80\xa6")));
         setButtonIcon (loadButton, Icon::window, (float) size::smallButtonIcon, false);
         loadButton.setTooltip ("The plugin's own controls, in a window of their own");
         loadButton.onClick = [this]
@@ -698,6 +698,9 @@ void BlockPanel::setAmpFace (const AmpPreset& amp)
                     onEdited();
             };
             s->setTooltip (spec.name + ". Right-click to assign an expression pedal");
+
+            if (c->shownPedal > 0)
+                face->setChip (spec.id, "EXP " + juce::String (c->shownPedal));   // the new face shows it too
 
             auto& menu = knobMenus.emplace_back (std::make_unique<KnobMenu> (*this, *c));
             s->addMouseListener (menu.get(), false);
@@ -870,6 +873,9 @@ void BlockPanel::refresh()
             {
                 c->shownPedal = pedal;
                 c->knob->setChip (pedal > 0 ? "EXP " + juce::String (pedal) : juce::String());
+
+                if (auto* face = c->faceKnob != nullptr ? gear->getFace() : nullptr)
+                    face->setChip (c->parameter.getSpec().id, pedal > 0 ? "EXP " + juce::String (pedal) : juce::String());
             }
         }
 
@@ -915,7 +921,7 @@ void BlockPanel::refresh()
     if (block.getFileSlot() != nullptr)
     {
         const auto file = block.getLoadedFile();
-        const auto name = loading ? juce::String ("Loading...")
+        const auto name = loading ? juce::String (juce::String (juce::CharPointer_UTF8 ("Loading\xe2\x80\xa6")))
                                   : (file == juce::File() ? juce::String ("(none)") : file.getFileNameWithoutExtension());
         const auto info = loading ? juce::String() : block.getLoadedFileInfo();
 
@@ -1057,7 +1063,7 @@ void BlockPanel::updateFaultCard()
     }
 
     gear->card.setMessage (lead, rest + dry);
-    gear->card.setActions (action, canOpen ? juce::String ("Open plugin window...") : juce::String());
+    gear->card.setActions (action, canOpen ? juce::String (juce::String (juce::CharPointer_UTF8 ("Open plugin window\xe2\x80\xa6"))) : juce::String());
     gear->layOutCard();
     gear->setDimmed (true);
 }

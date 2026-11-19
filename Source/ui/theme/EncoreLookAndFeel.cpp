@@ -447,6 +447,14 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
         return;
     }
 
+    if ((bool) button.getProperties()["encoreCompact"])
+    {
+        // Option grids (amp builder): one line, 4 px in, squeezed a little before it's cut.
+        g.drawFittedText (button.getButtonText(), button.getLocalBounds().withTrimmedBottom (1).reduced (size::buttonCompactPadX, 0),
+                          juce::Justification::centred, 1, size::buttonCompactMinSqueeze);
+        return;
+    }
+
     g.drawFittedText (button.getButtonText(), area, juce::Justification::centred, 2, 0.9f);
 }
 
@@ -743,7 +751,7 @@ void EncoreLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int w
     const auto track = juce::Rectangle<float> ((float) x, cy - 2.0f, (float) width, 4.0f);
     g.setColour (c (colour::sliderTrack));
     g.fillRoundedRectangle (track, 2.0f);
-    g.setColour (c (colour::sliderFill));
+    g.setColour (c ((bool) slider.getProperties()["encoreOutVolume"] ? colour::outSliderFill : colour::sliderFill));
     g.fillRoundedRectangle (track.withRight (pos), 2.0f);
 
     const auto thumb = juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ pos, cy });

@@ -45,7 +45,7 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/fonts/Inter-SemiBold.ttf Resources/ui/fonts/Inter-Bold.ttf
         Resources/ui/fonts/Inter-ExtraBold.ttf
         Resources/ui/logo/encore-wordmark-ui.svg Resources/ui/logo/encore-icon-clef-light.svg
-        Resources/ui/icons/plus.svg  ...every icon...)
+        Resources/ui/icons/plus.svg  ...every icon…)
 target_link_libraries(Encore PRIVATE EncoreUiAssets)          # and EncoreTests, for UI snapshot tests
 juce_add_gui_app(Encore … ICON_BIG Resources/ui/logo/encore-app-icon-256.png ICON_SMALL Resources/ui/logo/encore-app-icon-256.png)
 ```

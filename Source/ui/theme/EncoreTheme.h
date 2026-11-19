@@ -184,7 +184,7 @@ namespace colour
     // Menus, dialogs, scrollbars
     constexpr juce::uint32 menu            = 0xFA232327;   // rgba(35,35,39,.98) (v3.2 menus)
     constexpr juce::uint32 menuInnerRing   = 0x0FFFFFFF;   // 1 px ring inside the border (white 6 %)
-    constexpr juce::uint32 menuSeparator   = 0xff34343A;
+    constexpr juce::uint32 menuSeparator   = 0xff3A3A3F;   // v3.2 board
     constexpr juce::uint32 menuShortcut    = 0xff9A9AA1;
     constexpr juce::uint32 dialog          = 0xff232326;
     constexpr juce::uint32 dialogTitleTop  = 0xff38383C;
@@ -236,7 +236,8 @@ namespace colour
     constexpr juce::uint32 textSelection   = 0x664C8DF6;   // selected text in fields (accent 40 %)
     constexpr juce::uint32 fieldShadow     = 0x99000000;   // inner shadow of inset fields (black 60 %)
     constexpr juce::uint32 sliderTrack     = 0xff0E0E10;   // Out volume slider track
-    constexpr juce::uint32 sliderFill      = 0xff6E6E75;   // Out volume slider, filled part
+    constexpr juce::uint32 sliderFill      = 0xff6E6E75;   // horizontal sliders and faders, filled part
+    constexpr juce::uint32 outSliderFill   = 0xff8C8C93;   // the toolbar's Out volume slider, filled part (v3.2 board)
     constexpr juce::uint32 thumbTop        = 0xffF2F2F4;   // slider thumb / toggle knob gradient
     constexpr juce::uint32 thumbBot        = 0xffB9B9BF;
     constexpr juce::uint32 checkboxBorder  = 0xff4A4A4F;   // unticked checkbox
@@ -393,6 +394,8 @@ namespace size
     constexpr int buttonSmallHeight = 18;    // "Full list", "Load amp...", "Reset counters" in panes
     constexpr int buttonRadius      = 5;
     constexpr int buttonPadX        = 10;
+    constexpr int buttonCompactPadX = 4;          // option grids (amp builder): text 4 px in, one line (board: padding 0 4, nowrap)
+    constexpr float buttonCompactMinSqueeze = 0.85f;   // and squeezed this far before it is cut
     constexpr int toolbarButtonH    = 26;    // segmented mode switch in Edit/Layout
     constexpr int stageToolbarButtonH = 36;  // Stage: Tuner, Mute
     constexpr int stageModeButtonH  = 30;
@@ -508,7 +511,7 @@ namespace size
     constexpr int widgetChipX = 15, widgetChipW = 24, widgetChipH = 20, widgetChipRadius = 3, widgetNameX = 48, widgetListPadX = 7;
     constexpr int handle = 8, handleRadius = 2, handleGrab = 14, selectionBorder = 2, selectionHalo = 3;
     constexpr int dropBoxBorder = 2, dropBoxRadius = 6, dropBoxDash = 6, dropBoxDashGap = 4;   // the drop box (v3.2 §7)
-    constexpr int droppedWidgetW = 4, droppedWidgetH = 2;                                      // a widget dropped from the list, in cells
+    constexpr int newWidgetW = 4, newWidgetH = 2;                                              // a new widget (dropped, clicked or from the menu), in cells
     constexpr int gripW = 8, gripH = 12, gripPadRight = 8;                                     // the list rows' 6-dot grip
     constexpr int layoutInspectorPad = 10, layoutLabelGap = 8, layoutButtonGap = 8, layoutHalfGap = 6;
     constexpr int layoutNotesH = 123, layoutNoteGap = 6;
@@ -851,6 +854,7 @@ namespace state
     constexpr float activeLighten = 0.15f;   // a stage button widget while it acts (panic silencing)
     constexpr float disabledAlpha = 0.45f;
     constexpr float draggedAlpha  = 0.35f;   // a widget being moved, where it was
+    constexpr float dragImageAlpha = 0.6f;   // the picture of a dragged row under the pointer (kit::DragImage)
     constexpr float cutAlpha      = 0.35f;   // cut items in the full list
     // Summary badge for warning / ok (the boards only draw the problem one):
     // the badge colour lit and darkened the way the problem badge is.

@@ -132,14 +132,14 @@ void PatchList::showPatchMenu (int row)
         });
 
     juce::PopupMenu menu;
-    menu.addItem ("Rename...", [safeThis, row] { if (safeThis != nullptr) safeThis->rename (row); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Rename\xe2\x80\xa6")), [safeThis, row] { if (safeThis != nullptr) safeThis->rename (row); });
     menu.addItem ("Duplicate", [safeThis, id] { if (safeThis != nullptr) safeThis->session.duplicatePatch (id); });
     menu.addSeparator();
     menu.addSubMenu ("Fade in when switched to (" + juce::String ((int) fadeIn) + " ms)", fadeInMenu);
     menu.addSubMenu ("Amp ring-out when switched away (" + juce::String ((int) ringOut) + " ms)", ringOutMenu);
     menu.addSubMenu ("Then let ring out", spill);
     menu.addSeparator();
-    menu.addItem ("Delete...", patches.size() > 1, false, [safeThis] { if (safeThis != nullptr) safeThis->confirmDelete(); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Delete\xe2\x80\xa6")), patches.size() > 1, false, [safeThis] { if (safeThis != nullptr) safeThis->confirmDelete(); });
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this));
 }
 

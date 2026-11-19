@@ -109,7 +109,7 @@ public:
             beginTest ("Stage: the interface lost (stage-interface-lost.png)");
             {
                 auto lost = boardSnapshot();
-                lost.audioProblem = "AUDIO INTERFACE LOST - reconnecting to Focusrite USB ASIO...";
+                lost.audioProblem = juce::String (juce::CharPointer_UTF8 ("AUDIO INTERFACE LOST - reconnecting to Focusrite USB ASIO\xe2\x80\xa6"));
                 lost.deviceLine = lost.audioProblem + " (staying on the cue; check the cable)";
                 lost.roundTripMs = 0.0;
 
@@ -344,11 +344,13 @@ public:
             expect (view.getLayoutDropBox() != nullptr && view.getLayoutDropBox()->isVisible(), "the drop box shows while dragging");
             expectEquals (view.getLayoutDropText(), juce::String ("Drop: Patch"));
             expect (! view.isLayoutDropRefused());
+            expect (! view.getLayoutDragImage().isVisible(), "over the stage the drop box stands for the dragged row");
             renderSnapshot (view, "v32-layout-drop");
 
             list->mouseUp (event (*list, list->getLocalPoint (surface, at (6.0f, 9.0f)), view.getLayoutListRow (T::patchName), true));
             settle (engine, session);
             expect (! view.getLayoutDropBox()->isVisible(), "gone after the drop");
+            expect (! view.getLayoutDragImage().isVisible(), "the row's picture goes with the drop");
             {
                 const auto& ws = view.getShownWidgets();
                 expectEquals ((int) ws.size(), 3);
@@ -398,6 +400,8 @@ public:
                 settle (engine, session);
                 expectEquals ((int) view.getShownWidgets().size(), 5);
                 expect (! overlaps (view.getShownWidgets()), "a click adds it where it fits");
+                expectEquals (view.getShownWidgets().back().width, 4, "a click adds 4 x 2, as a drop does");
+                expectEquals (view.getShownWidgets().back().height, 2);
             }
 
             // 5. A full stage: the drop box turns amber and nothing is added.
@@ -412,8 +416,23 @@ public:
             settle (engine, session);
             expect (view.getShownWidgets() == before, "nothing changed");
 
+            // Off the stage the row's picture follows the pointer, the grabbed point under it.
+            {
+                const auto offStage = list->getLocalBounds().getCentre();   // list coordinates
+                dragFromList (T::clock, surface->getLocalPoint (list, offStage), false);
+                const auto& ghost = view.getLayoutDragImage();
+                expect (ghost.isVisible(), "the dragged row's picture shows off the stage");
+                expect (! view.getLayoutDropBox()->isVisible());
+                expect (ghost.getBounds().contains (view.getLocalPoint (list, offStage)), "the picture is under the pointer");
+                bool clicksSelf = true, clicksChildren = true;
+                ghost.getInterceptsMouseClicks (clicksSelf, clicksChildren);
+                expect (! clicksSelf && ! clicksChildren, "the picture never takes clicks");
+                renderSnapshot (view, "v32-layout-drag-off-stage");
+            }
+
             // Let go off the stage: nothing happens.
-            dragFromList (T::clock, list->getLocalBounds().getCentre(), true);
+            list->mouseUp (event (*list, list->getLocalBounds().getCentre(), view.getLayoutListRow (T::clock), true));
+            expect (! view.getLayoutDragImage().isVisible());
             expect (view.getShownWidgets() == before);
 
             view.setEditingLayout (false);

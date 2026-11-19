@@ -354,7 +354,7 @@ void PluginCatalog::startScanThread (bool rescanEverything)
 
     {
         const juce::ScopedLock sl (lock);
-        scanStatus = "Looking for plugins...";
+        scanStatus = juce::String (juce::CharPointer_UTF8 ("Looking for plugins\xe2\x80\xa6"));
         progress = {};
     }
 

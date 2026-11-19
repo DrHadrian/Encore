@@ -71,15 +71,16 @@ namespace
 
     float lineOf (const juce::Font& f)          { return f.getAscent() + f.getDescent(); }
 
-    /** A new widget of a type at a cell, at its usual size (as the add menu always made them). */
+    /** A new widget of a type at a cell: 4 × 2 cells, however it's added
+        (dropped from the list, clicked in it or picked from the add menu). */
     StageWidget newWidget (StageWidgetType type, juce::Point<int> cell)
     {
         StageWidget w;
         w.type = type;
         w.x = cell.x;
         w.y = cell.y;
-        w.width = type == StageWidgetType::setList ? 8 : (type == StageWidgetType::tuner ? 10 : 6);
-        w.height = type == StageWidgetType::setList ? 8 : (type == StageWidgetType::tuner ? 5 : 3);
+        w.width = size::newWidgetW;
+        w.height = size::newWidgetH;
 
         if (type == StageWidgetType::text)
             w.text = "Text";
@@ -582,7 +583,7 @@ private:
                 {
                     out.title = "System";
                     out.main = "AUDIO LOST";
-                    out.sub = "reconnecting...";
+                    out.sub = juce::String (juce::CharPointer_UTF8 ("reconnecting\xe2\x80\xa6"));
                     out.state = State::alert;
                     break;
                 }
@@ -605,7 +606,7 @@ private:
                 out.state = panicState != AudioEngine::PanicState::none ? State::active : State::normal;
                 out.sub = panicState == AudioEngine::PanicState::silent && owner.engine.getPanicMode() == AudioEngine::PanicMode::latch
                               ? juce::String ("silent - press to return")
-                              : (out.state == State::active ? juce::String ("silencing...") : juce::String ("silence & reset all"));
+                              : (out.state == State::active ? juce::String (juce::String (juce::CharPointer_UTF8 ("silencing\xe2\x80\xa6"))) : juce::String ("silence & reset all"));
                 break;
             }
 
@@ -1532,10 +1533,7 @@ public:
     /** A new widget from the list (4 × 2 cells), the pointer at its centre. */
     static StageWidget droppedWidget (StageWidgetType type)
     {
-        auto w = newWidget (type, {});
-        w.width = size::droppedWidgetW;
-        w.height = size::droppedWidgetH;
-        return w;
+        return newWidget (type, {});
     }
 
     juce::Point<float> newTopLeft (const StageWidget& w, juce::Point<int> pointer) const
@@ -1805,7 +1803,7 @@ private:
         menu.addSubMenu ("Text size", sizes);
 
         if (widgets[(size_t) index].type == StageWidgetType::text)
-            menu.addItem ("Edit text...", [safe, index] { if (safe != nullptr) safe->editText (index); });
+            menu.addItem (juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")), [safe, index] { if (safe != nullptr) safe->editText (index); });
 
         menu.addItem ("Duplicate", [safe] { if (safe != nullptr) safe->duplicateSelected(); });
         menu.addItem ("Bring to front", [safe] { if (safe != nullptr) safe->bringSelectedToFront(); });
@@ -1904,6 +1902,9 @@ public:
     /** A row dragged out of the list: where the pointer is (screen), and whether it was let go there. */
     std::function<void (StageWidgetType, juce::Point<int> screen, bool released)> onDrag;
 
+    /** The picture of the dragged row (owned by the view that spans the list and the stage). */
+    kit::DragImage* dragImage = nullptr;
+
     juce::String getTooltip() override
     {
         return hovered >= 0 ? juce::String ("Drag onto the stage, or click to add it at the first free place") : juce::String();
@@ -1979,7 +1980,13 @@ public:
         if (pressed < 0 || ! e.mouseWasDraggedSinceMouseDown())
             return;
 
+        if (! dragging && dragImage != nullptr)
+            dragImage->start (*this, rowBounds (pressed), e.getMouseDownPosition());
+
         dragging = true;
+
+        if (dragImage != nullptr)
+            dragImage->moveTo (e.getScreenPosition());
 
         if (onDrag != nullptr)
             onDrag (rows[(size_t) pressed].type, e.getScreenPosition(), false);
@@ -1993,6 +2000,9 @@ public:
         if (dragging)
         {
             dragging = false;
+
+            if (dragImage != nullptr)
+                dragImage->stop();
 
             if (row >= 0 && onDrag != nullptr)
                 onDrag (rows[(size_t) row].type, e.getScreenPosition(), true);
@@ -2094,7 +2104,7 @@ public:
 
         sizes.setSelected (index);
         const auto isText = w.type == StageWidgetType::text;
-        editTextButton.setButtonText (isText ? "Edit text..." : "Edit text... (Text widget only)");
+        editTextButton.setButtonText (isText ? juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")) : juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6 (Text widget only)")));
         editTextButton.setEnabled (isText);
     }
 
@@ -2142,7 +2152,7 @@ public:
 private:
     std::function<Editor*()> editorOf;
     kit::SegmentedControl sizes;
-    juce::TextButton editTextButton { "Edit text..." }, duplicateButton { "Duplicate" }, frontButton { "Bring to front" },
+    juce::TextButton editTextButton { juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")) }, duplicateButton { "Duplicate" }, frontButton { "Bring to front" },
                      removeButton { "Remove" };
     juce::StringArray notes;
     juce::Rectangle<float> labelBox, notesBox;
@@ -2254,6 +2264,9 @@ StageView::StageView (AudioEngine& e, ShowSession& s) : engine (e), session (s)
 
         const auto p = editor->getLocalPoint (nullptr, screen);
 
+        // Over the stage the drop box shows where it lands; elsewhere the row's picture shows what's dragged.
+        dragImage.setVisible (dragImage.isDragging() && ! released && ! editor->getLocalBounds().contains (p));
+
         if (! editor->getLocalBounds().contains (p))
         {
             editor->hideDropBox();   // off the stage: let go there and nothing happens
@@ -2275,6 +2288,8 @@ StageView::StageView (AudioEngine& e, ShowSession& s) : engine (e), session (s)
         }
     };
     widgetPane.addAndMakeVisible (*widgetPanel);
+    widgetPanel->dragImage = &dragImage;
+    addChildComponent (dragImage);
     artboard = std::make_unique<Artboard>();
     canvasPane.addAndMakeVisible (*artboard);
     layoutInspector = std::make_unique<LayoutInspector> ([this] { return editor.get(); });
@@ -2802,7 +2817,7 @@ void StageView::showLayoutMenu()
     };
 
     menu.addSeparator();
-    menu.addItem ("New layout (copy of this one)...", [safe, askName, editingId]
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("New layout (copy of this one)\xe2\x80\xa6")), [safe, askName, editingId]
     {
         askName ("New layout", "Big monitor", [safe, editingId] (juce::String name)
         {
@@ -2812,7 +2827,7 @@ void StageView::showLayoutMenu()
             safe->rebuildWidgets();
         });
     });
-    menu.addItem ("Rename...", [safe, askName, editingId, name = current.name]
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Rename\xe2\x80\xa6")), [safe, askName, editingId, name = current.name]
     {
         askName ("Rename layout", name, [safe, editingId] (juce::String newName)
         {

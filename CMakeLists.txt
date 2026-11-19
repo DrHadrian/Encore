@@ -302,6 +302,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/MixerStrip.h
     Source/ui/kit/DropBox.cpp
     Source/ui/kit/DropBox.h
+    Source/ui/kit/DragImage.cpp
+    Source/ui/kit/DragImage.h
     Source/ui/kit/AmpArt.cpp
     Source/ui/kit/AmpArt.h
     Source/ui/kit/AmpFace.cpp

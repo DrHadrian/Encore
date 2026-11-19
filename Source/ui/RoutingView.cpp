@@ -1050,7 +1050,7 @@ private:
     Decor decor;
     kit::Group inputsGroup { "Inputs" }, interfaceGroup { "Interface" }, namesGroup { "Names this show uses" },
                outputsGroup { "Outputs" }, detailGroup { "EQ, delay and safety" };
-    juce::TextButton addInputButton { "+ Add input" }, addOutputButton { "+ Add output" }, audioButton { "Audio settings..." };
+    juce::TextButton addInputButton { "+ Add input" }, addOutputButton { "+ Add output" }, audioButton { juce::String (juce::CharPointer_UTF8 ("Audio settings\xe2\x80\xa6")) };
     std::vector<std::unique_ptr<InputRow>> inputRows;
     std::vector<std::unique_ptr<OutputRow>> outputRows;
     std::vector<std::unique_ptr<NameRow>> nameRows;

@@ -20,13 +20,13 @@ namespace
     {
         switch (f)
         {
-            case Fix::audioSettings:  return "Audio settings...";
-            case Fix::midiSettings:   return "MIDI settings...";
-            case Fix::pluginSettings: return "Plugin settings...";
+            case Fix::audioSettings:  return juce::String (juce::CharPointer_UTF8 ("Audio settings\xe2\x80\xa6"));
+            case Fix::midiSettings:   return juce::String (juce::CharPointer_UTF8 ("MIDI settings\xe2\x80\xa6"));
+            case Fix::pluginSettings: return juce::String (juce::CharPointer_UTF8 ("Plugin settings\xe2\x80\xa6"));
             case Fix::save:           return "Save now";
             case Fix::resetCounters:  return "Reset counters";
             case Fix::unmute:         return "Unmute";
-            case Fix::routing:        return "Routing...";
+            case Fix::routing:        return juce::String (juce::CharPointer_UTF8 ("Routing\xe2\x80\xa6"));
             case Fix::unmuteOutput:   return "Unmute";
             case Fix::none:           break;
         }

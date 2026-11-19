@@ -64,7 +64,7 @@ private:
     void runModel (NamModel* model, float* samples, const float* normaliseAmount, int numSamples) noexcept;
     void updateToneStack (int numSamples) noexcept;
 
-    const FileSlot fileSlot { "Load amp...", "*.nam" };
+    const FileSlot fileSlot { juce::String (juce::CharPointer_UTF8 ("Load amp\xe2\x80\xa6")), "*.nam" };
 
     Parameter& inputGain;
     Parameter& outputGain;

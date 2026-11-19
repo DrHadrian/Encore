@@ -51,6 +51,11 @@ public:
         MIDI): redraws the knobs whose position changed. */
     void syncKnobs();
 
+    /** "EXP 1" on the face next to the knob that drives `paramId` (a pedal
+        moves it), on the side away from its printed label; empty to clear. */
+    void setChip (const juce::String& paramId, const juce::String& text);
+    juce::String getChip (const juce::String& paramId) const;
+
     /** A light that follows the block (or the power LED) was clicked. */
     std::function<void()> onPowerClicked;
 
@@ -63,6 +68,7 @@ public:
     void clickPower();
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
 
 private:
     class FixedArea;
@@ -75,6 +81,9 @@ private:
     juce::OwnedArray<Light> lights;
     juce::OwnedArray<FixedArea> fixedAreas;
     std::unique_ptr<PowerLed> powerLed;   // only when no light follows the block
+
+    struct ShownChip { juce::String paramId, text; juce::Rectangle<float> bounds; };
+    std::vector<ShownChip> chips;
 };
 
 } // namespace encore::kit

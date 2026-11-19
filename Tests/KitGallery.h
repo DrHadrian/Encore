@@ -75,7 +75,7 @@ public:
 
         notice.setText ("Encore restarted after an unexpected exit - back at cue 1 Clean.", utf8 ("shows for 30 s \xc2\xb7 written to the event log"));
         stageNotice.setText ("Go to cue 8_   (Enter to go, Esc to cancel)");
-        lost.setText ("AUDIO INTERFACE LOST - reconnecting to Focusrite USB ASIO...",
+        lost.setText (juce::String (juce::CharPointer_UTF8 ("AUDIO INTERFACE LOST - reconnecting to Focusrite USB ASIO\xe2\x80\xa6")),
                       juce::String (juce::CharPointer_UTF8 ("Staying on cue 3 \xc2\xb7 retrying every second \xc2\xb7 check the cable")));
         muted.setText (juce::String (juce::CharPointer_UTF8 ("Output muted \xe2\x80\x94 click to go live")));
 

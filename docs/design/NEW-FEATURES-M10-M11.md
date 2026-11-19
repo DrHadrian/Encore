@@ -17,21 +17,21 @@ Rules as always: words from the code (for M11, from §0 of the plan), nothing pr
 ### A.1 Settings › Plugins (V3Plugins)
 Replaces "no reference board yet" in SCREENS §7. Same frame, tabs Audio | MIDI | **Plugins** (icon `plug`), footer text from `SettingsWindow` ("Plugins belong to this computer. Each new one is tried in a separate process first, so a crash can't take Encore down."), Cancel / Done.
 - **Left column (the MAPPINGS place), group "Plugins"**: header line also carries a hint right-aligned, 11.5 #85858C: "Add one to a patch with the + in the signal chain › Plugin" (small UI gain). Table: column heads NAME / MAKER / VERSION (10.5 / 700 caps #6E6E75 on #1E1E21, 26 high), columns `1fr · 190 · 90`, rows 26, alternate rows `mappingRowAlt`, selected row #2E62C4. Empty: "No plugins yet. Scan looks in the folders on the right." centred.
-- **Bar (40, #1E1E21, line above)**: **Scan** / **Stop** (84), **Scan all again** (disabled while scanning, as in code), then the status (`getScanStatus()`: "Looking for plugins...", "Scanning 14 of 62: ValhallaSupermassive.vst3", "Scan stopped", "12 plugins, 3 blocked").
+- **Bar (40, #1E1E21, line above)**: **Scan** / **Stop** (84), **Scan all again** (disabled while scanning, as in code), then the status (`getScanStatus()`: "Looking for plugins…", "Scanning 14 of 62: ValhallaSupermassive.vst3", "Scan stopped", "12 plugins, 3 blocked").
 - **Small UI gain: ProgressBar** under the status while scanning (4 px track #0E0E10, fill accent #4C8DF6, radius 2). Needs a `PluginCatalog` getter for (index, total) next to the status text; hidden when not scanning. No animation: it moves only when the count changes.
-- **Right column 300**: group "Folders" (26 px rows, selected #2E62C4; bar **+ Add folder...**, **Remove** (enabled with a selection), **Defaults**). Group "Blocked" with an amber count chip on its title line; 44 px rows: file name 12.5, reason 11 amber (ellipsised, full text in the tooltip), **Try again** (small); empty "Nothing blocked". Help line under the rows, 11.5 #85858C: "Scan skips blocked files. Try again unblocks one, so the next Scan tries it in a separate process."
+- **Right column 300**: group "Folders" (26 px rows, selected #2E62C4; bar **+ Add folder…**, **Remove** (enabled with a selection), **Defaults**). Group "Blocked" with an amber count chip on its title line; 44 px rows: file name 12.5, reason 11 amber (ellipsised, full text in the tooltip), **Try again** (small); empty "Nothing blocked". Help line under the rows, 11.5 #85858C: "Scan skips blocked files. Try again unblocks one, so the next Scan tries it in a separate process."
 
 ### A.2 Edit with a plugin block (V3EditPlugin)
 - **PluginTile** in the chain (64 × 84, utility tile look, see C.2): label VST3, status dot (green glow when running, amber when not loaded or switched off, grey off), the plugin's name in two lines max (10.5 / 700), maker as caption, a small footswitch shape at the bottom.
-- **Block stage**: header "PLUGIN · VST3 · VALHALLAROOM" (the code's `panelInfo` kind + name), right "2.1% CPU" and **Open plugin window...** (window icon). Body: the placeholder plate (600 × 370): VST3 chip, name 16 / 700, "maker · v2.0.0" 12 #85858C, a recessed panel with the first 8 parameters as knobs in two rows of four with their plugin text under each (10.5 tabular), "+ N more in the plugin window" bottom-left, "PLUGIN · VST3" bottom-right.
-- **Inspector · Plugin**: BLOCK rows Type "Plugin", Plugin "ValhallaRoom · Valhalla DSP", Format, Status ("Running" green), **Open plugin window...**, Stomp switch popup. PARAMETERS (right "value · pedal") as for other blocks, then "+ N more in the plugin window". ASSIGNMENTS as for other blocks.
-- **Add block menu** (+ tile): Amp (NAM) · Cab (IR) · Noise gate · EQ · Delay | **Plugin ▸** → makers (▸ each, "Other" for none) | Find plugins... ; "No plugins found" (disabled) when the catalog is empty. Exactly `ChainStrip::blockTypeMenu`.
+- **Block stage**: header "PLUGIN · VST3 · VALHALLAROOM" (the code's `panelInfo` kind + name), right "2.1% CPU" and **Open plugin window…** (window icon). Body: the placeholder plate (600 × 370): VST3 chip, name 16 / 700, "maker · v2.0.0" 12 #85858C, a recessed panel with the first 8 parameters as knobs in two rows of four with their plugin text under each (10.5 tabular), "+ N more in the plugin window" bottom-left, "PLUGIN · VST3" bottom-right.
+- **Inspector · Plugin**: BLOCK rows Type "Plugin", Plugin "ValhallaRoom · Valhalla DSP", Format, Status ("Running" green), **Open plugin window…**, Stomp switch popup. PARAMETERS (right "value · pedal") as for other blocks, then "+ N more in the plugin window". ASSIGNMENTS as for other blocks.
+- **Add block menu** (+ tile): Amp (NAM) · Cab (IR) · Noise gate · EQ · Delay | **Plugin ▸** → makers (▸ each, "Other" for none) | Find plugins… ; "No plugins found" (disabled) when the catalog is empty. Exactly `ChainStrip::blockTypeMenu`.
 
 ### A.3 A plugin switched off (V3EditPluginOff)
 - **Notice bar** (amber, SCREENS §4.2): "Clean: ValhallaRoom took longer than the audio buffer and was switched off" (20 s, the code's text).
 - Tile: amber border, amber dot, amber name. A plugin that isn't installed looks the same (second tile on the board).
-- Block stage: amber header dot, no CPU text (the code clears it on a problem). **Small UI gain: FaultCard** over the dimmed plate (45 % opacity): 460 wide, #2A251C, border #3D2F12, warn icon amber, text #FFD27A 12.5: "**Switched off:** it took longer than the audio buffer 3 times in a row. The signal passes through it dry, so the show goes on." + **Turn back on** (primary; "Load again" for a crash) and **Open plugin window...**. The card's first sentence is the fault text; the 3-in-a-row and dry pass are true (`overrunsBeforeSwitchingOff = 3`; a switched-off plugin passes the dry signal). For "not installed" the card shows the load error and no Turn back on.
-- Inspector Status in amber (wraps to 3 lines), **Turn back on** primary above **Open plugin window...**.
+- Block stage: amber header dot, no CPU text (the code clears it on a problem). **Small UI gain: FaultCard** over the dimmed plate (45 % opacity): 460 wide, #2A251C, border #3D2F12, warn icon amber, text #FFD27A 12.5: "**Switched off:** it took longer than the audio buffer 3 times in a row. The signal passes through it dry, so the show goes on." + **Turn back on** (primary; "Load again" for a crash) and **Open plugin window…**. The card's first sentence is the fault text; the 3-in-a-row and dry pass are true (`overrunsBeforeSwitchingOff = 3`; a switched-off plugin passes the dry signal). For "not installed" the card shows the load error and no Turn back on.
+- Inspector Status in amber (wraps to 3 lines), **Turn back on** primary above **Open plugin window…**.
 
 ### A.4 Plugin window (V3PluginWindow)
 Native window (`setUsingNativeTitleBar (true)`, close button only), title "ValhallaRoom — Clean". When the plugin has its own editor it shows that editor, untouched. **Small UI gain: ParameterList** in place of JUCE's `GenericAudioProcessorEditor` when it has none:
@@ -42,7 +42,7 @@ Native window (`setUsingNativeTitleBar (true)`, close button only), title "Valha
 ### A.5 Other screens
 - **Settings › Audio**: Driver type is a **popup** (340 wide, `devicePopupW`), not a segmented control (code since 6dc4f54). Board V3Audio updated.
 - **Settings › MIDI**: three tabs (Audio | MIDI | Plugins).
-- **Pre-show check**: problem "N plugin(s) not playing", detail "The signal passes through them dry: Lead: H9 Shimmer isn't installed on this computer", fix **Plugin settings...** (primary).
+- **Pre-show check**: problem "N plugin(s) not playing", detail "The signal passes through them dry: Lead: H9 Shimmer isn't installed on this computer", fix **Plugin settings…** (primary).
 
 ---
 
@@ -57,7 +57,7 @@ Covers the main grid like the full list (SCREENS §5); toolbar, notice bar, bott
 - **Sub-toolbar (40)**: title "Routing" · segmented **Inputs & outputs** | **Sends**, each with a badge (THIS COMPUTER #1B2C45/#7FC4FF; THIS SHOW green) · flexible · **Back to patches** + key cap F7 (156).
 - **Inputs & outputs** (left column ≈ 520, right column the rest):
   - INPUTS group: rows name (field) · channel popup (the interface's channel names) · horizontal meter (56) · remove; **+ Add input** (up to 8).
-  - INTERFACE group: device, driver, channels in/out (read-only, "Audio..." to change).
+  - INTERFACE group: device, driver, channels in/out (read-only, "Audio…" to change).
   - NAMES THIS SHOW USES: each name with a ✓ (here) or NOT HERE + **+ Add input / + Add output**.
   - OUTPUTS group: per row name · channels popup (amber with "needs output 5" when missing) · level fader + dB field (66) · **M** mute (MuteButton) · stereo meter · EQ thumbnail (EqCurve, mini) · delay "0.0 ms ≈ 0.00 m"; **+ Add output** (up to 8); the selected row #2E62C4 tint.
   - Detail of the selected output: EQ (EqCurve 100 % width + 6 SmallKnobs: Low cut, Bass, Mid, Mid freq, Treble, High cut), Delay (field "12.0 ms" with − / + and "≈ 4.12 m"), "Safety limiter at −1 dBFS · always on" with its activity LED.
@@ -83,7 +83,7 @@ Covers the main grid like the full list (SCREENS §5); toolbar, notice bar, bott
 - Patch widget: under the patch name, the input (jack icon + "Guitar").
 
 ### B.6 Pre-show check, MIDI
-- Pre-show lines from plan §3.8 with **Routing...** (opens Edit › Routing view).
+- Pre-show lines from plan §3.8 with **Routing…** (opens Edit › Routing view).
 - MIDI: action menu gets **Mute output ▸** (submenu of the computer's outputs). A binding to a name not here: the row's trigger text in amber "· no output “Monitor wedge” here", row tinted amber 8 %.
 
 ---

@@ -108,7 +108,7 @@ public:
         key (juce::KeyPress::spaceKey, ' ');
         shot ("Space: the next song; the LCD follows", 2.5, { 120, 148 }, true);
         key (juce::KeyPress::spaceKey, ' ');
-        shot ("...and the next", 2.0, { 120, 175 }, true);
+        shot (juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6" "and the next")), 2.0, { 120, 175 }, true);
 
         if (auto* chain = findOf<ChainStrip> (main))
         {
@@ -146,7 +146,7 @@ public:
         // Settings and the pre-show check
         main.openSettings (SettingsWindow::Tab::audio);
         pump (400);
-        shot ("Settings: Audio", 4.0, centreOf (button ("Settings...")), true);
+        shot ("Settings: Audio", 4.0, centreOf (button (juce::String (juce::CharPointer_UTF8 ("Settings\xe2\x80\xa6")))), true);
         main.openSettings (SettingsWindow::Tab::midi);
         shot ("Settings: MIDI mappings for foot controllers", 4.0, { 761, 140 }, true);
         main.closeSettings();

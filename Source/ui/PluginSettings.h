@@ -69,7 +69,7 @@ private:
     juce::ListBox pluginList, folderList, blockedList;
 
     juce::TextButton scanButton { "Scan" }, rescanButton { "Scan all again" },
-                     addFolderButton { "+ Add folder..." }, removeFolderButton { "Remove" }, defaultFoldersButton { "Defaults" };
+                     addFolderButton { juce::String (juce::CharPointer_UTF8 ("+ Add folder\xe2\x80\xa6")) }, removeFolderButton { "Remove" }, defaultFoldersButton { "Defaults" };
     std::unique_ptr<juce::FileChooser> chooser;
 
     juce::Rectangle<int> pluginsBox, statusArea;

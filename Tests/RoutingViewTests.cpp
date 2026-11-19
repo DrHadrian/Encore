@@ -467,7 +467,7 @@ public:
                           juce::String ("Input of the playing patch. Pick another to change it for that patch."));
         }
 
-        beginTest ("Pre-show check with the routing lines and their Routing... buttons (m11-preshow-check)");
+        beginTest (juce::String (juce::CharPointer_UTF8 ("Pre-show check with the routing lines and their Routing\xe2\x80\xa6 buttons (m11-preshow-check)")));
         {
             // The board's case: outputs "Main" (all), In-ear on 1/2, Amp DI on 5 (muted; the
             // interface has 4); the patches send to Main where they sent to Front of house,
@@ -558,20 +558,20 @@ public:
             {
                 for (auto* child : c.getChildren())
                 {
-                    if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && fix == nullptr && b->getButtonText() == "Routing...")
+                    if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && fix == nullptr && b->getButtonText() == juce::String (juce::CharPointer_UTF8 ("Routing\xe2\x80\xa6")))
                         fix = b;
 
                     find (*child);
                 }
             };
             find (main);
-            expect (fix != nullptr, "a Routing... button");
+            expect (fix != nullptr, juce::String (juce::CharPointer_UTF8 ("a Routing\xe2\x80\xa6 button")));
 
             if (fix != nullptr && fix->onClick != nullptr)
                 fix->onClick();
 
             pumpUntil ([&] { return main.isShowingRouting(); }, 2000);
-            expect (main.isShowingRouting() && ! main.isShowingPreShowCheck(), "Routing... opens Routing");
+            expect (main.isShowingRouting() && ! main.isShowingPreShowCheck(), juce::String (juce::CharPointer_UTF8 ("Routing\xe2\x80\xa6 opens Routing")));
         }
 
         beginTest ("MIDI: the action menu at Mute output, a binding to an output not here in amber (m11-settings-midi-mute-output)");
@@ -719,7 +719,7 @@ public:
                 }
             }
 
-            beginTest ("OUT stage: On turns a send off and on; the fader sets its level; Routing... opens Routing");
+            beginTest (juce::String (juce::CharPointer_UTF8 ("OUT stage: On turns a send off and on; the fader sets its level; Routing\xe2\x80\xa6 opens Routing")));
             {
                 if (strip != nullptr)
                     strip->selectBlock (ChainStrip::outputSelected);
@@ -767,11 +767,11 @@ public:
                     }
                 }
 
-                auto* routingButton = stage != nullptr ? findTitled (*stage, "Routing...") : nullptr;
+                auto* routingButton = stage != nullptr ? findTitled (*stage, juce::String (juce::CharPointer_UTF8 ("Routing\xe2\x80\xa6"))) : nullptr;
 
                 if (routingButton == nullptr && stage != nullptr)
                     for (auto* c : stage->getChildren())
-                        if (auto* b = dynamic_cast<juce::TextButton*> (c); b != nullptr && b->getButtonText() == "Routing...")
+                        if (auto* b = dynamic_cast<juce::TextButton*> (c); b != nullptr && b->getButtonText() == juce::String (juce::CharPointer_UTF8 ("Routing\xe2\x80\xa6")))
                             routingButton = b;
 
                 expect (routingButton != nullptr);
@@ -780,7 +780,7 @@ public:
                     b->onClick();
 
                 pumpUntil ([&] { return main.isShowingRouting(); }, 2000);
-                expect (main.isShowingRouting(), "Routing... opens Routing");
+                expect (main.isShowingRouting(), juce::String (juce::CharPointer_UTF8 ("Routing\xe2\x80\xa6 opens Routing")));
             }
         }
     }

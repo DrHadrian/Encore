@@ -691,11 +691,11 @@ void CueListEditor::showRowMenu (int row)
         menu.addItem ("Rename (Enter)", [safe, row] { if (safe != nullptr) safe->startEditing (row, Column::name, false); });
         menu.addItem ("Bar mark", [safe, row] { if (safe != nullptr) safe->startEditing (row, Column::bar, false); });
         menu.addItem ("Note", [safe, row] { if (safe != nullptr) safe->startEditing (row, Column::note, false); });
-        menu.addItem ("Patch...", [safe, row] { if (safe != nullptr) safe->showPatchMenu (row); });
+        menu.addItem (juce::String (juce::CharPointer_UTF8 ("Patch\xe2\x80\xa6")), [safe, row] { if (safe != nullptr) safe->showPatchMenu (row); });
         menu.addSeparator();
-        menu.addItem ("Recall with a program change...", cueIndex >= 0, false,
+        menu.addItem (juce::String (juce::CharPointer_UTF8 ("Recall with a program change\xe2\x80\xa6")), cueIndex >= 0, false,
                       [safe, cueIndex] { if (safe != nullptr) cuedialogs::editProgramChange (*safe, safe->session, cueIndex); });
-        menu.addItem ("MIDI out when this " + session.getWords().item + " starts...", cueIndex >= 0, false,
+        menu.addItem ("MIDI out when this " + session.getWords().item + juce::String (juce::CharPointer_UTF8 (" starts\xe2\x80\xa6")), cueIndex >= 0, false,
                       [safe, cueIndex] { if (safe != nullptr) cuedialogs::editMidiOut (*safe, safe->session, cueIndex); });
         menu.addSeparator();
         menu.addItem (r.item->cut ? "Restore (uncut)" : "Cut (skip in the show)", [safe] { if (safe != nullptr) safe->toggleCutSelection(); });
@@ -704,7 +704,7 @@ void CueListEditor::showRowMenu (int row)
     menu.addSeparator();
     menu.addItem ("Move up (Ctrl+Up)", [safe] { if (safe != nullptr) safe->moveSelection (-1); });
     menu.addItem ("Move down (Ctrl+Down)", [safe] { if (safe != nullptr) safe->moveSelection (+1); });
-    menu.addItem ("Delete...", [safe] { if (safe != nullptr) safe->deleteSelection(); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Delete\xe2\x80\xa6")), [safe] { if (safe != nullptr) safe->deleteSelection(); });
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&list).withMousePosition());
 }

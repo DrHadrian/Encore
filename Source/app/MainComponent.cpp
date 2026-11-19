@@ -155,6 +155,7 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     toolbar.addAndMakeVisible (outLabel);
 
     volume.setRange (-60.0, 12.0, 0.1);
+    volume.getProperties().set ("encoreOutVolume", true);   // its own fill colour (outSliderFill)
     volume.setTextValueSuffix (" dB");
     volume.setDoubleClickReturnValue (true, 0.0);
     volume.setTextBoxStyle (juce::Slider::TextBoxRight, false, size::valueFieldW, size::fieldHeight);
@@ -547,11 +548,11 @@ void MainComponent::showMenu()
 juce::PopupMenu MainComponent::buildShowMenu()
 {
     juce::PopupMenu menu;
-    menu.addItem ("New show...", [this] { askForNewShow(); });
-    menu.addItem ("Open show...", [this] { chooseShowToOpen(); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("New show\xe2\x80\xa6")), [this] { askForNewShow(); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Open show\xe2\x80\xa6")), [this] { chooseShowToOpen(); });
     menu.addSeparator();
     menu.addItem ("Save now (Ctrl+S)", [this] { session->save(); reportProblems(); });
-    menu.addItem ("Save a copy to... (USB stick, backup)", [this] { chooseFolderForCopy(); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Save a copy to\xe2\x80\xa6 (USB stick, backup)")), [this] { chooseFolderForCopy(); });
     menu.addSeparator();
     menu.addItem ("Show folder in Explorer", session->getFolder().isValid(), false,
                   [this] { session->getFolder().getShowFile().revealToUser(); });
@@ -563,7 +564,7 @@ juce::PopupMenu MainComponent::buildShowMenu()
 
     menu.addSubMenu ("Kind of show", showType);
     menu.addSeparator();
-    menu.addItem ("Pre-show check... (F9)", [this] { openPreShowCheck(); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Pre-show check\xe2\x80\xa6 (F9)")), [this] { openPreShowCheck(); });
     menu.addItem ("Open log folder", [] { eventlog::getLogsFolder().startAsProcess(); });
     menu.addSeparator();
 
@@ -579,7 +580,7 @@ juce::PopupMenu MainComponent::buildShowMenu()
 
 void MainComponent::askForNewShow()
 {
-    auto* window = new juce::AlertWindow ("New show", "Name of the show (band, production, set...):",
+    auto* window = new juce::AlertWindow ("New show", juce::String (juce::CharPointer_UTF8 ("Name of the show (band, production, set\xe2\x80\xa6):")),
                                           juce::MessageBoxIconType::NoIcon, this);
     window->addTextEditor ("name", "New show");
     window->addButton ("Create", 1, juce::KeyPress (juce::KeyPress::returnKey));
@@ -626,7 +627,7 @@ void MainComponent::chooseShowToOpen()
 
 void MainComponent::chooseFolderForCopy()
 {
-    chooser = std::make_unique<juce::FileChooser> ("Copy the show into...",
+    chooser = std::make_unique<juce::FileChooser> (juce::String (juce::CharPointer_UTF8 ("Copy the show into\xe2\x80\xa6")),
                                                    juce::File::getSpecialLocation (juce::File::userHomeDirectory));
     juce::Component::SafePointer<MainComponent> safeThis (this);
 
@@ -923,7 +924,7 @@ void MainComponent::refreshWarningLine()
 
     if (deviceLost)
     {
-        shown = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + "... (staying on the cue; check the cable)";
+        shown = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6 (staying on the cue; check the cable)"));
         colourToken = colour::danger;
         all.add (shown);
     }
@@ -1939,7 +1940,7 @@ void MainComponent::refreshStatus()
 
     if (deviceLost)
     {
-        deviceLine.setText ("Reconnecting to " + lastGoodSetup.outputDeviceName + "...", juce::dontSendNotification);
+        deviceLine.setText ("Reconnecting to " + lastGoodSetup.outputDeviceName + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6")), juce::dontSendNotification);
         deviceLine.setTooltip ({});
         latencyLine.setText ({}, juce::dontSendNotification);
         latencyLine.setTooltip ({});
@@ -2173,7 +2174,7 @@ void MainComponent::timerCallback()
     }
 
     if (deviceLost)
-        snapshot.audioProblem = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + "...";
+        snapshot.audioProblem = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6"));
 
     // The stage footer: the device line (the lost text while lost) and the footswitch.
     snapshot.deviceLine = deviceLost ? snapshot.audioProblem + " (staying on the cue; check the cable)" : stageDeviceLine;

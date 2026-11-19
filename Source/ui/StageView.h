@@ -10,6 +10,7 @@
 #include "ui/TunerDisplay.h"
 #include "ui/kit/StatusBar.h"
 #include "ui/kit/NoticeBar.h"
+#include "ui/kit/DragImage.h"
 #include "ui/kit/Pane.h"
 #include "ui/kit/SegmentedControl.h"
 #include "ui/kit/Toolbar.h"
@@ -85,6 +86,7 @@ public:
     juce::Component* getLayoutSurface() const noexcept;
     juce::Point<int> getLayoutListRow (StageWidgetType) const;
     const juce::Component* getLayoutDropBox() const noexcept;
+    const juce::Component& getLayoutDragImage() const noexcept { return dragImage; }
     juce::String getLayoutDropText() const;
     bool isLayoutDropRefused() const noexcept;
     int getSelectedLayoutWidget() const noexcept;
@@ -158,6 +160,7 @@ private:
     std::unique_ptr<WidgetPanel> widgetPanel;
     std::unique_ptr<Artboard> artboard;
     std::unique_ptr<LayoutInspector> layoutInspector;
+    kit::DragImage dragImage;   // the row dragged out of the widget list, under the pointer
     bool inspectorShown = true;
 
     // Strips under the toolbar (§3.2)

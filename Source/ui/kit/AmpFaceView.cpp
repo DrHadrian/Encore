@@ -3,7 +3,9 @@
 
 #include "ui/kit/AmpFaceView.h"
 
+#include "ui/theme/EncoreFonts.h"
 #include "ui/theme/EncoreTheme.h"
+#include "ui/theme/Paint.h"
 
 namespace encore::kit
 {
@@ -240,6 +242,44 @@ void AmpFaceView::syncKnobs()
         k->update();
 }
 
+void AmpFaceView::setChip (const juce::String& paramId, const juce::String& text)
+{
+    const auto old = std::find_if (chips.begin(), chips.end(), [&paramId] (const ShownChip& c) { return c.paramId == paramId; });
+
+    if (old != chips.end())
+    {
+        if (old->text == text)
+            return;
+
+        repaint (old->bounds.getSmallestIntegerContainer());
+        chips.erase (old);
+    }
+
+    const auto* knob = static_cast<Knob*> (findKnob (paramId));
+
+    if (text.isEmpty() || knob == nullptr)
+        return;
+
+    // Centred on the knob, on the side away from its label, inside the face.
+    const auto k = knob->getBounds().toFloat();
+    const auto w = textWidth (font (type::gearChip), text) + (float) size::chipPadX * 2.0f, h = (float) size::chipH;
+    const auto gap = (float) size::knobLabelGap;
+    const auto y = knob->part.labelPos == "above" ? k.getBottom() + gap : k.getY() - gap - h;
+    auto r = juce::Rectangle<float> (w, h).withCentre ({ k.getCentreX(), y + h * 0.5f });
+    r = r.constrainedWithin (getLocalBounds().toFloat());
+    chips.push_back ({ paramId, text, r });
+    repaint (r.getSmallestIntegerContainer());
+}
+
+juce::String AmpFaceView::getChip (const juce::String& paramId) const
+{
+    for (const auto& c : chips)
+        if (c.paramId == paramId)
+            return c.text;
+
+    return {};
+}
+
 juce::StringArray AmpFaceView::getDrivenParameters() const
 {
     juce::StringArray ids;
@@ -289,6 +329,19 @@ void AmpFaceView::paint (juce::Graphics& g)
 {
     if (face.isValid())
         g.drawImage (face, juce::Rectangle<float> (0.0f, 0.0f, (float) amp::faceW, (float) amp::faceH), juce::RectanglePlacement::stretchToFit);
+}
+
+void AmpFaceView::paintOverChildren (juce::Graphics& g)
+{
+    // The same chip as under a knob in the parameter list (KnobView).
+    for (const auto& c : chips)
+    {
+        g.setColour (paint::c (colour::knobChipFill));
+        g.fillRoundedRectangle (c.bounds, (float) size::chipRadius);
+        g.setColour (paint::c (colour::expChipText));
+        g.setFont (font (type::gearChip));
+        g.drawText (c.text, c.bounds, juce::Justification::centred, false);
+    }
 }
 
 } // namespace encore::kit

@@ -74,7 +74,7 @@ private:
     void updateFilters (int numSamples) noexcept;
     void describe (const ImpulseResponse& ir);
 
-    const FileSlot fileSlot { "Load cab IR...", "*.wav;*.aif;*.aiff;*.flac" };
+    const FileSlot fileSlot { juce::String (juce::CharPointer_UTF8 ("Load cab IR\xe2\x80\xa6")), "*.wav;*.aif;*.aiff;*.flac" };
 
     Parameter& lowCut;
     Parameter& highCut;

@@ -67,7 +67,7 @@ private:
     juce::AudioDeviceManager& deviceManager;
 
     kit::StageBackdrop backdrop;
-    juce::TextButton routingButton { "Routing..." };
+    juce::TextButton routingButton { juce::String (juce::CharPointer_UTF8 ("Routing\xe2\x80\xa6")) };
     std::vector<std::unique_ptr<SendStrip>> strips;
     std::vector<std::unique_ptr<InputCard>> cards;
     juce::Rectangle<int> box, warning;

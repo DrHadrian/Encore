@@ -203,7 +203,7 @@ private:
     juce::TextButton showButton { "Show" };
     kit::SegmentedControl modeSwitch;
     kit::StatusBar statusBar { false };   // the toolbar's status bar (v3.2; was the LCD)
-    juce::TextButton settingsButton { "Settings..." };   // Audio | MIDI | Plugins, on the tab used last (v3.2)
+    juce::TextButton settingsButton { juce::String (juce::CharPointer_UTF8 ("Settings\xe2\x80\xa6")) };   // Audio | MIDI | Plugins, on the tab used last (v3.2)
     juce::TextButton tunerButton { "Tuner" }, panicButton { "PANIC" };
     juce::Label outLabel { {}, "Out" };
     kit::NoticeBar noticeBar { kit::NoticeBar::Kind::notice };
@@ -234,7 +234,7 @@ private:
     juce::String builderCaptureInfo;
     std::unique_ptr<juce::FileChooser> captureChooser;
     juce::TextButton patchPicker;
-    juce::Label loadingLabel { {}, "(loading patches...)" };
+    juce::Label loadingLabel { {}, juce::String (juce::CharPointer_UTF8 ("(loading patches\xe2\x80\xa6)")) };
     juce::Rectangle<int> headerArrow;
     Chain* shownChain = nullptr;
     int shownBlockIndex = -1;

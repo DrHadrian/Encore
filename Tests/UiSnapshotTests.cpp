@@ -101,10 +101,10 @@ public:
         {
             using LnF = theme::EncoreLookAndFeel;
             expect (LnF::splitShortcut ("Save now (Ctrl+S)") == std::pair<juce::String, juce::String> ("Save now", "Ctrl+S"));
-            expect (LnF::splitShortcut ("Pre-show check... (F9)").second == "F9");
+            expect (LnF::splitShortcut (juce::String (juce::CharPointer_UTF8 ("Pre-show check\xe2\x80\xa6 (F9)"))).second == "F9");
             expect (LnF::splitShortcut ("Go to this cue (G)").second == "G");
             expect (LnF::splitShortcut ("Stage settings (this show)").second.isEmpty());
-            expect (LnF::splitShortcut ("Save a copy to... (USB stick, backup)").second.isEmpty());
+            expect (LnF::splitShortcut (juce::String (juce::CharPointer_UTF8 ("Save a copy to\xe2\x80\xa6 (USB stick, backup)"))).second.isEmpty());
         }
 
         beginTest ("Kit: every component draws, at 1x and 2x");

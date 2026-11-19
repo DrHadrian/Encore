@@ -350,7 +350,7 @@ void ChainStrip::paint (juce::Graphics& g)
 
     if (chain == nullptr)
     {
-        paint::text (g, "Loading patch...", board.reduced (size::chainPadX, 0).toFloat(), type::body, colour::textMuted);
+        paint::text (g, juce::String (juce::CharPointer_UTF8 ("Loading patch\xe2\x80\xa6")), board.reduced (size::chainPadX, 0).toFloat(), type::body, colour::textMuted);
         return;
     }
 
@@ -517,7 +517,7 @@ juce::PopupMenu ChainStrip::blockTypeMenu (int insertAt, int lane)
         plugins.addItem ("No plugins found", false, false, nullptr);
 
     plugins.addSeparator();
-    plugins.addItem ("Find plugins...", [safeThis]
+    plugins.addItem (juce::String (juce::CharPointer_UTF8 ("Find plugins\xe2\x80\xa6")), [safeThis]
     {
         if (safeThis != nullptr && safeThis->onFindPlugins != nullptr)
             safeThis->onFindPlugins();

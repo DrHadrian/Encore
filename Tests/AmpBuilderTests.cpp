@@ -312,6 +312,16 @@ public:
             expectWithinAbsoluteError ((float) treble->getDoubleClickReturnValue(), block.findParameter ("treble")->getSpec().defaultValue, 1.0e-6f,
                                        "double-click: the default");
 
+            // A knob a pedal moves shows "EXP 1" on the face too, away from its label.
+            panel.getExpressionPedal = [] (const juce::String& id) { return id == "treble" ? 1 : 0; };
+            panel.refresh();
+            expectEquals (face->getChip ("treble"), juce::String ("EXP 1"));
+            expect (face->getChip ("bass").isEmpty());
+            renderSnapshot (panel, "v32-amp-face-exp");
+            panel.getExpressionPedal = [] (const juce::String&) { return 0; };
+            panel.refresh();
+            expect (face->getChip ("treble").isEmpty(), "gone when the pedal is taken off");
+
             // Level match is the switch.
             auto* match = face->findSwitch ("normalise");
             expect (match != nullptr);
@@ -341,6 +351,12 @@ public:
             expectEquals (face->getTooltipAt ({ fixed.x + 4, fixed.y + 4 }), juce::String ("Fixed at 3 in this capture"));
             expect (face->findKnob ("input") != nullptr && face->findKnob ("input")->getTitle() == "VOLUME");
             expect (face->findSwitch ("normalise") != nullptr, "the JC's toggle drives Level match");
+            panel.getExpressionPedal = [] (const juce::String& id) { return id == "input" ? 2 : 0; };
+            panel.refresh();
+            panel.setAmpFace (jc);   // a new face keeps showing the pedal
+            face = panel.getAmpFace();
+            expectEquals (face->getChip ("input"), juce::String ("EXP 2"));
+            panel.getExpressionPedal = nullptr;
 
             // The 5150's channel LEDs: the green one is always off, the red one follows.
             const auto& head = kit::ampTemplates::examples()[4].amp;

@@ -300,7 +300,7 @@ std::vector<PreShowCheckResult> runPreShowChecks (const PreShowFacts& f)
 
     //== Audio =================================================================
     if (f.reconnecting)
-        add (Status::problem, "Audio interface lost", "Reconnecting to " + f.deviceName + "... check the USB cable.", Fix::audioSettings);
+        add (Status::problem, "Audio interface lost", "Reconnecting to " + f.deviceName + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6 check the USB cable.")), Fix::audioSettings);
     else if (! f.deviceOpen)
         add (Status::problem, "No audio interface", "Choose one in Audio settings.", Fix::audioSettings);
     else
