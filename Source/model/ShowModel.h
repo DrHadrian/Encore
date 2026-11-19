@@ -6,6 +6,7 @@
 #include <juce_core/juce_core.h>
 #include <map>
 
+#include "model/AmpPreset.h"
 #include "model/MidiMapping.h"
 #include "model/StageLayout.h"
 #include <functional>
@@ -75,6 +76,7 @@ struct BlockModel
     std::map<juce::String, ExpressionAssignment> expression;   // parameter id -> pedal and range
     PluginRef plugin;                        // "plugin" blocks: which plugin
     juce::String state;                      // "plugin" blocks: the plugin's own settings, base64
+    juce::String ampPreset;                  // "nam" blocks: the amp (ShowModel::amps) whose face it shows, by id ("" = none)
 
     bool operator== (const BlockModel&) const = default;
 };
@@ -187,9 +189,10 @@ enum class ShowTemplate { band, musical, worship, solo };
 struct ShowModel
 {
     // 2: plugin blocks (milestone 10). 3: routing (milestone 11): patch inputs,
-    // sends, split paths. A show is saved with the oldest version that can hold
-    // it, so older Encore versions keep opening shows that don't need more.
-    static constexpr int currentSchemaVersion = 3;
+    // sends, split paths. 4: amps built in the amp builder (design v3.2). A show
+    // is saved with the oldest version that can hold it, so older Encore
+    // versions keep opening shows that don't need more.
+    static constexpr int currentSchemaVersion = 4;
 
     juce::String id;
     juce::String name;
@@ -202,6 +205,13 @@ struct ShowModel
 
     StageSettings stage;
 
+    std::vector<AmpPreset> amps;             // amps built in the amp builder (amp blocks refer to them by id)
+
+    const AmpPreset* findAmp (const juce::String& ampId) const;
+
+    /** Whether the show has amps of its own (or a block refers to one). */
+    bool usesAmps() const;
+
     PatchModel* findPatch (const juce::String& patchId);
     const PatchModel* findPatch (const juce::String& patchId) const;
 
@@ -212,7 +222,7 @@ struct ShowModel
     bool usesRouting() const;
 
     /** The schema version this show needs: the oldest that can hold it. */
-    int requiredSchemaVersion() const { return usesRouting() ? 3 : usesPlugins() ? 2 : 1; }
+    int requiredSchemaVersion() const { return usesAmps() ? 4 : usesRouting() ? 3 : usesPlugins() ? 2 : 1; }
 
     /** Every input and output name the show's patches use (in order, once each,
         ignoring case), e.g. to find the ones this computer doesn't have. */

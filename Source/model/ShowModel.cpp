@@ -262,6 +262,30 @@ bool ShowModel::usesRouting() const
     return uses;
 }
 
+const AmpPreset* ShowModel::findAmp (const juce::String& ampId) const
+{
+    for (const auto& a : amps)
+        if (a.id == ampId)
+            return &a;
+
+    return nullptr;
+}
+
+bool ShowModel::usesAmps() const
+{
+    if (! amps.empty())
+        return true;
+
+    bool uses = false;
+    forEachPatch ([&] (const PatchModel& p)
+    {
+        for (const auto& lane : p.lanes)
+            for (const auto& b : lane.blocks)
+                uses = uses || b.ampPreset.isNotEmpty();
+    });
+    return uses;
+}
+
 juce::StringArray ShowModel::inputNamesUsed() const
 {
     juce::StringArray inputs, outputs;

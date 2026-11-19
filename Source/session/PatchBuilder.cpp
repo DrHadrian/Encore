@@ -198,7 +198,10 @@ void captureChain (const Chain& chain, PatchModel& patch, const ShowFolder& fold
         const auto* previous = findPrevious (model.id);
 
         if (previous != nullptr)
+        {
             model.expression = previous->expression;   // not represented live: carry it over
+            model.ampPreset = previous->ampPreset;     // (the amp's face, likewise)
+        }
 
         if (auto* plugin = dynamic_cast<PluginBlock*> (block.get()))
         {

@@ -150,6 +150,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/dsp/StreamResampler.h
     Source/engine/nam/NamModel.cpp
     Source/engine/nam/NamModel.h
+    Source/model/AmpPreset.cpp
+    Source/model/AmpPreset.h
     Source/model/MidiMapping.cpp
     Source/model/MidiMapping.h
     Source/model/Routing.cpp
@@ -166,6 +168,8 @@ target_sources(EncoreEngine INTERFACE
     Source/platform/CrashReport.h
     Source/platform/SystemTuning.cpp
     Source/platform/SystemTuning.h
+    Source/session/AmpLibrary.cpp
+    Source/session/AmpLibrary.h
     Source/session/PatchBuilder.cpp
     Source/session/PluginCatalog.cpp
     Source/session/PluginCatalog.h

@@ -2,6 +2,8 @@
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
 #include "session/ShowSession.h"
+
+#include "engine/blocks/NamAmpBlock.h"
 #include "session/PatchBuilder.h"
 #include "session/PluginCatalog.h"
 #include "engine/blocks/PluginBlock.h"
@@ -968,6 +970,87 @@ void ShowSession::setPatchSend (const juce::String& patchKey, const juce::String
 
         changed (true);
     }
+}
+
+void ShowSession::saveAmp (const AmpPreset& amp)
+{
+    if (amp.id.isEmpty())
+        return;
+
+    for (auto& a : show.amps)
+    {
+        if (a.id == amp.id)
+        {
+            if (a != amp)
+            {
+                a = amp;
+                changed (true);
+            }
+
+            return;
+        }
+    }
+
+    show.amps.push_back (amp);
+    changed (true);
+}
+
+void ShowSession::setBlockAmp (int blockIndex, const juce::String& ampId)
+{
+    auto* patch = findPatchForKey (activePatchId);
+    auto* block = patch != nullptr ? patch->blockAt (blockIndex) : nullptr;
+
+    if (block == nullptr || block->type != NamAmpBlock::typeId)
+        return;
+
+    block->ampPreset = ampId;
+
+    // The amp's starting settings: its driving knobs and switches, as values on the face (0..1).
+    Block* live = nullptr;
+
+    if (const auto it = chains.find (activePatchId); it != chains.end()
+        && juce::isPositiveAndBelow (blockIndex, (int) it->second->getBlocks().size()))
+        live = it->second->getBlocks()[(size_t) blockIndex].get();
+
+    if (const auto* amp = show.findAmp (ampId))
+    {
+        std::unique_ptr<NamAmpBlock> probe;   // the parameters' ranges, for a patch that isn't built
+
+        for (const auto& part : amp->parts)
+        {
+            if (! part.drivesParameter())
+                continue;
+
+            const auto id = ampPreset::parameterFor (part.drives);
+            auto* p = live != nullptr ? live->findParameter (id) : nullptr;
+
+            if (p == nullptr)
+            {
+                if (probe == nullptr)
+                    probe = std::make_unique<NamAmpBlock>();
+
+                p = probe->findParameter (id);
+            }
+
+            if (p == nullptr)
+                continue;
+
+            const auto value = part.isToggle() ? (part.value >= 0.5f ? 1.0f : 0.0f) : p->getSpec().range.convertFrom0to1 (part.value);
+            block->params[id] = value;
+
+            if (live != nullptr && live->findParameter (id) == p)
+                p->setValue (value);   // live at once, ramped by the block
+        }
+    }
+
+    changed (true);
+}
+
+const AmpPreset* ShowSession::getBlockAmp (int blockIndex) const
+{
+    const auto* patch = findPatchForKey (activePatchId);
+    const auto* block = patch != nullptr ? patch->blockAt (blockIndex) : nullptr;
+    return block != nullptr && block->ampPreset.isNotEmpty() ? show.findAmp (block->ampPreset) : nullptr;
 }
 
 void ShowSession::markEdited()

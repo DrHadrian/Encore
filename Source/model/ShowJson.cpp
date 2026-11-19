@@ -102,6 +102,9 @@ namespace
         if (b.stomp > 0)
             set (o, "stomp", b.stomp);
 
+        if (b.ampPreset.isNotEmpty())
+            set (o, "ampPreset", b.ampPreset);
+
         if (b.type == pluginBlockType || ! b.plugin.isEmpty())
         {
             auto plugin = object();
@@ -145,6 +148,7 @@ namespace
         b.file = str (o, "file");
         b.stomp = juce::jlimit (0, maxStomps, integer (o, "stomp", 0));
         b.state = str (o, "state");
+        b.ampPreset = str (o, "ampPreset");
 
         if (const auto plugin = get (o, "plugin"); plugin.isObject())
         {
@@ -378,6 +382,16 @@ juce::String toJson (const ShowModel& show)
     set (root, "midi", midi);
     set (root, "stage", stageToVar (show.stage));
 
+    if (! show.amps.empty())
+    {
+        juce::Array<juce::var> amps;
+
+        for (const auto& a : show.amps)
+            amps.add (ampPreset::toVar (a));
+
+        set (root, "amps", amps);
+    }
+
     // Full precision, so values survive a save/load round trip exactly.
     return juce::JSON::toString (root, juce::JSON::FormatOptions{}.withSpacing (juce::JSON::Spacing::multiLine));
 }
@@ -429,6 +443,16 @@ std::optional<ShowModel> fromJson (const juce::String& text, juce::String& error
     }
 
     show.stage = stageFromVar (get (root, "stage"));
+
+    // Amps built in the amp builder; a damaged one is left out (its blocks show the default face).
+    forEachIn (root, "amps", [&] (const juce::var& a)
+    {
+        juce::String ampError;
+
+        if (auto amp = ampPreset::fromVar (a, ampError); amp && show.findAmp (amp->id) == nullptr)
+            show.amps.push_back (std::move (*amp));
+    });
+
     return show;
 }
 

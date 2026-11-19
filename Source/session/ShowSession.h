@@ -171,6 +171,20 @@ public:
     /** The pedal and its heel / toe values for a parameter, if one moves it. */
     std::optional<ExpressionAssignment> getExpressionAssignment (int blockIndex, const juce::String& paramId) const;
 
+    //== Amps built in the amp builder (design/AMP-BUILDER.md) =================
+    const std::vector<AmpPreset>& getAmps() const noexcept { return show.amps; }
+    const AmpPreset* getAmp (const juce::String& ampId) const { return show.findAmp (ampId); }
+
+    /** Adds the amp to the show, or replaces the one with its id. */
+    void saveAmp (const AmpPreset&);
+
+    /** Gives an amp block of the active patch the amp's face ("" = none) and
+        sets its driving knobs and switches to the amp's starting settings, live. */
+    void setBlockAmp (int blockIndex, const juce::String& ampId);
+
+    /** The amp an amp block of the active patch shows (null: the default face). */
+    const AmpPreset* getBlockAmp (int blockIndex) const;
+
     //== Running order =========================================================
     /** The cues in playing order (sections flattened, cut cues left out). */
     std::vector<const RunItem*> getCues() const;
