@@ -13,8 +13,8 @@ musical.
 
 ## Status
 
-Milestone 8: theatre cue lists (acts and scenes, automatic numbering, cut
-cues, bar marks and notes, fast typing, go to a cue by number); crash
+Milestones 0 to 11 are built. Theatre cue lists (acts and scenes, automatic
+numbering, cut cues, bar marks and notes, fast typing, go to a cue by number); crash
 recovery, interface reconnect, pre-show check; a stage view you lay out
 yourself, tuner, panic and lock; foot controllers and expression pedals over
 MIDI; gapless patch switching with tails; NAM amps, cab IRs, gate, EQ, delay.
@@ -25,7 +25,12 @@ the full cue list, a Stage view and its layout editor, one settings window
 Milestone 10 adds VST3 plugins as blocks, each new plugin tried in a separate
 process first, with a crash guard while playing. Milestone 11 adds routing:
 named inputs and outputs per computer, sends per patch, stereo, split paths
-A and B, and a mute, EQ, delay and limiter per output.
+A and B, and a mute, EQ, delay and limiter per output. Design v3.2 brings the
+status bar, the new menus, the bottom row with its mixer view, and drag and
+drop in the layout editor. The **amp builder** (F8) gives every amp block a
+face you build yourself from templates: its knobs drive the capture's Input,
+Bass, Mid, Treble and Output, and the amp is saved in the show with a copy in
+this computer's library.
 
 | Milestone | What you can test |
 | --- | --- |
@@ -37,10 +42,10 @@ A and B, and a mute, EQ, delay and limiter per output.
 | **5 – Patch switching** ✅ | Gapless switches with tail spillover |
 | **6 – MIDI** ✅ | Foot controller, expression pedals, MIDI out |
 | **7 – Performance view and tuner** ✅ | Stage view with layout editor, tuner, lock, panic |
-| **8 – Theatre cue lists** | Acts/scenes/cues, insert, renumber, cut, go to |
+| **8 – Theatre cue lists** ✅ | Acts/scenes/cues, insert, renumber, cut, go to |
 | **9 – Robustness** ✅ | Crash recovery, reconnect, pre-show check, soak test |
-| **10 – VST3 hosting** | Plugins as blocks, scanned out of process, crash guard |
-| **11 – Routing** | Named inputs and outputs, sends per patch, stereo, split paths, mute/EQ/delay per output |
+| **10 – VST3 hosting** ✅ | Plugins as blocks, scanned out of process, crash guard |
+| **11 – Routing** ✅ | Named inputs and outputs, sends per patch, stereo, split paths, mute/EQ/delay per output |
 | 12 – Plugin sandbox | Risky plugins in their own process |
 
 ## Building (Windows)
@@ -94,11 +99,14 @@ The tests run as four processes side by side (robustness and its soak,
 plugins, screens, everything else). `ENCORE_TEST_ONLY=<name>|<name>` runs
 just those, `ENCORE_TEST_SKIP` all but those.
 
-Build speed: Encore's own sources compile against a precompiled JUCE header
-(`ENCORE_PCH`, on by default; parsing JUCE is ~95 % of compiling a typical
-file). CI uses a compiler cache instead, skips link-time optimisation on pull
-requests (`ENCORE_LTO=OFF`) and runs the 4-hour soak every night instead of
-on every change.
+Build speed: JUCE and Encore's own code are compiled once and linked by both
+the app and the tests, so the tests run exactly what ships. Encore's sources
+compile against a precompiled JUCE header (`ENCORE_PCH`, on by default;
+parsing JUCE is ~95 % of compiling a typical file). The amp builder's art goes
+in as one zip that the build packs itself. CI uses a compiler cache instead of
+the precompiled header, skips link-time optimisation on pull requests
+(`ENCORE_LTO=OFF`) and runs the 4-hour soak every night instead of on every
+change (decisions 0049 and 0057).
 
 ## Live performance settings (Windows)
 
@@ -111,6 +119,27 @@ effect. For shows also:
   expense (the status line warns you);
 - set Windows' power mode to **Best performance**;
 - use 64 samples or more, so there is headroom for spikes.
+
+## Testing the amp builder with your guitar
+
+1. Open a show and pick a patch with an **Amp (NAM)** block that has a
+   capture. Click the amp block: the block stage shows an amp face (Encore
+   Gold 30 until you build your own). Play and turn its knobs: Input, Bass,
+   Mid, Treble and Output change the sound without clicks. Clicking the pilot
+   light turns the block on and off.
+2. Press **F8**. The amp builder opens on the selected amp block's amp. From the
+   amp picker, try **New amp from a template…**.
+3. Drag parts from the list onto the face, move them (the guides snap them into
+   line) and select a knob: under **Drives** pick what it turns, or Fixed. While
+   a knob is NOT SET, **Save amp** is greyed out and its tooltip says why.
+4. **Load capture…** picks the amp's sound (a .nam file).
+5. **Save amp**, then **Back to patches** (or F8): the amp block shows your face,
+   with its knobs at the amp's starting settings.
+6. Save the show, close and reopen it: the face and the knob settings are back.
+   Switch patches while playing: still gapless.
+7. In another show, **Add from the library…** in the amp picker finds your amp.
+8. Check: overruns and driver dropouts stay at 0, and the CPU figure doesn't
+   jump while a face is shown.
 
 ## Testing milestone 11 with your guitar
 
