@@ -892,6 +892,25 @@ public:
                 builder.select ({});
                 inspectorShot ("v32-amp-inspector-gold", 650);
 
+                {
+                    // Painting never changes the layout: the toolbar looks the same after many repaints
+                    // (the title area lost 15 px on every paint, leaving a stray mark by the amp picker).
+                    const auto toolbar = juce::Rectangle<int> (0, 0, 520, theme::size::outerPadding + theme::size::subToolbar);
+                    const auto first = builder.createComponentSnapshot (toolbar, false, 1.0f);
+
+                    for (int i = 0; i < 12; ++i)
+                        builder.createComponentSnapshot (toolbar, false, 1.0f);
+
+                    const auto later = builder.createComponentSnapshot (toolbar, false, 1.0f);
+                    auto same = first.getBounds() == later.getBounds();
+
+                    for (int y = 0; same && y < first.getHeight(); ++y)
+                        for (int x = 0; same && x < first.getWidth(); ++x)
+                            same = first.getPixelAt (x, y) == later.getPixelAt (x, y);
+
+                    expect (same, "the builder's toolbar is the same after 13 repaints");
+                }
+
                 expect (builder.showSwatchFocus ("Tolex", 4), "keyboard focus on the Tolex swatch Cream");
                 inspectorShot ("v32-amp-inspector-focus", 650);
                 builder.showSwatchFocus ({}, -1);

@@ -854,6 +854,7 @@ namespace state
     constexpr float activeLighten = 0.15f;   // a stage button widget while it acts (panic silencing)
     constexpr float disabledAlpha = 0.45f;
     constexpr float draggedAlpha  = 0.35f;   // a widget being moved, where it was
+    constexpr int focusFromPointerMs = 300;   // focus that moves this soon after a click came from the click: no ring
     constexpr float dragImageAlpha = 0.6f;   // the picture of a dragged row under the pointer (kit::DragImage)
     constexpr float cutAlpha      = 0.35f;   // cut items in the full list
     // Summary badge for warning / ok (the boards only draw the problem one):

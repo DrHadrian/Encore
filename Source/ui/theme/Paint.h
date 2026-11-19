@@ -54,6 +54,8 @@ namespace paint
     }
 
     /** The focus ring: 2 px accent, 1 px outside `r`. */
+    /** The keyboard-focus ring around r, drawn only when focus last moved by the
+        keyboard (theme::focusRings::visible); a click hides it. */
     void focusRing (juce::Graphics&, juce::Rectangle<float> r, float radius);
 
     /** A tick (✓) or cross (✕) drawn as a path, in `r`. */
