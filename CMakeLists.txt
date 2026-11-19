@@ -307,6 +307,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/AmpFace.h
     Source/ui/kit/AmpTemplates.cpp
     Source/ui/kit/AmpTemplates.h
+    Source/ui/kit/AmpFaceView.cpp
+    Source/ui/kit/AmpFaceView.h
     Source/ui/kit/Lcd.cpp
     Source/ui/kit/Lcd.h
     Source/ui/kit/MeterBar.cpp

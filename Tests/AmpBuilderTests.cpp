@@ -11,6 +11,8 @@
 #include "session/ShowSession.h"
 #include "ui/kit/AmpArt.h"
 #include "ui/kit/AmpFace.h"
+#include "ui/kit/AmpFaceView.h"
+#include "ui/BlockPanel.h"
 #include "ui/kit/AmpTemplates.h"
 
 namespace encore::test
@@ -278,6 +280,80 @@ public:
 
             kit::AmpFace::clearCache();
             expectEquals (kit::AmpFace::numCached(), 0);
+        }
+
+        beginTest ("Edit: an amp block shows a face; its driving controls are real, Fixed ones only say so, lights follow the block");
+        {
+            NamAmpBlock block;
+            BlockPanel panel (block);
+            panel.setBounds (0, 0, 1100, 640);
+            auto* face = panel.getAmpFace();
+            expect (face != nullptr, "no placeholder: Encore Gold 30 when the block has no amp of its own");
+
+            if (face == nullptr)
+                return;
+
+            expectEquals (face->getAmp().name, juce::String ("Encore Gold 30"));
+            expectEquals (face->getWidth(), 600);
+            expectEquals (face->getHeight(), 430);
+            expectEquals (face->getDrivenParameters().joinIntoString (","), juce::String ("input,bass,mid,treble,output,normalise"));
+
+            // A knob drives its parameter, both ways.
+            auto* treble = face->findKnob ("treble");
+            expect (treble != nullptr);
+            treble->setValue (4.0, juce::sendNotificationSync);
+            expectWithinAbsoluteError (block.findParameter ("treble")->getValue(), 4.0f, 0.01f, "turning the face's knob sets the block");
+            block.findParameter ("treble")->setValue (-3.0f);
+            panel.refresh();
+            expectWithinAbsoluteError ((float) treble->getValue(), -3.0f, 0.01f, "a change elsewhere (MIDI) shows on the face");
+            expect (treble->getDoubleClickReturnValue() == block.findParameter ("treble")->getSpec().defaultValue, "double-click: the default");
+
+            // Level match is the switch.
+            auto* match = face->findSwitch ("normalise");
+            expect (match != nullptr);
+            const auto before = block.findParameter ("normalise")->getValue();
+            match->triggerClick();
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+            expect (block.findParameter ("normalise")->getValue() != before, "the switch sets Level match");
+
+            // The pilot light follows the block, and turns it off and on.
+            expect (block.isEnabled() && face->isOn());
+            face->clickPower();
+            expect (! block.isEnabled() && ! face->isOn(), "clicking the light turns the amp off");
+            face->clickPower();
+            expect (block.isEnabled() && face->isOn());
+
+            const auto jewel = *face->getAmp().findPart ("j1");
+            expectEquals (face->getTooltipAt ({ jewel.x + 4, jewel.y + 4 }), juce::String ("Turn the block on or off"));
+            expect (hasContent (panel.createComponentSnapshot (panel.getLocalBounds())));
+            renderSnapshot (panel, "v32-amp-face-edit");
+
+            // An amp of its own: JC-120, with Fixed knobs that only say so.
+            const auto& jc = kit::ampTemplates::examples()[1].amp;
+            panel.setAmpFace (jc);
+            face = panel.getAmpFace();
+            expectEquals (face->getAmp().name, juce::String ("JC-120"));
+            const auto fixed = *jc.findPart ("d6");   // REVERB, fixed at 3
+            expectEquals (face->getTooltipAt ({ fixed.x + 4, fixed.y + 4 }), juce::String ("Fixed at 3 in this capture"));
+            expect (face->findKnob ("input") != nullptr && face->findKnob ("input")->getTitle() == "VOLUME");
+            expect (face->findSwitch ("normalise") != nullptr, "the JC's toggle drives Level match");
+
+            // The 5150's channel LEDs: the green one is always off, the red one follows.
+            const auto& head = kit::ampTemplates::examples()[4].amp;
+            kit::AmpFaceView view (head);
+            const auto green = *head.findPart ("e1");
+            expectEquals (view.getTooltipAt ({ green.x + 2, green.y + 2 }), juce::String ("Always off: it was off when the capture was made"));
+            const auto fixedSwitch = *head.findPart ("t1");
+            expectEquals (view.getTooltipAt ({ fixedSwitch.x + 2, fixedSwitch.y + 2 }), juce::String ("Fixed out in this capture"));
+
+            // A face whose lights are all always off gets the power LED.
+            auto dark = kit::ampTemplates::defaultFace();
+            dark.parts.erase (std::remove_if (dark.parts.begin(), dark.parts.end(), [] (const AmpPart& p) { return p.isLight(); }), dark.parts.end());
+            kit::AmpFaceView noLight (dark);
+            bool powered = false;
+            noLight.onPowerClicked = [&] { powered = true; };
+            noLight.clickPower();
+            expect (powered, "the power LED stands in");
         }
 
         beginTest ("Data: an amp survives JSON exactly, with the fields a newer Encore added");

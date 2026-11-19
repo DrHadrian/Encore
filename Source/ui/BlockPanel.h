@@ -9,6 +9,7 @@
 
 #include "engine/core/Block.h"
 #include "model/MidiMapping.h"
+#include "ui/kit/AmpFaceView.h"
 #include "ui/kit/FaultCard.h"
 #include "ui/kit/StageBackdrop.h"
 #include "ui/kit/GearPlaceholder.h"
@@ -61,6 +62,13 @@ public:
     /** Plugin blocks switched off: "Turn back on" / "Load again" on the fault card. */
     std::function<void()> onTurnPluginBackOn;
 
+    /** Amp blocks (design/AMP-BUILDER.md §4): the amp's face in place of the
+        placeholder, its driving knobs and switches bound to the block's
+        parameters. An amp block without an amp of its own shows Encore Gold 30
+        (set when the panel is made). */
+    void setAmpFace (const AmpPreset&);
+    kit::AmpFaceView* getAmpFace() const noexcept;
+
     /** Loads a file into the block as if picked in the chooser. */
     void loadFile (const juce::File& file);
 
@@ -82,6 +90,8 @@ private:
 
         Parameter& parameter;
         bool isSwitch = false;
+        juce::Slider* faceKnob = nullptr;     // on an amp face: the knob that drives it (owned by the face)
+        juce::Button* faceSwitch = nullptr;   // ... or the switch
         std::unique_ptr<kit::KnobView> knob;
         std::unique_ptr<kit::GearToggle> toggle;
         int shownPedal = -1;

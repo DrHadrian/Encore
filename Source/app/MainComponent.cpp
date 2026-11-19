@@ -731,6 +731,10 @@ void MainComponent::showSelectedBlock()
         };
         blockPanel->onEdited = [this] { session->markEdited(); };
 
+        // An amp built in the amp builder shows its own face (the panel starts with Encore Gold 30).
+        if (const auto* amp = session->getBlockAmp (index))
+            blockPanel->setAmpFace (*amp);
+
         if (auto* plugin = dynamic_cast<PluginBlock*> (&block))
         {
             blockPanel->onOpenPluginWindow = [this, plugin] { openPluginWindow (*plugin); };

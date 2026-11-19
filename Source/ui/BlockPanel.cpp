@@ -9,6 +9,7 @@
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/SplitBlocks.h"
 #include "ui/ChainStrip.h"
+#include "ui/kit/AmpTemplates.h"
 #include "ui/kit/Chip.h"
 #include "ui/theme/EncoreFonts.h"
 #include "ui/theme/EncoreLookAndFeel.h"
@@ -128,6 +129,30 @@ public:
     }
 
     kit::GearPlaceholder& getBox() noexcept { return box; }
+    kit::AmpFaceView* getFace() const noexcept { return face.get(); }
+
+    /** An amp's face over the placeholder (which hides, with its strip). */
+    void showFace (const AmpPreset& amp)
+    {
+        face = std::make_unique<kit::AmpFaceView> (amp);
+        face->setOn (owner.block.isEnabled());
+        face->onPowerClicked = [this]
+        {
+            owner.block.setEnabled (! owner.block.isEnabled());
+            face->setOn (owner.block.isEnabled());
+            power.setOn (owner.block.isEnabled());
+            box.setOn (owner.block.isEnabled());
+            owner.updateHeader();
+
+            if (owner.onEdited != nullptr)
+                owner.onEdited();
+        };
+        setSize (face->getWidth(), face->getHeight());
+        face->setTopLeftPosition (0, 0);
+        addAndMakeVisible (*face);
+        box.setVisible (false);
+        strip.setVisible (false);
+    }
     kit::PowerLed& getPower() noexcept { return power; }
     juce::Component& getStrip() noexcept { return strip; }
 
@@ -362,6 +387,9 @@ public:
 
     void paintOverChildren (juce::Graphics& g) override
     {
+        if (face != nullptr)
+            return;   // an amp face has its own print
+
         const auto origin = strip.getPosition().toFloat();
 
         for (auto& gr : groups)
@@ -397,6 +425,7 @@ private:
 
     BlockPanel& owner;
     kit::GearPlaceholder box;
+    std::unique_ptr<kit::AmpFaceView> face;
     const PluginBlock* plugin;
     juce::Component strip;
     kit::PowerLed power;
@@ -602,14 +631,94 @@ BlockPanel::BlockPanel (Block& blockToEdit) : block (blockToEdit)
         };
     }
 
+    // Amps show a face (an amp of their own, or Encore Gold 30): no placeholder.
+    if (isAmp (block))
+        setAmpFace (kit::ampTemplates::defaultFace());
+
     refresh();
 }
 
 BlockPanel::~BlockPanel()
 {
     for (auto& menu : knobMenus)
+    {
         if (menu->control.knob != nullptr)
             menu->control.knob->removeMouseListener (menu.get());
+
+        if (menu->control.faceKnob != nullptr)
+            menu->control.faceKnob->removeMouseListener (menu.get());
+    }
+}
+
+kit::AmpFaceView* BlockPanel::getAmpFace() const noexcept
+{
+    return gear != nullptr ? gear->getFace() : nullptr;
+}
+
+void BlockPanel::setAmpFace (const AmpPreset& amp)
+{
+    if (! isAmp (block))
+        return;
+
+    // The old face's controls go with it.
+    for (auto& menu : knobMenus)
+        if (menu->control.faceKnob != nullptr)
+            menu->control.faceKnob->removeMouseListener (menu.get());
+
+    for (auto& c : controls)
+    {
+        c->faceKnob = nullptr;
+        c->faceSwitch = nullptr;
+    }
+
+    gear->showFace (amp);
+    auto* face = gear->getFace();
+
+    // Bind the face's driving controls to the block's parameters, as the knobs and switches are.
+    for (auto& c : controls)
+    {
+        auto* param = &c->parameter;
+        const auto& spec = param->getSpec();
+
+        if (auto* s = face->findKnob (spec.id); s != nullptr && ! c->isSwitch)
+        {
+            const auto& r = spec.range;
+            c->faceKnob = s;
+            s->setNormalisableRange ({ (double) r.start, (double) r.end, (double) r.interval, (double) r.skew, r.symmetricSkew });
+            s->setValue (param->getValue(), juce::dontSendNotification);
+            s->setDoubleClickReturnValue (true, spec.defaultValue);
+            s->textFromValueFunction = [param] (double v) { return param->toText ((float) v); };
+            s->valueFromTextFunction = [] (const juce::String& text) { return text.getDoubleValue(); };
+            s->setPopupDisplayEnabled (true, false, nullptr);   // the value while dragging
+            s->onValueChange = [this, param, s]
+            {
+                param->setValue ((float) s->getValue());
+
+                if (onEdited != nullptr)
+                    onEdited();
+            };
+            s->setTooltip (spec.name + ". Right-click to assign an expression pedal");
+
+            auto& menu = knobMenus.emplace_back (std::make_unique<KnobMenu> (*this, *c));
+            s->addMouseListener (menu.get(), false);
+        }
+        else if (auto* b = face->findSwitch (spec.id); b != nullptr && c->isSwitch)
+        {
+            c->faceSwitch = b;
+            b->setToggleState (param->getValue() >= 0.5f, juce::dontSendNotification);
+            b->setTooltip (spec.name);
+            b->onClick = [this, param, b]
+            {
+                param->setValue (b->getToggleState() ? 1.0f : 0.0f);
+
+                if (onEdited != nullptr)
+                    onEdited();
+            };
+        }
+    }
+
+    face->syncKnobs();
+    resized();
 }
 
 void BlockPanel::KnobMenu::mouseDown (const juce::MouseEvent& e)
@@ -635,7 +744,8 @@ void BlockPanel::KnobMenu::mouseDown (const juce::MouseEvent& e)
     juce::PopupMenu menu;
     menu.addSectionHeader (control.parameter.getSpec().name);
     menu.addSubMenu ("Expression pedal (heel = min, toe = max)", pedals);
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (control.knob.get()));
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (control.faceKnob != nullptr ? static_cast<juce::Component*> (control.faceKnob)
+                                                                                                     : control.knob.get()));
 }
 
 void BlockPanel::setStatusLight (juce::String text, std::function<bool()> isLit)
@@ -765,6 +875,19 @@ void BlockPanel::refresh()
 
         const auto value = c->parameter.getValue();
 
+        // On an amp face (the knobs and switches above are hidden then).
+        if (c->faceKnob != nullptr && ! c->faceKnob->isMouseButtonDown()
+            && ! juce::approximatelyEqual ((float) c->faceKnob->getValue(), value))
+        {
+            c->faceKnob->setValue (value, juce::dontSendNotification);
+
+            if (auto* face = gear->getFace())
+                face->syncKnobs();
+        }
+
+        if (c->faceSwitch != nullptr && c->faceSwitch->getToggleState() != (value >= 0.5f))
+            c->faceSwitch->setToggleState (value >= 0.5f, juce::dontSendNotification);
+
         if (c->isSwitch)
         {
             const auto on = value >= 0.5f;
@@ -783,6 +906,9 @@ void BlockPanel::refresh()
         gear->getPower().setOn (block.isEnabled());
         gear->getBox().setOn (block.isEnabled());
     }
+
+    if (auto* face = gear->getFace(); face != nullptr && face->isOn() != block.isEnabled())
+        face->setOn (block.isEnabled());
 
     auto cpuText = block.isEnabled() ? juce::String (block.getCpuLoad() * 100.0, 1) + "% CPU" : juce::String();
 
