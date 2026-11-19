@@ -145,18 +145,20 @@ jobs:
       - name: Run the tests (soak ${{ env.ENCORE_SOAK_SECONDS }} s)
         run: ctest --test-dir build --output-on-failure --parallel 4 --timeout ${{ env.ENCORE_TEST_TIMEOUT }}
 
-      # TEMPORARY (removed before merging): try to catch main's amp builder hang.
-      - name: Repeat the amp builder tests
+      # TEMPORARY (removed before merging): the watchdog prints the stacks on Windows.
+      - name: Trip the hang watchdog
         if: matrix.config == 'Release'
         shell: bash
         env:
-          ENCORE_TEST_ONLY: Amp builder
+          ENCORE_TEST_ONLY: Design v3 hardening
+          ENCORE_TEST_HANG_SECONDS: '1'
         run: |
-          for i in $(seq 1 40); do
-            start=$SECONDS
-            ./build/EncoreTests_artefacts/Release/EncoreTests > run.log 2>&1 || { echo "run $i failed"; cat run.log; exit 1; }
-            echo "run $i: $(tail -1 run.log) ($((SECONDS - start)) s)"
-          done
+          set +e
+          ./build/EncoreTests_artefacts/Release/EncoreTests > trip.log 2>&1
+          rc=$?
+          sed -n '/^HANG/,$p' trip.log | head -120
+          echo "exit code $rc"
+          [ $rc -eq 3 ] && grep -q "(the test thread)" trip.log
 
       - name: Upload Encore.exe
         if: matrix.config == 'Release'
