@@ -5,7 +5,7 @@ description: "Use for any UI work in the Encore repo (C++/JUCE): screens, settin
 
 # Encore UI (design v3.2, native JUCE)
 
-Encore's UI follows one design system. The full kit is in `docs/design/` of the repo (start with `docs/design/README.md`), also in the Claude project "Encore" under `design/kit/`. The current design is **v3.2** (16–18 Nov 2026): v3 + the v3.1 audit fixes + `design/kit/V3.2-CHANGES.md`, which wins over the other kit docs where they differ until it is merged into them. This skill is the short version; the docs win if they differ.
+Encore's UI follows one design system. The full kit is in `docs/design/` of the repo (start with `docs/design/README.md`), also in the Claude project "Encore" under `design/kit/`. The current design is **v3.2** (16–18 Nov 2026): v3 + the v3.1 audit fixes + `design/kit/V3.2-CHANGES.md`, which wins over the other kit docs where they differ until it is merged into them. This skill is the short version; the docs win if they differ. The master copy is `.claude/skills/encore-ui/SKILL.md` in the repo.
 
 ## Before you change UI
 1. Read `docs/design/DESIGN-SYSTEM.md` (look), `docs/design/SCREENS.md` (screens, strings, parity map) and `docs/design/JUCE-ARCHITECTURE.md` (structure, performance, robustness).
