@@ -676,4 +676,11 @@ buildable and tested, for players and for every branch started from it.
   deleting main are refused. In an emergency, an admin can switch off "Do not
   allow bypassing" in the repository's branch settings, then switch it back on.
 - Pull requests merge with a merge commit, which keeps each step's commit.
+- **Main's cache serves the pull requests.** Pushes to main now build like pull
+  requests, without link-time optimisation. A pull request can reuse main's
+  compiler cache, but objects built for LTO can't be reused without it. Before
+  this, every pull request's Release build started from nothing. The players'
+  build (LTO) is made every night and when the workflow is run by hand, with
+  its own cache (`windows-Release-lto`). It also tests the LTO build, which a
+  pull request doesn't.
 

@@ -32,8 +32,11 @@ env:
   # 10 minutes (its log names the test that was running), not after hours. A
   # test group takes about a minute (Release) to three (Debug, 2-minute soak).
   ENCORE_TEST_TIMEOUT: ${{ (github.event_name == 'schedule' || (inputs.soak_seconds != '' && inputs.soak_seconds != '120')) && '7200' || '600' }}
-  # Link-time optimisation only where the app is built for players.
-  ENCORE_LTO: ${{ github.event_name == 'pull_request' && 'OFF' || 'ON' }}
+  # Link-time optimisation only for the players' build: every night and when run
+  # by hand. Pull requests and pushes to main build alike, so main's compiler
+  # cache is the one every pull request reuses (LTO objects can't be reused
+  # without LTO, so those runs keep their own cache).
+  ENCORE_LTO: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'ON' || 'OFF' }}
   SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
 
 jobs:
@@ -92,7 +95,7 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           variant: sccache
-          key: windows-${{ matrix.config }}
+          key: windows-${{ matrix.config }}${{ env.ENCORE_LTO == 'ON' && '-lto' || '' }}
           max-size: 2G
 
       # The toolchain this runner has: GitHub changes runner images (and with

@@ -104,9 +104,10 @@ the app and the tests, so the tests run exactly what ships. Encore's sources
 compile against a precompiled JUCE header (`ENCORE_PCH`, on by default;
 parsing JUCE is ~95 % of compiling a typical file). The amp builder's art goes
 in as one zip that the build packs itself. CI uses a compiler cache instead of
-the precompiled header, skips link-time optimisation on pull requests
-(`ENCORE_LTO=OFF`) and runs the 4-hour soak every night instead of on every
-change (decisions 0049 and 0057).
+the precompiled header. Pull requests and pushes to main build without
+link-time optimisation (`ENCORE_LTO=OFF`), so they share one cache. The
+players' build, with LTO, and the 4-hour soak run every night (decisions 0049,
+0057 and 0058).
 
 ## Live performance settings (Windows)
 
