@@ -1355,6 +1355,9 @@ private:
             juce::TextButton duplicate { "Duplicate" }, remove { "Remove" };
             Buttons()
             {
+                for (auto* b : { &duplicate, &remove })
+                    b->setMouseClickGrabsKeyboardFocus (false);   // the builder keeps its keys (decision 0025)
+
                 setVariant (remove, Variant::danger);
                 addAndMakeVisible (duplicate);
                 addAndMakeVisible (remove);
@@ -1483,7 +1486,11 @@ private:
         struct Load final : public juce::Component
         {
             juce::TextButton button { "Load capture" + ellipsis() };
-            Load() { addAndMakeVisible (button); }
+            Load()
+            {
+                button.setMouseClickGrabsKeyboardFocus (false);   // the builder keeps its keys (decision 0025)
+                addAndMakeVisible (button);
+            }
             void resized() override { button.setBounds (getLocalBounds().withSizeKeepingCentre (getWidth(), size::buttonHeight)); }   // the value column's width
         };
         auto load = std::make_unique<Load>();
@@ -2302,8 +2309,9 @@ void AmpBuilderView::paint (juce::Graphics& g)
     g.fillRect (toolbarArea.toFloat().reduced (1.0f, 0.0f).withTrimmedTop (1.0f));
     g.setColour (paint::c (colour::paneBorder));
     g.fillRect (toolbarArea.getX(), toolbarArea.getBottom() - 1, toolbarArea.getWidth(), 1);
-    drawIcon (g, Icon::amp, titleArea.removeFromLeft (15).toFloat().withSizeKeepingCentre (15.0f, 15.0f), paint::c (colour::text));
-    paint::text (g, "Amp builder", titleArea.toFloat().withTrimmedLeft (8.0f), type::subToolbarTitle, colour::text);
+    auto title = titleArea;   // a copy: paint() never changes the layout (it took 15 px off on every repaint)
+    drawIcon (g, Icon::amp, title.removeFromLeft (15).toFloat().withSizeKeepingCentre (15.0f, 15.0f), paint::c (colour::text));
+    paint::text (g, "Amp builder", title.toFloat().withTrimmedLeft (8.0f), type::subToolbarTitle, colour::text);
     paint::text (g, usedByText(), usedByArea.toFloat(), type::bodySmall, colour::textTertiary, juce::Justification::centredRight);
 
     // The three columns, their headers and the face's work area.

@@ -316,6 +316,8 @@ target_sources(EncoreUi PRIVATE
     Source/ui/theme/EncoreAmpTheme.h
     Source/ui/theme/Icons.cpp
     Source/ui/theme/Icons.h
+    Source/ui/theme/FocusRings.cpp
+    Source/ui/theme/FocusRings.h
     Source/ui/theme/Paint.cpp
     Source/ui/theme/Paint.h
     Source/ui/kit/DialogFrame.cpp

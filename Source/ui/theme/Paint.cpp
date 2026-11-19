@@ -3,6 +3,7 @@
 
 #include "ui/theme/Paint.h"
 #include "ui/theme/EncoreFonts.h"
+#include "ui/theme/FocusRings.h"
 
 namespace encore::theme::paint
 {
@@ -111,6 +112,9 @@ juce::String caps (const type::Style& style, const juce::String& s)
 
 void focusRing (juce::Graphics& g, juce::Rectangle<float> r, float radius)
 {
+    if (! focusRings::visible())
+        return;   // only after the keyboard moved focus, never after a click (CSS :focus-visible)
+
     g.setColour (c (colour::accent));
     g.drawRoundedRectangle (r.expanded (2.0f), radius + 2.0f, (float) size::focusRing);
 }

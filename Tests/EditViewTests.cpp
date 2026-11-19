@@ -10,12 +10,17 @@
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
+#include <functional>
+#include <typeinfo>
+
 #include "app/AppSettings.h"
 #include "app/MainComponent.h"
 #include "model/ShowFolder.h"
 #include "model/ShowJson.h"
 #include "session/RecoveryFile.h"
 #include "ui/theme/EncoreTheme.h"
+#include "ui/theme/FocusRings.h"
+#include "ui/theme/Paint.h"
 
 namespace encore::test
 {
@@ -140,6 +145,97 @@ public:
                 main.keyPressed (juce::KeyPress (juce::KeyPress::F5Key));
                 expect (! main.isShowingStage(), "F5 again: back to Edit");
                 expect (main.getMixerTab().isVisible());
+            }
+
+            beginTest ("Decision 0025: no button, slider or popup takes keyboard focus from a click (Edit, Routing, the amp builder, Stage)");
+            {
+                MainComponent main (settings, std::make_unique<BoardDeviceType>());
+                main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+                expect (pumpUntil ([&main]
+                        {
+                            if (auto* strip = main.getChainStrip())
+                                strip->selectBlock (0);
+
+                            return main.getBlockPanel() != nullptr && main.getBlockPanel()->getAmpFace() != nullptr;
+                        }));
+
+                // Everything under the window, shown or not: a clickable control that takes
+                // focus would draw a focus ring after a click and take Space and the arrows
+                // from the show (or from the amp builder's own keys).
+                juce::StringArray offenders;
+                const auto audit = [&offenders] (const juce::String& where, juce::Component& root)
+                {
+                    std::function<void (juce::Component&, juce::String)> walk = [&] (juce::Component& c, juce::String path)
+                    {
+                        const auto isControl = dynamic_cast<juce::Button*> (&c) != nullptr || dynamic_cast<juce::Slider*> (&c) != nullptr
+                                            || dynamic_cast<juce::ComboBox*> (&c) != nullptr;
+
+                        if (isControl && c.getWantsKeyboardFocus() && c.getMouseClickGrabsKeyboardFocus())
+                        {
+                            auto name = c.getName().isNotEmpty() ? c.getName() : c.getTitle();
+                            if (auto* b = dynamic_cast<juce::Button*> (&c); b != nullptr && name.isEmpty())
+                                name = b->getButtonText();
+                            offenders.addIfNotAlreadyThere (where + ": " + path + " > " + typeid (c).name() + " \"" + name + "\"");
+                        }
+
+                        for (auto* child : c.getChildren())
+                            walk (*child, path + "/" + juce::String (typeid (c).name()).fromLastOccurrenceOf ("::", false, false).substring (0, 24));
+                    };
+                    walk (root, {});
+                };
+
+                audit ("Edit", main);
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F7Key));
+                pump (100);
+                audit ("Routing (F7)", main);
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F7Key));
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F8Key));
+                pump (100);
+
+                if (auto* builder = main.getAmpBuilder())
+                {
+                    for (const auto* id : { "", "k1", "s1", "logo" })
+                    {
+                        builder->select (id);
+                        audit (juce::String ("Amp builder (F8), selected: ") + (*id != 0 ? id : "nothing"), main);
+                    }
+                }
+
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F8Key));
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F5Key));
+                pump (100);
+                audit ("Stage (F5)", main);
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F5Key));
+
+                for (const auto& o : offenders)
+                    logMessage ("takes focus from a click: " + o);
+
+                expectEquals (offenders.size(), 0, "controls that take keyboard focus from a click (listed above)");
+            }
+
+            beginTest ("Focus rings show only after the keyboard moved focus, never after a click (CSS :focus-visible)");
+            {
+                const auto ringPixels = [] ()
+                {
+                    juce::Image image (juce::Image::ARGB, 40, 40, true);
+                    {
+                        juce::Graphics g (image);
+                        theme::paint::focusRing (g, { 8.0f, 8.0f, 24.0f, 24.0f }, 4.0f);
+                    }
+                    int drawn = 0;
+                    for (int y = 0; y < image.getHeight(); ++y)
+                        for (int x = 0; x < image.getWidth(); ++x)
+                            drawn += image.getPixelAt (x, y).getAlpha() > 0 ? 1 : 0;
+                    return drawn;
+                };
+
+                theme::focusRings::setVisibleForTests (false);
+                expect (! theme::focusRings::visible());
+                expectEquals (ringPixels(), 0, "after a click: no ring");
+                theme::focusRings::setVisibleForTests (true);
+                expect (theme::focusRings::visible());
+                expect (ringPixels() > 0, "after Tab: the ring");
+                theme::focusRings::setVisibleForTests (false);
             }
         }
 

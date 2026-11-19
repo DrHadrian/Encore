@@ -693,3 +693,27 @@ buildable and tested, for players and for every branch started from it.
   on #17: 0 % hits, MSVC 14.51 after 14.52). The cache key now includes the
   MSVC version, so each compiler keeps its own cache.
 
+## 0059 — Focus rings only after the keyboard; no control takes focus from a click
+
+Some buttons showed a blue rectangle after a click, until the next click
+elsewhere. That was the keyboard-focus ring, in two situations:
+- **The amp builder's buttons** (Load capture…, Duplicate, Remove) still took
+  focus when clicked, against decision 0025. That also meant Space or the arrows
+  would have gone to them.
+- **The default button of a dialog** (Rename, Delete…) gets focus so Enter
+  works, and the ring was drawn although the keyboard was never used.
+
+Now (as DESIGN-SYSTEM already said: "only after keyboard navigation, never on click"):
+- **Rings follow CSS `:focus-visible`** (`theme::focusRings`). A ring is drawn
+  only when focus last moved by the keyboard. A click anywhere hides it until
+  Tab or another key moves focus again. Focus itself doesn't change, so Enter
+  and Space work as before. Every ring goes through `paint::focusRing`, so all
+  controls follow this.
+- **A test walks every control** under the main window (Edit, Routing, the
+  amp builder with each kind of part selected, Stage). It fails on any button,
+  slider or popup that would take keyboard focus from a click.
+- **The same day, a stray mark** next to the amp builder's picker turned out to
+  be its `paint()` cutting 15 px off the title area on every repaint. A test now
+  repaints the toolbar 13 times and compares, and a scan of every `paint()` found
+  no other place that changes state.
+
