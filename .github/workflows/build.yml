@@ -32,6 +32,10 @@ env:
   # 10 minutes (its log names the test that was running), not after hours. A
   # test group takes about a minute (Release) to three (Debug, 2-minute soak).
   ENCORE_TEST_TIMEOUT: ${{ (github.event_name == 'schedule' || (inputs.soak_seconds != '' && inputs.soak_seconds != '120')) && '7200' || '600' }}
+  # A test step that makes no progress for this long (the longest takes about
+  # 20 s; the soak reports as it goes) ends its process at once, printing the
+  # step and every thread's stack: a hang shows where it is (Tests/HangWatchdog.h).
+  ENCORE_TEST_HANG_SECONDS: '180'
   # Link-time optimisation only for the players' build: every night and when run
   # by hand. Pull requests and pushes to main build alike, so main's compiler
   # cache is the one every pull request reuses (LTO objects can't be reused

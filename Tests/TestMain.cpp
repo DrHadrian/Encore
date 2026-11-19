@@ -12,6 +12,7 @@
 #endif
 
 #include "session/PluginCatalog.h"
+#include "HangWatchdog.h"
 
 #if JUCE_WINDOWS && defined (_DEBUG)
 namespace
@@ -67,12 +68,17 @@ int main (int argc, char* argv[])
     if (encore::PluginCatalog::isScannerCommandLine (args))
         return encore::PluginCatalog::runScanner (args);
 
+    // ENCORE_TEST_HANG_SECONDS=<n> (CI): a run with no progress for n seconds
+    // prints where it stopped (on Windows, every thread's stack) and ends.
+    const encore::testing::HangWatchdog watchdog;
+
     // JUCE logs to the debugger on Windows: print each step to the console
     // (flushed), so a crash in CI shows where it happened.
     struct ConsoleRunner final : juce::UnitTestRunner
     {
         void logMessage (const juce::String& message) override
         {
+            encore::testing::HangWatchdog::step (message.toStdString());
             std::cout << message << std::endl;
         }
     };

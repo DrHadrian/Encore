@@ -543,6 +543,8 @@ if(ENCORE_BUILD_TESTS)
 
     target_sources(EncoreTests PRIVATE
         Tests/TestMain.cpp
+        Tests/HangWatchdog.cpp
+        Tests/HangWatchdog.h
         Tests/AllocationCounter.cpp
         Tests/AllocationCounter.h
         Tests/CabTests.cpp
@@ -592,6 +594,18 @@ if(ENCORE_BUILD_TESTS)
             nam_core)
 
     encore_precompile_headers(EncoreTests)
+    # Plain C++ that includes windows.h: no JUCE precompiled header.
+    set_source_files_properties(Tests/HangWatchdog.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+
+    if(WIN32)
+        # The hang watchdog prints symbolised stacks: DbgHelp, and a PDB in
+        # Release too (the objects already carry the debug info, /Z7). /DEBUG
+        # would switch off these two optimisations; they stay on.
+        target_link_libraries(EncoreTests PRIVATE dbghelp)
+        if(MSVC)
+            target_link_options(EncoreTests PRIVATE "$<$<CONFIG:Release>:/DEBUG;/OPT:REF;/OPT:ICF>")
+        endif()
+    endif()
 
     # The tests run as four processes in parallel (ctest -j): the long ones
     # (robustness and its soak, plugins, screens) each on their own, the
