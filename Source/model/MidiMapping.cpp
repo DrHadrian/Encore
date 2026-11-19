@@ -21,6 +21,7 @@ namespace
         { MidiAction::mute,          "mute",          "Mute" },
         { MidiAction::tuner,         "tuner",         "Tuner" },
         { MidiAction::panic,         "panic",         "Panic" },
+        { MidiAction::muteOutput,    "muteOutput",    "Mute output" },
     };
 
     const char* kindId (MidiTrigger::Kind k)
@@ -55,6 +56,14 @@ juce::String describe (MidiAction action, int index)
                        : juce::String (a.label);
 
     return "?";
+}
+
+juce::String describe (const MidiBinding& binding)
+{
+    if (binding.action == MidiAction::muteOutput)
+        return describe (binding.action, binding.index) + ": " + binding.output;
+
+    return describe (binding.action, binding.index);
 }
 
 juce::String describe (const MidiTrigger& t)
@@ -151,6 +160,10 @@ juce::var bindingsToVar (const std::vector<MidiBinding>& bindings)
         o->setProperty ("kind", kindId (b.trigger.kind));
         o->setProperty ("channel", b.trigger.channel);
         o->setProperty ("number", b.trigger.number);
+
+        if (b.action == MidiAction::muteOutput)
+            o->setProperty ("output", b.output);
+
         list.add (juce::var (o));
     }
 
@@ -186,6 +199,15 @@ std::vector<MidiBinding> bindingsFromVar (const juce::var& v)
                                             : MidiTrigger::Kind::controlChange;
             b.trigger.channel = juce::jlimit (0, 16, (int) item.getProperty ("channel", 0));
             b.trigger.number = juce::jlimit (0, 127, (int) item.getProperty ("number", 0));
+
+            if (b.action == MidiAction::muteOutput)
+            {
+                b.output = item.getProperty ("output", {}).toString().trim();
+
+                if (b.output.isEmpty())
+                    continue;   // muting nothing
+            }
+
             bindings.push_back (b);
         }
     }

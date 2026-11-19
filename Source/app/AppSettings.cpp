@@ -17,6 +17,9 @@ namespace keys
     static constexpr auto midiMap     = "midiBindings";
     static constexpr auto midiOut     = "midiOutput";
     static constexpr auto layoutInspector = "layoutEditorInspector";
+    static constexpr auto settingsTab = "settingsTab";
+    static constexpr auto routing     = "routing";
+    static constexpr auto mixerView = "mixerViewOpen";   // replaces "outputStripsFull" (v3.2: the Compact | Full toggle is gone)
 }
 
 AppSettings::AppSettings() : AppSettings (juce::File()) {}
@@ -72,6 +75,37 @@ void AppSettings::setMasterGainDecibels (float dB)
 {
     file().setValue (keys::masterGain, (double) dB);
 }
+
+RoutingConfig AppSettings::getRouting() const
+{
+    const auto guitarChannel = juce::jmax (0, getGuitarInputChannel()) + 1;
+    const auto text = file().getValue (keys::routing);
+
+    if (text.isEmpty())
+        return makeDefaultRouting (guitarChannel);
+
+    return routingFromVar (juce::JSON::parse (text), guitarChannel);
+}
+
+void AppSettings::setRouting (const RoutingConfig& routing)
+{
+    const auto clean = routing.sanitised();
+    file().setValue (keys::routing, juce::JSON::toString (routingToVar (clean), true));
+
+    // Older Encore versions (and anything still reading it) keep the guitar on the first input.
+    setGuitarInputChannel (clean.inputs.front().channel - 1);
+}
+
+bool AppSettings::hasRouting() const
+{
+    return file().containsKey (keys::routing);
+}
+
+bool AppSettings::getMixerViewOpen() const           { return file().getBoolValue (keys::mixerView, false); }
+void AppSettings::setMixerViewOpen (bool open)       { file().setValue (keys::mixerView, open); }
+
+juce::String AppSettings::getSettingsTab() const               { return file().getValue (keys::settingsTab, "audio"); }
+void AppSettings::setSettingsTab (const juce::String& tab)      { file().setValue (keys::settingsTab, tab); }
 
 bool AppSettings::getLayoutInspectorShown() const
 {

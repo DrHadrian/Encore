@@ -13,6 +13,7 @@
 #include "app/AppSettings.h"
 #include "app/MainComponent.h"
 #include "model/ShowFolder.h"
+#include "model/ShowJson.h"
 #include "session/RecoveryFile.h"
 #include "ui/theme/EncoreTheme.h"
 
@@ -79,6 +80,50 @@ public:
                 const auto minimum = main.getMinimumEditSize();
                 expect (minimum.x >= theme::size::minEditWidth && minimum.y >= theme::size::minEditHeight);
             }
+
+            beginTest ("Amp builder (F8): builds the selected amp block's amp; Save amp gives the block its face");
+            {
+                MainComponent main (settings, std::make_unique<BoardDeviceType>());
+                main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+                pump (1500);
+
+                // The amp block (the board's patch starts with it).
+                auto* strip = main.getChainStrip();
+                expect (strip != nullptr);
+
+                if (strip != nullptr)
+                    strip->selectBlock (0);
+
+                pump (100);
+                expect (main.getBlockPanel() != nullptr && main.getBlockPanel()->getAmpFace() != nullptr, "the amp block shows a face");
+
+                expect (main.getMixerTab().isVisible(), "the mixer tab shows with the bottom row");
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F8Key));
+                expect (main.isShowingAmpBuilder());
+                expect (! main.getMixerTab().isVisible(), "the builder covers the bottom row, its tab too");
+
+                if (auto* builder = main.getAmpBuilder())
+                {
+                    expectEquals (builder->getAmp().name, juce::String ("Encore Gold 30"), "the block has no amp of its own yet");
+                    renderSnapshot (main, "v32-amp-builder-edit");
+                    builder->applyTemplate ("jazz");
+                    expect (builder->save());
+                    pump (50);
+                    expect (main.getBlockPanel() != nullptr && main.getBlockPanel()->getAmpFace() != nullptr
+                            && main.getBlockPanel()->getAmpFace()->getAmp().look.body == "thin", "the block shows the saved amp");
+                }
+
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F8Key));
+                expect (! main.isShowingAmpBuilder(), "F8 again: back to the patches");
+                expect (main.getMixerTab().isVisible());
+
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F5Key));
+                expect (main.isShowingStage());
+                expect (! main.getMixerTab().isVisible(), "no mixer tab on Stage");
+                main.keyPressed (juce::KeyPress (juce::KeyPress::F5Key));
+                expect (! main.isShowingStage(), "F5 again: back to Edit");
+                expect (main.getMixerTab().isVisible());
+            }
         }
 
         beginTest ("Full list: typing a name (full-list-typing.png)");
@@ -107,10 +152,36 @@ public:
             expect (hasContent (renderSnapshot (main, "full-list-typing")));
         }
 
-        beginTest ("Pre-show check (preshow-check.png)");
+        beginTest ("Pre-show check, with a plugin that isn't installed (preshow-check.png)");
         {
+            // The board's show, with H9 Shimmer in patch Lead (not on this computer).
+            const auto checkFolder = makeBoardShow (root.getChildFile ("Pre-show check show"));
+            {
+                const auto showFile = checkFolder.getChildFile ("show.json");
+                juce::String error;
+                auto show = json::fromJson (showFile.loadFileAsString(), error);
+                expect (show.has_value(), error);
+
+                if (show)
+                {
+                    for (auto& patch : show->patches)
+                    {
+                        if (patch.name == "Lead")
+                        {
+                            BlockModel shimmer;
+                            shimmer.id = "lead-shimmer";
+                            shimmer.type = pluginBlockType;
+                            shimmer.plugin = { "VST3", "H9 Shimmer", "Eventide", 0, "3.7.2", {} };
+                            patch.mainLane().blocks.push_back (shimmer);
+                        }
+                    }
+
+                    expect (showFile.replaceWithText (json::toJson (*show)));
+                }
+            }
+
             AppSettings settings (root.getChildFile ("Settings check"));
-            settings.setLastShowFolder (showFolder);
+            settings.setLastShowFolder (checkFolder);
             const auto setup = boardDeviceSetup();
             settings.setAudioDeviceState (&setup);
 
@@ -248,6 +319,31 @@ public:
 
             main.closeSettings();
             expect (! main.isShowingSettings());
+
+            // Settings... (v3.2): one button, on the tab used last (here MIDI), remembered on this computer.
+            expectEquals (settings.getSettingsTab(), juce::String ("midi"));
+            juce::TextButton* settingsButton = nullptr;
+            std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+            {
+                for (auto* child : c.getChildren())
+                {
+                    if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && b->getButtonText() == juce::String (juce::CharPointer_UTF8 ("Settings\xe2\x80\xa6")))
+                        settingsButton = b;
+
+                    find (*child);
+                }
+            };
+            find (main);
+            expect (settingsButton != nullptr, juce::String (juce::CharPointer_UTF8 ("the toolbar's Settings\xe2\x80\xa6 button")));
+            expect (settingsButton != nullptr && settingsButton->getTooltip() == "Settings: Audio, MIDI and Plugins (opens on the tab you used last)");
+
+            if (settingsButton != nullptr && settingsButton->onClick != nullptr)
+                settingsButton->onClick();
+
+            expect (main.getShownSettingsTab() == SettingsWindow::Tab::midi, juce::String (juce::CharPointer_UTF8 ("Settings\xe2\x80\xa6 opens the tab used last")));
+            main.openSettings (SettingsWindow::Tab::plugins);
+            main.closeSettings();
+            expectEquals (settings.getSettingsTab(), juce::String ("plugins"));
         }
 
         beginTest ("Edit view: no audio device at all");

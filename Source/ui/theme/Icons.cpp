@@ -3,6 +3,8 @@
 
 #include "ui/theme/Icons.h"
 
+#include <map>
+
 #include "EncoreUiAssets.h"
 
 namespace encore::theme
@@ -46,6 +48,7 @@ namespace
             using namespace EncoreUiAssets;
             const std::pair<Icon, std::pair<const char*, int>> files[] = {
                 { Icon::alert,        { alert_svg,        alert_svgSize } },
+                { Icon::amp,          { amp_svg,          amp_svgSize } },
                 { Icon::arrowRight,   { arrowright_svg,   arrowright_svgSize } },
                 { Icon::audioWave,    { audiowave_svg,    audiowave_svgSize } },
                 { Icon::check,        { check_svg,        check_svgSize } },
@@ -53,14 +56,21 @@ namespace
                 { Icon::chevronUp,    { chevronup_svg,    chevronup_svgSize } },
                 { Icon::close,        { close_svg,        close_svgSize } },
                 { Icon::duplicate,    { duplicate_svg,    duplicate_svgSize } },
+                { Icon::jack,         { jack_svg,         jack_svgSize } },
                 { Icon::lock,         { lock_svg,         lock_svgSize } },
+                { Icon::merge,        { merge_svg,        merge_svgSize } },
                 { Icon::midiPort,     { midiport_svg,     midiport_svgSize } },
                 { Icon::minus,        { minus_svg,        minus_svgSize } },
                 { Icon::plug,         { plug_svg,         plug_svgSize } },
                 { Icon::plus,         { plus_svg,         plus_svgSize } },
+                { Icon::route,        { route_svg,        route_svgSize } },
+                { Icon::settings,     { settings_svg,     settings_svgSize } },
                 { Icon::sidebarRight, { sidebarright_svg, sidebarright_svgSize } },
                 { Icon::sliders,      { sliders_svg,      sliders_svgSize } },
+                { Icon::split,        { split_svg,        split_svgSize } },
                 { Icon::trash,        { trash_svg,        trash_svgSize } },
+                { Icon::warn,         { warn_svg,         warn_svgSize } },
+                { Icon::window,       { window_svg,       window_svgSize } },
             };
 
             for (auto& [icon, file] : files)
@@ -97,8 +107,63 @@ namespace
 
             if (box.isEmpty() && drawable != nullptr)
                 box = drawable->getDrawableBounds();
+
+        }
+
+        /** The wordmark in another colour (made once per colour; message thread). */
+        const juce::Drawable* coloured (juce::Colour colour) const
+        {
+            auto& made = byColour[colour.getARGB()];
+
+            if (made == nullptr && drawable != nullptr)
+            {
+                made = drawable->createCopy();
+                made->replaceColour (juce::Colour (0xffD9D9DE), colour);
+            }
+
+            return made.get();
+        }
+
+        mutable std::map<juce::uint32, std::unique_ptr<juce::Drawable>> byColour;
+    };
+
+    struct Clef
+    {
+        juce::Rectangle<float> box;
+        juce::String svg;
+        mutable std::map<juce::uint32, std::unique_ptr<juce::Drawable>> byColour;
+
+        Clef()
+        {
+            using namespace EncoreUiAssets;
+            svg = juce::String::fromUTF8 (encoreiconclef_svg, encoreiconclef_svgSize);
+
+            if (auto d = juce::Drawable::createFromSVGString (svg))
+            {
+                box = d->getContentBounds();
+
+                if (box.isEmpty())
+                    box = d->getDrawableBounds();
+            }
+        }
+
+        /** The clef in a colour: its "currentColor" set to it (made once per colour). */
+        const juce::Drawable* coloured (juce::Colour colour) const
+        {
+            auto& made = byColour[colour.getARGB()];
+
+            if (made == nullptr)
+                made = juce::Drawable::createFromSVGString (svg.replace ("currentColor", "#" + colour.toDisplayString (false)));
+
+            return made.get();
         }
     };
+
+    const Clef& clef()
+    {
+        static const Clef c;
+        return c;
+    }
 
     const Logo& logo()
     {
@@ -130,6 +195,22 @@ void drawLogo (juce::Graphics& g, juce::Rectangle<float> bounds)
 
     if (l.drawable != nullptr && ! l.box.isEmpty())
         l.drawable->draw (g, 1.0f, juce::RectanglePlacement (juce::RectanglePlacement::centred).getTransformToFit (l.box, bounds));
+}
+
+void drawLogo (juce::Graphics& g, juce::Rectangle<float> bounds, juce::Colour colour, juce::RectanglePlacement placement)
+{
+    const auto& l = logo();
+
+    if (auto* d = l.coloured (colour); d != nullptr && ! l.box.isEmpty())
+        d->draw (g, colour.getFloatAlpha(), placement.getTransformToFit (l.box, bounds));
+}
+
+void drawClef (juce::Graphics& g, juce::Rectangle<float> bounds, juce::Colour colour)
+{
+    const auto& c = clef();
+
+    if (auto* d = c.coloured (colour.withAlpha (1.0f)); d != nullptr && ! c.box.isEmpty())
+        d->draw (g, colour.getFloatAlpha(), juce::RectanglePlacement (juce::RectanglePlacement::centred).getTransformToFit (c.box, bounds));
 }
 
 float logoAspect()

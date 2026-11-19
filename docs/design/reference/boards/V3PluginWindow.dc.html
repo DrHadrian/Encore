@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Encore v3 — Plugin window (plugin without its own editor)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#161618}
+*{scrollbar-width:thin;scrollbar-color:#4A4A4F transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#4A4A4F;border:2px solid transparent;border-radius:6px;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#5E5E64;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+a{color:#4C8DF6}a:hover{color:#82AEFA}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #4C8DF6;outline-offset:1px}
+.b{height:24px;padding:0 12px;border:1px solid #0E0E10;border-radius:5px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12),0 1px 0 rgba(0,0,0,0.4);color:#E8E8EB;font-size:12px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.pri{border-color:#0B3E86;background:linear-gradient(180deg,#4C8DF6,#2E6FDC);color:#FFFFFF}
+.ghost{position:absolute;background:#1D1D20;border:1px solid #0A0A0B;border-radius:6px}
+
+.pri{border-color:#0B3E86 !important;background:linear-gradient(180deg,#4C8DF6,#2E6FDC) !important;color:#FFFFFF !important}
+.sm{height:18px !important;font-size:10.5px !important;padding:0 7px !important;letter-spacing:0;text-transform:none}
+.ut{position:absolute;box-sizing:border-box;border-radius:8px;background:linear-gradient(180deg,#2C2C30,#1F1F22);border:1px solid #3A3A3F;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 6px 6px rgba(0,0,0,0.45);font-family:Inter,sans-serif;overflow:hidden}
+.ut .lb{position:absolute;left:7px;top:6px;font-size:8.5px;font-weight:800;letter-spacing:0.08em;color:#85858C}
+.ut .dot{position:absolute;right:7px;top:8px;width:6px;height:6px;border-radius:50%}
+.ut .nm{position:absolute;left:6px;right:6px;bottom:7px;font-size:10.5px;font-weight:600;color:#E8E8EB;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ut .sb{position:absolute;left:6px;right:6px;bottom:20px;font-size:9px;color:#85858C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ut .ic{position:absolute;left:0;right:0;top:22px;display:flex;justify-content:center;color:#C4C4C9}
+.sel{outline:3px solid #4FA3FF;outline-offset:3px}
+.chip{display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:3px;font-size:9.5px;font-weight:700;letter-spacing:0.02em;white-space:nowrap}
+.c-mute{background:#5A1A16;color:#FFB4AD}
+.c-amber{background:#3D2F12;color:#FFD27A}
+.c-exp{background:#1B2C45;color:#7FC4FF}
+.c-off{background:#2A2A2E;color:#8E8E95}
+.c-green{background:#1E3A24;color:#4CD964}
+.mb{width:24px;height:20px;border:1px solid #0E0E10;border-radius:4px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12);color:#C4C4C9;font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.mb-on{border-color:#6E120D;background:linear-gradient(180deg,#E8483E,#BF2C25);color:#FFFFFF}
+.meterh{height:4px;border-radius:2px;background:#0E0E10;position:relative;overflow:hidden}
+.meterh>i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#2BC24F 0,#2BC24F 80%,#E8CF3A)}
+.meterv{width:4px;border-radius:2px;background:#0E0E10;position:relative;overflow:hidden}
+.meterv>i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(0deg,#2BC24F 0,#2BC24F 70%,#E8CF3A)}
+.grp{background:#1A1A1D;border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03)}
+.gt{font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#85858C;padding:0 2px 6px}
+.th{font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#6E6E75}
+.pop{height:22px;border:1px solid #0C0C0E;border-radius:5px;background:linear-gradient(180deg,#46464B,#38383C);box-shadow:inset 0 1px 0 rgba(255,255,255,0.1);color:#E8E8EB;font-size:12px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box;white-space:nowrap;overflow:hidden}
+.menu{position:absolute;background:rgba(44,44,48,0.97);border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 14px 40px rgba(0,0,0,0.6);padding:5px;font-size:12.5px;color:#E8E8EB;z-index:10}
+.mi{height:24px;display:flex;align-items:center;gap:4px;padding:0 10px 0 6px;border-radius:4px;white-space:nowrap}
+.mi .tk{width:14px}
+.mi .sc{color:#85858C;font-size:11px;margin-left:auto;padding-left:16px}
+.mi.hi{background:#2E62C4;color:#FFFFFF}
+.mi.hi .sc{color:#D3E1FA}
+.mi.dim{color:#6E6E75}
+.msep{height:1px;background:#3A3A3F;margin:4px 6px}
+.mhd{height:22px;display:flex;align-items:center;padding:0 10px 0 20px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6E6E75}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #161618; color: #E8E8EB; font-family: Inter, -apple-system, system-ui, sans-serif; font-size: 12.5px; position: relative; overflow: hidden">
+<div aria-hidden="true" style="position: absolute; inset: 0; filter: blur(2px); opacity: 0.9"><div style="position: absolute; left: 0; right: 0; top: 0; height: 44px; background: linear-gradient(180deg, #333337, #28282B)"></div><div class="ghost" style="left: 8px; top: 52px; width: 250px; height: 728px"></div><div class="ghost" style="left: 266px; top: 88px; width: 888px; height: 136px"></div><div class="ghost" style="left: 266px; top: 232px; width: 888px; height: 548px"></div><div class="ghost" style="left: 1162px; top: 52px; width: 270px; height: 728px"></div><div class="ghost" style="left: 8px; top: 788px; width: 1424px; height: 104px"></div></div><div style="position: absolute; inset: 0; background: rgba(0,0,0,0.15)"></div><div role="dialog" aria-label="ValhallaRoom — Clean" style="position: absolute; left: 430px; top: 110px; width: 580px; height: 560px; background: #1D1D20; border: 1px solid #3A3A3F; border-radius: 8px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,0.7); display: flex; flex-direction: column"><div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; background: #202022; border-bottom: 1px solid #0A0A0B"><span style="padding: 0 12px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #E8E8EB"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v4M15 3v4"></path><path d="M7 7h10v4a5 5 0 0 1-10 0z"></path><path d="M12 16v5"></path></svg>ValhallaRoom — Clean</span><span style="flex-grow: 1"></span><span style="width: 46px; text-align: center; color: #A9A9AF">✕</span></div><div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 16px; background: linear-gradient(180deg, #2A2A2E, #232326); border-bottom: 1px solid #0A0A0B"><span class="chip c-off" style="height: 18px">VST3</span><span style="font-size: 13px; font-weight: 700">ValhallaRoom</span><span style="font-size: 12px; color: #85858C">has no window of its own: its parameters</span><span style="flex-grow: 1"></span><span style="font-size: 11.5px; color: #85858C">13 parameters</span></div><div style="flex-grow: 1; overflow: auto"><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: transparent"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Mix</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 35%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(35% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">35 %</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: #1C1C1F"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Pre-delay</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 20%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(20% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">20 ms</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: transparent"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Decay</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 45%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(45% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">2.8 s</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: #1C1C1F"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Size</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 60%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(60% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">60 %</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: transparent"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Low cut</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 15%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(15% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">120 Hz</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: #1C1C1F"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">High cut</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 70%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(70% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">8.2 kHz</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: transparent"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Early/Late</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 50%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(50% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">50 %</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: #1C1C1F"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Mod depth</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 30%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(30% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">30 %</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: transparent"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Diffusion</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 80%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(80% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">80 %</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: #1C1C1F"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Mod rate</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 25%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(25% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">0.5 Hz</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: transparent"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Bass mult</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 40%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(40% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">0.8 ×</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: #1C1C1F"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Bass xover</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 30%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(30% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">400 Hz</span></div><div style="height: 32px; display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; padding: 0 16px; border-bottom: 1px solid #1F1F22; background: transparent"><span style="color: #C4C4C9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Mode</span><span style="position: relative; height: 16px"><span style="position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 2px; background: #0E0E10"></span><span style="position: absolute; left: 0; top: 6px; width: 0%; height: 4px; border-radius: 2px; background: #6E6E75"></span><span style="position: absolute; left: calc(0% - 6px); top: 2px; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(180deg,#F2F2F4,#B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span><span style="text-align: right; font-variant-numeric: tabular-nums">Large Room</span></div></div><div style="height: 30px; flex-shrink: 0; display: flex; align-items: center; padding: 0 16px; border-top: 1px solid #111113; font-size: 11px; color: #85858C">Changes save with the patch. The window comes back when the patch rebuilds.</div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var problems = [
+      ['Foot controller not connected', 'FCB1010 (USB)', 'MIDI settings...']
+    ];
+    var warnings = [
+      ['Driver: Windows Audio', 'Headset (2- EarPods) - use the interface\'s ASIO driver for low latency', 'Audio settings...'],
+      ['Buffer 480 samples at 48.0 kHz', 'About 20.0 ms round trip - 64 or 128 feels best to play', 'Audio settings...'],
+      ['Dropouts since the last reset', '0 overruns, 1 driver dropouts. Reset, then play through the show\'s heaviest patches.', 'Reset counters'],
+      ['Output is muted', 'Unmute before the show.', 'Unmute']
+    ];
+    var oks = [
+      ['CPU 7 %', 'Headroom for switching and ringing tails', ''],
+      ['Mains power', '', ''],
+      ['Show saved', '', '']
+    ];
+    var mk = function (list, kind) {
+      return list.map(function (r) {
+        var p = kind === 'problem', w = kind === 'warning';
+        return {
+          title: r[0], detail: r[1], fix: r[2], hasFix: r[2] !== '',
+          icon: p ? '✕' : (w ? '!' : '✓'),
+          dot: p ? '#D83A30' : (w ? '#FF9F0A' : '#1E3A24'),
+          ink: p ? '#FFFFFF' : (w ? '#1A1200' : '#4CD964'),
+          titleColor: p ? '#FF8A80' : '#E8E8EB',
+          bg: p ? 'rgba(216,58,48,0.08)' : 'transparent',
+          btnCls: p ? 'b pri' : 'b'
+        };
+      });
+    };
+    return {
+      summary: problems.length + ' problem(s) to fix before the show',
+      counts: problems.length + ' problem · ' + warnings.length + ' to look at · ' + oks.length + ' fine',
+      groups: [
+        { name: 'Problems', color: '#FF8A80', rows: mk(problems, 'problem') },
+        { name: 'To look at', color: '#FFB340', rows: mk(warnings, 'warning') },
+        { name: 'Fine', color: '#4CD964', rows: mk(oks, 'ok') }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

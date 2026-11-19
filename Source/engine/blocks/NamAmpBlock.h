@@ -38,6 +38,7 @@ public:
     juce::String getLoadedFileInfo() const override;
     void collectGarbage() override { models.collectGarbage(); }
     int getLatencySamples() const noexcept override;
+    int getOutputChannels (int) const noexcept override { return 1; }   // an amp is mono
 
     //== Message thread ========================================================
     /** Hands a loaded model to the audio thread (prepares it first if needed).
@@ -63,7 +64,7 @@ private:
     void runModel (NamModel* model, float* samples, const float* normaliseAmount, int numSamples) noexcept;
     void updateToneStack (int numSamples) noexcept;
 
-    const FileSlot fileSlot { "Load amp...", "*.nam" };
+    const FileSlot fileSlot { juce::String (juce::CharPointer_UTF8 ("Load amp\xe2\x80\xa6")), "*.nam" };
 
     Parameter& inputGain;
     Parameter& outputGain;

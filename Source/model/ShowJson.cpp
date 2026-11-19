@@ -2,6 +2,7 @@
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
 #include "model/ShowJson.h"
+#include "model/Routing.h"
 
 namespace encore::json
 {
@@ -32,6 +33,15 @@ namespace
     {
         const auto v = get (o, key);
         return v.isVoid() ? fallback : (bool) v;
+    }
+
+    bool hasSend (const PatchModel& patch, const juce::String& output)
+    {
+        for (const auto& s : patch.sends)
+            if (routing::sameName (s.output, output))
+                return true;
+
+        return false;
     }
 
     int integer (const juce::var& o, const char* key, int fallback)
@@ -92,6 +102,9 @@ namespace
         if (b.stomp > 0)
             set (o, "stomp", b.stomp);
 
+        if (b.ampPreset.isNotEmpty())
+            set (o, "ampPreset", b.ampPreset);
+
         if (b.type == pluginBlockType || ! b.plugin.isEmpty())
         {
             auto plugin = object();
@@ -135,6 +148,7 @@ namespace
         b.file = str (o, "file");
         b.stomp = juce::jlimit (0, maxStomps, integer (o, "stomp", 0));
         b.state = str (o, "state");
+        b.ampPreset = str (o, "ampPreset");
 
         if (const auto plugin = get (o, "plugin"); plugin.isObject())
         {
@@ -282,6 +296,27 @@ juce::var patchToVar (const PatchModel& patch)
     }
 
     set (o, "lanes", lanes);
+
+    if (! patch.sends.empty())
+    {
+        juce::Array<juce::var> sends;
+
+        for (auto& send : patch.sends)
+        {
+            auto v = object();
+            set (v, "output", send.output);
+            // -inf has no JSON number; an off send keeps its level for when it's turned back on.
+            set (v, "level", juce::jmax (send.levelDb, routing::silentDb));
+
+            if (! send.on)
+                set (v, "on", false);
+
+            sends.add (v);
+        }
+
+        set (o, "sends", sends);
+    }
+
     return o;
 }
 
@@ -309,6 +344,19 @@ PatchModel patchFromVar (const juce::var& o)
     if (patch.lanes.empty())
         patch.lanes.emplace_back();
 
+    forEachIn (o, "sends", [&] (const juce::var& v)
+    {
+        const auto output = str (v, "output").trim();
+
+        if (output.isEmpty() || hasSend (patch, output))
+            return;   // unnamed, or listed twice: the first wins
+
+        const auto level = get (v, "level");
+        const auto dB = (level.isDouble() || level.isInt() || level.isInt64()) ? (float) (double) level : 0.0f;
+        patch.sends.push_back ({ output, routing::clampLevel (dB), flag (v, "on", true) && dB > routing::silentDb });
+    });
+
+    normaliseSplit (patch);
     return patch;
 }
 
@@ -333,6 +381,16 @@ juce::String toJson (const ShowModel& show)
     set (midi, "bindings", bindingsToVar (show.midiBindings));
     set (root, "midi", midi);
     set (root, "stage", stageToVar (show.stage));
+
+    if (! show.amps.empty())
+    {
+        juce::Array<juce::var> amps;
+
+        for (const auto& a : show.amps)
+            amps.add (ampPreset::toVar (a));
+
+        set (root, "amps", amps);
+    }
 
     // Full precision, so values survive a save/load round trip exactly.
     return juce::JSON::toString (root, juce::JSON::FormatOptions{}.withSpacing (juce::JSON::Spacing::multiLine));
@@ -385,6 +443,16 @@ std::optional<ShowModel> fromJson (const juce::String& text, juce::String& error
     }
 
     show.stage = stageFromVar (get (root, "stage"));
+
+    // Amps built in the amp builder; a damaged one is left out (its blocks show the default face).
+    forEachIn (root, "amps", [&] (const juce::var& a)
+    {
+        juce::String ampError;
+
+        if (auto amp = ampPreset::fromVar (a, ampError); amp && show.findAmp (amp->id) == nullptr)
+            show.amps.push_back (std::move (*amp));
+    });
+
     return show;
 }
 

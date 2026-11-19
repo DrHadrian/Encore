@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Encore v3.2 — Amp builder (new feature, to plan)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Righteous&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#161618}
+*{scrollbar-width:thin;scrollbar-color:#66666D transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#66666D;border:2px solid transparent;border-radius:6px;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#5E5E64;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+a{color:#4C8DF6}a:hover{color:#82AEFA}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #4C8DF6;outline-offset:1px}
+.tb{background:linear-gradient(180deg,#333337,#28282B);border-bottom:1px solid #0A0A0B;box-shadow:inset 0 1px 0 rgba(255,255,255,0.07)}
+.pane{background:#1D1D20;border:1px solid #0A0A0B;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.hd{height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 6px 0 10px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#9A9AA1;background:linear-gradient(180deg,#252528,#202023);border-bottom:1px solid #111113}
+.b{height:24px;padding:0 10px;border:1px solid #0E0E10;border-radius:5px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12),0 1px 0 rgba(0,0,0,0.4);color:#E8E8EB;font-size:12px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.b-on{background:linear-gradient(180deg,#252528,#2E2E31);box-shadow:inset 0 1px 3px rgba(0,0,0,0.7)}
+.ib{width:20px;height:20px;padding:0;border:0;border-radius:4px;background:transparent;color:#A9A9AF;display:inline-flex;align-items:center;justify-content:center}
+.ib:hover{background:#2E2E32;color:#FFFFFF}
+.lcd{background:linear-gradient(180deg,#1C232C,#12171D);border:1px solid #07090B;border-radius:6px;box-shadow:inset 0 1px 4px rgba(0,0,0,0.65),0 1px 0 rgba(255,255,255,0.05);color:#D5E4F7;font-variant-numeric: tabular-nums slashed-zero}
+.row{height:26px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:4px;font-size:12.5px;color:#E1E1E5}
+.fld{height:22px;border:1px solid #0C0C0E;border-radius:4px;background:#141416;box-shadow:inset 0 1px 2px rgba(0,0,0,0.6);color:#E1E1E5;font-size:12px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box}
+.k{font-size:11.5px;color:#A3A3AA}
+.kbd{font-size:10px;color:#8C8C93;border:1px solid #2E2E33;border-radius:3px;padding:0 4px}
+.board{background:linear-gradient(180deg,rgba(0,0,0,0.2),rgba(0,0,0,0.55)),url(/_blob/3d6f9110dbe6da1bfe549597457b1148) 0 0/192px 192px,#151516}
+.stage{background:radial-gradient(ellipse at 45% 25%,#3a3a3e,#1c1c1f 65%,#141416)}
+.chk{position:absolute;left:0;top:0;width:64px;height:64px;background:url(/_blob/8e462cd916a1546709639e2ebb36331d) 0 0/64px auto no-repeat}
+
+.pri{border-color:#0B3E86 !important;background:linear-gradient(180deg,#3570DA,#2860C6) !important;color:#FFFFFF !important}
+.sm{height:18px !important;font-size:10.5px !important;padding:0 7px !important;letter-spacing:0;text-transform:none}
+.ut{position:absolute;box-sizing:border-box;border-radius:8px;background:linear-gradient(180deg,#2C2C30,#1F1F22);border:1px solid #3A3A3F;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 6px 6px rgba(0,0,0,0.45);font-family:Inter,sans-serif;overflow:hidden}
+.ut .lb{position:absolute;left:7px;top:6px;font-size:8.5px;font-weight:800;letter-spacing:0.08em;color:#9A9AA1}
+.ut .dot{position:absolute;right:7px;top:8px;width:6px;height:6px;border-radius:50%}
+.ut .nm{position:absolute;left:6px;right:6px;bottom:7px;font-size:10.5px;font-weight:600;color:#E8E8EB;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ut .sb{position:absolute;left:6px;right:6px;bottom:20px;font-size:9px;color:#9A9AA1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ut .ic{position:absolute;left:0;right:0;top:22px;display:flex;justify-content:center;color:#C4C4C9}
+.sel{outline:3px solid #4FA3FF;outline-offset:3px}
+.chip{display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:3px;font-size:9.5px;font-weight:700;letter-spacing:0.02em;white-space:nowrap}
+.c-mute{background:#5A1A16;color:#FFB4AD}
+.c-amber{background:#3D2F12;color:#FFD27A}
+.c-exp{background:#1B2C45;color:#7FC4FF}
+.c-off{background:#2A2A2E;color:#A3A3AA}
+.c-green{background:#1E3A24;color:#4CD964}
+.mb{width:24px;height:20px;border:1px solid #0E0E10;border-radius:4px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12);color:#C4C4C9;font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.mb-on{border-color:#6E120D;background:linear-gradient(180deg,#D23C33,#B02A23);color:#FFFFFF}
+.meterh{height:4px;border-radius:2px;background:#0E0E10;position:relative;overflow:hidden}
+.meterh>i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#2BC24F 0,#2BC24F 80%,#E8CF3A)}
+.meterv{width:4px;border-radius:2px;background:#0E0E10;position:relative;overflow:hidden}
+.meterv>i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(0deg,#2BC24F 0,#2BC24F 70%,#E8CF3A)}
+.grp{background:#29292D;border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03)}
+.gt{font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#9A9AA1;padding:0 2px 6px}
+.th{font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#8C8C93}
+.pop{height:22px;border:1px solid #0C0C0E;border-radius:5px;background:linear-gradient(180deg,#46464B,#38383C);box-shadow:inset 0 1px 0 rgba(255,255,255,0.1);color:#E8E8EB;font-size:12px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box;white-space:nowrap;overflow:hidden}
+.menu{position:absolute;background:rgba(35,35,39,0.98);border:1px solid #0A0A0B;border-radius:10px;box-shadow:0 0 0 1px rgba(255,255,255,0.06) inset,0 12px 30px rgba(0,0,0,0.6);padding:4px;font-size:12px;color:#E8E8EB;z-index:10}
+.mi{height:24px;display:flex;align-items:center;gap:4px;padding:0 10px 0 6px;border-radius:6px;white-space:nowrap}
+.mi .tk{width:14px}
+.mi .sc{color:#9A9AA1;font-size:11px;margin-left:auto;padding-left:16px}
+.mi.hi{background:#2E62C4;color:#FFFFFF}
+.mi.hi .sc{color:#EEF3FD}
+.mi.dim{color:#8C8C93}
+.msep{height:1px;background:#3A3A3F;margin:4px 6px}
+.mhd{height:22px;display:flex;align-items:center;padding:0 10px 0 20px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#8C8C93}
+
+
+/* v3.2: status bar (from v4) in place of the blue LCD */
+.sbar{background:#121214 !important;border:1px solid #2A2A2F !important;border-radius:7px !important;box-shadow:none !important;color:#F2F2F4 !important;gap:0 !important;padding:0 !important;font-variant-numeric:tabular-nums slashed-zero}
+.sbar > span{flex-direction:column-reverse !important;justify-content:center;padding:0 14px;white-space:nowrap;align-self:stretch}
+.sbar > span + span{border-left:1px solid #2A2A2F}
+
+/* amp builder */
+.ab-lib{width:100%;height:30px;display:flex;align-items:center;gap:9px;padding:0 8px;border:0;border-radius:4px;background:transparent;font:inherit;font-size:12.5px;color:#E1E1E5;text-align:left;cursor:grab}
+.ab-lib:hover{background:#2A2A2F}
+.ab-ico{width:22px;height:18px;border-radius:3px;background:#2A2D34;border:1px solid #3A3E47;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;font-size:9px;font-weight:700;color:#B9BEC9}
+.ab-gh{padding:10px 4px 4px;font-size:10px;font-weight:700;letter-spacing:0.08em;color:#8C8C93;text-transform:uppercase}
+.ab-row{display:grid;grid-template-columns:86px minmax(0,1fr);align-items:center;gap:8px;min-height:26px}
+.ab-row>span:first-child{font-size:11.5px;color:#A3A3AA}
+.ab-sw{width:22px;height:22px;border-radius:5px;border:1px solid #0A0A0B;padding:0;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.06);background-size:cover;background-position:center}
+.ab-sw-on{outline:2px solid #E8E8EB;outline-offset:1px}
+.ab-part{position:absolute;cursor:grab}
+.ab-sel{outline:1px dashed #6EA5FA;outline-offset:3px}
+.ab-bad{outline:1px dashed #FFB340;outline-offset:3px}
+.ab-h{position:absolute;width:7px;height:7px;background:#FFFFFF;border:1px solid #2E6FDC;border-radius:2px;box-sizing:border-box;z-index:7}
+.ab-bind{position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;height:16px;padding:0 6px;border-radius:3px;font-size:9.5px;font-weight:700;display:flex;align-items:center;z-index:7;font-family:Inter,sans-serif;letter-spacing:0}
+.ab-seg{display:flex;border:1px solid #0E0E10;border-radius:5px;overflow:hidden}
+.ab-seg>button{flex:1 1 0;border:0;border-radius:0;padding:0 4px;font-size:11px}
+.ab-seg>button+button{border-left:1px solid #0E0E10}
+/* audit fixes (v3.1) */
+.foc{outline:2px solid #4C8DF6;outline-offset:2px}
+.hov{background:#2A2A2F !important;box-shadow:inset 0 0 0 1px #3A3A3F}
+.st-off{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:3px;background:#2C2C30;color:#B4B4BA;font-size:9.5px;font-weight:700;letter-spacing:.06em}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #161618; color: #E8E8EB; font-family: Inter, -apple-system, system-ui, sans-serif; font-size: 12.5px; display: flex; flex-direction: column; overflow: hidden">
+
+  <header class="tb" style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px">
+    <span style="display: inline-flex; padding: 0 4px"><dc-import name="Logo" variant="wordmark" size="17" color="#D9D9DE" hint-size="98px,17px"></dc-import></span>
+    <button class="b">Show <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+    <span style="display: flex; flex-direction: column; line-height: 1.15"><span style="font-weight: 600">My Show</span><span style="font-size: 10.5px; color: #9A9AA1">Saved 23:28</span></span>
+    <div role="group" aria-label="Mode" style="display: flex; border: 1px solid #0E0E10; border-radius: 6px; overflow: hidden; margin-left: 10px">
+      <button class="b" style="border: 0; border-radius: 0; height: 26px; width: 64px">Stage</button>
+      <button class="b b-on" style="border: 0; border-left: 1px solid #0E0E10; border-radius: 0; height: 26px; width: 64px; color: #FFFFFF">Edit</button>
+      <button class="b" style="border: 0; border-left: 1px solid #0E0E10; border-radius: 0; height: 26px; width: 64px">Layout</button>
+    </div>
+    <div style="flex-grow: 1"></div>
+    <div class="lcd sbar" style="height: 32px; display: flex; align-items: center; gap: 18px; padding: 0 14px">
+      <span style="display: flex; flex-direction: column; line-height: 1.05"><span style="font-size: 14px; font-weight: 600">1 / 8</span><span style="font-size: 8.5px; color: #8C8C93; font-weight: 700">SONG</span></span>
+      <span style="display: flex; flex-direction: column; line-height: 1.05; min-width: 110px"><span style="font-size: 14px; font-weight: 600">Clean</span><span style="font-size: 8.5px; color: #8C8C93; font-weight: 700">PATCH CLEAN</span></span>
+      <span style="display: flex; flex-direction: column; line-height: 1.05"><span style="font-size: 14px; font-weight: 600">20.0 ms</span><span style="font-size: 8.5px; color: #8C8C93; font-weight: 700">ROUND TRIP</span></span>
+      <span style="display: flex; flex-direction: column; line-height: 1.05"><span style="font-size: 14px; font-weight: 600">48.0k</span><span style="font-size: 8.5px; color: #8C8C93; font-weight: 700">RATE</span></span>
+    </div>
+    <div style="flex-grow: 1"></div>
+    <button class="b">Tuner</button>
+    <button class="b" title="Settings: Audio, MIDI and Plugins (opens on the tab you used last)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:5px;vertical-align:-2px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings…</button>
+    <span style="display: flex; align-items: center; gap: 6px; margin-left: 4px">
+      <span class="k">Out</span>
+      <span style="width: 70px; height: 4px; border-radius: 2px; background: #0E0E10; position: relative; display: inline-block"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 62%; background: #8C8C93; border-radius: 2px"></span><span style="position: absolute; left: 62%; top: -4px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: linear-gradient(180deg, #F2F2F4, #B9B9BF); box-shadow: 0 1px 2px rgba(0,0,0,0.6)"></span></span>
+      <span class="fld" style="width: 66px; white-space: nowrap; justify-content: flex-end; font-variant-numeric: tabular-nums slashed-zero">−12.0 dB</span>
+    </span>
+    <button class="b" style="color: #FF8A80; font-weight: 700">PANIC</button>
+    <button class="b" style="border-color: #6e120d; background: linear-gradient(180deg, #D23C33, #B02A23); color: #FFFFFF; font-weight: 700; width: 74px">MUTED</button>
+  </header>
+
+  <main style="flex-grow: 1; min-height: 0; display: flex; padding: 8px">
+    <section class="pane" aria-label="Amp builder" style="flex-grow: 1; min-height: 0; position: relative">
+      <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 8px 0 12px; background: linear-gradient(180deg, #2A2A2E, #232326); border-bottom: 1px solid #0A0A0B">
+        <span style="font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2"></rect><path d="M3 10h18M7 7.5h.01M10 7.5h.01M13 7.5h.01"></path><path d="M9 4h6"></path></svg> Amp builder</span>
+        <span style="width: 8px"></span>
+        <button class="pop" aria-haspopup="menu" aria-expanded="{{menuOpen}}" onClick="{{toggleMenu}}" title="The amp you are building. Pick another amp of this show or the library." style="width: 210px; height: 24px; cursor: pointer"><span><b style="font-weight: 600">{{ampName}}</b></span><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        <span class="chip c-off" style="height: 18px" title="Saved in this show, with a copy in this computer's amp library">IN THIS SHOW · IN LIBRARY</span>
+        <span style="flex-grow: 1"></span>
+        <span style="font-size: 12px; color: #A3A3AA">{{usedBy}}</span>
+        <span style="width: 6px"></span>
+        <button class="b" title="Undo (Ctrl+Z)">Undo</button>
+        <button class="b" title="Save the amp in this show and update the copy in the library">Save amp</button>
+        <button class="b" title="Back to the patches (F8)" style="width: 156px; white-space: nowrap">Back to patches <span class="kbd">F8</span></button>
+      </div>
+      <sc-if value="{{menuOpen}}" hint-placeholder-val="{{ false }}">
+        <div role="menu" aria-label="Amps" style="position: absolute; left: 150px; top: 36px; width: 260px; padding: 4px; border-radius: 10px; background: rgba(35,35,39,0.98); border: 1px solid #0A0A0B; box-shadow: 0 0 0 1px rgba(255,255,255,0.06) inset, 0 12px 30px rgba(0,0,0,0.6); z-index: 30; font-size: 12px">
+          <div style="padding: 4px 10px 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #8C8C93">AMPS IN THIS SHOW</div>
+          <sc-for list="{{ampItems}}" as="a" hint-placeholder-count="2"><button role="menuitemradio" aria-checked="{{a.on}}" onClick="{{a.pick}}" style="width: 100%; height: 24px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border: 0; border-radius: 6px; font: inherit; font-size: 12px; text-align: left; cursor: pointer; {{a.style}}"><span>{{a.name}}</span><span style="font-size: 10.5px; opacity: 0.75">{{a.note}}</span></button></sc-for>
+          <div style="height: 1px; background: #34343A; margin: 4px 6px"></div>
+          <div style="height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 6px">New amp from a template...</div>
+          <div style="height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 6px">Add from the library...</div>
+        </div>
+      </sc-if>
+      <div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) 300px">
+
+        <aside aria-label="Parts" style="border-right: 1px solid #0A0A0B; display: flex; flex-direction: column; min-height: 0">
+          <div class="hd"><span>Parts</span><span style="letter-spacing: 0; text-transform: none; font-weight: 500">drag onto the amp</span></div>
+          <div style="flex-grow: 1; overflow: auto; padding: 0 6px 8px; display: flex; flex-direction: column">
+            <sc-for list="{{lib}}" as="g" hint-placeholder-count="4">
+              <div class="ab-gh">{{g.name}}</div>
+              <sc-for list="{{g.items}}" as="it" hint-placeholder-count="4">
+                <button class="ab-lib" draggable="true" onDragStart="{{it.drag}}" onDragEnd="{{dragEnd}}" title="{{it.tip}}"><span class="ab-ico" style="{{it.icoStyle}}">{{it.ico}}</span><span style="flex-grow: 1">{{it.name}}</span><svg width="8" height="12" viewBox="0 0 8 12" aria-hidden="true" style="flex-shrink:0;opacity:.55"><g fill="#A3A3AA"><circle cx="2" cy="2" r="1"/><circle cx="6" cy="2" r="1"/><circle cx="2" cy="6" r="1"/><circle cx="6" cy="6" r="1"/><circle cx="2" cy="10" r="1"/><circle cx="6" cy="10" r="1"/></g></svg></button>
+              </sc-for>
+            </sc-for>
+          </div>
+          <div style="padding: 8px 10px; border-top: 1px solid #111113; font-size: 11px; color: #9A9AA1; line-height: 1.5">A knob either drives Input, Bass, Mid, Treble or Output, or is fixed at the setting the capture was made at. Fixed knobs can't be turned.</div>
+        </aside>
+
+        <section aria-label="Amp face" style="display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #111113">
+          <div class="hd"><span>Face · 600 × 430</span><span style="letter-spacing: 0; text-transform: none; font-weight: 500">Drag to move · lines up with other parts · shift-click to select several</span></div>
+          <div style="flex-grow: 1; min-height: 0; display: flex; align-items: center; justify-content: center; background-color: #121418; background-image: radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px); background-size: 16px 16px">
+            <div onDragOver="{{over}}" onDragLeave="{{leave}}" onDrop="{{drop}}" onClick="{{pickAmp}}" style="width: 600px; height: 430px; position: relative; flex-shrink: 0; filter: drop-shadow(0 24px 20px rgba(0,0,0,0.55))">
+              <img src="{{f.body}}" alt="" style="position: absolute; inset: 0; width: 600px; height: 430px; pointer-events: none">
+              <img src="{{f.panel}}" alt="" style="position: absolute; left: {{f.px}}px; top: {{f.py}}px; width: {{f.pw}}px; height: {{f.panelH}}px; pointer-events: none">
+              <sc-if value="{{f.hasGrille}}" hint-placeholder-val="{{ true }}"><img src="{{f.grille}}" alt="" style="position: absolute; left: {{f.gx}}px; top: {{f.grilleY}}px; width: {{f.gw}}px; height: {{f.grilleH}}px; pointer-events: none"></sc-if>
+              <sc-if value="{{f.feet}}" hint-placeholder-val="{{ false }}"><span style="position: absolute; left: 64px; top: 400px; width: 86px; height: 18px; border-radius: 0 0 8px 8px; background: linear-gradient(180deg, #1E1E20, #0A0A0B); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08); pointer-events: none"></span><span style="position: absolute; left: 450px; top: 400px; width: 86px; height: 18px; border-radius: 0 0 8px 8px; background: linear-gradient(180deg, #1E1E20, #0A0A0B); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08); pointer-events: none"></span></sc-if>
+              <sc-for list="{{f.corners}}" as="c" hint-placeholder-count="4"><img src="{{c.src}}" alt="" style="position: absolute; left: {{c.x}}px; top: {{c.y}}px; width: 22px; height: 22px; pointer-events: none"></sc-for>
+              <sc-for list="{{f.studs}}" as="s" hint-placeholder-count="0"><span style="position: absolute; left: {{s.x}}px; top: {{s.y}}px; width: 5px; height: 5px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #D9C9A0, #6E5A36 70%, #2A2216); box-shadow: 0 1px 1px rgba(0,0,0,0.7); pointer-events: none"></span></sc-for>
+              <sc-for list="{{parts}}" as="p" hint-placeholder-count="10">
+                <div class="ab-part {{p.cls}}" draggable="true" tabindex="0" aria-label="{{p.aria}}" title="{{p.tip}}" onDragStart="{{p.drag}}" onDragEnd="{{dragEnd}}" onClick="{{p.pick}}" style="left: {{p.x}}px; top: {{p.y}}px; width: {{p.w}}px; height: {{p.h}}px; {{p.fade}}">
+                  <sc-if value="{{p.isSection}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; inset: 0; border-radius: 4px; {{p.secStyle}}"></div></sc-if>
+                  <sc-if value="{{p.isSymbol}}" hint-placeholder-val="{{ false }}"><sc-if value="{{p.sym_volume}}" hint-placeholder-val="{{ false }}"><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="{{p.pc}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="position: absolute; inset: 0"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9a4 4 0 0 1 0 6"/><path d="M19 6.5a8 8 0 0 1 0 11"/></svg></sc-if><sc-if value="{{p.sym_treble}}" hint-placeholder-val="{{ false }}"><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="{{p.pc}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="position: absolute; inset: 0"><path d="M2 16l2.5-5 2.5 5 2.5-5 2.5 5 2.5-5 2.5 5 2.5-5 2.5 5"/><path d="M12 7V2M9.5 4.5 12 2l2.5 2.5"/></svg></sc-if><sc-if value="{{p.sym_bass}}" hint-placeholder-val="{{ false }}"><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="{{p.pc}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="position: absolute; inset: 0"><path d="M2 11c2.5-6 7.5-6 10 0s7.5 6 10 0"/><path d="M12 17v5M9.5 19.5 12 22l2.5-2.5"/></svg></sc-if><sc-if value="{{p.sym_mid}}" hint-placeholder-val="{{ false }}"><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="{{p.pc}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="position: absolute; inset: 0"><path d="M2 12h6M16 12h6M8 7l4 5-4 5M16 7l-4 5 4 5"/></svg></sc-if><sc-if value="{{p.sym_gain}}" hint-placeholder-val="{{ false }}"><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="{{p.pc}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="position: absolute; inset: 0"><path d="M3 18 8 6v12l5-12v12l5-12v12"/></svg></sc-if><sc-if value="{{p.sym_reverb}}" hint-placeholder-val="{{ false }}"><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="{{p.pc}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="position: absolute; inset: 0"><path d="M2 12c0-5 4-5 4 0s4 5 4 0 4-5 4 0 4 5 4 0 4-5 4 0"/></svg></sc-if><sc-if value="{{p.sym_power}}" hint-placeholder-val="{{ false }}"><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="{{p.pc}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="position: absolute; inset: 0"><path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/></svg></sc-if><sc-if value="{{p.sym_input}}" hint-placeholder-val="{{ false }}"><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="{{p.pc}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="position: absolute; inset: 0"><path d="M2 12h8"/><rect x="10" y="9" width="7" height="6" rx="1"/><path d="M17 12h5"/></svg></sc-if><sc-if value="{{p.sym_clean}}" hint-placeholder-val="{{ false }}"><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="{{p.pc}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="position: absolute; inset: 0"><path d="M2 12c2.5-7 6.5-7 9 0s6.5 7 9 0"/></svg></sc-if><sc-if value="{{p.sym_dirty}}" hint-placeholder-val="{{ false }}"><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="{{p.pc}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="position: absolute; inset: 0"><path d="M2 16h4V8h6v8h6V8h4"/></svg></sc-if></sc-if>
+                  <sc-if value="{{p.isOutline}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; inset: 0; border: 1.5px solid {{f.print}}; border-radius: 3px"></div></sc-if>
+                  <sc-if value="{{p.isHandle}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; left: 1px; right: 1px; top: 0; bottom: 0; border-radius: 6px; background: linear-gradient(90deg, #6A6A70, #F6F6F8 35%, #A8A8AE 60%, #4A4A50); box-shadow: 1px 2px 3px rgba(0,0,0,0.5)"></div><div style="position: absolute; left: -2px; right: -2px; top: 0; height: 10px; border-radius: 3px; background: linear-gradient(180deg, #D9D9DE, #6A6A70)"></div><div style="position: absolute; left: -2px; right: -2px; bottom: 0; height: 10px; border-radius: 3px; background: linear-gradient(180deg, #D9D9DE, #6A6A70)"></div></sc-if>
+                  <sc-if value="{{p.isBadge}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; inset: 0; border: 1.5px solid {{f.print}}; border-radius: 2px; background: rgba(255,255,255,0.35); display: flex; align-items: center; justify-content: center"><dc-import name="Logo" variant="icon" size="{{p.badgeSize}}" color="{{f.print}}" hint-size="24px,24px"></dc-import></div></sc-if>
+                  <sc-if value="{{p.isTitle}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 800; letter-spacing: 0.16em; color: {{f.print}}; font-family: Inter, sans-serif"><span style="flex-grow: 1; height: 1px; background: {{f.rule}}"></span>{{p.text}}<span style="flex-grow: 1; height: 1px; background: {{f.rule}}"></span></div></sc-if>
+                  <sc-if value="{{p.isText}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: {{p.fs}}px; {{p.textFont}}; color: {{p.pc}}; white-space: nowrap">{{p.text}}</div></sc-if>
+                  <sc-if value="{{p.isPlate}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; inset: 0; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: {{p.fs}}px; font-weight: 800; letter-spacing: 0.08em; font-family: Inter, sans-serif; white-space: nowrap; {{p.plateStyle}}">{{p.text}}</div></sc-if>
+                  <sc-if value="{{p.isTrim}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; inset: 0; border-radius: 2px; {{p.trimStyle}}"></div></sc-if>
+                  <sc-if value="{{p.isLogo}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; left: 0; top: 0; pointer-events: none"><dc-import name="Logo" variant="wordmark" size="{{p.logoSize}}" color="{{p.logoColor}}" hint-size="190px,34px"></dc-import></div></sc-if>
+                  <sc-if value="{{p.hasTicks}}" hint-placeholder-val="{{ false }}"><sc-for list="{{p.ticks}}" as="tk" hint-placeholder-count="11"><span style="position: absolute; left: 50%; top: 50%; width: {{tk.w}}px; height: {{tk.len}}px; margin-left: {{tk.ml}}px; background: {{p.pc}}; transform-origin: 50% 0; transform: rotate({{tk.a}}deg) translateY({{tk.r}}px); border-radius: 1px"></span></sc-for></sc-if>
+                  <sc-if value="{{p.hasNums}}" hint-placeholder-val="{{ false }}"><sc-for list="{{p.nums}}" as="nm" hint-placeholder-count="12"><span style="position: absolute; left: {{nm.x}}px; top: {{nm.y}}px; transform: translate(-50%, -50%); font: 700 {{p.nfs}}px Inter, sans-serif; line-height: 1; color: {{p.pc}}; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none">{{nm.t}}</span></sc-for></sc-if>
+                  <sc-if value="{{p.isImg}}" hint-placeholder-val="{{ true }}"><div style="position: absolute; {{p.imgStyle}}"></div></sc-if>
+                  <sc-if value="{{p.hasPointer}}" hint-placeholder-val="{{ false }}"><span style="position: absolute; left: 50%; top: 50%; width: 2px; height: {{p.pl}}px; margin-left: -1px; background: #F2F2F4; border-radius: 1px; transform-origin: 50% 0; transform: rotate({{p.pa}}deg) translateY(-{{p.pl}}px); box-shadow: 0 0 1px rgba(0,0,0,0.6)"></span></sc-if>
+                  <sc-if value="{{p.hasTop}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; left: -24px; right: -24px; bottom: calc(100% + 3px); text-align: center; font-size: {{p.lfs}}px; font-weight: 800; letter-spacing: {{p.ls}}; color: {{p.pc}}; font-family: Inter, sans-serif">{{p.top}}</div></sc-if>
+                  <sc-if value="{{p.hasLabel}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; left: -24px; right: -24px; {{p.labelPos}}; text-align: center; font-size: {{p.lfs}}px; font-weight: 800; letter-spacing: {{p.ls}}; line-height: 1.15; color: {{p.pc}}; font-family: Inter, sans-serif; white-space: pre-line">{{p.label}}</div></sc-if>
+                  <sc-if value="{{p.showBind}}" hint-placeholder-val="{{ false }}"><span class="ab-bind" style="{{p.bindPos}}; {{p.bindStyle}}">{{p.bind}}</span></sc-if>
+                  <sc-if value="{{p.selected}}" hint-placeholder-val="{{ false }}"><span class="ab-h" style="left: -7px; top: -7px"></span><span class="ab-h" style="right: -7px; top: -7px"></span><span class="ab-h" style="left: -7px; bottom: -7px"></span><span class="ab-h" style="right: -7px; bottom: -7px"></span></sc-if>
+                </div>
+              </sc-for>
+              <sc-for list="{{guides}}" as="g" hint-placeholder-count="0"><span style="position: absolute; left: {{g.x}}px; top: {{g.y}}px; width: {{g.w}}px; height: {{g.h}}px; background: #FF4FD8; pointer-events: none; z-index: 9"></span></sc-for>
+              <sc-for list="{{gaps}}" as="g" hint-placeholder-count="0"><span style="position: absolute; left: {{g.x}}px; top: {{g.y}}px; width: {{g.w}}px; height: 1px; background: #FF4FD8; pointer-events: none; z-index: 9"><span style="position: absolute; left: 50%; top: -14px; transform: translateX(-50%); padding: 0 4px; height: 12px; border-radius: 3px; background: #FF4FD8; color: #FFFFFF; font: 700 9px Inter, sans-serif; line-height: 12px">{{g.label}}</span></span></sc-for>
+              <sc-if value="{{ghost.on}}" hint-placeholder-val="{{ false }}">
+                <div style="position: absolute; left: {{ghost.x}}px; top: {{ghost.y}}px; width: {{ghost.w}}px; height: {{ghost.h}}px; box-sizing: border-box; border: 2px dashed #4C8DF6; border-radius: 6px; background: rgba(76,141,246,0.16); pointer-events: none; z-index: 8"></div>
+              </sc-if>
+            </div>
+          </div>
+          <div style="height: 30px; flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 0 12px; border-top: 1px solid #0A0A0B; background: #1B1B1E; font-size: 11px; color: #9A9AA1">
+            <span>{{countText}}</span><span style="flex-grow: 1"></span><span>Rendered to images when saved, so it costs nothing on stage</span>
+          </div>
+        </section>
+
+        <aside aria-label="Inspector" style="border-left: 1px solid #0A0A0B; display: flex; flex-direction: column; min-height: 0">
+          <div class="hd"><span>{{inspTitle}}</span><span style="letter-spacing: 0; text-transform: none; font-weight: 500">{{inspHint}}</span></div>
+          <div style="flex-grow: 1; min-height: 0; overflow: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px">
+
+            <sc-if value="{{isPart}}" hint-placeholder-val="{{ true }}">
+              <sc-if value="{{sp.isKnob}}" hint-placeholder-val="{{ true }}">
+                <div class="ab-row"><span>Drives</span><div role="radiogroup" aria-label="Drives" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px">
+                  <sc-for list="{{sp.params}}" as="q" hint-placeholder-count="6"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="height: 22px; padding: 0 4px; font-size: 11px; {{q.style}}">{{q.name}}</button></sc-for>
+                </div></div>
+                <sc-if value="{{sp.fixed}}" hint-placeholder-val="{{ false }}">
+                  <div class="ab-row"><span>Fixed at</span><span style="display: flex; align-items: center; gap: 8px"><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: #0E0E10; position: relative"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: {{sp.vPct}}%; background: #8C8C93; border-radius: 2px"></span><span style="position: absolute; left: {{sp.vPct}}%; top: -4px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: linear-gradient(180deg, #F2F2F4, #B9B9BF)"></span></span><span class="fld" style="width: 44px; height: 22px; justify-content: flex-end">{{sp.vText}}</span></span></div>
+                  <div style="padding: 8px 10px; border-radius: 6px; background: #232326; color: #A3A3AA; font-size: 11.5px; line-height: 1.45">Shows the setting the capture was made at. It can't be turned; in Edit its tooltip says “fixed at {{sp.vText}} in this capture”.</div>
+                </sc-if>
+                <sc-if value="{{sp.unbound}}" hint-placeholder-val="{{ false }}">
+                  <div style="padding: 8px 10px; border-radius: 6px; background: #2A251C; border: 1px solid #3D2F12; color: #FFD27A; font-size: 11.5px; line-height: 1.45">Not set yet. Pick what it drives, or Fixed. A knob that is neither can't be saved.</div>
+                </sc-if>
+                <div class="ab-row"><span>Knob</span><div role="radiogroup" aria-label="Knob style" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px">
+                  <sc-for list="{{sp.knobs}}" as="q" hint-placeholder-count="4"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" aria-label="{{q.name}}" title="{{q.name}}" onClick="{{q.pick}}" style="height: 34px; padding: 0"><span style="width: 24px; height: 24px; display: block; {{q.img}}"></span></button></sc-for>
+                </div></div>
+                <div class="ab-row"><span>Size</span><div class="ab-seg" role="radiogroup"><sc-for list="{{sp.sizes}}" as="q" hint-placeholder-count="3"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+                <div class="ab-row"><span>Label</span><div class="ab-seg" role="radiogroup"><sc-for list="{{sp.lpos}}" as="q" hint-placeholder-count="2"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+                <div class="ab-row"><span>Scale</span><div class="ab-seg" role="radiogroup"><sc-for list="{{sp.scales}}" as="q" hint-placeholder-count="2"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+              </sc-if>
+              <sc-if value="{{sp.isToggle}}" hint-placeholder-val="{{ false }}">
+                <div class="ab-row"><span>Switch</span><div class="ab-seg" role="radiogroup" aria-label="Switch"><sc-for list="{{sp.tStyle}}" as="q" hint-placeholder-count="2"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+                <div class="ab-row"><span>Drives</span><div class="ab-seg" role="radiogroup"><sc-for list="{{sp.tDrive}}" as="q" hint-placeholder-count="2"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+                <sc-if value="{{sp.tFixed}}" hint-placeholder-val="{{ false }}">
+                  <div class="ab-row"><span>Fixed</span><div class="ab-seg" role="radiogroup"><sc-for list="{{sp.tPos}}" as="q" hint-placeholder-count="2"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+                  <div style="padding: 8px 10px; border-radius: 6px; background: #232326; color: #A3A3AA; font-size: 11.5px; line-height: 1.45">Shows the switch as it was when the capture was made. It can't be switched.</div>
+                </sc-if>
+                <div class="ab-row"><span>Top label</span><span class="fld" style="height: 24px">{{sp.topText}}</span></div>
+              </sc-if>
+              <sc-if value="{{sp.isJewel}}" hint-placeholder-val="{{ false }}">
+                <div class="ab-row"><span>Style</span><div class="ab-seg" role="radiogroup" aria-label="Light style"><sc-for list="{{sp.lStyle}}" as="q" hint-placeholder-count="2"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+                <div class="ab-row"><span>Lights</span><div class="ab-seg" role="radiogroup" aria-label="Lights"><sc-for list="{{sp.lState}}" as="q" hint-placeholder-count="2"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+                <div class="ab-row"><span>Colour</span><div role="radiogroup" style="display: flex; gap: 6px"><sc-for list="{{sp.lights}}" as="q" hint-placeholder-count="4"><button class="ab-sw {{q.cls}}" role="radio" aria-checked="{{q.on}}" aria-label="{{q.name}}" title="{{q.name}}" onClick="{{q.pick}}" style="{{q.style}}"></button></sc-for></div></div>
+              </sc-if>
+              <sc-if value="{{sp.isSymbol}}" hint-placeholder-val="{{ false }}">
+                <div class="ab-row" style="align-items: start"><span style="padding-top: 6px">Symbol</span><div role="radiogroup" aria-label="Symbol" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px"><button class="{{sp.icons.volume.cls}}" role="radio" aria-checked="{{sp.icons.volume.on}}" aria-label="Volume" title="Volume" onClick="{{sp.icons.volume.pick}}" style="height: 30px; padding: 0; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9a4 4 0 0 1 0 6"/><path d="M19 6.5a8 8 0 0 1 0 11"/></svg></button><button class="{{sp.icons.treble.cls}}" role="radio" aria-checked="{{sp.icons.treble.on}}" aria-label="Treble" title="Treble" onClick="{{sp.icons.treble.pick}}" style="height: 30px; padding: 0; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16l2.5-5 2.5 5 2.5-5 2.5 5 2.5-5 2.5 5 2.5-5 2.5 5"/><path d="M12 7V2M9.5 4.5 12 2l2.5 2.5"/></svg></button><button class="{{sp.icons.bass.cls}}" role="radio" aria-checked="{{sp.icons.bass.on}}" aria-label="Bass" title="Bass" onClick="{{sp.icons.bass.pick}}" style="height: 30px; padding: 0; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 11c2.5-6 7.5-6 10 0s7.5 6 10 0"/><path d="M12 17v5M9.5 19.5 12 22l2.5-2.5"/></svg></button><button class="{{sp.icons.mid.cls}}" role="radio" aria-checked="{{sp.icons.mid.on}}" aria-label="Mid / shape" title="Mid / shape" onClick="{{sp.icons.mid.pick}}" style="height: 30px; padding: 0; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h6M16 12h6M8 7l4 5-4 5M16 7l-4 5 4 5"/></svg></button><button class="{{sp.icons.gain.cls}}" role="radio" aria-checked="{{sp.icons.gain.on}}" aria-label="Gain" title="Gain" onClick="{{sp.icons.gain.pick}}" style="height: 30px; padding: 0; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18 8 6v12l5-12v12l5-12v12"/></svg></button><button class="{{sp.icons.reverb.cls}}" role="radio" aria-checked="{{sp.icons.reverb.on}}" aria-label="Reverb" title="Reverb" onClick="{{sp.icons.reverb.pick}}" style="height: 30px; padding: 0; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12c0-5 4-5 4 0s4 5 4 0 4-5 4 0 4 5 4 0 4-5 4 0"/></svg></button><button class="{{sp.icons.power.cls}}" role="radio" aria-checked="{{sp.icons.power.on}}" aria-label="Power" title="Power" onClick="{{sp.icons.power.pick}}" style="height: 30px; padding: 0; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/></svg></button><button class="{{sp.icons.input.cls}}" role="radio" aria-checked="{{sp.icons.input.on}}" aria-label="Input" title="Input" onClick="{{sp.icons.input.pick}}" style="height: 30px; padding: 0; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h8"/><rect x="10" y="9" width="7" height="6" rx="1"/><path d="M17 12h5"/></svg></button><button class="{{sp.icons.clean.cls}}" role="radio" aria-checked="{{sp.icons.clean.on}}" aria-label="Clean" title="Clean" onClick="{{sp.icons.clean.pick}}" style="height: 30px; padding: 0; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12c2.5-7 6.5-7 9 0s6.5 7 9 0"/></svg></button><button class="{{sp.icons.dirty.cls}}" role="radio" aria-checked="{{sp.icons.dirty.on}}" aria-label="Dirty" title="Dirty" onClick="{{sp.icons.dirty.pick}}" style="height: 30px; padding: 0; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4V8h6v8h6V8h4"/></svg></button></div></div>
+              </sc-if>
+              <sc-if value="{{sp.isTextPart}}" hint-placeholder-val="{{ false }}">
+                <div class="ab-row"><span>Style</span><div class="ab-seg" role="radiogroup"><sc-for list="{{sp.fonts}}" as="q" hint-placeholder-count="2"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+              </sc-if>
+              <sc-if value="{{sp.isPlate}}" hint-placeholder-val="{{ false }}">
+                <div class="ab-row"><span>Shape</span><div class="ab-seg" role="radiogroup" aria-label="Shape"><sc-for list="{{sp.shapes}}" as="q" hint-placeholder-count="2"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+              </sc-if>
+              <sc-if value="{{sp.hasMaterial}}" hint-placeholder-val="{{ false }}">
+                <div class="ab-row"><span>Material</span><div role="radiogroup" style="display: flex; gap: 6px; flex-wrap: wrap"><sc-for list="{{sp.mats}}" as="q" hint-placeholder-count="5"><button class="ab-sw {{q.cls}}" role="radio" aria-checked="{{q.on}}" aria-label="{{q.name}}" title="{{q.name}}" onClick="{{q.pick}}" style="{{q.style}}"></button></sc-for></div></div>
+              </sc-if>
+              <sc-if value="{{sp.isLogo}}" hint-placeholder-val="{{ false }}">
+                <div class="ab-row"><span>Colour</span><div role="radiogroup" style="display: flex; gap: 6px"><sc-for list="{{sp.logoColors}}" as="q" hint-placeholder-count="4"><button class="ab-sw {{q.cls}}" role="radio" aria-checked="{{q.on}}" aria-label="{{q.name}}" title="{{q.name}}" onClick="{{q.pick}}" style="{{q.style}}"></button></sc-for></div></div>
+                <div style="font-size: 11px; color: #9A9AA1; line-height: 1.5">Every amp carries the Encore logo. Its colour and size can change; the logo itself can't.</div>
+              </sc-if>
+              <sc-if value="{{sp.hasText}}" hint-placeholder-val="{{ true }}">
+                <div class="ab-row"><span>Text</span><span class="fld" style="height: 24px; white-space: nowrap; overflow: hidden">{{sp.text}}</span></div>
+              </sc-if>
+              <div class="ab-row"><span>Position</span><span style="display: flex; gap: 6px"><span class="fld" style="flex: 1 1 0; height: 24px">x {{sp.x}}</span><span class="fld" style="flex: 1 1 0; height: 24px">y {{sp.y}}</span></span></div>
+              <div class="ab-row"><span>Size</span><span style="display: flex; gap: 6px"><span class="fld" style="flex: 1 1 0; height: 24px">w {{sp.w}}</span><span class="fld" style="flex: 1 1 0; height: 24px">h {{sp.h}}</span></span></div>
+              <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 6px"><button class="b">Duplicate</button><button class="b" style="color: #FF8A80">Remove</button></div>
+            </sc-if>
+
+            <sc-if value="{{isMulti}}" hint-placeholder-val="{{ false }}">
+              <div style="font-size: 12px; color: #C4C4C9">{{multiText}}</div>
+              <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
+                <sc-for list="{{arr}}" as="a" hint-placeholder-count="5"><button class="b" onClick="{{a.pick}}">{{a.name}}</button></sc-for>
+              </div>
+              <div style="font-size: 11px; color: #9A9AA1; line-height: 1.5">Shift-click parts to select several. Align middles lines them up on the first one you picked; Space evenly keeps the outer two in place.</div>
+            </sc-if>
+            <sc-if value="{{isAmp}}" hint-placeholder-val="{{ false }}">
+              <div class="ab-row"><span>Template</span><div role="radiogroup" aria-label="Template" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px">
+                <sc-for list="{{tpls}}" as="q" hint-placeholder-count="5"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" title="Start over from this template: its look and its parts" style="height: 24px; padding: 0 4px; font-size: 11px; {{q.style}}">{{q.name}}</button></sc-for>
+              </div></div>
+              <div class="ab-row" style="align-items: start"><span style="padding-top: 4px">Body</span><div role="radiogroup" aria-label="Body" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px"><sc-for list="{{layouts}}" as="q" hint-placeholder-count="5"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="height: 24px; padding: 0 4px; font-size: 11px; white-space: nowrap; {{q.style}}">{{q.name}}</button></sc-for></div></div>
+              <sc-for list="{{swGroups}}" as="g" hint-placeholder-count="4">
+                <div class="ab-row"><span>{{g.name}}</span><div role="radiogroup" aria-label="{{g.name}}" style="display: flex; gap: 6px; flex-wrap: wrap"><sc-for list="{{g.items}}" as="q" hint-placeholder-count="5"><button class="ab-sw {{q.cls}}" role="radio" aria-checked="{{q.on}}" aria-label="{{q.name}}" title="{{q.name}}" onClick="{{q.pick}}" style="{{q.style}}"></button></sc-for></div></div>
+              </sc-for>
+              <div class="ab-row"><span>Corners</span><div class="ab-seg" role="radiogroup"><sc-for list="{{cornerOpts}}" as="q" hint-placeholder-count="3"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+              <div class="ab-row"><span>Studs</span><div class="ab-seg" role="radiogroup"><sc-for list="{{studOpts}}" as="q" hint-placeholder-count="2"><button class="{{q.cls}}" role="radio" aria-checked="{{q.on}}" onClick="{{q.pick}}" style="{{q.style}}">{{q.name}}</button></sc-for></div></div>
+            </sc-if>
+
+            <div style="height: 1px; background: #111113; margin: 10px -12px 6px"></div>
+            <div class="gt" style="padding-bottom: 2px">Sound</div>
+            <div class="ab-row"><span>NAM capture</span><span class="fld" style="height: 24px; overflow: hidden"><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{capture}}</span></span></div>
+            <div class="ab-row"><span></span><span style="font-size: 11px; color: #9A9AA1">48.0 kHz · standard · ~12% CPU</span></div>
+            <div class="ab-row"><span></span><button class="b">Load capture…</button></div>
+            <div style="font-size: 11px; color: #9A9AA1; line-height: 1.5; margin-top: 4px">The knobs' positions here are the amp's starting settings. Each patch that uses the amp keeps its own.</div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+var B = {"chicken": "/_blob/8e462cd916a1546709639e2ebb36331d", "jewel": "/_blob/329ef6e70a0bdb77d9a99fb7959c49d4", "tog": "/_blob/3e2931c77ead6710a0faefd0df59a2e3", "kblack": "/_blob/7bd2416c143ab3d7528e080820ae3a09", "kcream": "/_blob/b30d42bb78b0962c58562d03e5c128aa", "ksilver": "/_blob/bef9d65d89507fd501ebf2cdc52be7e7", "body_head_black_black": "/_blob/804cdd8fd5bcd661b24a373e05bcf3f7", "body_head_black_gold": "/_blob/7fc966b8f62238a5d600d67f72e05d0e", "body_head_black_none": "/_blob/a17097f6a2df5f55f0e65bbda439380b", "body_head_black_white": "/_blob/dbc2d9a352826161ef302cf9892e563b", "body_head_blonde_black": "/_blob/fdea2b6ec31b1c8fd74eedf1e6a754ac", "body_head_blonde_gold": "/_blob/765e78cafc167378b186a502356f321d", "body_head_blonde_none": "/_blob/bd474a9587ee582b754cd06de3f9841b", "body_head_blonde_white": "/_blob/863f2e9a69020bf461cef644e5750698", "body_head_brown_black": "/_blob/4217c24e59511a4a276e174b048eada9", "body_head_brown_gold": "/_blob/37da0f4333ff6527610261f0cfcd988c", "body_head_brown_none": "/_blob/ffe4560f36c0c377a37e1da216663581", "body_head_brown_white": "/_blob/3fb89fd4f90731169be933968d78cdb0", "body_head_cream_black": "/_blob/92eb818e0f941d39ca3b121b1ee2c625", "body_head_cream_gold": "/_blob/f4cb65c0856b2d44a3737b3eab77fe1a", "body_head_cream_none": "/_blob/cab74232cd42b1043ec6920ed405d231", "body_head_cream_white": "/_blob/d7470c4cf210a759454a6ecd9907018d", "body_head_orange_black": "/_blob/bcbe8a6632149ee2e5b2ce68375cfc2b", "body_head_orange_gold": "/_blob/f5b9720b2b86abbae2740f95bb7a9c62", "body_head_orange_none": "/_blob/b6f98a36392da7708e15655ffc033b32", "body_head_orange_white": "/_blob/6be7345f39cc086c5dabcc4182c1e03f", "body_head_red_black": "/_blob/b00e6027a6394c41fe820f556282adb3", "body_head_red_gold": "/_blob/0d9a5d30a982c64211da432f86c09d67", "body_head_red_none": "/_blob/16159631c43c42b8eafaaa63c1be6f43", "body_head_red_white": "/_blob/428e70e70a740a8f353064985104bf5d", "body_head_tweed_black": "/_blob/02a33cd7b1d5b1d10789efe5e758cf3f", "body_head_tweed_gold": "/_blob/cd17045f52ab3b686760128126125199", "body_head_tweed_none": "/_blob/e0c0c60503906995baf2729f2fb8664a", "body_head_tweed_white": "/_blob/cb50322fe502d3fe318d9fcb3309083a", "body_head_white_black": "/_blob/685beb55b930c83a8b051c199d889902", "body_head_white_gold": "/_blob/889e213700508e370c4d06a890a4dbf9", "body_head_white_none": "/_blob/13b83c3caaa83ff561f6d2b273ab0077", "body_head_white_white": "/_blob/49b57eddf15dc1248cb86e798bd21ce5", "body_headg_black_black": "/_blob/db7714e9dc975186f39b1c902a9f756b", "body_headg_black_gold": "/_blob/57a10fc01acb5566669a5e8a943aea06", "body_headg_black_none": "/_blob/899de99f40d1fba18b7f3d9f41db1425", "body_headg_black_white": "/_blob/7730cbe3db6f8dbf4e3748de1716010c", "body_headg_blonde_black": "/_blob/db2e2f1c5b44727bc2513384b4d30961", "body_headg_blonde_gold": "/_blob/76928cf4c41a8031b1ff25faa5fc1338", "body_headg_blonde_none": "/_blob/ec3b9873793c12f15528b8e368f182ea", "body_headg_blonde_white": "/_blob/b30521c571d02d8a44d9e0dbc89a6a22", "body_headg_brown_black": "/_blob/d6fe6545b0b6fe61c3152f719dca562d", "body_headg_brown_gold": "/_blob/2151dd69fdaa81e82b34dc2876476fd1", "body_headg_brown_none": "/_blob/a317668e71f997a1863436a5a79d3b5e", "body_headg_brown_white": "/_blob/f6479e4feae35210f0d024a28099c513", "body_headg_cream_black": "/_blob/a4d58e9a3557cd14e9915b699481b517", "body_headg_cream_gold": "/_blob/1e867853f0cef98964fad44d71107e9a", "body_headg_cream_none": "/_blob/2b7aa09a790a3be967919abc6ff6e9c5", "body_headg_cream_white": "/_blob/413870dbf2a7401383593f60eafe9871", "body_headg_orange_black": "/_blob/ec3603b68c1be9c13b5a474b38de1b1d", "body_headg_orange_gold": "/_blob/e4d6c97ba32a18d90f1010be5ebc327a", "body_headg_orange_none": "/_blob/fd3f42456a6d85841d8d78fb2f6403d9", "body_headg_orange_white": "/_blob/70d0097a1bb5c74ee4367b293190aec7", "body_headg_red_black": "/_blob/5d1b781b9a45136f5dcf6666664c862c", "body_headg_red_gold": "/_blob/39fe3d3f48dece2764c9ff25bf6fe19a", "body_headg_red_none": "/_blob/21a401a93f782a8be63ed9579b934a8d", "body_headg_red_white": "/_blob/1484988c93ab619b7b3572feac60f3b4", "body_headg_tweed_black": "/_blob/7639286b021d3e00c97097d75ca0e7b7", "body_headg_tweed_gold": "/_blob/98a93a252393353ce34d6a2718aa48fd", "body_headg_tweed_none": "/_blob/3dce05414d16b7f6b4c2297bcead557b", "body_headg_tweed_white": "/_blob/4bb33a5057ebd95ecddf67feb417ef88", "body_headg_white_black": "/_blob/c1c717ea27dd5a357c4df44ac4983a80", "body_headg_white_gold": "/_blob/f71530e62277bd7ea3360ca3dc04bb6d", "body_headg_white_none": "/_blob/1c2b515369b446f2a31c0e307b3cefe6", "body_headg_white_white": "/_blob/364f3783f0ab6ac8d0bdc089acaa7ebd", "body_tall_black_black": "/_blob/f2869d0821ed6812618e5d7aef4c6889", "body_tall_black_gold": "/_blob/31ceb88dc145c2483e6e75c70e7a5f87", "body_tall_black_none": "/_blob/e8bf9aa0f24b2f522a643bd8b1cd5ccf", "body_tall_black_white": "/_blob/25ad75d109d2650bc4a76e0b854b86d0", "body_tall_blonde_black": "/_blob/df043940c30fffc6b859ca39b13653a4", "body_tall_blonde_gold": "/_blob/619c801908963c34c6ecf05458ec1ac1", "body_tall_blonde_none": "/_blob/1014289d68b181b67a8b2a18e54d0690", "body_tall_blonde_white": "/_blob/6cdc15a44059795f89e02c5754a49d38", "body_tall_brown_black": "/_blob/2cd072fb96205a56fc13b8178369564a", "body_tall_brown_gold": "/_blob/9121c10447ad28c7ec15375aabd66ca3", "body_tall_brown_none": "/_blob/c7b9d4f71d296894608f07461234a8b2", "body_tall_brown_white": "/_blob/04a13e96c6c2eb7c3c097ab315dd1f49", "body_tall_cream_black": "/_blob/b6363c257f3399466d9452989f4b7b7e", "body_tall_cream_gold": "/_blob/b9a1fe73b8985d570c6e9494edcf847b", "body_tall_cream_none": "/_blob/74d1598f3377ff79543496b4ada72e8e", "body_tall_cream_white": "/_blob/908afa4ed5406a23eed4533bb90a5c2c", "body_tall_orange_black": "/_blob/d5ac40181dafb8689612aec52dce15ca", "body_tall_orange_gold": "/_blob/24665c953160583011651b7eb92c01e2", "body_tall_orange_none": "/_blob/bbbb1363e5ec28bd594be515bc1b702b", "body_tall_orange_white": "/_blob/9887eb3985c5b243b69ce8deba94cb10", "body_tall_red_black": "/_blob/27ce7da086cb322e2f996d6c292198c8", "body_tall_red_gold": "/_blob/8c3ad71f44b55328e2d3f55d015c7495", "body_tall_red_none": "/_blob/625b052e1ffac4e20ff379ec154af855", "body_tall_red_white": "/_blob/6528dc0174af56c3750f5f25212ce181", "body_tall_tweed_black": "/_blob/73a4c5b925edca7890bd22ca7ad3f851", "body_tall_tweed_gold": "/_blob/0dde2c3bec111551cc110a182633351e", "body_tall_tweed_none": "/_blob/4e589623f2bd09570e2a4889afad6dff", "body_tall_tweed_white": "/_blob/aacbdc531f06cfb6fb4591d558edf08c", "body_tall_white_black": "/_blob/6b700235abe5fbf9c93be967aae9bc93", "body_tall_white_gold": "/_blob/8131e1fa17a279cadfb0d4808cf4e605", "body_tall_white_none": "/_blob/94c627185e2f26f6fed407b25dfbbb1b", "body_tall_white_white": "/_blob/ae8b7ac3eafc59c62d419d1d88affe8f", "body_thin_black_black": "/_blob/7e6bf493b426a44b5acc92c9a5294f8c", "body_thin_black_gold": "/_blob/32e9c2b70dd4b2c99f9abf31fb7f8f18", "body_thin_black_none": "/_blob/d8d75e2f4c5ee6c5f212267143151c42", "body_thin_black_white": "/_blob/f3ed883c0c5282519e02aa3a92245d72", "body_thin_blonde_black": "/_blob/bd9c4f6ff9fab2307b39e925b3e63413", "body_thin_blonde_gold": "/_blob/370b84c4dbe9502a2fdb6ca8bc813898", "body_thin_blonde_none": "/_blob/ee2b0517aad6248f54a5a27c6d1ba6cb", "body_thin_blonde_white": "/_blob/e8af8e4115c04f0b61dd21ab7ea1322d", "body_thin_brown_black": "/_blob/cf67ce2c6a573fe41dc06e783fe41533", "body_thin_brown_gold": "/_blob/1dfa6177dfdd2808ef2a4da774063e91", "body_thin_brown_none": "/_blob/8737d55c504c24c632aa0432d35cdef0", "body_thin_brown_white": "/_blob/aa927f646718550f697e7480fa2ad34f", "body_thin_cream_black": "/_blob/36761cc781bb5d61aa1149e6ab2b6dd2", "body_thin_cream_gold": "/_blob/e7f542966e6e124ecc3444f8132f5ce5", "body_thin_cream_none": "/_blob/5cb3214fd3930fcc1e05f342041ddc46", "body_thin_cream_white": "/_blob/f6b27f00f2e7bfa57a1d298bfe48079d", "body_thin_orange_black": "/_blob/56255a1b105b77187337b84674564b8b", "body_thin_orange_gold": "/_blob/6ab95c05653823f4d73e4dbbae7bb413", "body_thin_orange_none": "/_blob/519239e28d3159ac18f176c64e6d389a", "body_thin_orange_white": "/_blob/a1b4ad561e43fe31be986a3431194ca3", "body_thin_red_black": "/_blob/945f66b339ae6861fdfa776f8dda9c22", "body_thin_red_gold": "/_blob/9c6210d8a1401b7c34e1518274a7730e", "body_thin_red_none": "/_blob/ae3f3fe0ca0192f47e337eb6669d7fbd", "body_thin_red_white": "/_blob/d8d373527190302b9f05cbc05217c165", "body_thin_tweed_black": "/_blob/d174947a03918cb08a8ef331619e41cd", "body_thin_tweed_gold": "/_blob/3c4989ce645eabefb800e13c094dc8e7", "body_thin_tweed_none": "/_blob/e4c9de2e130ce0e9ecbbefd8cf807e74", "body_thin_tweed_white": "/_blob/ab912a62c648646079d616f3ba1f6399", "body_thin_white_black": "/_blob/0aaa9a123fbdc942d718e23e045f2a93", "body_thin_white_gold": "/_blob/2e0d4c5738552564172a67ed63491825", "body_thin_white_none": "/_blob/11c728c71733a2a173fda047dc276903", "body_thin_white_white": "/_blob/22c48397d8bc9342faa3460c6316abe4", "body_top_black_black": "/_blob/efced688098f7d80e1455a6871a873e3", "body_top_black_gold": "/_blob/b2ab344453e6efbe75c31629f761c76c", "body_top_black_none": "/_blob/e42086a678ef95e43b4e9f0425e74be6", "body_top_black_white": "/_blob/570b6cddaacb27cf2e8f0902b916ac86", "body_top_blonde_black": "/_blob/0859f9f2e2b0a6aa3c5df529f8971bcc", "body_top_blonde_gold": "/_blob/f631a40bb7dd92fbca903690d5950d40", "body_top_blonde_none": "/_blob/e62db79e86bd2bc1a8722d27f3513057", "body_top_blonde_white": "/_blob/8ced5753acd4ef7bc25c51a31181116f", "body_top_brown_black": "/_blob/3006c9fc5e951d40109b92cabfaf1ca3", "body_top_brown_gold": "/_blob/5f13e63b39a7ef5d3cdde22be286d362", "body_top_brown_none": "/_blob/0d8543a9b2ef3114085f5bd1f9938c93", "body_top_brown_white": "/_blob/6f76224121b17668580453df74a3abf0", "body_top_cream_black": "/_blob/96762850a7eb3651a2278dbe59c17608", "body_top_cream_gold": "/_blob/a75a378a704980f8579f433794f16ee9", "body_top_cream_none": "/_blob/e2854315b80cc2e3577fea48776f2997", "body_top_cream_white": "/_blob/af12ad8533444833ea0dd010298a66a9", "body_top_orange_black": "/_blob/47a3bcad67b6b4d6822a2baa52dc44fa", "body_top_orange_gold": "/_blob/49b6e16d6651253050e21608d966ef00", "body_top_orange_none": "/_blob/8fca16b8af2e3d4a43fab1f20afb28ae", "body_top_orange_white": "/_blob/8dec06b0775381ac48f57f9e489ca102", "body_top_red_black": "/_blob/8ee5ba9c47d0470cf2b289efa1c41ed8", "body_top_red_gold": "/_blob/5962262f7873eb004178cef6c9812808", "body_top_red_none": "/_blob/f66656427310de29c223a39db4902d8b", "body_top_red_white": "/_blob/287853012f0b2af64bfa8b60e5ba2a96", "body_top_tweed_black": "/_blob/a8190102237b43a7477071da9f65b25c", "body_top_tweed_gold": "/_blob/a4e126c2f0a68356c94e488a2ccf2b26", "body_top_tweed_none": "/_blob/991cefb7e4537671b850b78a6c7a2c5f", "body_top_tweed_white": "/_blob/421515f10293d93ccbf50f893ccff00c", "body_top_white_black": "/_blob/3e8200efbc4cfad85c39cbe588ae131b", "body_top_white_gold": "/_blob/e548901815075cd0e83f15a2f734f94c", "body_top_white_none": "/_blob/6d663efdf65b8fb9743e41f8b326beba", "body_top_white_white": "/_blob/41bc8704eda954499f29fe5f20487851", "corner_black_bl": "/_blob/ee48df546b2b1ac3dcbef5e7ac48ef80", "corner_black_br": "/_blob/e4f7a3acd76b90e31d9f500d5e8cdab3", "corner_black_tl": "/_blob/06f4ea74dd743a9be902704a4ff8d03b", "corner_black_tr": "/_blob/6ba9f517dbfa02896be8145b8a1261c1", "corner_chrome_bl": "/_blob/8395822b3a3156be183dd66e2b89fa4b", "corner_chrome_br": "/_blob/0ded17ece455b9fe6ac0944963bffe64", "corner_chrome_tl": "/_blob/014f030a74e0538213b1bd01951f460b", "corner_chrome_tr": "/_blob/f9955f220b208fc45f79460cb30fcdc3", "grille_headg_black": "/_blob/c061c099d99e6589877dfa018d1c0ac8", "grille_headg_brass": "/_blob/8acfde7a2f46facfa69b69bc575768df", "grille_headg_oxblood": "/_blob/19790d805cf627f0bceeddb79c1eca60", "grille_headg_salt": "/_blob/96a9eb110218e994dd41d410094cb432", "grille_headg_silver": "/_blob/0d59c780a2234ce5fc8e54ec46de681c", "grille_headg_wheat": "/_blob/7f14aa920cd2ec4a54517af1875b8e53", "grille_tall_black": "/_blob/b3ed3c1d7cca1858e605b27c1f84e7db", "grille_tall_brass": "/_blob/f68b095f2e5eb4a6fdf6170430f20f7f", "grille_tall_oxblood": "/_blob/d92898c51513ea9b0def24314a80ab16", "grille_tall_salt": "/_blob/f8881e37e42fe45258395ed24e6663ca", "grille_tall_silver": "/_blob/a2d36f32f53326d7937ef0a4be8f132a", "grille_tall_wheat": "/_blob/c5faf7f5bf7a2264976a29b95b0618eb", "grille_thin_black": "/_blob/28dc3883b0f483541f95c6795953fc6b", "grille_thin_brass": "/_blob/7e3209eb078ee2ac9acb7d076cd10726", "grille_thin_oxblood": "/_blob/aa2310f973aa2b21ba775f8ba672d64e", "grille_thin_salt": "/_blob/926ed8eb74bcef6e5d637b3a57f5d4b8", "grille_thin_silver": "/_blob/90bf5cdf297f9bf1c46b4349722bbe05", "grille_thin_wheat": "/_blob/e7e45790f0438d0ca10e83f887098f43", "grille_top_black": "/_blob/e6a26ca6e1db652416b4cf145ef4ff43", "grille_top_brass": "/_blob/ee0eda4ee1fd1b382b210d8ea604c84d", "grille_top_oxblood": "/_blob/012f8810c321819838aacb1f3d3c9424", "grille_top_salt": "/_blob/72a1745c16afdbb1868992ba0242a4db", "grille_top_silver": "/_blob/5478c60771451386b9a63a6ba523c025", "grille_top_wheat": "/_blob/22992d7e380be9069ae7e75df3cfbf50", "panel_head_black": "/_blob/84a5caf90f1a144a3a9a068ed59ee814", "panel_head_dark": "/_blob/5259e8185116855c62c45b07eb757391", "panel_head_gold": "/_blob/746124cc2abf46409943f718e7d9187e", "panel_head_orange": "/_blob/685d4e4d61ed6c3ee6618c5d2bb61c09", "panel_head_plexi": "/_blob/6e9a6b8439452a99010cf927f571d0e9", "panel_head_silver": "/_blob/62d8241dec3b9dd9d69ac7bf4498683e", "panel_head_white": "/_blob/1f3e707dfa8c7d895b5c1a6d0ffae746", "panel_headg_black": "/_blob/fa5e3cb4c2cd9d40649343adb2dc0d82", "panel_headg_dark": "/_blob/0b09c4c8d5b13a9d01d6299b5d353d08", "panel_headg_gold": "/_blob/03fb1667c7f7e35d2cd14bf9be16feb9", "panel_headg_orange": "/_blob/42c102e55864b8f29197b9ccbced112a", "panel_headg_plexi": "/_blob/9c0e8fd061bf02019d7eea780bbc8862", "panel_headg_silver": "/_blob/ba0c7d7c4cab24cd0f56bcde09592f45", "panel_headg_white": "/_blob/d77c3c0b6b6b62c5caaa77ac5d37a0a7", "panel_tall_black": "/_blob/b1a4a945b3771773e8cfb68f99a004c9", "panel_tall_dark": "/_blob/564f739ed445e790c97ced9b885ecd9c", "panel_tall_gold": "/_blob/0f0c187f51296da398244b71cde81e1c", "panel_tall_orange": "/_blob/b223ea1f175eb28acea023945abc8697", "panel_tall_plexi": "/_blob/683d4f66396468fe2341af3f0a26e8cd", "panel_tall_silver": "/_blob/731b7a7ec9f7d127b50929d58e88486c", "panel_tall_white": "/_blob/4050081f1a30435db0a54acae6357ded", "panel_thin_black": "/_blob/9f7df3bdc8d712678e6dbcf6a890bd79", "panel_thin_dark": "/_blob/f614e2955f02a74e7ee916f6ca8200de", "panel_thin_gold": "/_blob/3995441cc700a291bcd455bc727ebd51", "panel_thin_orange": "/_blob/7aaa5cf754655f3b240a1671046279d8", "panel_thin_plexi": "/_blob/039e0e26548310c13f74cccc2b6ccb5e", "panel_thin_silver": "/_blob/579ff9a411137b0826cf241323a9fa79", "panel_thin_white": "/_blob/c2bc291c271d65a40fb5013cf7e21b83", "panel_top_black": "/_blob/94f80d66be93e9fcb8586e577015f546", "panel_top_dark": "/_blob/45c8281e03e7f39af7ca754925675995", "panel_top_gold": "/_blob/62025463e215b5e166ca74409357f965", "panel_top_orange": "/_blob/38f7b1f0d2bcc3a4cda0be1123f41631", "panel_top_plexi": "/_blob/c2997ce641260a5f9d241503ffd97711", "panel_top_silver": "/_blob/32b0e2ce0152c3dc7efc8ff5640eebd2", "panel_top_white": "/_blob/3e690ba194f6f45a885d6f9f30174916"};
+B.togOff = '/_blob/5f1214aafed6069eb552422fe132e4f4';
+var SNAP = 2;
+var LAYOUT = {
+  tall: { name: 'Tall', px: 22, py: 44, pw: 556, panelH: 138, grille: true, gx: 22, gw: 556, grilleY: 194, grilleH: 214, body: [0, 24, 600, 430], feet: false },
+  thin: { name: 'Thin', px: 22, py: 44, pw: 556, panelH: 72, grille: true, gx: 22, gw: 556, grilleY: 128, grilleH: 280, body: [0, 24, 600, 430], feet: false },
+  head: { name: 'Head', px: 30, py: 128, pw: 540, panelH: 240, grille: false, gx: 0, gw: 0, grilleY: 0, grilleH: 0, body: [0, 96, 600, 400], feet: true },
+  headg: { name: 'Grille head', px: 28, py: 296, pw: 544, panelH: 84, grille: true, gx: 28, gw: 544, grilleY: 112, grilleH: 178, body: [0, 96, 600, 400], feet: true },
+  top: { name: 'Top', px: 34, py: 40, pw: 532, panelH: 70, grille: true, gx: 40, gw: 520, grilleY: 172, grilleH: 228, body: [0, 24, 600, 430], feet: false }
+};
+var TOLEX = { tweed: ['Tweed', 'repeating-linear-gradient(135deg, #7A5228 0 1px, #D9B878 1px 3.4px)'], black: ['Black', '#1C1B1A'], orange: ['Orange', '#C8601E'], white: ['White', '#E0DED6'], cream: ['Cream', '#D6C6A0'], brown: ['Brown', '#4E3220'], red: ['Red', '#6E1C18'], blonde: ['Blonde', '#C4A470'] };
+var PIPING = { gold: ['Gold', '#D6C080'], white: ['White', '#E4E2DC'], black: ['Black', '#1E1E20'], none: ['None', 'linear-gradient(135deg, transparent 44%, #FF8A80 44% 56%, transparent 56%), #2A2A2E'] };
+var PANEL = { gold: 'Brushed gold', silver: 'Brushed silver', black: 'Black', plexi: 'Plexi gold', dark: 'Dark steel', white: 'White', orange: 'Orange' };
+var GRILLE = { oxblood: 'Oxblood weave', silver: 'Silver-blue weave', wheat: 'Wheat weave', salt: 'Salt & pepper', black: 'Black mesh', brass: 'Perforated brass' };
+var PRINT = { white: ['#141416', '#3A3A3E'], orange: ['#141416', '#3A2410'], gold: ['#4a3a1c', '#6a5630'], plexi: ['#2a2112', '#5a4628'], silver: ['#2A2A2E', '#55555B'], black: ['#E8E8EB', '#6A6A70'], dark: ['#E8E8EB', '#8A8A90'] };
+var KNOB = { chicken: 'Chickenhead', black: 'Black knurled', plain: 'Black, white line', cream: 'Cream dome', silver: 'Silver' };
+var KSIZE = { S: 26, M: 34, L: 48, XL: 64 };
+var SCALES = [['ticks', 'Ticks'], ['n10', '1–10'], ['n12', '1–12'], ['none', 'None']];
+function scaleOf(p) { return p.scale || (p.ticks ? 'ticks' : 'none'); }
+function tname(p) { return p.type === 'toggle' && p.sw === 'push' ? 'Push button' : p.type === 'jewel' && p.style === 'led' ? 'LED' : TYPE[p.type]; }
+var LEDC = { red: ['#FF6A58', '#B0221A', '#3A1512'], amber: ['#FFC85A', '#B06A10', '#3A2810'], green: ['#6CF58C', '#169A3A', '#13301A'], blue: ['#7DBBFF', '#1D5AAE', '#142236'] };
+var PLATEM = { gold: 'Gold', silver: 'Silver', black: 'Black', blackgold: 'Black, gold rim' };
+var PLATESW = { gold: 'background: linear-gradient(180deg, #F1DFA8, #B8913E)', silver: 'background: linear-gradient(180deg, #F2F2F4, #A8A8AE)', black: 'background: linear-gradient(180deg, #2A2A2E, #121214)', blackgold: 'background: #121214; box-shadow: inset 0 0 0 3px #C9A452' };
+var PARAMS = ['Input', 'Bass', 'Mid', 'Treble', 'Output', 'Fixed'];
+var LOGOC = { cream: ['Cream', '#F3E6C4'], white: ['White', '#F2F2F4'], gold: ['Gold', '#D9B865'], black: ['Black', '#1A1A1C'] };
+var MAT = { black: 'Black', gold: 'Gold', silver: 'Silver', orange: 'Orange', white: 'White' };
+var LIGHT = { red: ['Red', 'none', 'rgba(255,110,60,0.7)'], amber: ['Amber', 'hue-rotate(28deg) saturate(1.3)', 'rgba(255,170,40,0.7)'], green: ['Green', 'hue-rotate(95deg)', 'rgba(80,230,90,0.6)'], blue: ['Blue', 'hue-rotate(215deg)', 'rgba(80,150,255,0.6)'] };
+var ICONS = ['volume', 'treble', 'bass', 'mid', 'gain', 'reverb', 'power', 'input', 'clean', 'dirty'];
+var ICONNAME = { volume: 'Volume', treble: 'Treble', bass: 'Bass', mid: 'Mid / shape', gain: 'Gain', reverb: 'Reverb', power: 'Power', input: 'Input', clean: 'Clean', dirty: 'Dirty' };
+function panelImg(lay, m) { return B['panel_' + lay + '_' + m]; }
+
+var GOLD_PARTS = [
+  { id: 'a1', type: 'title', x: 36, y: 50, w: 104, h: 12, text: 'PREAMP' },
+  { id: 'a2', type: 'title', x: 150, y: 50, w: 214, h: 12, text: 'EQ' },
+  { id: 'a3', type: 'title', x: 376, y: 50, w: 190, h: 12, text: 'OUTPUT' },
+  { id: 'k1', type: 'knob', x: 56, y: 72, style: 'chicken', size: 'XL', param: 'Input', v: 0.6, label: 'INPUT', lpos: 'below', ticks: true },
+  { id: 'k2', type: 'knob', x: 130, y: 72, style: 'chicken', size: 'XL', param: 'Bass', v: 0.5, label: 'BASS', lpos: 'below', ticks: true },
+  { id: 'k3', type: 'knob', x: 204, y: 72, style: 'chicken', size: 'XL', param: 'Mid', v: 0.5, label: 'MID', lpos: 'below', ticks: true },
+  { id: 'k4', type: 'knob', x: 278, y: 72, style: 'chicken', size: 'XL', param: 'Treble', v: 0.5, label: 'TREBLE', lpos: 'below', ticks: true },
+  { id: 't1', type: 'toggle', x: 398, y: 66, w: 40, h: 70, label: 'LEVEL\nMATCH' },
+  { id: 'k5', type: 'knob', x: 470, y: 72, style: 'chicken', size: 'XL', param: 'Output', v: 0.72, label: 'OUTPUT', lpos: 'below', ticks: true },
+  { id: 'j1', type: 'jewel', x: 544, y: 90, w: 28, h: 28 },
+  { id: 'l1', type: 'logo', x: 52, y: 214, w: 190, h: 34, size: 34, color: 'cream' },
+  { id: 'p1', type: 'plate', x: 476, y: 372, w: 76, h: 22, text: 'GOLD 30', mat: 'gold' }
+];
+function jcKnob(id, x, label, param, v) { return { id: id, type: 'knob', x: x, y: 80, style: 'black', size: 'S', param: param, v: v, label: label, lpos: 'above', ticks: false }; }
+var JC_PARTS = [
+  { id: 's1', type: 'section', x: 28, y: 50, w: 156, h: 60, mat: 'black' },
+  { id: 's2', type: 'section', x: 190, y: 50, w: 222, h: 60, mat: 'black' },
+  { id: 's3', type: 'section', x: 418, y: 50, w: 96, h: 60, mat: 'gold' },
+  { id: 's4', type: 'section', x: 520, y: 50, w: 52, h: 60, mat: 'black' },
+  { id: 'i1', type: 'jack', x: 34, y: 62, w: 16, h: 16 }, { id: 'i2', type: 'jack', x: 34, y: 86, w: 16, h: 16 },
+  jcKnob('c1', 58, 'VOLUME', 'Fixed', 0.5), jcKnob('c2', 89, 'TREBLE', 'Fixed', 0.5), jcKnob('c3', 120, 'MIDDLE', 'Fixed', 0.5), jcKnob('c4', 151, 'BASS', 'Fixed', 0.5),
+  { id: 'i3', type: 'jack', x: 196, y: 62, w: 16, h: 16 }, { id: 'i4', type: 'jack', x: 196, y: 86, w: 16, h: 16 },
+  jcKnob('d1', 220, 'VOLUME', 'Input', 0.45), jcKnob('d2', 251, 'TREBLE', 'Treble', 0.6), jcKnob('d3', 282, 'MIDDLE', 'Mid', 0.5), jcKnob('d4', 313, 'BASS', 'Bass', 0.45),
+  jcKnob('d5', 344, 'DIST', 'Fixed', 0), jcKnob('d6', 375, 'REVERB', 'Fixed', 0.3),
+  jcKnob('e1', 424, 'SPEED', 'Fixed', 0.3), jcKnob('e2', 453, 'DEPTH', 'Fixed', 0.6), jcKnob('e3', 482, 'OUTPUT', 'Output', 0.7),
+  { id: 'p1', type: 'plate', x: 524, y: 55, w: 44, h: 14, text: 'JC-120', mat: 'silver' },
+  { id: 't1', type: 'toggle', x: 528, y: 76, w: 14, h: 26, label: '' },
+  { id: 'j1', type: 'jewel', x: 550, y: 82, w: 14, h: 14 },
+  { id: 'r1', type: 'trim', x: 22, y: 133, w: 556, h: 5, mat: 'silver' },
+  { id: 'r2', type: 'trim', x: 22, y: 398, w: 556, h: 5, mat: 'silver' },
+  { id: 'l1', type: 'logo', x: 40, y: 150, w: 110, h: 20, size: 20, color: 'white' }
+];
+function hk(id, x, size, param, v, sym, symX) { var s = KSIZE[size], y = 281 - s / 2; return [{ id: id, type: 'knob', x: x, y: y, style: 'plain', size: size, param: param, v: v, label: '', lpos: 'below', ticks: true }, { id: id + 's', type: 'symbol', x: Math.round(x + s / 2 - 7), y: 242, w: 14, h: 14, icon: sym }]; }
+function cap(id, x, w, text) { return { id: id, type: 'text', x: x, y: 319, w: w, h: 8, text: text }; }
+var HEAD_PARTS = [
+  { id: 'h1', type: 'handle', x: 40, y: 142, w: 12, h: 212 }, { id: 'h2', type: 'handle', x: 548, y: 142, w: 12, h: 212 },
+  { id: 'o1', type: 'outline', x: 60, y: 138, w: 480, h: 220 },
+  { id: 'l1', type: 'logo', x: 74, y: 152, w: 173, h: 30, size: 30, color: 'black' },
+  { id: 'tt', type: 'text', x: 286, y: 156, w: 196, h: 24, text: 'SUPER CRUSH 100', font: 'serif' },
+  { id: 'bg', type: 'badge', x: 494, y: 144, w: 36, h: 42 },
+  { id: 's1', type: 'section', x: 66, y: 232, w: 156, h: 104, mat: 'black' },
+  { id: 's2', type: 'section', x: 228, y: 232, w: 164, h: 104, mat: 'orange' },
+  { id: 's3', type: 'section', x: 398, y: 232, w: 136, h: 104, mat: 'black' },
+  { id: 'y1', type: 'symbol', x: 68, y: 242, w: 14, h: 14, icon: 'power' },
+  { id: 't1', type: 'toggle', x: 68, y: 268, w: 14, h: 26, param: 'Fixed', v: 0, top: 'OFF', label: 'ON' },
+  { id: 'y2', type: 'symbol', x: 102, y: 242, w: 14, h: 14, icon: 'dirty' },
+  { id: 't2', type: 'toggle', x: 102, y: 268, w: 14, h: 26, param: 'Fixed', v: 0, top: 'CLEAN', label: 'DIRTY' },
+  { id: 'j1', type: 'jewel', x: 126, y: 273, w: 16, h: 16, color: 'amber' },
+  cap('c1', 59, 32, 'POWER'), cap('c2', 91, 36, 'CHANNEL'), cap('c3', 148, 72, 'MASTER'),
+  cap('c4', 228, 164, 'DIRTY CHANNEL'), cap('c5', 398, 100, 'CLEAN CHANNEL'), cap('c6', 500, 32, 'INPUT'),
+  { id: 'i1', type: 'jack', x: 508, y: 273, w: 16, h: 16 }, { id: 'y9', type: 'symbol', x: 509, y: 242, w: 14, h: 14, icon: 'input' }
+].concat(hk('m1', 148, 'M', 'Output', 0.62, 'volume'), hk('m2', 186, 'M', 'Fixed', 0.25, 'reverb'),
+  hk('d1', 233, 'M', 'Fixed', 0.6, 'volume'), hk('d2', 271, 'S', 'Treble', 0.55, 'treble'), hk('d3', 300, 'S', 'Mid', 0.5, 'mid'), hk('d4', 329, 'S', 'Bass', 0.6, 'bass'), hk('d5', 357, 'M', 'Input', 0.7, 'gain'),
+  hk('e1', 405, 'S', 'Fixed', 0.5, 'treble'), hk('e2', 435, 'S', 'Fixed', 0.5, 'bass'), hk('e3', 464, 'M', 'Fixed', 0.5, 'volume'));
+function bjKnob(id, x, label, param, v) { return { id: id, type: 'knob', x: x, y: 67, style: 'chicken', size: 'M', param: param, v: v, label: label, lpos: 'above', scale: 'n12' }; }
+function bjCap(id, x, w, text) { return { id: id, type: 'text', x: x, y: 44, w: w, h: 12, text: text }; }
+var TOP_PARTS = [
+  { id: 'i1', type: 'jack', x: 50, y: 76, w: 16, h: 16 }, bjCap('c1', 38, 40, 'INPUT'),
+  bjKnob('k1', 95, 'VOLUME', 'Input', 0.5),
+  { id: 't1', type: 'toggle', sw: 'push', x: 151, y: 75, w: 18, h: 18, param: 'Fixed', v: 1, top: '', label: '' }, bjCap('c2', 140, 40, 'FAT'),
+  bjKnob('k2', 191, 'TREBLE', 'Treble', 0.55), bjKnob('k3', 249, 'BASS', 'Bass', 0.45), bjKnob('k4', 307, 'MIDDLE', 'Mid', 0.6),
+  bjKnob('k5', 365, 'MASTER', 'Output', 0.65), bjKnob('k6', 423, 'REVERB', 'Fixed', 0.3),
+  { id: 't2', type: 'toggle', x: 485, y: 71, w: 14, h: 26, param: 'Fixed', v: 1, top: '', label: '' }, bjCap('c3', 468, 48, 'POWER'),
+  { id: 'j1', type: 'jewel', x: 524, y: 76, w: 16, h: 16, color: 'red' },
+  { id: 'p1', type: 'plate', x: 250, y: 140, w: 100, h: 24, text: '', mat: 'black' },
+  { id: 'l1', type: 'logo', x: 261, y: 145, w: 78, h: 14, size: 14, color: 'white' },
+  { id: 'w1', type: 'screw', x: 28, y: 160, w: 6, h: 6 }, { id: 'w2', type: 'screw', x: 566, y: 160, w: 6, h: 6 },
+  { id: 'w3', type: 'screw', x: 28, y: 406, w: 6, h: 6 }, { id: 'w4', type: 'screw', x: 566, y: 406, w: 6, h: 6 }
+];
+function gk(id, cx, label, param, v) { return { id: id, type: 'knob', x: cx - 13, y: 325, style: 'chicken', size: 'S', param: param, v: v, label: label, lpos: 'above', ticks: true }; }
+var GHEAD_PARTS = [
+  { id: 'i1', type: 'jack', x: 38, y: 330, w: 16, h: 16 }, { id: 'c1', type: 'text', x: 32, y: 356, w: 28, h: 9, text: 'INSERT' },
+  gk('a1', 76, 'GAIN', 'Fixed', 0.4), gk('a2', 114, 'LOW', 'Fixed', 0.5), gk('a3', 152, 'MID', 'Fixed', 0.5), gk('a4', 190, 'HIGH', 'Fixed', 0.5), gk('a5', 228, 'VOLUME', 'Fixed', 0.4),
+  { id: 'c2', type: 'text', x: 245, y: 309, w: 34, h: 7, text: 'SELECT' }, { id: 't1', type: 'toggle', sw: 'push', x: 255, y: 321, w: 14, h: 14, param: 'Fixed', v: 1, top: '', label: '' },
+  { id: 'e1', type: 'jewel', style: 'led', state: 'off', x: 259, y: 343, w: 6, h: 6, color: 'green' },
+  gk('b1', 288, 'GAIN', 'Input', 0.65), gk('b2', 326, 'LOW', 'Bass', 0.55), gk('b3', 364, 'MID', 'Mid', 0.45), gk('b4', 402, 'HIGH', 'Treble', 0.6), gk('b5', 440, 'VOLUME', 'Output', 0.4),
+  { id: 'c3', type: 'text', x: 457, y: 309, w: 34, h: 7, text: 'SELECT' }, { id: 't2', type: 'toggle', sw: 'push', x: 467, y: 321, w: 14, h: 14, param: 'Fixed', v: 0, top: '', label: '' },
+  { id: 'e2', type: 'jewel', style: 'led', state: 'on', x: 471, y: 343, w: 6, h: 6, color: 'red' },
+  gk('p1', 512, 'PRESENCE', 'Fixed', 0.5),
+  { id: 'j1', type: 'jewel', x: 533, y: 325, w: 26, h: 26, color: 'red' },
+  { id: 's1', type: 'title', x: 60, y: 360, w: 186, h: 10, text: 'ONE / TWO' }, { id: 's2', type: 'title', x: 272, y: 360, w: 186, h: 10, text: 'THREE' },
+  { id: 'n1', type: 'plate', shape: 'oval', x: 225, y: 170, w: 150, h: 60, text: '', mat: 'blackgold' },
+  { id: 'l1', type: 'logo', x: 239, y: 189, w: 123, h: 22, size: 22, color: 'gold' },
+  { id: 'n2', type: 'plate', x: 444, y: 252, w: 116, h: 28, text: '5150 III 50W', mat: 'blackgold' }
+];
+function tplParts(list) { return list.map(function (p) { return Object.assign({}, p); }); }
+var TPL = {
+  gold:  { name: 'British gold', look: { layout: 'tall', tolex: 'black', piping: 'gold', panel: 'gold', grille: 'oxblood', corners: 'chrome', studs: false }, parts: GOLD_PARTS, capture: 'Plexi 59 crunch.nam' },
+  black: { name: 'Black panel', look: { layout: 'tall', tolex: 'black', piping: 'white', panel: 'black', grille: 'silver', corners: 'chrome', studs: false }, parts: GOLD_PARTS, capture: 'Blackface Deluxe vib.nam' },
+  plexi: { name: 'Plexi', look: { layout: 'tall', tolex: 'black', piping: 'white', panel: 'plexi', grille: 'salt', corners: 'chrome', studs: false }, parts: GOLD_PARTS, capture: 'Super Lead 1968.nam' },
+  cream: { name: 'Cream', look: { layout: 'tall', tolex: 'cream', piping: 'black', panel: 'dark', grille: 'wheat', corners: 'chrome', studs: false }, parts: GOLD_PARTS, capture: 'Tweed Bassman.nam' },
+  tweed: { name: 'Tweed top', look: { layout: 'top', tolex: 'tweed', piping: 'none', panel: 'silver', grille: 'oxblood', corners: 'none', studs: false }, parts: TOP_PARTS, capture: 'Blues Junior fat off.nam' },
+  ghead: { name: 'Grille head', look: { layout: 'headg', tolex: 'black', piping: 'none', panel: 'gold', grille: 'brass', corners: 'black', studs: false }, parts: GHEAD_PARTS, capture: '5150 III 50W ch3.nam' },
+  frame: { name: 'Framed head', look: { layout: 'head', tolex: 'orange', piping: 'none', panel: 'white', grille: 'black', corners: 'black', studs: false }, parts: HEAD_PARTS, capture: 'Super Crush dirty.nam' },
+  jazz:  { name: 'Jazz clean', look: { layout: 'thin', tolex: 'black', piping: 'black', panel: 'black', grille: 'black', corners: 'black', studs: true }, parts: JC_PARTS, capture: 'JC 120B bright off.nam' }
+};
+var AMPS = [
+  { name: 'Encore Gold 30', tpl: 'gold', used: 'Clean, Clean 2' },
+  { name: 'JC-120', tpl: 'jazz', used: 'Ballad in D' },
+  { name: 'Super Crush 100', tpl: 'frame', used: 'Lead, Big chorus' },
+  { name: 'Blues Junior', tpl: 'tweed', used: 'Slow blues' },
+  { name: '5150 III 50W', tpl: 'ghead', used: 'Heavy, Breakdown' }
+];
+var SIZE = { knob: null, symbol: [14, 14], badge: [36, 42], handle: [12, 200], outline: [200, 100], toggle: [24, 42], jewel: [28, 28], logo: [150, 26], text: [90, 14], plate: [70, 20], jack: [18, 18], screw: [10, 10], section: [120, 56], title: [140, 12], trim: [556, 5] };
+var TYPE = { knob: 'Knob', symbol: 'Symbol', badge: 'Badge', handle: 'Panel handle', outline: 'Frame line', toggle: 'Bat toggle', jewel: 'Pilot light', logo: 'Encore logo', text: 'Label text', plate: 'Name plate', jack: 'Input jack', screw: 'Screw', section: 'Panel section', title: 'Section title', trim: 'Trim strip' };
+function snap(v) { return Math.round(v / SNAP) * SNAP; }
+function knobImg(style, s, v) {
+  if (style === 'plain') return 'background: radial-gradient(circle at 40% 32%, #4A4A4F 0, #1C1C1F 38%, #0B0B0C 70%), #0B0B0C; box-shadow: inset 0 0 0 ' + Math.max(1, s / 14) + 'px #050506, inset 0 1px 1px rgba(255,255,255,0.25)';
+  if (style === 'chicken') return 'background-image: url(' + B.chicken + '); background-size: ' + s + 'px auto; background-position: 0 -' + (Math.round(v * 40) * s) + 'px';
+  return 'background-image: url(' + B['k' + style] + '); background-size: 100% 100%';
+}
+function tenth(v) { var n = Math.round(v * 100) / 10; return (n % 1 === 0 ? n.toFixed(0) : n.toFixed(1)); }
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    var a = AMPS[0], t = TPL[a.tpl];
+    this.state = { amp: 0, tpl: a.tpl, look: Object.assign({}, t.look), parts: tplParts(t.parts), sel: 'k4', multi: [], drag: null, hover: null, next: 1, menu: false };
+  }
+  dims(p) {
+    if (p.type === 'knob') { var s = KSIZE[p.size || 'M']; return [s, s]; }
+    if (p.w) return [p.w, p.h];
+    return SIZE[p.type] || [40, 40];
+  }
+  newPart(d) {
+    var id = 'n' + this.state.next, p = { id: id, type: d.type };
+    if (d.type === 'knob') Object.assign(p, { style: d.style, size: this.state.look.layout === 'tall' ? 'L' : 'S', param: null, v: 0.5, label: 'KNOB', lpos: this.state.look.layout === 'thin' || this.state.look.layout === 'top' ? 'above' : 'below', ticks: this.state.look.layout !== 'thin' });
+    if (d.type === 'trim') p.x = LAYOUT[this.state.look.layout].px;
+    else { var s = SIZE[d.type]; p.w = s[0]; p.h = s[1]; }
+    if (d.type === 'text') p.text = 'LABEL';
+    if (d.type === 'plate') { p.text = 'MODEL'; p.mat = 'gold'; }
+    if (d.type === 'title') p.text = 'SECTION';
+    if (d.type === 'section') p.mat = 'gold';
+    if (d.type === 'trim') { p.mat = 'silver'; p.x = 22; }
+    if (d.type === 'logo') { p.size = 26; p.color = 'cream'; }
+    if (d.type === 'toggle') { p.label = 'MATCH'; p.top = ''; p.param = 'Level match'; p.v = 1; if (d.style === 'push') { p.sw = 'push'; p.w = 18; p.h = 18; } }
+    if (d.type === 'symbol') p.icon = 'volume';
+    if (d.type === 'jewel') { p.color = 'red'; if (d.style === 'led') { p.style = 'led'; p.state = 'on'; p.w = 8; p.h = 8; } }
+    if (d.type === 'text') p.font = 'caps';
+    return p;
+  }
+  pos(e, w, h) {
+    var r = e.currentTarget.getBoundingClientRect(), k = r.width / 600, d = this.state.drag;
+    var x = (e.clientX - r.left) / k - (d && d.kind === 'move' ? d.gx : w / 2), y = (e.clientY - r.top) / k - (d && d.kind === 'move' ? d.gy : h / 2);
+    x = Math.max(0, Math.min(600 - w, snap(x))); y = Math.max(24, Math.min(430 - h, snap(y)));
+    return this.smart(x, y, w, h, d && d.kind === 'move' ? d.id : null);
+  }
+  // Smart guides: line up with other parts' centres, and repeat the spacing of a row.
+  smart(x, y, w, h, selfId) {
+    var self = this, T = 6, others = this.state.parts.filter(function (q) { return q.id !== selfId && q.type !== 'trim' && q.type !== 'section'; });
+    var guides = [], cy = y + h / 2, cx = x + w / 2, bestY = null, bestX = null;
+    others.forEach(function (q) {
+      var dq = self.dims(q), qcy = q.y + dq[1] / 2, qcx = q.x + dq[0] / 2;
+      var dy = Math.abs(qcy - cy); if (dy <= T && (!bestY || dy < bestY.d)) bestY = { d: dy, v: qcy };
+      var dx = Math.abs(qcx - cx); if (dx <= T && (!bestX || dx < bestX.d)) bestX = { d: dx, v: qcx };
+    });
+    if (bestY) { y = Math.round(bestY.v - h / 2); cy = bestY.v; }
+    if (bestX) { x = Math.round(bestX.v - w / 2); cx = bestX.v; }
+    var gaps = [];
+    if (bestY) {
+      var row = others.filter(function (q) { var dq = self.dims(q); return Math.abs(q.y + dq[1] / 2 - cy) < 1.5; }).map(function (q) { var dq = self.dims(q); return { x: q.x, w: dq[0] }; }).sort(function (a, b) { return a.x - b.x; });
+      var left = row.filter(function (q) { return q.x + q.w <= x + 1; }), right = row.filter(function (q) { return q.x >= x + w - 1; });
+      var L = left[left.length - 1], LL = left[left.length - 2], R = right[0], RR = right[1];
+      if (L && LL) { var g = L.x - (LL.x + LL.w), cur = x - (L.x + L.w); if (Math.abs(cur - g) <= T) { x = L.x + L.w + g; gaps.push([LL.x + LL.w, L.x, g], [L.x + L.w, x, g]); } }
+      if (!gaps.length && R && RR) { var g2 = RR.x - (R.x + R.w), cur2 = R.x - (x + w); if (Math.abs(cur2 - g2) <= T) { x = R.x - g2 - w; gaps.push([x + w, R.x, g2], [R.x + R.w, RR.x, g2]); } }
+      var xs = row.map(function (q) { return q.x; }).concat([x]), xe = row.map(function (q) { return q.x + q.w; }).concat([x + w]);
+      guides.push({ x: Math.min.apply(null, xs) - 6, y: Math.round(cy), w: Math.max.apply(null, xe) - Math.min.apply(null, xs) + 12, h: 1 });
+    }
+    if (bestX) guides.push({ x: Math.round(cx), y: 28, w: 1, h: 398 });
+    var gy = Math.round(cy - h / 2 - 6);
+    return { x: x, y: y, guides: guides, gaps: gaps.map(function (g) { return { x: g[0], y: gy, w: Math.max(1, g[1] - g[0]), label: String(Math.round(g[2])) }; }) };
+  }
+  sels() { var st = this.state; return (st.multi && st.multi.length ? st.multi : (st.sel ? [st.sel] : [])); }
+  arrange(kind) {
+    var self = this, ids = this.sels(), ps = this.state.parts.filter(function (p) { return ids.indexOf(p.id) >= 0; });
+    if (ps.length < 2) return;
+    var b = ps.map(function (p) { var d = self.dims(p); return { id: p.id, x: p.x, y: p.y, w: d[0], h: d[1] }; }), ch = {};
+    var first = b.filter(function (q) { return q.id === ids[0]; })[0];
+    var top = Math.min.apply(null, b.map(function (q) { return q.y; })), bot = Math.max.apply(null, b.map(function (q) { return q.y + q.h; }));
+    if (kind === 'top') b.forEach(function (q) { ch[q.id] = { y: top }; });
+    if (kind === 'bottom') b.forEach(function (q) { ch[q.id] = { y: bot - q.h }; });
+    if (kind === 'middle') { var m = first.y + first.h / 2; b.forEach(function (q) { ch[q.id] = { y: Math.round(m - q.h / 2) }; }); }
+    if (kind === 'distribute') {
+      b.sort(function (p, q) { return p.x - q.x; });
+      var span = b[b.length - 1].x + b[b.length - 1].w - b[0].x, tot = b.reduce(function (a, q) { return a + q.w; }, 0), gap = (span - tot) / (b.length - 1), cx = b[0].x;
+      b.forEach(function (q) { ch[q.id] = { x: Math.round(cx) }; cx += q.w + gap; });
+    }
+    if (kind === 'size') { var f = this.find(ids[0]); ps.forEach(function (p) { if (p.type === f.type && p.id !== f.id) ch[p.id] = p.type === 'knob' ? { size: f.size } : { w: f.w, h: f.h }; }); }
+    this.setState({ parts: this.state.parts.map(function (p) { return ch[p.id] ? Object.assign({}, p, ch[p.id]) : p; }) });
+  }
+  dsize() { var d = this.state.drag; if (!d) return [0, 0]; if (d.kind === 'move') return this.dims(this.find(d.id)); return this.dims(this.newPart(d)); }
+  find(id) { return this.state.parts.filter(function (p) { return p.id === id; })[0]; }
+  setPart(id, ch) { this.setState({ parts: this.state.parts.map(function (p) { return p.id === id ? Object.assign({}, p, ch) : p; }) }); }
+  setLook(ch) { this.setState({ look: Object.assign({}, this.state.look, ch) }); }
+  renderVals() {
+    var self = this, st = this.state, L = st.look, lay = LAYOUT[L.layout], pr = PRINT[L.panel];
+    function seg(opts, cur, set) { return opts.map(function (o) { var on = cur === o[0]; return { name: o[1], on: on ? 'true' : 'false', cls: on ? 'b b-on' : 'b', style: on ? 'color: #FFFFFF' : '', pick: function () { set(o[0]); } }; }); }
+    function swatch(map, cur, styleOf, set) { return Object.keys(map).map(function (k) { var on = cur === k; return { name: Array.isArray(map[k]) ? map[k][0] : map[k], on: on ? 'true' : 'false', cls: on ? 'ab-sw-on' : '', style: styleOf(k), pick: function () { set(k); } }; }); }
+    var lib = [
+      { name: 'Controls', items: [['knob', 'Chickenhead knob', 'chicken'], ['knob', 'Black knurled knob', 'black'], ['knob', 'Cream dome knob', 'cream'], ['knob', 'Silver knob', 'silver'], ['knob', 'Black knob, white line', 'plain'], ['toggle', 'Bat toggle', 'bat'], ['toggle', 'Push button', 'push']] },
+      { name: 'Lights', items: [['jewel', 'Pilot light', 'jewel'], ['jewel', 'LED', 'led']] },
+      { name: 'Panel', items: [['section', 'Panel section'], ['outline', 'Frame line'], ['title', 'Section title'], ['text', 'Label text'], ['symbol', 'Symbol'], ['plate', 'Name plate'], ['badge', 'Badge'], ['handle', 'Panel handle'], ['jack', 'Input jack'], ['screw', 'Screw']] },
+      { name: 'Front', items: [['logo', 'Encore logo'], ['trim', 'Trim strip']] }
+    ].map(function (g) {
+      return { name: g.name, items: g.items.map(function (it) {
+        var ico = '', icoStyle = '';
+        if (it[0] === 'knob') icoStyle = knobImg(it[2], 20, 0.5) + '; background-color: transparent; border: 0';
+        else if (it[2] === 'push') ico = 'PB';
+        else if (it[2] === 'led') ico = 'LD';
+        else ico = { symbol: 'SY', badge: 'BD', handle: 'HD', outline: 'FL', toggle: 'TG', jewel: 'PL', section: 'PS', title: 'ST', text: 'TX', plate: 'NP', jack: 'IN', screw: 'SC', logo: 'EN', trim: 'TR' }[it[0]];
+        var tip = it[0] === 'knob' ? 'A knob: drives Input, Bass, Mid, Treble or Output, or is fixed at the capture’s setting' : it[0] === 'toggle' ? 'Drives Level match, or is fixed as it was in the capture' : it[0] === 'jewel' ? 'Lights while the amp block is on, or is always off' : it[0] === 'logo' ? 'The Encore logo, in a colour and size you pick' : 'Print or decor: drives nothing';
+        return { name: it[1], ico: ico, icoStyle: icoStyle, tip: tip,
+          drag: function (e) { try { e.dataTransfer.setData('text/plain', it[1]); e.dataTransfer.effectAllowed = 'copy'; } catch (x) {} self.setState({ drag: { kind: 'new', type: it[0], style: it[2] } }); } };
+      }) };
+    });
+    function printAt(p, d) {
+      var cx = p.x + d[0] / 2, cy = p.y + d[1] / 2, col = pr[0];
+      st.parts.forEach(function (q) { if (q.type === 'section' && cx >= q.x && cx <= q.x + q.w && cy >= q.y && cy <= q.y + q.h) col = q.mat === 'black' ? '#E8E8EB' : q.mat === 'orange' || q.mat === 'white' ? '#141416' : '#2a2112'; });
+      return col;
+    }
+    var parts = st.parts.map(function (p) {
+      var d = self.dims(p), sel = self.sels().indexOf(p.id) >= 0, moving = st.drag && st.drag.kind === 'move' && st.drag.id === p.id;
+      var isKnob = p.type === 'knob', fixed = isKnob && p.param === 'Fixed', bad = isKnob && !p.param;
+      var o = { x: p.x, y: p.y, w: d[0], h: d[1], selected: sel, cls: bad ? 'ab-bad' : (sel ? 'ab-sel' : ''), fade: moving ? 'opacity: 0.35' : '',
+        isSection: false, isSymbol: false, isBadge: false, isHandle: false, isOutline: false, hasTop: false, top: '', textFont: '', isTitle: false, isText: false, isPlate: false, isTrim: false, isLogo: false, isImg: false, hasNums: false, nums: [], nfs: 7, hasTicks: false, hasPointer: false, hasLabel: false, showBind: false,
+        text: p.text || '', fs: 10, aria: TYPE[p.type], tip: TYPE[p.type], ticks: [], label: p.label || '', labelPos: '', lfs: 9.5, bind: '', bindStyle: '', bindPos: 'top: calc(100% + 18px)', ls: '0.1em', pc: printAt(p, d) };
+      if (isKnob) {
+        var s = d[0];
+        o.isImg = true; o.imgStyle = 'inset: 0; border-radius: 50%; ' + knobImg(p.style, s, p.v) + '; filter: drop-shadow(0 ' + Math.max(2, s / 18) + 'px ' + Math.max(1, s / 30) + 'px rgba(0,0,0,0.55))';
+        o.hasPointer = p.style !== 'chicken'; o.pa = -135 + 270 * p.v; o.pl = Math.round(s * 0.36);
+        var sc = scaleOf(p), nn = sc === 'n10' ? 10 : sc === 'n12' ? 12 : 0;
+        o.hasTicks = sc === 'ticks'; o.ticks = []; o.hasNums = nn > 0; o.nums = [];
+        var nfs = s < 40 ? 6 : 7.5, rn = s / 2 + 2 + nfs * 0.6;
+        for (var ni = 1; ni <= nn; ni++) { var na = (-135 + 270 * (ni - 1) / (nn - 1)) * Math.PI / 180; o.nums.push({ t: String(ni), x: Math.round((s / 2 + rn * Math.sin(na)) * 10) / 10, y: Math.round((s / 2 - rn * Math.cos(na)) * 10) / 10 }); }
+        o.nfs = nfs;
+        var sm = s < 40; for (var i = 0; i <= 10; i++) { var big = i === 0 || i === 5 || i === 10, len = sm ? (big ? 3 : 2) : (big ? 5 : 3.5), tw = sm ? (big ? 1.2 : 0.9) : (big ? 1.6 : 1); o.ticks.push({ a: -135 + 27 * i, len: len, w: tw, ml: -tw / 2, r: -(s / 2 + (sm ? 1.5 : 2) + len) }); }
+        o.hasLabel = !!p.label; o.lfs = s < 32 ? 6.5 : 9.5; o.ls = s < 32 ? '0.02em' : '0.1em';
+        o.labelPos = p.lpos === 'above' ? 'bottom: calc(100% + ' + (nn ? 11 : o.hasTicks ? 9 : 3) + 'px)' : 'top: calc(100% + ' + (nn ? 6 : o.hasTicks ? 8 : 4) + 'px)';
+        o.aria = 'Knob ' + (p.label || '') + (fixed ? ', fixed at ' + tenth(p.v) : p.param ? ', drives ' + p.param : ', not set');
+        o.tip = fixed ? 'Fixed at ' + tenth(p.v) + ' in this capture' : p.param ? 'Drives ' + p.param : 'Not set: pick what it drives, or Fixed';
+        o.showBind = sel || bad; o.bind = bad ? 'NOT SET' : fixed ? 'FIXED ' + tenth(p.v) : '→ ' + p.param;
+        o.bindStyle = bad ? 'background: #4A3510; color: #FFD27A' : fixed ? 'background: #2C2C30; color: #C4C4C9' : 'background: #1B2C45; color: #7FC4FF';
+        o.bindPos = p.lpos === 'above' ? 'top: calc(100% + ' + (nn ? 8 : 4) + 'px)' : 'top: calc(100% + ' + (nn ? 22 : o.hasTicks ? 24 : 18) + 'px)';
+      } else if (p.type === 'toggle') {
+        var tfix = p.param === 'Fixed', up = tfix ? p.v >= 0.5 : true, push = p.sw === 'push', W = push ? ['OUT', 'IN', 'out', 'pressed in'] : ['UP', 'DOWN', 'up', 'down'];
+        o.isImg = true;
+        if (!push) o.imgStyle = 'inset: 0; background-image: url(' + (up ? B.tog : B.togOff) + '); background-size: 100% 100%';
+        else o.imgStyle = up ? 'inset: 0; border-radius: 50%; background: radial-gradient(circle at 44% 38%, #4E4E53 0, #1B1B1E 38%, #0A0A0B 52%, #2A2A2E 55%, #F4F4F6 60%, #A4A4AA 74%, #45454A 92%, #1A1A1C 100%); box-shadow: 0 2px 2px rgba(0,0,0,0.6)'
+          : 'inset: 0; border-radius: 50%; background: radial-gradient(circle at 50% 54%, #18181A 0, #0C0C0E 40%, #040405 54%, #6A6A70 58%, #E4E4E8 66%, #9A9AA0 78%, #3A3A3E 92%, #161618 100%); box-shadow: 0 1px 1px rgba(0,0,0,0.6)';
+        o.hasLabel = !!p.label; o.lfs = d[1] < 40 ? 6.5 : 9.5; o.ls = d[1] < 40 ? '0.02em' : '0.1em'; o.labelPos = 'top: calc(100% + 3px)';
+        o.hasTop = !!p.top; o.top = p.top || '';
+        o.showBind = sel; o.bind = tfix ? 'FIXED ' + (up ? W[0] : W[1]) : '→ Level match'; o.bindStyle = tfix ? 'background: #2C2C30; color: #C4C4C9' : 'background: #1B2C45; color: #7FC4FF';
+        o.bindPos = 'top: calc(100% + ' + (d[1] < 40 ? 16 : 34) + 'px)'; o.tip = tfix ? 'Fixed ' + (up ? W[2] : W[3]) + ' in this capture' : 'Drives Level match'; o.aria = tname(p) + (tfix ? ', fixed ' + (up ? W[2] : W[3]) : ', drives Level match');
+      } else if (p.type === 'jewel') {
+        var lc = LIGHT[p.color || 'red'], lit = p.state !== 'off', ec = LEDC[p.color || 'red'];
+        o.isImg = true;
+        if (p.style === 'led') o.imgStyle = 'inset: 0; border-radius: 50%; background: ' + (lit ? 'radial-gradient(circle at 40% 35%, #FFFFFF 0, ' + ec[0] + ' 32%, ' + ec[1] + ' 80%)' : 'radial-gradient(circle at 40% 35%, rgba(255,255,255,0.35) 0, ' + ec[2] + ' 45%, #0A0A0B 90%)') + '; box-shadow: 0 0 0 1px #0A0A0B, 0 0 0 2px #7A7A80' + (lit ? ', 0 0 ' + Math.max(4, d[0]) + 'px ' + ec[0] : '');
+        else o.imgStyle = 'inset: 0; background-image: url(' + B.jewel + '); background-size: 100% 100%; filter: ' + (lc[1] === 'none' ? '' : lc[1] + ' ') + (lit ? 'drop-shadow(0 0 ' + (d[0] / 3) + 'px ' + lc[2] + ')' : 'brightness(0.4) saturate(0.6)');
+        o.tip = lit ? 'Lights while the amp block is on' : 'Always off: it was off when the capture was made'; o.aria = tname(p) + (lit ? ', lights while the amp block is on' : ', always off');
+      } else if (p.type === 'jack') {
+        o.isImg = true; o.imgStyle = 'inset: 0; border-radius: 50%; background: radial-gradient(circle, #050506 0 28%, #D9D9DE 31%, #8A8A90 55%, #3A3A3E 75%, #18181A 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.7)';
+      } else if (p.type === 'screw') {
+        o.isImg = true; o.imgStyle = 'inset: 0; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #F2F2F4, #7A7A80 70%); box-shadow: 0 1px 1px rgba(0,0,0,0.6)';
+      } else if (p.type === 'section') {
+        o.isSection = true;
+        o.secStyle = 'background-image: url(' + panelImg(L.layout, p.mat || 'black') + '); background-size: ' + lay.pw + 'px ' + lay.panelH + 'px; background-position: ' + (lay.px - p.x) + 'px ' + (lay.py - p.y) + 'px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.7), 0 2px 3px rgba(0,0,0,0.5)';
+      } else if (p.type === 'symbol') { o.isSymbol = true; ICONS.forEach(function (k) { o['sym_' + k] = p.icon === k; }); o.tip = 'Symbol: ' + ICONNAME[p.icon];
+      } else if (p.type === 'badge') { o.isBadge = true; o.badgeSize = Math.round(Math.min(d[0], d[1]) * 0.62);
+      } else if (p.type === 'handle') { o.isHandle = true;
+      } else if (p.type === 'outline') { o.isOutline = true;
+      } else if (p.type === 'title') { o.isTitle = true;
+      } else if (p.type === 'text') { o.isText = true; var serif = p.font === 'serif'; o.fs = Math.max(6, Math.round(d[1] * (serif ? 0.8 : 0.78))); o.textFont = serif ? "font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif; font-weight: 600; letter-spacing: 0.02em" : 'font-family: Inter, sans-serif; font-weight: 800; letter-spacing: ' + (d[1] < 12 ? '0.05em' : '0.12em');
+      } else if (p.type === 'plate') {
+        o.isPlate = true; o.fs = Math.max(7, Math.round(d[1] * 0.5));
+        o.plateStyle = (p.shape === 'oval' ? 'border-radius: 50%; ' : '') + (p.mat === 'blackgold' ? 'background: radial-gradient(ellipse at 50% 35%, #2A2A2E, #0E0E10 70%); color: #D9B865; box-shadow: inset 0 0 0 ' + (d[1] > 40 ? 3 : 2) + 'px #C9A452, inset 0 0 0 ' + (d[1] > 40 ? 4 : 3) + 'px #3A2E14, 0 2px 3px rgba(0,0,0,0.7)' : '') + (p.mat === 'blackgold' ? '' : p.mat === 'silver' ? 'background: linear-gradient(180deg, #F2F2F4, #A8A8AE); color: #1A1A1C; box-shadow: inset 0 1px 0 #FFFFFF, 0 1px 2px rgba(0,0,0,0.6)' : p.mat === 'black' ? 'background: linear-gradient(180deg, #2A2A2E, #121214); color: #D9D9DE; box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 1px 2px rgba(0,0,0,0.6)' : 'background: linear-gradient(180deg, #F1DFA8, #B8913E); color: #2a2112; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.6)');
+      } else if (p.type === 'trim') {
+        o.isTrim = true;
+        o.trimStyle = p.mat === 'gold' ? 'background: linear-gradient(180deg, #F6E3A8, #B8913E 50%, #6E5420 60%, #D9B865)' : p.mat === 'black' ? 'background: linear-gradient(180deg, #3A3A3E, #0E0E10)' : 'background: linear-gradient(180deg, #FFFFFF, #B9B9BF 45%, #5A5A60 60%, #D9D9DE); box-shadow: 0 1px 2px rgba(0,0,0,0.6)';
+      } else if (p.type === 'logo') { o.isLogo = true; o.logoSize = p.size; o.logoColor = LOGOC[p.color][1]; }
+      o.pick = function (e) {
+        e.stopPropagation();
+        if (e.shiftKey || e.ctrlKey || e.metaKey) { var cur = self.sels(), i = cur.indexOf(p.id); cur = i >= 0 ? cur.filter(function (x) { return x !== p.id; }) : cur.concat([p.id]); self.setState({ multi: cur, sel: cur[cur.length - 1] || null, menu: false }); }
+        else self.setState({ sel: p.id, multi: [], menu: false });
+      };
+      o.drag = function (e) {
+        var r = e.currentTarget.getBoundingClientRect(), k = r.width / d[0];
+        try { e.dataTransfer.setData('text/plain', p.id); e.dataTransfer.effectAllowed = 'move'; } catch (x) {}
+        self.setState({ drag: { kind: 'move', id: p.id, gx: (e.clientX - r.left) / k, gy: (e.clientY - r.top) / k }, sel: p.id, multi: [] });
+      };
+      return o;
+    });
+    var nSel = this.sels().length, sp = nSel === 1 ? this.find(st.sel) : null, isPart = !!sp, isMulti = nSel > 1, ds = this.dsize(), hv = st.hover;
+    var spv = { isPlate: false, lStyle: [], lState: [], shapes: [], tStyle: [], isJewel: false, isSymbol: false, isTextPart: false, tFixed: false, tPos: [], tDrive: [], lights: [], icons: {}, fonts: [], topText: '', isKnob: false, isToggle: false, hasMaterial: false, isLogo: false, hasText: false, fixed: false, unbound: false, text: '', x: 0, y: 0, w: 0, h: 0, params: [], knobs: [], sizes: [], lpos: [], scales: [], mats: [], logoColors: [], vPct: 0, vText: '' };
+    if (sp) {
+      var dd = this.dims(sp);
+      var icons = {}; ICONS.forEach(function (k) { var on = sp.icon === k; icons[k] = { cls: on ? 'b b-on' : 'b', on: on ? 'true' : 'false', pick: function () { self.setPart(sp.id, { icon: k }); } }; });
+      spv = { isPlate: sp.type === 'plate', isJewelPart: sp.type === 'jewel',
+        lStyle: seg([['jewel', 'Jewel'], ['led', 'LED']], sp.style || 'jewel', function (v) { self.setPart(sp.id, v === 'led' ? { style: 'led', w: 8, h: 8 } : { style: 'jewel', w: 28, h: 28 }); }),
+        lState: seg([['on', 'Lights while on'], ['off', 'Always off']], sp.state || 'on', function (v) { self.setPart(sp.id, { state: v }); }),
+        shapes: seg([['rect', 'Rectangle'], ['oval', 'Oval']], sp.shape || 'rect', function (v) { self.setPart(sp.id, { shape: v }); }),
+        isJewel: sp.type === 'jewel', isSymbol: sp.type === 'symbol', isTextPart: sp.type === 'text', icons: icons, topText: sp.top || '',
+        tFixed: sp.type === 'toggle' && sp.param === 'Fixed',
+        tDrive: seg([['Level match', 'Level match'], ['Fixed', 'Fixed']], sp.param || 'Level match', function (v) { self.setPart(sp.id, { param: v }); }),
+        tPos: seg(sp.sw === 'push' ? [[1, 'Out'], [0, 'In']] : [[1, 'Up'], [0, 'Down']], sp.v >= 0.5 ? 1 : 0, function (v) { self.setPart(sp.id, { v: v }); }),
+        tStyle: seg([['bat', 'Bat toggle'], ['push', 'Push button']], sp.sw || 'bat', function (v) { self.setPart(sp.id, v === 'push' ? { sw: 'push', w: 18, h: 18 } : { sw: 'bat', w: 14, h: 26 }); }),
+        lights: swatch(LIGHT, sp.color || 'red', function (k) { return 'background: ' + LIGHT[k][2].replace(/0\.[67]\)/, '1)'); }, function (k) { self.setPart(sp.id, { color: k }); }),
+        fonts: seg([['caps', 'Caps'], ['serif', 'Serif']], sp.font || 'caps', function (v) { self.setPart(sp.id, { font: v }); }),
+        isKnob: sp.type === 'knob', isToggle: sp.type === 'toggle', hasMaterial: ['section', 'plate', 'trim'].indexOf(sp.type) >= 0, isLogo: sp.type === 'logo', hasText: ['text', 'plate', 'title', 'toggle'].indexOf(sp.type) >= 0 || sp.type === 'knob',
+        fixed: sp.param === 'Fixed', unbound: sp.type === 'knob' && !sp.param, text: sp.type === 'knob' ? (sp.label || '') : (sp.text || ''), x: sp.x, y: sp.y, w: dd[0], h: dd[1],
+        vPct: Math.round((sp.v || 0) * 100), vText: tenth(sp.v || 0),
+        params: PARAMS.map(function (q) { var on = sp.param === q; return { name: q, on: on ? 'true' : 'false', cls: on ? 'b b-on' : 'b', style: on ? 'color: #FFFFFF' : '', pick: function () { self.setPart(sp.id, { param: q }); } }; }),
+        knobs: Object.keys(KNOB).map(function (k) { var on = sp.style === k; return { name: KNOB[k], on: on ? 'true' : 'false', cls: on ? 'b b-on' : 'b', img: knobImg(k, 24, 0.5), pick: function () { self.setPart(sp.id, { style: k }); } }; }),
+        sizes: seg([['S', 'S'], ['M', 'M'], ['L', 'L'], ['XL', 'XL']], sp.size, function (v) { self.setPart(sp.id, { size: v }); }),
+        lpos: seg([['above', 'Above'], ['below', 'Below']], sp.lpos, function (v) { self.setPart(sp.id, { lpos: v }); }),
+        scales: seg(SCALES, scaleOf(sp), function (v) { self.setPart(sp.id, { scale: v, ticks: v === 'ticks' }); }),
+        mats: swatch(sp.type === 'section' ? MAT : sp.type === 'plate' ? PLATEM : { black: 'Black', gold: 'Gold', silver: 'Silver' }, sp.mat, function (k) { return sp.type === 'plate' ? PLATESW[k] : 'background-image: url(' + panelImg('tall', k) + ')'; }, function (k) { self.setPart(sp.id, { mat: k }); }),
+        logoColors: swatch(LOGOC, sp.color, function (k) { return 'background: ' + LOGOC[k][1]; }, function (k) { self.setPart(sp.id, { color: k }); }) };
+    }
+    var bx = lay.body, corners = L.corners === 'none' ? [] : [['tl', bx[0], bx[1]], ['tr', bx[2] - 22, bx[1]], ['bl', bx[0], bx[3] - 22], ['br', bx[2] - 22, bx[3] - 22]].map(function (c) { return { src: B['corner_' + L.corners + '_' + c[0]], x: c[1], y: c[2] }; });
+    var studs = [];
+    if (L.studs) {
+      for (var x = 40; x <= 560; x += 26) { if (x < 222 || x > 378) studs.push({ x: x, y: bx[1] + 5 }); studs.push({ x: x, y: bx[3] - 12 }); }
+      for (var y = bx[1] + 32; y <= bx[3] - 34; y += 26) { studs.push({ x: 7, y: y }); studs.push({ x: 588, y: y }); }
+    }
+    var amp = AMPS[st.amp];
+    return {
+      ampName: amp.name, usedBy: 'Used by ' + amp.used, menuOpen: st.menu,
+      toggleMenu: function (e) { e.stopPropagation(); self.setState({ menu: !self.state.menu }); },
+      ampItems: AMPS.map(function (a, i) { var on = i === st.amp; return { name: a.name, note: TPL[a.tpl].name, on: on ? 'true' : 'false', style: on ? 'background: #2E62C4; color: #FFFFFF' : 'background: transparent; color: #E8E8EB',
+        pick: function () { var t = TPL[a.tpl]; self.setState({ amp: i, tpl: a.tpl, look: Object.assign({}, t.look), parts: tplParts(t.parts), sel: null, multi: [], menu: false }); } }; }),
+      f: { body: B['body_' + L.layout + '_' + L.tolex + '_' + L.piping], panel: panelImg(L.layout, L.panel), grille: lay.grille ? B['grille_' + L.layout + '_' + L.grille] : '', hasGrille: lay.grille, feet: lay.feet, px: lay.px, py: lay.py, pw: lay.pw, gx: lay.gx, gw: lay.gw,
+        panelH: lay.panelH, grilleY: lay.grilleY, grilleH: lay.grilleH, corners: corners, studs: studs, print: pr[0], rule: pr[1] },
+      lib: lib, parts: parts, isPart: isPart, isAmp: !isPart && !isMulti, sp: spv,
+      inspTitle: isMulti ? 'Arrange' : isPart ? tname(sp) : 'Amp · ' + amp.name, inspHint: isPart ? 'click the amp body for the amp' : 'the whole amp',
+      tpls: Object.keys(TPL).map(function (k) { var on = st.tpl === k; return { name: TPL[k].name, on: on ? 'true' : 'false', cls: on ? 'b b-on' : 'b', style: on ? 'color: #FFFFFF' : '', pick: function () { var t = TPL[k]; self.setState({ tpl: k, look: Object.assign({}, t.look), parts: tplParts(t.parts), sel: null }); } }; }),
+      layouts: seg([['tall', 'Tall'], ['thin', 'Thin'], ['top', 'Top panel'], ['head', 'Head'], ['headg', 'Grille head']], L.layout, function (v) { self.setLook({ layout: v }); }),
+      swGroups: [
+        { name: 'Tolex', items: swatch(TOLEX, L.tolex, function (k) { return 'background: ' + TOLEX[k][1]; }, function (k) { self.setLook({ tolex: k }); }) },
+        { name: 'Piping', items: swatch(PIPING, L.piping, function (k) { return 'background: ' + PIPING[k][1]; }, function (k) { self.setLook({ piping: k }); }) },
+        { name: 'Panel', items: swatch(PANEL, L.panel, function (k) { return 'background-image: url(' + panelImg('tall', k) + ')'; }, function (k) { self.setLook({ panel: k }); }) },
+        { name: 'Grille', items: swatch(GRILLE, L.grille, function (k) { return 'background-image: url(' + B['grille_tall_' + k] + ')'; }, function (k) { self.setLook({ grille: k }); }) }
+      ].filter(function (g) { return g.name !== 'Grille' || lay.grille; }),
+      cornerOpts: seg([['chrome', 'Chrome'], ['black', 'Black'], ['none', 'None']], L.corners, function (v) { self.setLook({ corners: v }); }),
+      studOpts: seg([[true, 'On'], [false, 'Off']], !!L.studs, function (v) { self.setLook({ studs: v }); }),
+      capture: TPL[st.tpl].capture,
+      pickAmp: function () { self.setState({ sel: null, multi: [], menu: false }); },
+      isMulti: isMulti, multiText: nSel + ' parts selected',
+      arr: [['top', 'Align tops'], ['middle', 'Align middles'], ['bottom', 'Align bottoms'], ['distribute', 'Space evenly'], ['size', 'Same size']].map(function (a) { return { name: a[1], pick: function () { self.arrange(a[0]); } }; }),
+      guides: hv && st.drag ? hv.guides : [], gaps: hv && st.drag ? hv.gaps : [],
+      dragEnd: function () { self.setState({ drag: null, hover: null }); },
+      over: function (e) { if (!self.state.drag) return; e.preventDefault(); var s = self.dsize(), p = self.pos(e, s[0], s[1]), h = self.state.hover; if (!h || h.x !== p.x || h.y !== p.y || h.guides.length !== p.guides.length || h.gaps.length !== p.gaps.length) self.setState({ hover: p }); },
+      leave: function (e) { if (e.currentTarget.contains(e.relatedTarget)) return; self.setState({ hover: null }); },
+      drop: function (e) {
+        e.preventDefault(); var d = self.state.drag; if (!d) return; var s = self.dsize(), p = self.pos(e, s[0], s[1]);
+        if (d.kind === 'move') { self.setPart(d.id, { x: p.x, y: p.y }); self.setState({ drag: null, hover: null, sel: d.id, multi: [] }); }
+        else { var np = self.newPart(d); np.x = d.type === 'trim' ? 22 : p.x; np.y = p.y; self.setState({ parts: self.state.parts.concat([np]), sel: np.id, next: self.state.next + 1, drag: null, hover: null }); }
+      },
+      ghost: hv && st.drag ? { on: true, x: hv.x, y: hv.y, w: ds[0], h: ds[1] } : { on: false, x: 0, y: 0, w: 0, h: 0 },
+      countText: st.parts.length + ' parts · ' + st.parts.filter(function (p) { return p.type === 'knob' && p.param && p.param !== 'Fixed'; }).length + ' turnable knobs · ' + st.parts.filter(function (p) { return p.param === 'Fixed'; }).length + ' fixed · template: ' + TPL[st.tpl].name
+    };
+  }
+}
+
+</script>
+</body>
+</html>

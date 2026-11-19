@@ -12,6 +12,12 @@
 #include "ui/kit/KeyCap.h"
 #include "ui/kit/KnobView.h"
 #include "ui/kit/Lcd.h"
+#include "ui/kit/StatusBar.h"
+#include "ui/kit/DropBox.h"
+#include "ui/kit/HealthStatus.h"
+#include "ui/kit/MixerStrip.h"
+#include "ui/kit/OutputStrip.h"
+#include "ui/kit/PaneTab.h"
 #include "ui/kit/MeterBar.h"
 #include "ui/kit/NoticeBar.h"
 #include "ui/kit/Pane.h"
@@ -42,8 +48,8 @@ public:
         toolbar.addAndMakeVisible (mode);
         mode.setSegments ({ "Stage", "Edit", "Layout" });
         mode.setSelected (1);
-        toolbar.addAndMakeVisible (lcd);
-        lcd.setItems ({ { "1 / 8", "Song", 0 }, { "Clean", "Patch Clean", size::lcdMinPatch }, { "20.0 ms", "Round trip", 0 }, { "48.0k", "Rate", 0 } });
+        toolbar.addAndMakeVisible (statusBar);
+        statusBar.setItems ({ { "1 / 8", "Song", 0 }, { "Clean", "Patch Clean", size::lcdMinPatch }, { "20.0 ms", "Round trip", 0 }, { "48.0k", "Rate", 0 } });
 
         const std::pair<const char*, Variant> buttonKinds[] = {
             { "Tuner", Variant::standard }, { "Done", Variant::primary }, { "PANIC", Variant::danger },
@@ -69,7 +75,7 @@ public:
 
         notice.setText ("Encore restarted after an unexpected exit - back at cue 1 Clean.", utf8 ("shows for 30 s \xc2\xb7 written to the event log"));
         stageNotice.setText ("Go to cue 8_   (Enter to go, Esc to cancel)");
-        lost.setText ("AUDIO INTERFACE LOST - reconnecting to Focusrite USB ASIO...",
+        lost.setText (juce::String (juce::CharPointer_UTF8 ("AUDIO INTERFACE LOST - reconnecting to Focusrite USB ASIO\xe2\x80\xa6")),
                       juce::String (juce::CharPointer_UTF8 ("Staying on cue 3 \xc2\xb7 retrying every second \xc2\xb7 check the cable")));
         muted.setText (juce::String (juce::CharPointer_UTF8 ("Output muted \xe2\x80\x94 click to go live")));
 
@@ -161,7 +167,32 @@ public:
         frame.addFooterButton ("Done", Variant::primary);
         addAndMakeVisible (overlay);
 
-        setSize (1440, 1320);
+        // v3.2: the bottom row's pieces and the drop box.
+        outStereo.setOutput ("Front of house", "1/2", true, "0.0 dB", false);
+        outStereo.setPeaks (0.6f, 0.5f);
+        outMuted.setOutput ("Amp DI", "5", false, "0.0 dB", true);
+        mixA.setOutput ("Front of house", "1/2", true, 0.0f, false);
+        mixA.setFirst (true);
+        mixA.setPeaks (0.5f, 0.4f);
+        mixB.setOutput ("In-ear", "3/4", true, -6.0f, false);
+        mixB.setPeaks (0.95f, 0.9f);
+        mixB.setLimiterReduction (2.0f);
+        mixC.setOutput ("Amp DI", "5", false, 0.0f, true);
+        inputStrip.setInput ("Guitar", juce::String::fromUTF8 ("1 \xc2\xb7 Input 1 (Mic/Inst)"), false);
+        inputStrip.setPeak (0.3f);
+        tabOpen.setOpen (true);
+        healthy.setStatus ({}, juce::String::fromUTF8 ("CPU 9% \xc2\xb7 5.3 ms"));
+        problems.setStatus ({ juce::String::fromUTF8 ("Output \xe2\x80\x9c" "Amp DI\xe2\x80\x9d is muted") }, juce::String::fromUTF8 ("CPU 9% \xc2\xb7 5.3 ms"));
+        drop.setLabel ("Drop: Clock");
+        refused.setLabel ("Drop: Tuner");
+        refused.setRefused (true);
+
+        for (juce::Component* c : { (juce::Component*) &outStereo, (juce::Component*) &outMuted, (juce::Component*) &mixA, (juce::Component*) &mixB,
+                                    (juce::Component*) &mixC, (juce::Component*) &inputStrip, (juce::Component*) &tabClosed, (juce::Component*) &tabOpen,
+                                    (juce::Component*) &healthy, (juce::Component*) &problems, (juce::Component*) &drop, (juce::Component*) &refused })
+            addAndMakeVisible (c);
+
+        setSize (1440, 1560);
     }
 
     void paint (juce::Graphics& g) override
@@ -199,7 +230,7 @@ public:
         toolbar.setBounds (0, 0, getWidth(), size::toolbarEdit + 1);
         toolbar.setLogoBounds ({ 14, 12, 98, 17 });
         mode.setBounds (287, 8, 194, 28);
-        lcd.setBounds (529, 5, lcd.getIdealWidth(), kit::Lcd::heightFor (false));
+        statusBar.setBounds (529, 5, statusBar.getIdealWidth(), kit::StatusBar::heightFor (false));
 
         auto x = 20;
 
@@ -275,12 +306,36 @@ public:
         editor.setBounds (180, 1000, 160, size::fieldHeight);
 
         overlay.setBounds (20, 1160, 560, 150);
+
+        // v3.2 (y 1330): output strips, mixer strips, the input strip, tabs, health, drop boxes.
+        outStereo.setBounds (40, 1350, 300, 60);
+        outStereo.setPadding (0, size::outputStripPad);
+        outMuted.setBounds (340, 1350, 120, 60);   // narrow: the level under the meters
+        outMuted.setPadding (size::outputStripPad, 0);
+        inputStrip.setBounds (500, 1340, kit::InputStrip::idealWidth(), size::mixerRow - 2 * size::bottomPanePad - 20);
+        mixA.setBounds (620, 1340, kit::MixerStrip::widthFor (true), size::mixerRow - 2 * size::bottomPanePad - 20);
+        mixB.setBounds (mixA.getRight(), 1340, kit::MixerStrip::widthFor (false), mixA.getHeight());
+        mixC.setBounds (mixB.getRight(), 1340, kit::MixerStrip::widthFor (false), mixA.getHeight());
+        tabClosed.setBounds (40, 1440, size::paneTabW, size::paneTabH);
+        tabOpen.setBounds (100, 1440, size::paneTabW, size::paneTabH);
+        const auto statusH = 2 * size::healthLineH + size::healthLineGap + 2 * size::healthStatusPad;
+        healthy.setBounds (40, 1470, size::healthColW + size::healthStatusPad, statusH);
+        problems.setBounds (180, 1470, size::healthColW + size::healthStatusPad, statusH);
+        drop.setBounds (1000, 1350, 180, 70);
+        refused.setBounds (1200, 1350, 180, 70);
     }
 
 private:
     kit::Toolbar toolbar;
     kit::SegmentedControl mode;
-    kit::Lcd lcd { false }, stageLcd { true };
+    kit::StatusBar statusBar { false };   // the toolbars (v3.2)
+    kit::OutputStrip outStereo, outMuted;
+    kit::MixerStrip mixA, mixB, mixC;
+    kit::InputStrip inputStrip;
+    kit::PaneTab tabClosed, tabOpen;
+    kit::HealthStatus healthy, problems;
+    kit::DropBox drop, refused;
+    kit::Lcd stageLcd { true };            // the LCD look stays for the tuner readout
     juce::OwnedArray<juce::TextButton> buttons;
     juce::OwnedArray<kit::IconButton> iconButtons;
     kit::NoticeBar notice { kit::NoticeBar::Kind::notice }, stageNotice { kit::NoticeBar::Kind::stageNotice },

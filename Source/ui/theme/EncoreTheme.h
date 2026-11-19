@@ -43,10 +43,10 @@ namespace colour
     constexpr juce::uint32 text            = 0xffE8E8EB;   // primary
     constexpr juce::uint32 textStrong      = 0xffFFFFFF;   // on blue, titles of section rows
     constexpr juce::uint32 textSecondary   = 0xffA9A9AF;   // labels, help
-    constexpr juce::uint32 textTertiary    = 0xff8E8E95;   // field labels ("k"), summaries
-    constexpr juce::uint32 textMuted       = 0xff85858C;   // pane header labels, footers
-    constexpr juce::uint32 textDisabled    = 0xff6E6E75;
-    constexpr juce::uint32 textDim         = 0xff7A7A80;   // played rows, numbers
+    constexpr juce::uint32 textTertiary    = 0xffA3A3AA;   // field labels ("k"), summaries (v3.1)
+    constexpr juce::uint32 textMuted       = 0xff9A9AA1;   // pane header labels, footers, toolbar captions (v3.1)
+    constexpr juce::uint32 textDisabled    = 0xff6E6E75;   // disabled controls only (v3.1: live text uses textDim)
+    constexpr juce::uint32 textDim         = 0xff8C8C93;   // played rows, numbers, column heads, key caps, captions (v3.1)
     constexpr juce::uint32 textSoft        = 0xffC4C4C9;   // secondary values, title bar text
     constexpr juce::uint32 textRow         = 0xffE1E1E5;   // list rows
     constexpr juce::uint32 logoUi          = 0xffD9D9DE;   // wordmark in the toolbar
@@ -66,11 +66,11 @@ namespace colour
     // Selection / primary (blue)
     constexpr juce::uint32 accent          = 0xff4C8DF6;   // focus ring, selection outline, links
     constexpr juce::uint32 accentHover     = 0xff82AEFA;
-    constexpr juce::uint32 primaryTop      = 0xff4C8DF6;   // primary button gradient
-    constexpr juce::uint32 primaryBot      = 0xff2E6FDC;
+    constexpr juce::uint32 primaryTop      = 0xff3570DA;   // primary button gradient (v3.1; accent stays for focus and selection)
+    constexpr juce::uint32 primaryBot      = 0xff2860C6;
     constexpr juce::uint32 primaryBorder   = 0xff0B3E86;
     constexpr juce::uint32 selectedRow     = 0xff2E62C4;   // selected / playing row in panes and stage lists
-    constexpr juce::uint32 selectedRowSub  = 0xffD3E1FA;   // secondary text on a selected row
+    constexpr juce::uint32 selectedRowSub  = 0xffEEF3FD;   // secondary text on a selected row
     constexpr juce::uint32 tableSelection  = 0x594C8DF6;   // accent at 35 %: selected row in the full list
     constexpr juce::uint32 menuHighlight   = 0xff2E62C4;
 
@@ -80,6 +80,7 @@ namespace colour
     constexpr juce::uint32 okBadgeTick     = 0xff4CD964;
     constexpr juce::uint32 amber           = 0xffFFB340;   // warnings, section headings (at 85 %), bar marks
     constexpr juce::uint32 amberSection    = 0xD9FFB340;   // amber at 85 %: section headings / kinds
+    constexpr juce::uint32 missingRow      = 0x14FF9F0A;   // a mapping row whose output isn't on this computer (amber 8 %)
     constexpr juce::uint32 amberStrong     = 0xffFF9F0A;   // amber badge fill
     constexpr juce::uint32 amberInk        = 0xff1A1200;   // text on amber badge
     constexpr juce::uint32 noticeTop       = 0xff3D2F12;   // notice bar gradient
@@ -87,8 +88,8 @@ namespace colour
     constexpr juce::uint32 noticeText      = 0xffFFD27A;
     constexpr juce::uint32 noticeSubtle    = 0xffC9A964;
     constexpr juce::uint32 danger          = 0xffFF8A80;   // danger text (PANIC label, Remove, Delete)
-    constexpr juce::uint32 mutedTop        = 0xffE8483E;   // MUTED button
-    constexpr juce::uint32 mutedBot        = 0xffBF2C25;
+    constexpr juce::uint32 mutedTop        = 0xffD23C33;   // MUTED button
+    constexpr juce::uint32 mutedBot        = 0xffB02A23;
     constexpr juce::uint32 mutedBorder     = 0xff6E120D;
     constexpr juce::uint32 mutedBanner     = 0xffC9302A;   // "Output muted — click to go live"
     constexpr juce::uint32 panicTop        = 0xffA62B24;   // panic tile, AUDIO LOST widget
@@ -127,14 +128,18 @@ namespace colour
     constexpr juce::uint32 lcdText         = 0xffD5E4F7;
     constexpr juce::uint32 lcdLabel        = 0xff7F95B3;
     constexpr juce::uint32 lcdShadow       = 0xA6000000;   // inner shadow (black 65 %)
-    constexpr juce::uint32 lcdHighlight    = 0x0DFFFFFF;   // 1 px bottom highlight (white 5 %)
+    constexpr juce::uint32 lcdHighlight    = 0x0DFFFFFF;   // 1 px bottom highlight (white 5 %)   (the LCD stays for the tuner readout)
+    constexpr juce::uint32 statusBarBg     = 0xff121214;   // the toolbars' status bar (v3.2, replaces the LCD)
+    constexpr juce::uint32 statusBarEdge   = 0xff2A2A2F;   // its border and the lines between fields
+    constexpr juce::uint32 statusBarLabel  = 0xff8C8C93;
+    constexpr juce::uint32 statusBarText   = 0xffF2F2F4;
 
     // Stage widgets
     constexpr juce::uint32 widget          = 0xff1C1E23;
     constexpr juce::uint32 widgetBorder    = 0xff2B2E35;
     constexpr juce::uint32 widgetTagFill   = 0x8C000000;   // name tag (black 55 %)
     constexpr juce::uint32 widgetTagText   = 0xffD8D8DC;
-    constexpr juce::uint32 widgetTitle     = 0xff6E7480;   // "SONG 3   SET 1"
+    constexpr juce::uint32 widgetTitle     = 0xffA2A8B3;   // "SONG 3   SET 1"
     constexpr juce::uint32 widgetTrack     = 0xff2A2D33;   // empty meter / pedal track
     constexpr juce::uint32 expressionTop   = 0xff6EA5FA;   // EXP bar gradient, top (bottom: expressionBot)
     constexpr juce::uint32 stageMeterLow   = 0xff2BC24F;   // stage level bars: green to half way...
@@ -149,8 +154,27 @@ namespace colour
     constexpr juce::uint32 meterTrack      = 0xff0E0E10;
     constexpr juce::uint32 meterGreen      = 0xff2BC24F;
     constexpr juce::uint32 meterYellow     = 0xffE8CF3A;
+    constexpr juce::uint32 meterRed        = 0xffE8483E;   // a mixer meter's top (from 98.5 %)
+
+    // The bottom row (v3.2, V3.2-CHANGES §3)
+    constexpr juce::uint32 stripDivider    = 0xff26262B;   // 1 px between output strips
+    constexpr juce::uint32 stripValue      = 0xffC4C4C9;   // an output's level and peak readouts
+    constexpr juce::uint32 faderZeroMark   = 0xff6E6E75;   // the 0 dB line across a mixer fader
+    constexpr juce::uint32 mixerThumbTop   = 0xff5A5A60;
+    constexpr juce::uint32 mixerThumbBot   = 0xff3A3A3E;
+    constexpr juce::uint32 mixerThumbShine = 0x26FFFFFF;   // its top highlight (white 15 %)
+    constexpr juce::uint32 mixerThumbLine  = 0xffF2F2F4;   // its centre line
+    constexpr juce::uint32 mixerThumbShadow= 0x99000000;   // under it (black 60 %)
+    constexpr juce::uint32 thumbShadow     = 0x59000000;   // under a send fader's or the slider's thumb (black 35 %)
+    constexpr juce::uint32 limText         = 0xff5E5E64;   // LIM while the limiter rests
+    constexpr juce::uint32 limDot          = 0xff2E2E33;
+    constexpr juce::uint32 limOn           = 0xffFFB340;   // LIM while it works (flat, no glow)
+    constexpr juce::uint32 peakHot         = 0xffFF8A80;   // a peak that reached the −1 dBFS limiter
+    constexpr juce::uint32 healthHover     = 0xff232326;   // the health status under the mouse
+    constexpr juce::uint32 pickerTop       = 0xff46464B;   // the input picker (a popup field)
+    constexpr juce::uint32 pickerBot       = 0xff38383C;
     constexpr juce::uint32 meterPeak       = 0xffE8E8EB;
-    constexpr juce::uint32 meterScale      = 0xff6A6A71;
+    constexpr juce::uint32 meterScale      = 0xff8F8F96;
     constexpr juce::uint32 expressionFill  = 0xff6EA5FA;   // EXP bars, assigned parameter bars
     constexpr juce::uint32 parameterFill   = 0xff8E8E95;
     constexpr juce::uint32 expChipFill     = 0xff1B2C45;   // "EXP 1" chip
@@ -158,20 +182,21 @@ namespace colour
     constexpr juce::uint32 pedalBar        = 0xff6EA5FA;   // inspector value bar of a parameter a pedal moves
 
     // Menus, dialogs, scrollbars
-    constexpr juce::uint32 menu            = 0xF72C2C30;   // rgba(44,44,48,.97)
-    constexpr juce::uint32 menuHighlightBorder = 0x14FFFFFF;
-    constexpr juce::uint32 menuSeparator   = 0xff3A3A3F;
-    constexpr juce::uint32 menuShortcut    = 0xff85858C;
+    constexpr juce::uint32 menu            = 0xFA232327;   // rgba(35,35,39,.98) (v3.2 menus)
+    constexpr juce::uint32 menuInnerRing   = 0x0FFFFFFF;   // 1 px ring inside the border (white 6 %)
+    constexpr juce::uint32 menuSeparator   = 0xff3A3A3F;   // v3.2 board
+    constexpr juce::uint32 menuShortcut    = 0xff9A9AA1;
     constexpr juce::uint32 dialog          = 0xff232326;
     constexpr juce::uint32 dialogTitleTop  = 0xff38383C;
     constexpr juce::uint32 dialogTitleBot  = 0xff2E2E31;
     constexpr juce::uint32 dialogFooter    = 0xff262629;
     constexpr juce::uint32 dimmer          = 0x73000000;   // behind modal dialogs (black 45 %)
     constexpr juce::uint32 dialogHighlight = 0x14FFFFFF;   // inner top highlight (white 8 %)
+    constexpr juce::uint32 groupHighlight  = 0x08FFFFFF;   // a group box's inner top line (white 3 %)
     constexpr juce::uint32 dialogShadow    = 0xB3000000;   // 0, 30, 80 px, black 70 %
     constexpr juce::uint32 tabStripTop     = 0xff2E2E31;   // settings tab strip
     constexpr juce::uint32 tabStripBot     = 0xff28282B;
-    constexpr juce::uint32 scrollThumb     = 0xff4A4A4F;
+    constexpr juce::uint32 scrollThumb     = 0xff66666D;
     constexpr juce::uint32 scrollThumbHover= 0xff5E5E64;
 
     // Gear placeholders (until real gear art exists)
@@ -180,7 +205,7 @@ namespace colour
     constexpr juce::uint32 gearBorder      = 0xff3A3A3F;
     constexpr juce::uint32 gearStrip       = 0xff26262A;
     constexpr juce::uint32 gearStripBorder = 0xff38383D;
-    constexpr juce::uint32 gearLabel       = 0xff85858C;
+    constexpr juce::uint32 gearLabel       = 0xff9A9AA1;
     constexpr juce::uint32 gearHighlight   = 0x14FFFFFF;   // inner top highlight (white 8 %)
     constexpr juce::uint32 pedalTop        = 0xff303034;   // pedal placeholder gradient
     constexpr juce::uint32 pedalBot        = 0xff232326;
@@ -211,7 +236,8 @@ namespace colour
     constexpr juce::uint32 textSelection   = 0x664C8DF6;   // selected text in fields (accent 40 %)
     constexpr juce::uint32 fieldShadow     = 0x99000000;   // inner shadow of inset fields (black 60 %)
     constexpr juce::uint32 sliderTrack     = 0xff0E0E10;   // Out volume slider track
-    constexpr juce::uint32 sliderFill      = 0xff6E6E75;   // Out volume slider, filled part
+    constexpr juce::uint32 sliderFill      = 0xff6E6E75;   // horizontal sliders and faders, filled part
+    constexpr juce::uint32 outSliderFill   = 0xff8C8C93;   // the toolbar's Out volume slider, filled part (v3.2 board)
     constexpr juce::uint32 thumbTop        = 0xffF2F2F4;   // slider thumb / toggle knob gradient
     constexpr juce::uint32 thumbBot        = 0xffB9B9BF;
     constexpr juce::uint32 checkboxBorder  = 0xff4A4A4F;   // unticked checkbox
@@ -219,7 +245,7 @@ namespace colour
     constexpr juce::uint32 rowHover        = 0xff2A2A2F;   // hover on clickable rows
     constexpr juce::uint32 patchSelected   = 0xff2B2B30;   // selected row in the Patches pane
     constexpr juce::uint32 tooltip         = 0xff2C2C30;
-    constexpr juce::uint32 groupBox        = 0xff1A1A1D;   // group boxes in dialogs
+    constexpr juce::uint32 groupBox        = 0xff29292D;   // group boxes in dialogs
     constexpr juce::uint32 mappingHeader   = 0xff1E1E21;   // MIDI mappings: column header, bottom bar
     constexpr juce::uint32 mappingRowAlt   = 0xff1C1C1F;   // MIDI mappings: every other row
     constexpr juce::uint32 triggerText     = 0xffD5D5DA;   // "CC 64, any channel"
@@ -235,7 +261,7 @@ namespace colour
     constexpr juce::uint32 chainBoardShadow= 0xB3000000;   // inset shadow of the chain board (black 70 %)
     constexpr juce::uint32 stageFooter     = 0xff1B1B1E;   // Stage footer strip
     constexpr juce::uint32 tunerOverlay    = 0xF70E0E10;   // tuner over the grid (97 %)
-    constexpr juce::uint32 stageNumberDim  = 0xff7A7A80;   // numbers in stage lists
+    constexpr juce::uint32 stageNumberDim  = 0xff8C8C93;   // numbers in stage lists
     constexpr juce::uint32 panicSub        = 0xffF3C4C0;   // "silence & reset all"
     constexpr juce::uint32 expressionBot   = 0xff3A7AE6;   // EXP bar gradient, bottom
     constexpr juce::uint32 blockStageTop   = 0xff3A3A3E;   // block stage radial light, centre
@@ -254,6 +280,10 @@ namespace colour
     constexpr juce::uint32 artboard        = 0xff121418;   // layout editor: the stage preview
     constexpr juce::uint32 artboardBorder  = 0xff000000;
     constexpr juce::uint32 selectionHalo   = 0x404C8DF6;   // accent at 25 %
+    constexpr juce::uint32 dropBoxFill     = 0x244C8DF6;   // where a dragged widget lands: accent at 14 %
+    constexpr juce::uint32 dropBoxText     = 0xffEEF3FD;
+    constexpr juce::uint32 dropBoxRefused  = 0x24FFB340;   // ... no free space of its size: amber at 14 %
+    constexpr juce::uint32 gripDots        = 0x8CA3A3AA;   // a list row's drag grip: #A3A3AA at 55 %
     constexpr juce::uint32 learningRow     = 0x1FFFB340;   // MIDI row being learned (amber 12 %)
 
     // Patch colours (PatchModel::colour is used as stored; these are the defaults shown in the designs)
@@ -261,6 +291,56 @@ namespace colour
     constexpr juce::uint32 patchOrange     = 0xffFF9F0A;
     constexpr juce::uint32 patchGreen      = 0xff30C25A;
     constexpr juce::uint32 patchRed        = 0xffFF6B4A;
+
+    // Milestones 10 and 11 (NEW-FEATURES-M10-M11 §C)
+    constexpr juce::uint32 chipMuteBg      = 0xff5A1A16;   // OUTPUT MUTED
+    constexpr juce::uint32 chipMuteText    = 0xffFFB4AD;
+    constexpr juce::uint32 chipAmberBg     = 0xff3D2F12;   // NOT HERE, counts
+    constexpr juce::uint32 chipAmberText   = 0xffFFD27A;
+    constexpr juce::uint32 chipExpBg       = 0xff1B2C45;   // EXP n, THIS COMPUTER
+    constexpr juce::uint32 chipExpText     = 0xff7FC4FF;
+    constexpr juce::uint32 chipOffBg       = 0xff2C2C30;   // OFF
+    constexpr juce::uint32 chipOffText     = 0xffA3A3AA;
+    constexpr juce::uint32 chipGreenBg     = 0xff1E3A24;   // THIS SHOW
+    constexpr juce::uint32 chipGreenText   = 0xff4CD964;
+    constexpr juce::uint32 chipPlainBg     = 0xff2A2A2E;   // VST3, THIS COMPUTER
+    constexpr juce::uint32 chipPlainText   = 0xffA3A3AA;
+    constexpr juce::uint32 utilityTileTop  = 0xff2C2C30;
+    constexpr juce::uint32 utilityTileBottom = 0xff1F1F22;
+    constexpr juce::uint32 utilityTileBorder = 0xff3A3A3F;
+    constexpr juce::uint32 selectionOutline = 0xff4FA3FF;
+    constexpr juce::uint32 faultCardBg     = 0xff2A251C;
+    constexpr juce::uint32 faultCardBorder = 0xff3D2F12;
+    constexpr juce::uint32 faultCardText   = 0xffFFD27A;
+    constexpr juce::uint32 statusRunning   = 0xff4CD964;   // inspector Status "Running" (a plugin playing)
+    constexpr juce::uint32 outputStripBg   = 0xff18181B;   // an output's strip in the bottom row
+    constexpr juce::uint32 muteOffText     = 0xffC4C4C9;   // the M button while the output plays
+    constexpr juce::uint32 smallKnobArc    = 0xff8E8E95;   // a small knob's value arc
+    constexpr juce::uint32 smallKnobCap    = 0xff3A3A3E;
+    constexpr juce::uint32 eqWell          = 0xff121214;   // behind the EQ curve
+    constexpr juce::uint32 eqGrid          = 0xff26262A;
+    constexpr juce::uint32 eqZero          = 0xff3A3A3F;
+    constexpr juce::uint32 eqCurve         = 0xff6EA5FA;
+    constexpr juce::uint32 eqCurveFill     = 0x1A6EA5FA;   // 10 %
+    constexpr juce::uint32 faderTick       = 0xff3A3A3F;
+    constexpr juce::uint32 routingSelectedRow = 0xff2E3A50;   // the output whose EQ and delay show below
+    constexpr juce::uint32 routingDivider  = 0xff26262A;
+    constexpr juce::uint32 routingHead     = 0xff1E1E21;   // a table's head row and bar in a group
+    constexpr juce::uint32 tickGreen       = 0xff4CD964;
+    constexpr juce::uint32 sendsSelectedRow = 0xff232A38;  // the patch whose send is being set
+    constexpr juce::uint32 sendsCellWell   = 0xff0E1013;   // the selected send   // ✓ a name this computer has
+    constexpr juce::uint32 pathRow         = 0x09FFFFFF;   // a split path's row (white 3.5 %)
+    constexpr juce::uint32 pathRowBorder   = 0x0DFFFFFF;   // (white 5 %)
+    constexpr juce::uint32 pathBadgeBg     = 0xff3A3A3F;
+    constexpr juce::uint32 pathBadgeOffBg  = 0xff2A2A2E;
+    constexpr juce::uint32 sendBoxTop      = 0xff2A2A2E;   // the OUT stage's box
+    constexpr juce::uint32 sendBoxBottom   = 0xff1E1E21;
+    constexpr juce::uint32 inputCardTop    = 0xff2A2A2E;
+    constexpr juce::uint32 inputCardBottom = 0xff1F1F22;
+    constexpr juce::uint32 inputCardBorder = 0xff2B2E35;
+    constexpr juce::uint32 faultCardShadow = 0x80000000;   // its drop shadow (0, 14, 30 px, black 50 %)
+    constexpr juce::uint32 utilityShadow   = 0x73000000;   // chain tile drop shadow (0, 6, 6 px, black 45 %)
+    constexpr juce::uint32 groupRowLine    = 0xff1F1F22;   // 1 px under each row of the Plugins, Folders and Blocked lists
 }
 
 //==============================================================================
@@ -289,7 +369,8 @@ namespace size
     constexpr int inspectorWidth    = 272;   // Edit right column
     constexpr int widgetPanelWidth  = 220;   // layout editor "+ Widget" panel
     constexpr int layoutInspectorWidth = 280; // layout editor widget inspector
-    constexpr int bottomRow         = 104;   // Edit: input / meters / health row
+    constexpr int bottomRow         = 104;   // Edit: input / outputs / health row, collapsed
+    constexpr int mixerRow          = 196;   // ... with the mixer view open (the patch area gives up 92)
 
     // Edit toolbar (SCREENS.md §4.1): padding 10, gaps 10
     constexpr int toolbarPadX = 10, toolbarGap = 10, logoMargin = 4, logoW = 98, logoH = 17;
@@ -313,6 +394,8 @@ namespace size
     constexpr int buttonSmallHeight = 18;    // "Full list", "Load amp...", "Reset counters" in panes
     constexpr int buttonRadius      = 5;
     constexpr int buttonPadX        = 10;
+    constexpr int buttonCompactPadX = 4;          // option grids (amp builder): text 4 px in, one line (board: padding 0 4, nowrap)
+    constexpr float buttonCompactMinSqueeze = 0.85f;   // and squeezed this far before it is cut
     constexpr int toolbarButtonH    = 26;    // segmented mode switch in Edit/Layout
     constexpr int stageToolbarButtonH = 36;  // Stage: Tuner, Mute
     constexpr int stageModeButtonH  = 30;
@@ -322,23 +405,31 @@ namespace size
     constexpr int patchPickerW      = 130, headerArrow = 14;   // the centre header line
     constexpr int iconButton        = 20;
     constexpr int iconSize          = 12;
+    constexpr int settingsIcon      = 13;   // the gear on Settings… (v3.2)
+    constexpr int buttonIconGap     = 6;    // icon to text in a button
+    constexpr int settingsIconGap   = 11;   // Settings…: the button's 6 + the gear's own 5 (v3.2 board)
+    constexpr float nameMinSqueeze  = 0.96f;   // a name squeezed this far before it's shortened with "..."
+    constexpr int infoButtonIcon    = 11;   // Open routing's icon in the inspector
     constexpr int rowHeight         = 26;    // pane lists
     constexpr int tableRowHeight    = 28;    // full list
     constexpr int tableHeaderHeight = 24;
     constexpr int sectionHeadingH   = 24;    // sidebar section heading (22 in the CSS; the target renders 24)
     constexpr int headerDot = 7;
+    constexpr int inspectorPluginKeyW = 84, inspectorPluginStompW = 120, inspectorPluginRowGap = 7, smallButtonIcon = 11;
     constexpr int inspectorPadX = 10, inspectorPadTop = 6, inspectorPadBottom = 10, inspectorKeyW = 74, inspectorColGap = 8;
     constexpr int inspectorRowGap = 6, inspectorTextH = 15, inspectorListPadX = 6, inspectorNameW = 60, inspectorChipW = 44;
     // Plugins can have hundreds of parameters: the block stage shows the first
     // few as knobs, the inspector lists the first ones; the rest are in the plugin's window.
-    constexpr int pluginPanelKnobs = 8, inspectorPluginParams = 48;
+    constexpr int pluginPanelKnobs = 8, inspectorPluginParams = 10;
     constexpr int inspectorBarH = 4, assignKeyW = 62, assignArrowW = 12;
     constexpr int listPad = 4, listGap = 1, rowPadX = 8, rowGap = 8, rowNumberW = 18, paneBarW = 3, paneBarH = 16, paneBarRadius = 2;
     constexpr int swatch = 9, swatchRadius = 2, rowRadius = 4, headingPadBottom = 2;
     constexpr int paneFooterPadX = 10, paneFooterPadY = 8, headerButtonGap = 1, headerSmallButtonMargin = 4;
     constexpr int menuItemHeight    = 24;
-    constexpr int menuPadding       = 5;
-    constexpr int menuRadius        = 7;
+    constexpr int menuPadding       = 4;
+    constexpr int menuRadius        = 10;
+    constexpr int menuItemRadius    = 6;
+    constexpr int menuHeaderIndent  = 20;    // section header text from the item's left edge
     constexpr int menuSeparatorH    = 9;     // 1 px line + 4 px above and below
     constexpr int dialogRadius      = 10;
     constexpr int dialogTitleBar    = 30;
@@ -357,6 +448,8 @@ namespace size
     constexpr int ampTileW = 117, tileW = 64, tileH = 84, plusTileW = 48, tileGap = 6;
     constexpr int pedalW = 160, pedalH = 210;            // drawn at 0.4 in the chain, 0.7 on Stage
     constexpr int ampPanelW = 600, ampPanelH = 430, blockPanelH = 300, cabPanelW = 230, cabPanelH = 300;
+    constexpr int mergePanelW = 562, mergePanelH = 302, mergeLabelBottom = 42, mergePanelTop = 40;   // the merge's box: PATH A · PATH B
+    constexpr int mergeGroupGap = 34, mergeLineGap = 14, mergeLineH = 14;         // the groups, the summary under each
     constexpr int ampStripX = 22, ampStripY = 44, ampStripW = 556, ampStripH = 138;
     constexpr int gearRadius = 10, pedalRadius = 14, pedalBorder = 2, stripRadius = 6, plusTileRadius = 8;
     constexpr int chainPadX = 12, chainPadY = 14, chainShadowH = 8, dash = 4;            // the chain board
@@ -371,7 +464,7 @@ namespace size
     constexpr int pedalShadowY = 6, pedalShadowBlur = 10;
     constexpr int panelLabelBottom = 57, panelLabelH = 16;  // "AMP · NAM CAPTURE": top at height − 57
     constexpr int platePadX = 10, plateH = 20, plateRadius = 3, plateRight = 44, plateBottom = 38;
-    constexpr int knobCell = 64, knobColumn = 74, knobLabelGap = 4, knobLabelH = 12, chipH = 13, chipPadX = 5, chipRadius = 3;
+    constexpr int knobCell = 64, knobColumn = 74, knobLabelGap = 4, knobLabelH = 12, knobValueH = 13, chipH = 13, chipPadX = 5, chipRadius = 3;
     constexpr int toggleW = 22, toggleH = 36, toggleKnob = 16, toggleColumn = 74, toggleColumnH = 91;
     constexpr int toggleOnH = 10, toggleTrackY = 14, toggleNameY = 54, toggleNameLineH = 12, toggleOffY = 80;
     constexpr int powerLed = 28, ledGlowR = 8, ledHalo = 54;
@@ -393,6 +486,7 @@ namespace size
     constexpr int widgetTitleX = 22, widgetTitleY = 34;                       // "SONG 3   SET 1"
     constexpr int currentNameX = 18, currentNameBottom = 22;
     constexpr int widgetTextX = 16, widgetTextBottom = 10;                    // Patch, Next cue (Cue note: bottom 12)
+    constexpr int patchInputRight = 15, patchInputBottom = 18, patchInputIcon = 15, patchInputGap = 4;   // the Patch widget's input (M11)
     constexpr int cueNoteBottom = 12, cueNoteGap = 2, nextCueGap = 16;
     constexpr int healthX = 12, healthBottom = 8, clockBottom = 8;
     constexpr int lockGap = 6, lockPadTop = 14, lockIcon = 34, panicPadTop = 12, stageButtonPadTop = 10;
@@ -416,6 +510,9 @@ namespace size
     constexpr int widgetListTop = 8, widgetGroupH = 24, widgetGroupX = 11, widgetRowH = 30;
     constexpr int widgetChipX = 15, widgetChipW = 24, widgetChipH = 20, widgetChipRadius = 3, widgetNameX = 48, widgetListPadX = 7;
     constexpr int handle = 8, handleRadius = 2, handleGrab = 14, selectionBorder = 2, selectionHalo = 3;
+    constexpr int dropBoxBorder = 2, dropBoxRadius = 6, dropBoxDash = 6, dropBoxDashGap = 4;   // the drop box (v3.2 §7)
+    constexpr int newWidgetW = 4, newWidgetH = 2;                                              // a new widget (dropped, clicked or from the menu), in cells
+    constexpr int gripW = 8, gripH = 12, gripPadRight = 8;                                     // the list rows' 6-dot grip
     constexpr int layoutInspectorPad = 10, layoutLabelGap = 8, layoutButtonGap = 8, layoutHalfGap = 6;
     constexpr int layoutNotesH = 123, layoutNoteGap = 6;
     // Settings window (SCREENS.md §7, settings-*.json)
@@ -430,7 +527,95 @@ namespace size
     constexpr int mappingHeaderH = 27, mappingRowH = 31, mappingBarH = 37, mappingPadX = 12, actionW = 200;
     // Settings > Plugins (milestone 10): the plugin list where the MIDI tab has
     // its mappings (same header, rows and bar), folders and the blocklist on the right.
-    constexpr int pluginsMakerW = 160, pluginsVersionW = 72, pluginsFolderRows = 4, pluginsBlockedRowH = 44, pluginsTryAgainW = 76;
+    constexpr int pluginsMakerW = 190, pluginsVersionW = 90, pluginsColumnGap = 10, pluginsFoldersBoxH = 147, pluginsBlockedRowH = 45;
+    constexpr int pluginsRowH = 27, pluginsBarH = 41, pluginsTitleRowH = 20, pluginsStatusTop = 10, pluginsProgressTop = 29;
+    constexpr int pluginsCountLift = 5, pluginsBlockedNameTop = 7, pluginsBlockedReasonTop = 24, pluginsTryAgainGap = 10, pluginsHelpPadTop = 10;
+    // Milestones 10 and 11 (NEW-FEATURES-M10-M11 §C)
+    constexpr int tagChipH = 16, tagChipRadius = 3, tagChipPadX = 6;
+    constexpr int progressH = 4, progressRadius = 2;
+    // UtilityTile (chain tiles that aren't gear: plugin, IN/OUT jacks, split/merge), from edit-plugin.json
+    constexpr int utilityTileH = 84, utilityTileRadius = 8, utilityTilePadX = 7, utilityLabelTop = 6, utilityLabelH = 11;
+    constexpr int utilityDot = 6, utilityDotTop = 9, utilityDotRight = 8, utilityDotMinW = 60;
+    constexpr int utilityNameTop = 25, utilityNameLineH = 12, utilityCaptionTop = 50, utilityCaptionH = 11;
+    constexpr int utilityFootW = 22, utilityFootH = 16, utilityFootTop = 62, utilityFootRadius = 7;
+    constexpr int utilityShadowY = 6, utilityShadowBlur = 6;
+    constexpr int utilityIcon = 22, utilityIconTop = 23;
+    constexpr int utilityBottomCaptionTop = 52, utilityBottomNameTop = 63, jackTileW = 64, splitTileW = 52, outTileW = 104;
+    constexpr int utilityLinesTop = 23, utilityLineH = 12, utilityLinePitch = 14, utilityLineBarW = 24, utilityLineChipW = 14, outTileLines = 3;
+    // Split paths on the chain board (m11-edit-split-merge.json)
+    constexpr int chainSplitPaneH = 235, pathRowH = 98, pathRowPitch = 96, pathRowLead = 28, pathRowPadRight = 9, pathRowGap = 10;
+    constexpr int pathRowRadius = 9, pathTileTop = 6, pathBadge = 16, pathBadgeX = 6, pathOffRight = 17, pathAbove = 54, outTileRight = 10;
+    // Routing (milestone 11; NEW-FEATURES-M10-M11 §B, §C)
+    constexpr int outputMuteW = 24, outputMuteH = 20, outputMuteRadius = 4, stageMuteW = 52, stageMuteRadius = 6;
+    // The Stage Outputs widget (M11Stage): a column per output.
+    constexpr int stageOutputsPadX = 15, stageOutputsGap = 14, stageOutputNameTop = 35, stageOutputNameH = 19, stageOutputChannelsGap = 6;
+    constexpr int stageOutputMeterTop = 62, stageOutputMeterW = 8, stageOutputMeterGap = 3, stageOutputMeterToMute = 8, stageOutputStateX = 28;
+    constexpr int stageOutputMuteH = 52, stageOutputBottom = 21;
+    constexpr int levelBarH = 4, levelBarGap = 2;
+    // The bottom row, v3.2: collapsed (104) and the mixer view (196).
+    constexpr int healthColW = 116, bottomPanePad = 10, bottomLineGap = 5, bottomLineH = 14;
+    constexpr int inputPickerH = 22, inputPickerRadius = 5, inputPickerPadX = 8, inputPickerChevron = 9;
+    constexpr int inputMeterH = 8, inputPeakTickW = 2;
+    constexpr int outputStripPad = 12, outputValueW = 46, outputInlineGap = 6, outputInlineMinW = 140;   // value moves under the meters below this
+    constexpr int mixerPadX = 12, mixerStripW = 94, mixerFirstStripW = 82, mixerRowGap = 6;
+    constexpr int mixerScaleW = 18, mixerScaleGap = 4, mixerMetersW = 12, mixerMeterGap = 6, mixerFaderW = 28;   // a strip's columns
+    constexpr int mixerNameH = 28, mixerLimH = 12, mixerBottomH = 20, mixerNameLineH = 14;                       // ... and rows
+    constexpr int mixerBarW = 5, mixerBarGap = 2, mixerBarRadius = 2, mixerPeakTickH = 1;
+    constexpr int mixerFaderInset = 6, mixerTrackW = 4, mixerZeroMarkW = 18, mixerThumbW = 22, mixerThumbH = 12, mixerThumbRadius = 3;
+    constexpr int limDotSize = 5, limDotGap = 3;
+    constexpr int mixerInputMeterW = 5, mixerInputPickerH = 20, mixerInputPickerPadX = 6, mixerInputLabelH = 14, mixerInputPeakH = 12;
+    constexpr int mixerInputCols = 68;   // its grid: 18 | 4 | 5 | 41
+    constexpr int paneTabW = 44, paneTabH = 12, paneTabRise = 7, paneTabRadius = 6, paneTabChevron = 10;
+    constexpr int healthStatusPad = 6, healthStatusRadius = 5, healthDot = 6, healthDotGap = 6, healthIcon = 12, healthIconGap = 5;
+    constexpr int healthLineGap = 3, healthMixerBottom = 4;
+    constexpr int healthDialogW = 460, healthDialogH = 250, healthDialogPad = 16, healthDialogLineH = 20;   // System health, in full
+    constexpr int outputStripFullW = 170, outputStripH = 71, outputStripRadius = 5, outputStripPadX = 9, outputStripNameTop = 7;
+    constexpr int outputStripBarsTop = 31, outputStripValueTop = 51, outputStripGap = 6, outputStripMuteTop = 26;
+    constexpr int outputsPaneTop = 30, outputsHeaderTop = 10, outputsSegmentW = 89, outputsSegmentCompactW = 57, outputsSegmentH = 18;
+    constexpr int inputSummaryNameTop = 47, inputSummaryLabelTop = 28, inputSummaryMeterTop = 68, inputSummaryMeterH = 8;
+    constexpr int smallKnob = 36, smallKnobColumn = 70, smallKnobLabelGap = 2, smallKnobLabelH = 11, smallKnobValueGap = 3, smallKnobValueH = 14;
+    constexpr float smallKnobArcR = 15.0f, smallKnobArcW = 3.0f, smallKnobCapR = 10.0f, smallKnobPointerW = 2.0f;
+    constexpr int eqCurvePadX = 11, eqCurveLabelPad = 5;
+    constexpr int faderTrackW = 4, faderThumbW = 28, faderThumbH = 14, faderThumbRadius = 3, sendFaderTrackH = 196;
+    constexpr int faderScaleW = 26, faderTickW = 6, faderTickGap = 4, faderHThumb = 12;
+    // The Routing view (m11-routing-inputs-outputs.json, m11-routing-sends.json)
+    constexpr int routingButtonW = 112;   // the centre header's Routing button (F7)
+    constexpr int routingHeaderH = 41, routingFooterH = 31, routingPadX = 15, routingTitleX = 33, routingIconX = 13, routingIcon = 15;
+    constexpr int routingTabsX = 121, routingTabsW = 302, routingTabsH = 26, routingChipGap = 10, routingBackW = 156;
+    constexpr int routingLeftW = 452, routingColumnGap = 16, routingContentTop = 56, routingGroupGap = 14;
+    constexpr int routingHeadH = 27, routingInputRowH = 37, routingOutputRowH = 45, routingBarH = 37, routingNameRowH = 33;
+    constexpr int routingCellPadX = 12, routingRemoveW = 22, routingInterfaceH = 87, routingNamesHelpH = 48;
+    constexpr int routingInNameW = 130, routingInChannelW = 176, routingInLevelW = 56, routingColGap = 10;
+    constexpr int routingOutNameW = 136, routingOutChannelsW = 120, routingFaderW = 104, routingLevelFieldW = 66, routingOutMeterW = 86;
+    constexpr int routingEqThumbW = 40, routingEqSummaryW = 76, routingDelayW = 118, routingComboH = 22;
+    constexpr int routingDetailH = 257, routingDetailPad = 17, routingCurveW = 414, routingCurveH = 126, routingKnobsTop = 176;
+    constexpr int routingDividerX = 459, routingRightX = 488, routingRightW = 250, routingStepW = 26, routingDelayFieldW = 100, routingDelayFieldH = 30;
+    constexpr int sendsHeadH = 45, sendsRowH = 37, sendsPatchW = 308, sendsInputW = 128, sendsEndW = 78, sendsColumnW = 176;
+    constexpr int sendsBarW = 64, sendsCellH = 28, sendsHelpTop = 14, sendsHelpW = 420, sendsHelpGap = 24;
+    // The IN and OUT stages (m11-edit-out-sends.json, m11-edit-in-missing.json)
+    constexpr int sendBoxTop = 26, sendBoxPad = 24, sendBoxH = 362, sendBoxRadius = 10, sendStripW = 92, sendStripGap = 26;
+    constexpr int sendNameTop = 18, sendSubTop = 40, sendOnTop = 58, sendOnX = 22, sendOnW = 48, sendOnH = 20, sendOnDotX = 11, sendOnDot = 6, sendOnTextGap = 5;
+    constexpr int sendFaderTop = 83, sendMeterX = 68, sendValueTop = 300, sendValueX = 14, sendValueW = 64, sendValueH = 22;
+    constexpr int jackFooterGap = 12, jackFooterH = 14, jackFooterSeparator = 20;   // the OUT stage's line under the box
+    constexpr int inputIntroTop = 36, inputCardsTop = 70, inputCardW = 200, inputCardH = 132, inputCardGap = 14;
+    constexpr int inputCardPad = 14, inputCardChipTop = 14, inputCardNameTop = 41, inputCardCaptionTop = 67, inputCardMeterTop = 101;
+    constexpr int inputCardIconX = 13, inputCardIconTop = 11, inputCardIcon = 18;
+    constexpr int inputCardMeterH = 6, inputCardRadius = 8, inputWarningTop = 226, inputWarningH = 57, inputWarningPadX = 33;
+    // FaultCard (a plugin switched off or not loaded, over its dimmed plate; edit-plugin-switched-off.json)
+    constexpr int faultCardW = 460, faultCardTop = 128, faultCardRadius = 8, faultCardPadX = 17, faultCardPadY = 15;
+    constexpr int faultCardIconW = 10, faultCardIconH = 18, faultCardIconGap = 10, faultCardLineGap = 3, faultCardGap = 10;
+    // ParameterList (a plugin's window when it has none of its own; plugin-window.json)
+    constexpr int paramListW = 580, paramListHeaderH = 41, paramListRowH = 33, paramListH = 455, paramListFooterH = 31;
+    constexpr int paramListPadX = 16, paramListNameW = 130, paramListSliderX = 158, paramListSliderW = 304, paramListValueW = 90;
+    constexpr int paramListChipH = 18, paramListGap = 10, paramListCountW = 120, paramListThumb = 12;
+    constexpr int faultCardButtonGap = 8, faultCardShadowY = 14, faultCardShadowBlur = 30;
+    // The plugin plate on the block stage (edit-plugin.json): 600 x 370, 22 below the stage header
+    constexpr int pluginPlateW = 600, pluginPlateH = 370, pluginPlateTop = 22, pluginPlatePadX = 22;
+    constexpr int pluginPlateChipTop = 26, pluginPlateChipH = 18, pluginPlateNameTop = 25, pluginPlateNameH = 20, pluginPlateTextGap = 10;
+    constexpr int pluginPlatePanelTop = 66, pluginPlatePanelH = 250, pluginPlatePanelPadX = 21, pluginPlatePanelPadTop = 15;
+    constexpr float pluginPlateDimmed = 0.45f;   // the plate under a FaultCard
+    constexpr int pluginPlateColumns = 4, pluginPlateRowPitch = 115, pluginPlateFootTop = 340, pluginPlateFootH = 16;
+    // (the power LED sits top right, on the name line: not on the board, but the panel's on/off stays)
     constexpr int triggerX = 222, learnW = 76, learnH = 22, removeW = 22, removeRight = 18, lastValueW = 117, lastValueH = 21;
     constexpr int helpLineH = 18, helpGap = 10, groupPadTight = 13;   // (help groups: 13 above and below the text)
     constexpr int statusTitleH = 15, statusLineH = 14, statusTextH = 15, latencySplit = 2, tickTextGap = 10, defaultsValueX = 170;
@@ -464,6 +649,7 @@ namespace size
     constexpr int lcdRadius = 6, lcdEdit = 32, lcdStage = 36, lcdShadowH = 5;
     constexpr int lcdPadX = 14, lcdGap = 18, lcdPadXStage = 16, lcdGapStage = 20;
     constexpr int lcdMinPatch = 110, lcdMinPatchStage = 140;   // the name item keeps its width
+    constexpr int statusBarRadius = 7, statusBarPadX = 14;      // the status bar (v3.2): its fields' padding, 1 px lines between
 
     // Full list columns (CueListEditor): number, name 45 % of flex, bar, note (rest), patch, MIDI
     constexpr int colNumber = 64, colBar = 150, colPatch = 190, colMidi = 90;
@@ -485,7 +671,10 @@ namespace type
 
     enum class Weight { regular = 400, medium = 500, semibold = 600, bold = 700, extraBold = 800 };
 
-    struct Style { float px; Weight weight; float tracking = 0.0f; bool uppercase = false; };
+    /** A text style. `readout`: numbers people read off the screen (status bar,
+        dB, ms, PC and cue numbers) use Inter Readout: tabular figures with the
+        slashed zero (v3.1), so 0 and O can't be confused. */
+    struct Style { float px; Weight weight; float tracking = 0.0f; bool uppercase = false; bool readout = false; };
 
     constexpr float lcdLineHeight = 1.05f;   // LCD value / label lines (em)
     constexpr float titleLineHeight = 1.15f; // the show name over its save state
@@ -494,20 +683,22 @@ namespace type
 
     // UI chrome
     constexpr Style body            { 12.5f, Weight::regular };             // rows, values
+    constexpr Style bodyReadout     { 12.5f, Weight::regular, 0.0f, false, true }; // cue numbers in rows, MIDI triggers (readout)
     constexpr Style bodySmall       { 12.0f, Weight::regular };             // fields, button text
     constexpr Style button          { 12.0f, Weight::medium };
+    constexpr Style buttonCompact   { 11.0f, Weight::medium };              // the amp builder's option grids (22 px buttons)
     constexpr Style label           { 11.5f, Weight::regular };             // field labels ("k"), help
     constexpr Style caption         { 11.0f, Weight::regular };             // footers, notes
     constexpr Style paneHeader      { 10.0f, Weight::bold, 0.08f, true };   // "SET LIST", "INSPECTOR · AMP"
-    constexpr Style lcdValue        { 14.0f, Weight::semibold };            // Edit LCD (16 on Stage)
+    constexpr Style lcdValue        { 14.0f, Weight::semibold, 0.0f, false, true };            // Edit LCD (16 on Stage)
     constexpr Style lcdLabel        {  8.5f, Weight::bold };                // Edit LCD labels (9 on Stage)
     constexpr Style toolbarTitle    { 12.5f, Weight::semibold };            // show name
     constexpr Style sectionHeading  { 10.5f, Weight::extraBold, 0.06f, true }; // sidebar SET 1
     constexpr Style tableRow        { 13.5f, Weight::regular };
     constexpr Style tableSection    { 14.0f, Weight::bold };
     constexpr Style tableKind       { 11.0f, Weight::bold, 0.06f, true };
-    constexpr Style tableMidi       { 12.0f, Weight::regular };             // "PC 5  OUT"
-    constexpr Style menuItem        { 12.5f, Weight::regular };
+    constexpr Style tableMidi       { 12.0f, Weight::regular, 0.0f, false, true };             // "PC 5  OUT"
+    constexpr Style menuItem        { 12.0f, Weight::regular };
     constexpr Style menuShortcut    { 11.0f, Weight::regular };
     constexpr Style dialogTitle     { 12.5f, Weight::semibold };
     constexpr Style summaryLarge    { 20.0f, Weight::bold };                // pre-show summary
@@ -521,10 +712,14 @@ namespace type
     constexpr Style paneHeaderNote  { 10.0f, Weight::medium };              // "6.9% CPU", "value · pedal"
     constexpr Style buttonSmall     { 10.5f, Weight::medium };              // 18 px pane buttons
     constexpr Style buttonBold      { 12.0f, Weight::bold };                // PANIC, MUTED, Mute
-    constexpr Style lcdValueStage   { 16.0f, Weight::semibold };
+    constexpr Style lcdValueStage   { 16.0f, Weight::semibold, 0.0f, false, true };
     constexpr Style lcdLabelStage   {  9.0f, Weight::semibold };
-    constexpr Style meterValue      { 11.0f, Weight::regular };
-    constexpr Style meterScale      {  9.0f, Weight::regular };
+    constexpr Style statusValue     { 14.0f, Weight::semibold, 0.0f, false, true };   // status bar value (Edit)
+    constexpr Style statusLabel     {  8.5f, Weight::bold };                          // its label, above it (caps)
+    constexpr Style statusValueStage{ 16.0f, Weight::semibold, 0.0f, false, true };   // on the Stage toolbar
+    constexpr Style statusLabelStage{  9.0f, Weight::semibold };
+    constexpr Style meterValue      { 11.0f, Weight::regular, 0.0f, false, true };
+    constexpr Style meterScale      { 9.0f, Weight::regular, 0.0f, false, true };
     constexpr Style miniMeterLabel  {  9.0f, Weight::bold };                // Stage toolbar CPU / DROPOUTS
     constexpr Style rowStrong       { 12.5f, Weight::semibold };            // current row, show name
     constexpr Style rowTrailing     { 11.0f, Weight::regular };             // patch name at the end of a row
@@ -562,9 +757,9 @@ namespace type
     constexpr Style currentName     { 168.0f, Weight::extraBold, -0.04f };  // fits the widget; shrink to fit
     constexpr Style stageListName   { 20.0f, Weight::bold };
     constexpr Style stageListHeading{ 13.0f, Weight::extraBold, 0.06f, true };
-    constexpr Style stageListNumber { 13.0f, Weight::regular };
+    constexpr Style stageListNumber { 13.0f, Weight::regular, 0.0f, false, true };
     constexpr Style stageListPatch  { 15.0f, Weight::regular };
-    constexpr Style clock           { 52.0f, Weight::extraBold };
+    constexpr Style clock           { 52.0f, Weight::extraBold, 0.0f, false, true };
     constexpr Style healthMain      { 30.0f, Weight::extraBold };            // "CPU 7%", "AUDIO LOST"
     constexpr Style healthSub       { 12.0f, Weight::bold };                 // "OK · 0 dropouts · 5.3 ms"
     constexpr Style lockLabel       { 38.0f, Weight::extraBold };
@@ -594,8 +789,57 @@ namespace type
     constexpr Style helpStrong      { 12.0f, Weight::bold };
     constexpr Style statusTitle     { 12.5f, Weight::semibold };
     constexpr Style noteText        { 11.5f, Weight::regular };             // notes under groups, the latency line
+    constexpr Style noteTextStrong  { 11.5f, Weight::semibold };            // a word picked out in such a note
     constexpr Style noteStrong      { 11.5f, Weight::bold };
     constexpr Style columnHead      { 10.5f, Weight::bold, 0.06f, true };   // DOES, FOOTSWITCH / PEDAL
+    constexpr Style tagChip         { 9.5f, Weight::bold, 0.02f, true };    // NOT HERE, OUTPUT MUTED, counts
+    constexpr Style utilityLabel    {  8.5f, Weight::extraBold, 0.08f, true }; // VST3, IN, OUT, SPLIT on a chain tile
+    constexpr Style utilityName     { 10.5f, Weight::bold };                // the plugin's name on its tile
+    constexpr Style utilityCaption  {  9.0f, Weight::regular };             // its maker
+    constexpr Style muteLetter      { 10.0f, Weight::extraBold };           // "M"
+    constexpr Style outputName      { 11.5f, Weight::semibold };            // an output's name on its strip
+    constexpr Style outputChannels  { 9.5f, Weight::regular, 0.0f, false, true };             // "1/2"
+    constexpr Style dropBox         { 12.0f, Weight::semibold };            // "Drop: Clock" / "Move: Clock"
+    constexpr Style mixerName       { 11.0f, Weight::semibold };            // an output's name over its mixer strip (two lines)
+    constexpr Style limLabel        {  8.5f, Weight::bold, 0.06f, true };   // LIM
+    constexpr Style peakValue       { 10.0f, Weight::regular, 0.0f, false, true };   // "−8.2" over the fader
+    constexpr Style dbScaleLabel    {  9.0f, Weight::regular, 0.0f, false, true };   // 0 −6 −12 −24 −48 beside a mixer meter
+    constexpr Style healthStatus    { 11.0f, Weight::regular, 0.0f, false, true };   // "Healthy" / "CPU 9% · 5.3 ms"
+    constexpr Style healthStatusStrong { 11.0f, Weight::semibold, 0.0f, false, true }; // "1 thing to check"
+    constexpr Style pickerName      { 12.0f, Weight::semibold };            // the input picker: "Guitar"
+    constexpr Style pickerCaption   { 12.0f, Weight::regular };             // ... " · 1 · Input 1 (Mic/Inst)"
+    constexpr Style pickerCompact   { 11.0f, Weight::semibold };            // the mixer view's "Guitar"
+    constexpr Style outputValue     { 10.5f, Weight::regular, 0.0f, false, true };             // "-6.0 dB", "muted"
+    constexpr Style inputSummaryName{ 13.0f, Weight::semibold };            // the playing patch's input
+    constexpr Style stageMute       { 15.0f, Weight::extraBold, 0.04f };    // Mute / MUTED on the Outputs widget
+    constexpr Style stageOutputName { 15.0f, Weight::bold };                // "Front of house" on the Outputs widget
+    constexpr Style stageOutputChannels { 11.0f, Weight::regular };         // its "1/2"
+    constexpr Style stageOutputState { 12.0f, Weight::regular };            // "live" / "muted"
+    constexpr Style stagePatchInput { 13.0f, Weight::regular };             // the Patch widget's input
+    constexpr Style smallKnobLabel  {  9.5f, Weight::extraBold, 0.08f, true }; // LOW CUT under a small knob
+    constexpr Style smallKnobValue  { 11.0f, Weight::regular, 0.0f, false, true };
+    constexpr Style eqScale         { 9.0f, Weight::regular, 0.0f, false, true };             // 20 Hz, 20 kHz, +12 dB
+    constexpr Style faderScale      { 9.0f, Weight::regular, 0.0f, false, true };             // +6 0 −6 … −∞ beside a fader
+    constexpr Style routingTitle    { 14.0f, Weight::bold };                // "Routing"
+    constexpr Style routingRowName  { 12.5f, Weight::semibold };            // an output's or a name's row
+    constexpr Style routingDevice   { 13.0f, Weight::semibold };            // the interface's name
+    constexpr Style routingDelay    { 16.0f, Weight::semibold, 0.0f, false, true };            // "12.0 ms"
+    constexpr Style routingGlyph    { 12.5f, Weight::extraBold };           // ✓ / !
+    constexpr Style sendsHead       { 12.0f, Weight::semibold };            // an output's name over its column
+    constexpr Style sendsHeadSub    { 10.0f, Weight::regular };             // "3/4 · stereo"
+    constexpr Style sendName        { 12.0f, Weight::semibold };            // an output over its send fader
+    constexpr Style sendSub         { 10.0f, Weight::regular };             // "1/2 · stereo"
+    constexpr Style inputCardName   { 18.0f, Weight::bold };                // Guitar on its card
+    constexpr Style paramListName   { 13.0f, Weight::bold };                // the plugin's name over its parameter list
+    constexpr Style paramListNote   { 12.0f, Weight::regular };             // "has no window of its own: its parameters"
+    constexpr Style faultText       { 12.5f, Weight::regular };             // the FaultCard's message
+    constexpr Style faultStrong     { 12.5f, Weight::bold };                // "Switched off:"
+    constexpr Style utilityLine     {  9.5f, Weight::semibold };            // an output on the OUT tile
+    constexpr Style pathBadge       {  9.5f, Weight::extraBold };           // A / B
+    constexpr Style knobValue       { 10.5f, Weight::regular, 0.0f, false, true };             // "35 %" under a plugin plate knob
+    constexpr Style plateName       { 16.0f, Weight::bold };                // ValhallaRoom on the plugin plate
+    constexpr Style plateMaker      { 12.0f, Weight::regular };             // "Valhalla DSP · v2.0.0"
+    constexpr Style plateMore       { 11.0f, Weight::regular };             // "+ 24 more in the plugin window"
     constexpr Style tunerCaption    { 11.0f, Weight::bold, 0.08f, true };
     constexpr Style tunerNote       { 180.0f, Weight::semibold };
     constexpr Style tunerDetail     { 18.0f, Weight::regular };
@@ -609,6 +853,8 @@ namespace state
     constexpr float hoverLighten  = 0.06f;   // raised controls get 6 % lighter on hover
     constexpr float activeLighten = 0.15f;   // a stage button widget while it acts (panic silencing)
     constexpr float disabledAlpha = 0.45f;
+    constexpr float draggedAlpha  = 0.35f;   // a widget being moved, where it was
+    constexpr float dragImageAlpha = 0.6f;   // the picture of a dragged row under the pointer (kit::DragImage)
     constexpr float cutAlpha      = 0.35f;   // cut items in the full list
     // Summary badge for warning / ok (the boards only draw the problem one):
     // the badge colour lit and darkened the way the problem badge is.
@@ -623,6 +869,125 @@ namespace state
 namespace motion
 {
     constexpr int uiTimerHz = 30;
+}
+
+//==============================================================================
+// Amp faces (design/AMP-BUILDER.md, board BAmpBuilder): the materials and
+// print of amps built in the amp builder. They are drawn things (metal,
+// rubber, light), not UI chrome, so they live apart from the UI colours;
+// composed once to an image per amp (kit::AmpFace).
+namespace amp
+{
+    constexpr int faceW = 600, faceH = 430;   // the GearView amp box (Edit)
+    constexpr int snap = 2;                   // the builder's grid (px)
+    constexpr int guideReach = 6;             // smart guides: centres within 6 px line up
+    constexpr juce::uint32 guide = 0xffFF4FD8;   // the smart guides' magenta
+
+    // Print on the panels: text, ticks, symbols, frame lines (and title rules).
+    constexpr juce::uint32 printDark   = 0xff141416, ruleWhite = 0xff3A3A3E, ruleOrange = 0xff3A2410;   // white, orange panels
+    constexpr juce::uint32 printGold   = 0xff4A3A1C, ruleGold  = 0xff6A5630;
+    constexpr juce::uint32 printPlexi  = 0xff2A2112, rulePlexi = 0xff5A4628;
+    constexpr juce::uint32 printSilver = 0xff2A2A2E, ruleSilver = 0xff55555B;
+    constexpr juce::uint32 printLight  = 0xffE8E8EB, ruleBlack = 0xff6A6A70, ruleDark = 0xff8A8A90;  // black, dark steel
+    constexpr juce::uint32 printOnMetal = 0xff2A2112;   // on a gold or silver panel section
+
+    // Panel sections: their edges.
+    constexpr juce::uint32 sectionShine = 0x2EFFFFFF, sectionShade = 0x80000000, sectionRing = 0xB3000000, sectionDrop = 0x80000000;
+    constexpr int sectionRadius = 4;
+
+    // Feet (head bodies), studs, corners.
+    constexpr juce::uint32 footTop = 0xff1E1E20, footBottom = 0xff0A0A0B, footShine = 0x14FFFFFF;
+    constexpr int footW = 86, footH = 18, footRadius = 8, footLeftX = 64, footRightX = 450, footY = 400;
+    constexpr juce::uint32 studLight = 0xffD9C9A0, studMid = 0xff6E5A36, studDark = 0xff2A2216;
+    constexpr int studSize = 5, studPitch = 26, cornerSize = 22;
+
+    // Knobs: shadow; the plain black knob; the pointer line.
+    constexpr juce::uint32 knobShadow = 0x8C000000;
+    // A knob's CSS drop-shadow: Y = max(2, s/18) down, blur B = max(1, s/30) (sigma B/2), black 55 %, every style.
+    constexpr float knobShadowMinY = 2.0f, knobShadowYDiv = 18.0f, knobShadowMinBlur = 1.0f, knobShadowBlurDiv = 30.0f;
+    constexpr int knobShadowCacheMax = 256;   // shadow images kept (per look, size, frame, pixel scale)
+    constexpr juce::uint32 plainLight = 0xff4A4A4F, plainMid = 0xff1C1C1F, plainDark = 0xff0B0B0C, plainRing = 0xff050506, plainShine = 0x40FFFFFF;
+    constexpr juce::uint32 pointer = 0xffF2F2F4, pointerShade = 0x99000000;
+
+    // Push button (out / pressed in).
+    constexpr juce::uint32 pushCapLight = 0xff4E4E53, pushCapMid = 0xff1B1B1E, pushCapDark = 0xff0A0A0B, pushGap = 0xff2A2A2E,
+                           pushChromeLight = 0xffF4F4F6, pushChromeMid = 0xffA4A4AA, pushChromeDark = 0xff45454A, pushEdge = 0xff1A1A1C;
+    constexpr juce::uint32 pushInCap = 0xff18181A, pushInCapMid = 0xff0C0C0E, pushInCapDark = 0xff040405, pushInGap = 0xff6A6A70,
+                           pushInChrome = 0xffE4E4E8, pushInChromeMid = 0xff9A9AA0, pushInChromeDark = 0xff3A3A3E, pushInEdge = 0xff161618;
+    constexpr juce::uint32 switchShadow = 0x99000000;
+
+    // Lights: the glow around a lit pilot jewel; the LEDs (lit centre, rim, unlit).
+    constexpr juce::uint32 glowRed = 0xB3FF6E3C, glowAmber = 0xB3FFAA28, glowGreen = 0x9950E65A, glowBlue = 0x995096FF;
+    constexpr juce::uint32 ledRed[3]   { 0xffFF6A58, 0xffB0221A, 0xff3A1512 };
+    constexpr juce::uint32 ledAmber[3] { 0xffFFC85A, 0xffB06A10, 0xff3A2810 };
+    constexpr juce::uint32 ledGreen[3] { 0xff6CF58C, 0xff169A3A, 0xff13301A };
+    constexpr juce::uint32 ledBlue[3]  { 0xff7DBBFF, 0xff1D5AAE, 0xff142236 };
+    constexpr juce::uint32 ledHot = 0xffFFFFFF, ledUnlitShine = 0x59FFFFFF, ledUnlitEdge = 0xff0A0A0B, ledBezelInner = 0xff0A0A0B, ledBezel = 0xff7A7A80;
+
+    // Jack, screw.
+    constexpr juce::uint32 jackHole = 0xff050506, jackLight = 0xffD9D9DE, jackMid = 0xff8A8A90, jackDark = 0xff3A3A3E, jackEdge = 0xff18181A, jackShadow = 0xB3000000;
+    constexpr juce::uint32 screwLight = 0xffF2F2F4, screwDark = 0xff7A7A80, screwShadow = 0x99000000;
+
+    // Panel handle: chrome bar and its two caps.
+    constexpr juce::uint32 handleDark = 0xff6A6A70, handleShine = 0xffF6F6F8, handleMid = 0xffA8A8AE, handleEdge = 0xff4A4A50, handleShadow = 0x80000000;
+    constexpr juce::uint32 handleCapTop = 0xffD9D9DE, handleCapBottom = 0xff6A6A70;
+
+    // Name plates: gold, silver, black, black with a gold rim (text colour last).
+    constexpr juce::uint32 plateGoldTop = 0xffF1DFA8, plateGoldBottom = 0xffB8913E, plateGoldText = 0xff2A2112, plateGoldShine = 0x99FFFFFF;
+    constexpr juce::uint32 plateSilverTop = 0xffF2F2F4, plateSilverBottom = 0xffA8A8AE, plateSilverText = 0xff1A1A1C, plateSilverShine = 0xffFFFFFF;
+    constexpr juce::uint32 plateBlackTop = 0xff2A2A2E, plateBlackBottom = 0xff121214, plateBlackText = 0xffD9D9DE, plateBlackShine = 0x26FFFFFF;
+    constexpr juce::uint32 plateRimCentre = 0xff2A2A2E, plateRimEdge = 0xff0E0E10, plateRimText = 0xffD9B865, plateRim = 0xffC9A452, plateRimInner = 0xff3A2E14;
+    constexpr juce::uint32 plateShadow = 0x99000000, plateRimShadow = 0xB3000000;
+
+    // Trim strips.
+    constexpr juce::uint32 trimGold[4]   { 0xffF6E3A8, 0xffB8913E, 0xff6E5420, 0xffD9B865 };
+    constexpr juce::uint32 trimSilver[4] { 0xffFFFFFF, 0xffB9B9BF, 0xff5A5A60, 0xffD9D9DE };
+    constexpr juce::uint32 trimBlackTop = 0xff3A3A3E, trimBlackBottom = 0xff0E0E10;
+
+    // The Encore logo's colours; the badge's fill.
+    constexpr juce::uint32 logoCream = 0xffF3E6C4, logoWhite = 0xffF2F2F4, logoGold = 0xffD9B865, logoBlack = 0xff1A1A1C;
+    constexpr juce::uint32 badgeFill = 0x59FFFFFF;
+
+    // The builder's marks on parts: what a knob drives, NOT SET (amber), selection.
+    constexpr juce::uint32 bindDrivesFill = 0xff1B2C45, bindDrivesText = 0xff7FC4FF;
+    constexpr juce::uint32 bindFixedFill = 0xff2C2C30, bindFixedText = 0xffC4C4C9;
+    constexpr juce::uint32 bindNotSetFill = 0xff4A3510, bindNotSetText = 0xffFFD27A;
+    constexpr juce::uint32 selectedOutline = 0xff6EA5FA, notSetOutline = 0xffFFB340, handleFill = 0xffFFFFFF, handleBorder = 0xff2E6FDC;
+
+    // The amp builder (board BAmpBuilder): the face's work area, notes in the inspector.
+    constexpr juce::uint32 workArea = 0xff121418, workDots = 0x12FFFFFF, faceShadow = 0x8C000000;
+    constexpr juce::uint32 dropFill = 0x294C8DF6;    // where a dragged part lands: accent at 16 %
+    constexpr juce::uint32 notSetNoteFill = 0xff2A251C, notSetNoteBorder = 0xff3D2F12, notSetNoteText = 0xffFFD27A;
+    constexpr juce::uint32 fixedNoteFill = 0xff232326;
+    constexpr juce::uint32 swatchRing = 0xffE8E8EB, swatchShine = 0x0FFFFFFF;   // selected ring (CSS outline), inner ring
+    // Tolex swatches: flat colours, the tweed as stripes (board TOLEX).
+    constexpr juce::uint32 tolexBlack = 0xff1C1B1A, tolexOrange = 0xffC8601E, tolexWhite = 0xffE0DED6, tolexCream = 0xffD6C6A0,
+                           tolexBrown = 0xff4E3220, tolexRed = 0xff6E1C18, tolexBlonde = 0xffC4A470;
+    constexpr juce::uint32 tweedDark = 0xff7A5228, tweedLight = 0xffD9B878;
+    constexpr float tweedPeriod = 3.4f, tweedLine = 1.0f;   // repeating-linear-gradient(135deg, dark 0 1px, light 1px 3.4px)
+    constexpr float pipingNoneBand = 0.12f;                 // the None slash: 44 % .. 56 % of the 135° gradient line
+    // Swatches the builder can't cut from the layers: piping cords, light colours.
+    constexpr juce::uint32 pipingGold = 0xffD6C080, pipingWhite = 0xffE4E2DC, pipingBlack = 0xff1E1E20, pipingNone = 0xff2A2A2E, pipingNoneSlash = 0xffFF8A80;
+    constexpr juce::uint32 lightRed = 0xffFF6E3C, lightAmber = 0xffFFAA28, lightGreen = 0xff50E65A, lightBlue = 0xff5096FF;
+
+    constexpr int partsW = 220, inspectorW = 300, footerH = 30, ampPickerW = 210, backButtonW = 156;
+    constexpr int dotPitch = 16, faceShadowY = 24, faceShadowBlur = 20;
+    constexpr int handleSize = 7, bindH = 16, bindPadX = 6, outlineGap = 3;
+    constexpr int rowLabelW = 86, rowGap = 8, rowMinH = 26, inspectorPadX = 12, inspectorPadY = 10, swatch = 22;
+    constexpr int headerH = 25;                                               // the builder's column headers: .hd 24 + its 1 px line
+    constexpr int knobPictureSize = 24, knobPictureButtonH = 34;              // the Knob choice: 24 px pictures in 34 px buttons
+    constexpr int fieldH = 24, fieldPairGap = 6, fieldPadX = 8, buttonsRowTop = 6;   // Duplicate | Remove: 6 px above                              // Position / Size: two fields, "x 278"
+    constexpr int rowGapY = 6;                                                // the inspector's rows: a column with gap 6
+    constexpr float noteSize = 11.0f, noteLineH = 1.5f, filledNoteSize = 11.5f, filledNoteLineH = 1.45f;
+    constexpr int notePadX = 10, notePadY = 8, noteRadius = 6, closingNoteTop = 4;
+    constexpr int sectionLineTop = 10, sectionLineBottom = 6, sectionTitleH = 12, sectionTitlePadBottom = 2;   // the line and "SOUND"
+    constexpr int choiceH = 24, drivesH = 22;                                  // option buttons: Template, Body (24), Drives (22)
+    constexpr int swatchGap = 6, swatchRadius = 5;                          // .ab-sw: 6 px across and down
+    constexpr int swatchRingOut = 2, swatchRingRadius = 7, swatchRingW = 2;  // outline 2 px, offset 1: stroke centred 2 px out
+    constexpr int swatchMargin = 3;                                          // room for the ring around a swatch group
+    constexpr int labelTopBody = 4, labelTopSymbol = 6, labelLineH = 14;     // Body / Symbol labels sit at the top
+    constexpr int dropBorder = 2, dropRadius = 6, gapLabelH = 12;
+    constexpr int undoDepth = 100;
 }
 
 } // namespace encore::theme

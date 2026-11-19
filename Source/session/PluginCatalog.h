@@ -88,6 +88,15 @@ public:
     /** "Scanning 3 of 40: Shimmer.vst3", "Scan stopped", or "12 plugins, 1 blocked". */
     juce::String getScanStatus() const;
 
+    /** While scanning: the file being scanned (1-based) and how many there are;
+        both 0 when not scanning or still looking for files. */
+    struct ScanProgress { int current = 0, total = 0; };
+    ScanProgress getScanProgress() const;
+
+    /** Tests only (UI snapshots): shows a scan at this file without running
+        one. Ended by cancelScan(). */
+    void showScanProgressForTesting (int index, int total, const juce::String& file);
+
     /** How long a scanned file may go without finishing a plugin (default 60 s). */
     void setScanTimeout (juce::RelativeTime);
 
@@ -96,6 +105,10 @@ public:
     std::unique_ptr<juce::AudioPluginInstance> createInstance (const juce::PluginDescription&,
                                                                double sampleRate, int blockSize,
                                                                juce::String& error);
+
+    /** Tests only (UI snapshots): makes the instances instead of loading
+        files; returning null loads the file as usual. Message thread. */
+    static std::function<std::unique_ptr<juce::AudioPluginInstance> (const juce::PluginDescription&)>& instanceMakerForTesting();
 
     //== The scanner process ===================================================
     /** True if Encore was started as a scanner (by a scan, not by a person). */
@@ -137,6 +150,7 @@ private:
     juce::KnownPluginList known;                     // internally locked too
     std::map<juce::String, juce::String> blocked;    // file -> reason
     juce::String scanStatus;
+    ScanProgress progress;
     juce::RelativeTime scanTimeout { juce::RelativeTime::seconds (60) };
 
     std::unique_ptr<ScanThread> scanThread;

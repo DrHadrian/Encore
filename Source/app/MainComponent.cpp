@@ -6,6 +6,7 @@
 
 #include "engine/blocks/CabIrBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
+#include "ui/kit/AmpTemplates.h"
 #include "engine/blocks/NoiseGateBlock.h"
 #include "engine/core/Realtime.h"
 #include "ui/theme/EncoreFonts.h"
@@ -136,25 +137,25 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     };
     toolbar.addAndMakeVisible (modeSwitch);
 
-    toolbar.addAndMakeVisible (lcd);
+    toolbar.addAndMakeVisible (statusBar);
 
     tunerButton.setTooltip ("Tuner (T)");
     tunerButton.setClickingTogglesState (false);
     tunerButton.onClick = [this] { engine.setTunerOpen (! engine.isTunerOpen()); };
     toolbar.addAndMakeVisible (tunerButton);
 
-    midiSettingsButton.onClick = [this] { openMidiSettings(); };
-    midiSettingsButton.setTooltip ("Foot controller, expression pedals, MIDI learn and MIDI out");
-    toolbar.addAndMakeVisible (midiSettingsButton);
-
-    audioSettingsButton.onClick = [this] { openAudioSettings(); };
-    audioSettingsButton.setTooltip ("Audio settings: interface, driver, buffer and channels");
-    toolbar.addAndMakeVisible (audioSettingsButton);
+    // One button for Audio | MIDI | Plugins (design v3.2); the pre-show fixes and
+    // Routing still open the Audio, MIDI or Plugins tab directly.
+    settingsButton.onClick = [this] { openSettingsOnLastTab(); };
+    settingsButton.setTooltip ("Settings: Audio, MIDI and Plugins (opens on the tab you used last)");
+    setButtonIcon (settingsButton, Icon::settings, (float) size::settingsIcon, false, (float) size::settingsIconGap);
+    toolbar.addAndMakeVisible (settingsButton);
 
     styleLabel (outLabel, type::label, colour::textTertiary);
     toolbar.addAndMakeVisible (outLabel);
 
     volume.setRange (-60.0, 12.0, 0.1);
+    volume.getProperties().set ("encoreOutVolume", true);   // its own fill colour (outSliderFill)
     volume.setTextValueSuffix (" dB");
     volume.setDoubleClickReturnValue (true, 0.0);
     volume.setTextBoxStyle (juce::Slider::TextBoxRight, false, size::valueFieldW, size::fieldHeight);
@@ -208,48 +209,59 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     addChildComponent (noticeBar);
 
     // Bottom row (SCREENS.md §4.4)
-    for (auto* pane : { &inputPane, &metersPane, &healthPane })
+    for (auto* pane : { &inputPane, &metersPane })
         addAndMakeVisible (pane);
 
-    styleLabel (inputLabel, type::label, colour::textTertiary);
-    inputPane.addAndMakeVisible (inputLabel);
+    inputPane.addAndMakeVisible (inputSummary);
+    inputSummary.onPickInput = [this] (juce::Component& anchor) { showInputPicker (anchor); };
+    metersPane.addAndMakeVisible (outputsPane);
 
-    setVariant (inputChoice, Variant::field);
-    inputChoice.setTitle ("Guitar input");
-    inputChoice.onChange = [this]
+    const auto outputSlotAt = [this] (int index)
     {
-        const auto index = inputChoice.getSelectedId() - 1;   // ids are 1-based
+        const auto& outputs = engine.getRouting().outputs;
+        return juce::isPositiveAndBelow (index, (int) outputs.size()) ? engine.getOutputSlot (outputs[(size_t) index].name) : -1;
+    };
 
-        if (index >= 0)
+    outputsPane.onMuteClicked = [this] (int index, bool muted)
+    {
+        const auto& outputs = engine.getRouting().outputs;
+
+        if (juce::isPositiveAndBelow (index, (int) outputs.size()))
+            setOutputMuted (outputs[(size_t) index].name, muted);
+    };
+    outputsPane.onLevelChange = [this, outputSlotAt] (int index, float dB)
+    {
+        // Live while the fader moves; saved with the routing when it lets go.
+        if (const auto slot = outputSlotAt (index); slot >= 0)
+            engine.setOutputLevel (slot, dB);
+    };
+    outputsPane.onLevelCommit = [this] (int index, float dB)
+    {
+        auto routing = engine.getRouting();
+
+        if (juce::isPositiveAndBelow (index, (int) routing.outputs.size()) && routing.outputs[(size_t) index].levelDb != dB)
         {
-            engine.setGuitarInputChannel (index);
-            settings.setGuitarInputChannel (index);
+            routing.outputs[(size_t) index].levelDb = dB;
+            setRouting (routing);
         }
     };
-    inputPane.addAndMakeVisible (inputChoice);
-
-    styleLabel (deviceLine, type::caption, colour::textMuted);
-    inputPane.addAndMakeVisible (deviceLine);
-
-    metersPane.addAndMakeVisible (inputMeter);
-    metersPane.addAndMakeVisible (outputMeter);
-    metersPane.addAndMakeVisible (meterScale);
-
-    styleLabel (healthTitle, type::healthTitle, colour::textTertiary);
-    healthPane.addAndMakeVisible (healthTitle);
-
-    setVariant (resetCountersButton, Variant::small);
-    resetCountersButton.setTooltip ("Start the overrun, dropout and clip counts again from zero");
-    resetCountersButton.onClick = [this] { engine.resetCounters(); };
-    healthPane.addAndMakeVisible (resetCountersButton);
-
-    for (auto* line : { &healthLine, &latencyLine, &warningLine })
+    outputsPane.onPeakReset = [this, outputSlotAt] (int index)
     {
-        styleLabel (*line, type::caption, colour::textSecondary);
-        healthPane.addAndMakeVisible (line);
-    }
+        if (const auto slot = outputSlotAt (index); slot >= 0)
+            engine.resetOutputClips (slot);
+    };
 
-    warningLine.setJustificationType (juce::Justification::topLeft);
+
+    healthStatus.onClick = [this] { openHealthDetails(); };
+    addAndMakeVisible (healthStatus);
+
+    mixerTab.setTooltips ("Open the mixer view: vertical meters, peaks and level faders", "Close the mixer view");
+    mixerTab.onClick = [this] { setMixerOpen (! mixerOpen); };
+    addChildComponent (mixerTab);   // shown with the bottom row (layoutBottomRow)
+    mixerOpen = settings.getMixerViewOpen();
+    mixerTab.setOpen (mixerOpen);
+    inputSummary.setMixer (mixerOpen);
+    outputsPane.setMixer (mixerOpen);
 
     styleLabel (chainLabel, type::headerLine, colour::text);
     addAndMakeVisible (chainLabel);
@@ -288,13 +300,39 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     if (error.isNotEmpty())
         setWarning ("Audio device problem: " + error);
 
-    engine.setGuitarInputChannel (settings.getGuitarInputChannel());
+    // This computer's inputs and outputs. The first time (before routing), the
+    // guitar input was a place among the switched-on inputs: it becomes the
+    // interface channel it pointed at.
+    auto routing = settings.getRouting();
+
+    if (! settings.hasRouting())
+        if (auto* device = deviceManager.getCurrentAudioDevice())
+        {
+            const auto active = device->getActiveInputChannels();
+            const auto wanted = juce::jmax (0, settings.getGuitarInputChannel());
+
+            for (int ch = 0, index = 0; ch <= active.getHighestBit(); ++ch)
+                if (active[ch] && index++ == wanted)
+                {
+                    routing.inputs.front().channel = ch + 1;
+                    break;
+                }
+
+            settings.setRouting (routing);
+        }
+
+    engine.setRouting (routing);
     deviceManager.addAudioCallback (&engine);
 
     // MIDI: every enabled input feeds the router (the device manager reopens
     // inputs that were enabled last time, and ones plugged back in).
     deviceManager.addMidiInputDeviceCallback ({}, &engine.getMidiRouter());
     deviceManager.addChangeListener (this);
+
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+        lastRoutedDevice = device->getName();
+
+    ensureRoutingChannelsActive();
 
     // Did the last run end cleanly? If not, go back to where it was.
     recovery = std::make_unique<RecoveryFile> (settings.getFolder().getChildFile ("recovery.json"));
@@ -354,6 +392,7 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     chainStrip = std::make_unique<ChainStrip> (*session);
     chainStrip->onSelectionChanged = [this] (int) { showSelectedBlock(); };
     chainStrip->onFindPlugins = [this] { openSettings (SettingsWindow::Tab::plugins); };
+    chainStrip->onHeightChanged = [this] { resized(); };
     addAndMakeVisible (*chainStrip);
 
     openInitialShow();
@@ -361,11 +400,64 @@ MainComponent::MainComponent (AppSettings& s, std::unique_ptr<juce::AudioIODevic
     cueEditor = std::make_unique<CueListEditor> (*session);
     cueEditor->onClose = [this] { setCueListVisible (false); };
     addChildComponent (*cueEditor);
+
+    // Routing (F7): this computer's inputs and outputs, the show's sends.
+    routingView = std::make_unique<RoutingView> (engine, *session, deviceManager);
+    routingView->onClose = [this] { setRoutingVisible (false); };
+    routingView->onSetRouting = [this] (const RoutingConfig& r) { setRouting (r); };
+    routingView->onSetOutputMuted = [this] (const juce::String& name, bool muted) { setOutputMuted (name, muted); };
+    routingView->onOpenAudioSettings = [this] { openAudioSettings(); };
+    addChildComponent (*routingView);
+
+    // The amp builder (F8): this computer's amp library beside the settings.
+    ampLibrary = std::make_unique<AmpLibrary> (settings.getFolder().getChildFile ("Amps"));
+    ampBuilder = std::make_unique<AmpBuilderView> (*session, *ampLibrary);
+    ampBuilder->onClose = [this] { setAmpBuilderVisible (false); };
+    ampBuilder->onSaved = [this] (const AmpPreset& saved)
+    {
+        // The amp block it was built for shows it from now on (its starting settings applied).
+        if (builderBlockIndex >= 0)
+        {
+            session->setBlockAmp (builderBlockIndex, saved.id);
+
+            if (blockPanel != nullptr && shownBlockIndex == builderBlockIndex)
+                blockPanel->setAmpFace (saved);
+        }
+    };
+    ampBuilder->onLoadCapture = [this] (std::function<void (const juce::File&, const juce::String&)> done)
+    {
+        captureChooser = std::make_unique<juce::FileChooser> ("Load a NAM capture", settings.getLastBrowseFolder(), "*.nam");
+        juce::Component::SafePointer<MainComponent> safe (this);
+        captureChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                                     [safe, done] (const juce::FileChooser& chooser)
+        {
+            if (safe == nullptr || chooser.getResult() == juce::File())
+                return;
+
+            const auto file = chooser.getResult();
+            safe->settings.setLastBrowseFolder (file.getParentDirectory());
+
+            // The amp block being built loads it (the existing loader, off the audio thread).
+            if (safe->blockPanel != nullptr && safe->shownBlockIndex == safe->builderBlockIndex)
+                safe->blockPanel->loadFile (file);
+
+            done (file, {});
+        });
+    };
+    addChildComponent (*ampBuilder);
+
+    setButtonIcon (routingButton, Icon::route, (float) size::iconSize, false);
+    setButtonKeyCap (routingButton, "F7");
+    routingButton.setTooltip ("Routing: this computer's inputs and outputs, and every patch's sends (F7)");
+    routingButton.setWantsKeyboardFocus (false);
+    routingButton.onClick = [this] { setRoutingVisible (! isShowingRouting()); };
+    addAndMakeVisible (routingButton);
     setList->onExpand = [this] { setCueListVisible (true); };
 
     stageView = std::make_unique<StageView> (engine, *session);
     stageView->setOpaque (true);
     stageView->onLeave = [this] { setStageVisible (false); };
+    stageView->onMuteOutput = [this] (const juce::String& name, bool muted) { setOutputMuted (name, muted); };
     stageView->setLayoutInspectorShown (settings.getLayoutInspectorShown());
     stageView->onLayoutInspectorChanged = [this] (bool shown) { settings.setLayoutInspectorShown (shown); };
     addChildComponent (*stageView);
@@ -395,10 +487,14 @@ MainComponent::~MainComponent()
     // Settings windows hold references to the engine, devices and session.
     settingsWindow = nullptr;
     checkDialog = nullptr;
+    healthDialog = nullptr;
 
     stageView = nullptr;
     cueEditor = nullptr;
+    routingView = nullptr;
+    ampBuilder = nullptr;   // it holds the session
     blockPanel = nullptr;
+    jackStage = nullptr;
     inspector = nullptr;
     chainStrip = nullptr;
     patchList = nullptr;
@@ -452,11 +548,11 @@ void MainComponent::showMenu()
 juce::PopupMenu MainComponent::buildShowMenu()
 {
     juce::PopupMenu menu;
-    menu.addItem ("New show...", [this] { askForNewShow(); });
-    menu.addItem ("Open show...", [this] { chooseShowToOpen(); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("New show\xe2\x80\xa6")), [this] { askForNewShow(); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Open show\xe2\x80\xa6")), [this] { chooseShowToOpen(); });
     menu.addSeparator();
     menu.addItem ("Save now (Ctrl+S)", [this] { session->save(); reportProblems(); });
-    menu.addItem ("Save a copy to... (USB stick, backup)", [this] { chooseFolderForCopy(); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Save a copy to\xe2\x80\xa6 (USB stick, backup)")), [this] { chooseFolderForCopy(); });
     menu.addSeparator();
     menu.addItem ("Show folder in Explorer", session->getFolder().isValid(), false,
                   [this] { session->getFolder().getShowFile().revealToUser(); });
@@ -468,7 +564,7 @@ juce::PopupMenu MainComponent::buildShowMenu()
 
     menu.addSubMenu ("Kind of show", showType);
     menu.addSeparator();
-    menu.addItem ("Pre-show check... (F9)", [this] { openPreShowCheck(); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Pre-show check\xe2\x80\xa6 (F9)")), [this] { openPreShowCheck(); });
     menu.addItem ("Open log folder", [] { eventlog::getLogsFolder().startAsProcess(); });
     menu.addSeparator();
 
@@ -484,7 +580,7 @@ juce::PopupMenu MainComponent::buildShowMenu()
 
 void MainComponent::askForNewShow()
 {
-    auto* window = new juce::AlertWindow ("New show", "Name of the show (band, production, set...):",
+    auto* window = new juce::AlertWindow ("New show", juce::String (juce::CharPointer_UTF8 ("Name of the show (band, production, set\xe2\x80\xa6):")),
                                           juce::MessageBoxIconType::NoIcon, this);
     window->addTextEditor ("name", "New show");
     window->addButton ("Create", 1, juce::KeyPress (juce::KeyPress::returnKey));
@@ -531,7 +627,7 @@ void MainComponent::chooseShowToOpen()
 
 void MainComponent::chooseFolderForCopy()
 {
-    chooser = std::make_unique<juce::FileChooser> ("Copy the show into...",
+    chooser = std::make_unique<juce::FileChooser> (juce::String (juce::CharPointer_UTF8 ("Copy the show into\xe2\x80\xa6")),
                                                    juce::File::getSpecialLocation (juce::File::userHomeDirectory));
     juce::Component::SafePointer<MainComponent> safeThis (this);
 
@@ -565,7 +661,7 @@ void MainComponent::refreshShowStatus()
     if (showTitle->getIdealWidth() != oldTitleWidth)
         layoutToolbar (toolbar.getLocalBounds());
 
-    refreshLcd();
+    refreshStatusBar();
 
     // "Cue 3 of 12: Solo  →  [Patch: Lead ▾]" when playing from the set list,
     // else the patch name (SCREENS.md §4.3, the centre header line).
@@ -636,13 +732,28 @@ void MainComponent::showSelectedBlock()
     const auto index = chainStrip->getSelectedIndex();
     auto* chain = engine.getChain();
 
-    if (chain == shownChain && index == shownBlockIndex && blockPanel != nullptr)
+    if (chain == shownChain && index == shownBlockIndex && (blockPanel != nullptr || jackStage != nullptr))
         return;
 
     shownChain = chain;
     shownBlockIndex = index;
     blockPanel = nullptr;
+    jackStage = nullptr;
     inspector->setBlock (chain, index);
+
+    // The chain's IN or OUT tile: the patch's input or sends.
+    if (chain != nullptr && (index == ChainStrip::inputSelected || index == ChainStrip::outputSelected))
+    {
+        const auto kind = index == ChainStrip::inputSelected ? JackStage::Kind::input : JackStage::Kind::output;
+        jackStage = std::make_unique<JackStage> (kind, engine, *session, deviceManager);
+        jackStage->onOpenRouting = [this] { setRoutingVisible (true); };
+        jackStage->refresh();
+        showJackInspector();
+
+        const auto behindStage = cueEditor != nullptr ? getIndexOfChildComponent (cueEditor.get()) : -1;
+        addAndMakeVisible (*jackStage, behindStage);
+        keepKeysForTheShow (*jackStage);
+    }
 
     if (chain != nullptr && juce::isPositiveAndBelow (index, (int) chain->getBlocks().size()))
     {
@@ -661,8 +772,15 @@ void MainComponent::showSelectedBlock()
         };
         blockPanel->onEdited = [this] { session->markEdited(); };
 
+        // An amp built in the amp builder shows its own face (the panel starts with Encore Gold 30).
+        if (const auto* amp = session->getBlockAmp (index))
+            blockPanel->setAmpFace (*amp);
+
         if (auto* plugin = dynamic_cast<PluginBlock*> (&block))
+        {
             blockPanel->onOpenPluginWindow = [this, plugin] { openPluginWindow (*plugin); };
+            blockPanel->onTurnPluginBackOn = [this, index] { session->turnPluginBackOn (index); };
+        }
 
         // The amp with a cab right after it: the cab stands beside it (a click selects it).
         if (block.getTypeId() == NamAmpBlock::typeId && index + 1 < (int) chain->getBlocks().size()
@@ -697,6 +815,23 @@ void MainComponent::showSelectedBlock()
     }
 
     relayout();
+}
+
+void MainComponent::showJackInspector()
+{
+    if (jackStage == nullptr)
+        return;
+
+    const auto input = jackStage->getKind() == JackStage::Kind::input;
+    inspector->setInfo (input ? "Input" : "Output", "this patch", jackStage->getInspectorSections());
+    inspector->onInfoButton = [this] (int)
+    {
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
+        {
+            if (safe != nullptr)
+                safe->setRoutingVisible (true);
+        });
+    };
 }
 
 void MainComponent::relayout()
@@ -789,7 +924,7 @@ void MainComponent::refreshWarningLine()
 
     if (deviceLost)
     {
-        shown = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + "... (staying on the cue; check the cable)";
+        shown = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6 (staying on the cue; check the cable)"));
         colourToken = colour::danger;
         all.add (shown);
     }
@@ -809,6 +944,18 @@ void MainComponent::refreshWarningLine()
         }
     }
 
+    // An output muted on its own (the bottom row's M, Stage, a footswitch).
+    if (mutedOutputsText.isNotEmpty())
+    {
+        all.add (mutedOutputsText);
+
+        if (shown.isEmpty())
+        {
+            shown = warn + mutedOutputsText;
+            colourToken = colour::amber;
+        }
+    }
+
     if (systemText.isNotEmpty())
     {
         all.add (systemText);
@@ -823,6 +970,121 @@ void MainComponent::refreshWarningLine()
     warningLine.setText (shown, juce::dontSendNotification);
     warningLine.setTooltip (all.joinIntoString ("\n"));
     warningLine.setColour (juce::Label::textColourId, paint::c (colourToken));
+
+    // The health status counts the problems (plain Windows / power info isn't one).
+    healthProblems = all;
+
+    if (systemText.isNotEmpty() && ! systemProblem)
+        healthProblems.removeString (systemText);
+
+    refreshHealthStatus();
+}
+
+void MainComponent::refreshHealthStatus()
+{
+    healthStatus.setStatus (healthProblems, healthDetail);
+
+    if (healthDialog != nullptr)
+        healthDialog->setLines (healthDetailLines());
+}
+
+std::vector<HealthDetailsDialog::Line> MainComponent::healthDetailLines()
+{
+    // Today's lines: CPU and counters, latency, the device; then what to check, and plain info.
+    std::vector<HealthDetailsDialog::Line> lines;
+
+    for (auto* label : { &healthLine, &latencyLine, &deviceLine })
+        if (label->getText().isNotEmpty())
+            lines.push_back ({ label->getText(), label->getTooltip(), false });
+
+    for (const auto& p : healthProblems)
+        lines.push_back ({ p, p, true });
+
+    if (systemText.isNotEmpty() && ! systemProblem)
+        lines.push_back ({ systemText, systemText, false });
+
+    return lines;
+}
+
+void MainComponent::openHealthDetails()
+{
+    if (healthDialog != nullptr || isShowingStage())
+        return;
+
+    healthDialog = std::make_unique<HealthDetailsDialog> (
+        [this] { engine.resetCounters(); },
+        [this]
+        {
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
+            {
+                if (safe != nullptr)
+                    safe->closeHealthDetails();
+            });
+        });
+    healthDialog->setLines (healthDetailLines());
+
+    auto& overlay = healthDialog->getOverlay();
+    addAndMakeVisible (overlay);
+    overlay.setBounds (getLocalBounds());
+    overlay.enterModalState (isShowing());
+}
+
+void MainComponent::closeHealthDetails()
+{
+    if (healthDialog == nullptr)
+        return;
+
+    healthDialog->getOverlay().exitModalState (0);
+    healthDialog = nullptr;
+
+    if (isShowing())
+        grabKeyboardFocus();
+}
+
+void MainComponent::setMixerOpen (bool open)
+{
+    if (open == mixerOpen)
+        return;
+
+    mixerOpen = open;
+    settings.setMixerViewOpen (open);
+    mixerTab.setOpen (open);
+    inputSummary.setMixer (open);
+    outputsPane.setMixer (open);
+    resized();   // the patch area above gives up (or gets back) 92 px
+}
+
+void MainComponent::showInputPicker (juce::Component& anchor)
+{
+    // This computer's inputs; the pick is the playing patch's input from now on (saved with the show).
+    const auto& routing = engine.getRouting();
+    const auto* patch = session->getPatch (session->getActivePatchId());
+
+    if (patch == nullptr || routing.inputs.empty())
+        return;
+
+    const auto wanted = patch->inputName();
+    const auto& playing = routing.inputFor (wanted);
+    juce::PopupMenu menu;
+    int id = 1;
+
+    for (const auto& input : routing.inputs)
+        menu.addItem (id++, input.name + juce::String (juce::CharPointer_UTF8 (" \xc2\xb7 ")) + juce::String (input.channel), true, input.name == playing.name);
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&anchor).withMinimumWidth (anchor.getWidth()),
+                        [safe = juce::Component::SafePointer<MainComponent> (this)] (int chosen)
+                        {
+                            if (safe == nullptr || chosen <= 0)
+                                return;
+
+                            const auto& inputs = safe->engine.getRouting().inputs;
+
+                            if (juce::isPositiveAndBelow (chosen - 1, (int) inputs.size()))
+                            {
+                                safe->session->setPatchInput (safe->session->getActivePatchId(), inputs[(size_t) chosen - 1].name);
+                                safe->refreshBottomRow();
+                            }
+                        });
 }
 
 void MainComponent::watchAudioDevice()
@@ -922,7 +1184,7 @@ void MainComponent::openPreShowCheck()
 
     checkDialog = std::make_unique<PreShowCheckDialog> (
         [this] { return gatherPreShowFacts(); },
-        [this] (PreShowCheckResult::Fix f) { applyFix (f); },
+        [this] (const PreShowCheckResult& r) { applyFix (r); },
         [this]
         {
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
@@ -953,13 +1215,15 @@ void MainComponent::closePreShowCheck()
         grabKeyboardFocus();
 }
 
-void MainComponent::applyFix (PreShowCheckResult::Fix fix)
+void MainComponent::applyFix (const PreShowCheckResult& result)
 {
     using Fix = PreShowCheckResult::Fix;
 
     // The dialogs open on top of the check window; it stays open behind.
-    switch (fix)
+    switch (result.fix)
     {
+        case Fix::routing:        closePreShowCheck(); openRouting(); break;
+        case Fix::unmuteOutput:   setOutputMuted (result.target, false); break;
         case Fix::audioSettings:  openAudioSettings(); break;
         case Fix::midiSettings:   openMidiSettings(); break;
         case Fix::pluginSettings: openSettings (SettingsWindow::Tab::plugins); break;
@@ -1030,7 +1294,287 @@ PreShowFacts MainComponent::gatherPreShowFacts()
         f.cuesSendMidi = f.cuesSendMidi || ! cue->midiOut.empty();
 
     f.midiOutputConnected = midiOutputPresent;
+
+    f.routing = engine.getRouting();
+    f.patchRouting = describePatchRouting (session->getShow());
+    f.unalignedPatches = session->getUnalignedPatches();
+
+    if (f.deviceOpen)
+    {
+        f.deviceInputChannels = engine.getDeviceInputChannels();
+        f.deviceOutputChannels = engine.getDeviceOutputChannels();
+        f.switchedOnInputs = f.switchedOnOutputs = 0;
+
+        for (int ch = 1; ch <= routing::maxChannel; ++ch)
+        {
+            if (engine.isInputChannelUsable (ch))  f.switchedOnInputs  |= (juce::uint64) 1 << (ch - 1);
+            if (engine.isOutputChannelUsable (ch)) f.switchedOnOutputs |= (juce::uint64) 1 << (ch - 1);
+        }
+    }
+
     return f;
+}
+
+//==============================================================================
+void MainComponent::setRouting (const RoutingConfig& routing)
+{
+    engine.setRouting (routing);
+    settings.setRouting (engine.getRouting());
+    session->refreshRouting();   // inputs and sends by name, to the new slots
+    ensureRoutingChannelsActive();
+    refreshInputChoices();
+}
+
+void MainComponent::refreshBottomRow()
+{
+    // Outputs: this computer's, in order, with their mutes as the engine has them.
+    const auto& routing = engine.getRouting();
+    std::vector<OutputsPane::Output> outputs;
+
+    for (const auto& o : routing.outputs)
+    {
+        const auto slot = engine.getOutputSlot (o.name);
+        const auto muted = slot >= 0 ? engine.isOutputMuted (slot) : o.mute;
+        outputs.push_back ({ o.name, describeShortChannels (o), describeLevel (o.levelDb), o.levelDb, o.isStereo(), muted });
+    }
+
+    outputsPane.setOutputs (outputs);
+
+    juce::StringArray mutedNames;
+
+    for (const auto& o : outputs)
+        if (o.muted)
+            mutedNames.add (juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9c")) + o.name + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9d")));
+
+    const auto mutedText = mutedNames.isEmpty() ? juce::String()
+                         : (mutedNames.size() == 1 ? "Output " : "Outputs ") + mutedNames.joinIntoString (", ") + (mutedNames.size() == 1 ? " is muted" : " are muted");
+
+    if (mutedText != mutedOutputsText)
+    {
+        mutedOutputsText = mutedText;
+        refreshWarningLine();
+    }
+
+    // The playing patch's input: its name, or the one that plays instead.
+    const auto* patch = session->getPatch (session->getActivePatchId());
+    const auto wanted = patch != nullptr ? patch->inputName() : juce::String();
+    const auto slot = engine.getInputSlot (wanted);
+    summaryInputSlot = slot;
+
+    if (! routing.inputs.empty())
+    {
+        const auto& input = routing.inputFor (wanted);   // the patch's, or the first one
+        const auto missing = wanted.isNotEmpty() && routing.findInput (wanted) == nullptr;
+        juce::String caption;
+
+        if (missing)
+        {
+            caption = "instead of " + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9c")) + wanted + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9d"));
+        }
+        else
+        {
+            caption = juce::String (input.channel);
+
+            if (auto* device = deviceManager.getCurrentAudioDevice())
+                if (const auto names = device->getInputChannelNames(); juce::isPositiveAndBelow (input.channel - 1, names.size()))
+                    caption << juce::String (juce::CharPointer_UTF8 (" \xc2\xb7 ")) << names[input.channel - 1];
+        }
+
+        inputSummary.setInput (input.name, caption, missing);
+    }
+
+    refreshChainJacks();
+}
+
+void MainComponent::refreshChainJacks()
+{
+    // The chain's IN and OUT tiles: the playing patch's input and sends.
+    const auto& routing = engine.getRouting();
+    const auto* patch = session->getPatch (session->getActivePatchId());
+    using Dot = kit::UtilityTileInfo::Dot;
+
+    kit::UtilityTileInfo in;
+    in.label = "In";
+    in.nameAtBottom = true;
+    in.icon = Icon::jack;
+    const auto wanted = patch != nullptr ? patch->inputName() : juce::String();
+
+    if (wanted.isNotEmpty() && routing.findInput (wanted) == nullptr)
+    {
+        in.name = wanted;
+        in.caption = "not here";
+        in.amber = true;
+        in.dot = Dot::amber;
+    }
+    else if (! routing.inputs.empty())
+    {
+        const auto& input = routing.inputFor (wanted);
+        in.name = input.name;
+        in.caption = "input " + juce::String (input.channel);
+        in.dot = Dot::on;
+    }
+
+    kit::UtilityTileInfo out;
+    out.label = "Out";
+    out.dot = Dot::on;
+
+    if (patch != nullptr)
+    {
+        // This computer's outputs, then the show's names that aren't here.
+        juce::StringArray names;
+
+        for (const auto& o : routing.outputs)
+            names.add (o.name);
+
+        for (const auto& s : patch->sends)
+            if (routing.findOutput (s.output) == nullptr)
+                names.addIfNotAlreadyThere (s.output);
+
+        for (int i = 0; i < names.size(); ++i)
+        {
+            if (i == size::outTileLines)
+            {
+                out.more = "+ " + juce::String (names.size() - i) + " more";
+                break;
+            }
+
+            const auto send = patch->sendFor (names[i]);
+            const auto slot = engine.getOutputSlot (names[i]);
+            const auto on = send.on && send.levelDb > routing::silentDb;
+            out.lines.push_back ({ names[i], on ? 1.0f - kit::faderLaw::positionFor (send.levelDb) : 0.0f,
+                                   slot >= 0 && engine.isOutputMuted (slot) });
+        }
+    }
+
+    chainStrip->setJackTiles (in, out);
+}
+
+void MainComponent::setOutputMuted (const juce::String& outputName, bool shouldBeMuted)
+{
+    const auto slot = engine.getOutputSlot (outputName);
+
+    if (slot < 0)
+        return;
+
+    engine.setOutputMuted (slot, shouldBeMuted);
+
+    if (engine.syncOutputMutes())
+        settings.setRouting (engine.getRouting());
+}
+
+void MainComponent::ensureRoutingChannelsActive()
+{
+    // The interface channels the routing uses must be switched on, or they'd
+    // stay silent; switch on the ones the interface has (never off).
+    auto* device = deviceManager.getCurrentAudioDevice();
+
+    if (device == nullptr || deviceLost)
+        return;
+
+    auto setup = deviceManager.getAudioDeviceSetup();
+    const auto numIns = device->getInputChannelNames().size();
+    const auto numOuts = device->getOutputChannelNames().size();
+    auto ins = device->getActiveInputChannels();
+    auto outs = device->getActiveOutputChannels();
+    bool changes = false;
+
+    for (const auto& in : engine.getRouting().inputs)
+        if (in.channel <= numIns && ! ins[in.channel - 1])
+        {
+            ins.setBit (in.channel - 1);
+            changes = true;
+        }
+
+    for (const auto& out : engine.getRouting().outputs)
+        for (auto ch : out.channels)
+            if (ch <= numOuts && ! outs[ch - 1])
+            {
+                outs.setBit (ch - 1);
+                changes = true;
+            }
+
+    if (! changes)
+        return;
+
+    setup.inputChannels = ins;
+    setup.outputChannels = outs;
+    setup.useDefaultInputChannels = false;
+    setup.useDefaultOutputChannels = false;
+
+    if (const auto error = deviceManager.setAudioDeviceSetup (setup, true); error.isNotEmpty())
+        eventlog::write ("Couldn't switch on the channels the routing uses: " + error);
+}
+
+void MainComponent::openRouting()
+{
+    // Routing lives in Edit (decision: design v3, milestone 11).
+    if (isShowingStage())
+        setStageVisible (false);
+
+    setRoutingVisible (true);
+}
+
+void MainComponent::setAmpBuilderVisible (bool shouldShow)
+{
+    if (ampBuilder == nullptr || shouldShow == ampBuilder->isVisible() || (shouldShow && isShowingStage()))
+        return;
+
+    if (shouldShow)
+    {
+        // Build the amp of the selected amp block (or Encore Gold 30, which it shows until it has its own).
+        builderBlockIndex = -1;
+        const auto* chain = engine.getChain();
+        const auto index = chainStrip != nullptr ? chainStrip->getSelectedIndex() : -1;
+
+        if (chain != nullptr && juce::isPositiveAndBelow (index, (int) chain->getBlocks().size())
+            && chain->getBlocks()[(size_t) index]->getTypeId() == NamAmpBlock::typeId)
+            builderBlockIndex = index;
+
+        const auto* own = builderBlockIndex >= 0 ? session->getBlockAmp (builderBlockIndex) : nullptr;
+        ampBuilder->edit (own != nullptr ? *own : kit::ampTemplates::defaultFace());
+        builderCaptureInfo.clear();
+
+        if (routingView != nullptr && routingView->isVisible())
+            setRoutingVisible (false);
+
+        if (cueEditor != nullptr && cueEditor->isVisible())
+            cueEditor->setVisible (false);
+    }
+
+    ampBuilder->setVisible (shouldShow);
+    resized();
+
+    if (shouldShow)
+        ampBuilder->toFront (false);
+
+    if (isShowing())
+        (shouldShow ? static_cast<juce::Component&> (*ampBuilder) : static_cast<juce::Component&> (*this)).grabKeyboardFocus();
+}
+
+void MainComponent::setRoutingVisible (bool shouldShow)
+{
+    if (routingView == nullptr)
+        return;
+
+    if (shouldShow && cueEditor != nullptr && cueEditor->isVisible())
+        cueEditor->setVisible (false);   // one view over the grid at a time
+
+    routingView->setVisible (shouldShow);
+    routingButton.setToggleState (shouldShow, juce::dontSendNotification);
+
+    if (shouldShow)
+    {
+        routingView->refresh();
+        routingView->toFront (false);
+
+        if (stageView != nullptr && stageView->isVisible())
+            stageView->toFront (false);
+    }
+
+    resized();
+
+    if (isShowing())   // (off-screen in tests)
+        grabKeyboardFocus();
 }
 
 bool MainComponent::handleGoToKey (const juce::KeyPress& key)
@@ -1137,6 +1681,9 @@ void MainComponent::setStageVisible (bool shouldShow)
     if (stageView == nullptr || shouldShow == stageView->isVisible())
         return;
 
+    if (shouldShow)
+        closeHealthDetails();   // Edit only: nothing modal on Stage
+
     if (! shouldShow)
     {
         stageView->setEditingLayout (false);
@@ -1204,7 +1751,25 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
 
     if (key.getKeyCode() == juce::KeyPress::F6Key && ! isShowingStage())
     {
+        if (! cueEditor->isVisible())
+            setRoutingVisible (false);
+
         setCueListVisible (! cueEditor->isVisible());
+        return true;
+    }
+
+    if (key.getKeyCode() == juce::KeyPress::F8Key && ! isShowingStage())
+    {
+        setAmpBuilderVisible (! isShowingAmpBuilder());
+        return true;
+    }
+
+    if (isShowingAmpBuilder() && ampBuilder->keyPressed (key))
+        return true;
+
+    if (key.getKeyCode() == juce::KeyPress::F7Key && ! isShowingStage())
+    {
+        setRoutingVisible (! isShowingRouting());
         return true;
     }
 
@@ -1252,6 +1817,7 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
 
 //==============================================================================
 void MainComponent::openAudioSettings()   { openSettings (SettingsWindow::Tab::audio); }
+void MainComponent::openSettingsOnLastTab() { openSettings (SettingsWindow::tabNamed (settings.getSettingsTab())); }
 void MainComponent::openMidiSettings()    { openSettings (SettingsWindow::Tab::midi); }
 
 void MainComponent::openSettings (SettingsWindow::Tab tab)
@@ -1272,6 +1838,8 @@ void MainComponent::openSettings (SettingsWindow::Tab tab)
                         safe->closeSettings();
                 });
             });
+
+        settingsWindow->onTabShown = [this] (SettingsWindow::Tab t) { settings.setSettingsTab (SettingsWindow::tabName (t)); };
 
         auto& overlay = settingsWindow->getOverlay();
         addAndMakeVisible (overlay);
@@ -1329,32 +1897,14 @@ void MainComponent::applyMidiOutput()
 
 void MainComponent::refreshInputChoices()
 {
-    inputChoice.clear (juce::dontSendNotification);
-
     auto* device = deviceManager.getCurrentAudioDevice();
 
     if (device == nullptr)
         return;
 
-    // The engine sees only *active* input channels, packed in order, so the
-    // combo lists those and maps item N to the Nth active channel.
-    const auto names = device->getInputChannelNames();
-    const auto active = device->getActiveInputChannels();
-
-    int activeIndex = 0;
-
-    for (int ch = 0; ch < names.size(); ++ch)
-        if (active[ch])
-            inputChoice.addItem (juce::String (ch + 1) + ": " + names[ch], ++activeIndex);
-
-    if (activeIndex == 0)
-    {
+    // Inputs are picked in Routing; here only the warning when none is switched on.
+    if (device->getActiveInputChannels().isZero())
         setWarning ("No input channels enabled: open Audio settings and tick your guitar input.");
-        return;
-    }
-
-    const auto wanted = juce::jlimit (0, activeIndex - 1, engine.getGuitarInputChannel());
-    inputChoice.setSelectedId (wanted + 1, juce::sendNotificationSync);
 }
 
 void MainComponent::refreshSystemStatus()
@@ -1390,13 +1940,13 @@ void MainComponent::refreshStatus()
 
     if (deviceLost)
     {
-        deviceLine.setText ("Reconnecting to " + lastGoodSetup.outputDeviceName + "...", juce::dontSendNotification);
+        deviceLine.setText ("Reconnecting to " + lastGoodSetup.outputDeviceName + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6")), juce::dontSendNotification);
         deviceLine.setTooltip ({});
         latencyLine.setText ({}, juce::dontSendNotification);
         latencyLine.setTooltip ({});
         stageDeviceLine = deviceLine.getText();
         roundTripMs = 0.0;
-        refreshLcd();
+        refreshStatusBar();
         return;
     }
 
@@ -1408,7 +1958,7 @@ void MainComponent::refreshStatus()
         latencyLine.setTooltip ({});
         stageDeviceLine = deviceLine.getText();
         roundTripMs = sampleRate = 0.0;
-        refreshLcd();
+        refreshStatusBar();
         return;
     }
 
@@ -1445,7 +1995,7 @@ void MainComponent::refreshStatus()
 
     sampleRate = rate;
     roundTripMs = rate > 0.0 ? 1000.0 * (inLatency + outLatency + chainLatency) / rate : 0.0;
-    refreshLcd();
+    refreshStatusBar();
 
     if (typeName != "ASIO")
         setWarning ("Not using ASIO: expect higher latency. Pick an ASIO driver in Audio settings for the stage.");
@@ -1453,7 +2003,7 @@ void MainComponent::refreshStatus()
         setWarning ({});
 }
 
-void MainComponent::refreshLcd()
+void MainComponent::refreshStatusBar()
 {
     if (session == nullptr)
         return;
@@ -1472,14 +2022,14 @@ void MainComponent::refreshLcd()
     if (name.isEmpty() && patch != nullptr)
         name = patch->name;
 
-    lcd.setItems ({
+    statusBar.setItems ({
         { (playing ? juce::String (cue + 1) : dash) + " / " + juce::String ((int) cues.size()), words.item, 0 },
         { name.isNotEmpty() ? name : dash, "Patch " + (patch != nullptr ? patch->name : dash), size::lcdMinPatch, size::lcdNameMaxW },
         { roundTripMs > 0.0 ? juce::String (roundTripMs, 1) + " ms" : dash, "Round trip", 0 },
         { sampleRate > 0.0 ? juce::String (sampleRate / 1000.0, 1) + "k" : dash, "Rate", 0 },
     });
 
-    if (lcd.getIdealWidth() != lcd.getWidth())
+    if (statusBar.getIdealWidth() != statusBar.getWidth())
         layoutToolbar (toolbar.getLocalBounds());
 }
 
@@ -1515,6 +2065,14 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
     if (warning.startsWith ("No input") || warning.startsWith ("Audio device problem"))
         setWarning ({});
 
+    // Another interface: switch on the channels the routing uses (once; on
+    // the same interface, what Settings › Audio switches off stays off).
+    if (auto* device = deviceManager.getCurrentAudioDevice(); device != nullptr && device->getName() != lastRoutedDevice)
+    {
+        lastRoutedDevice = device->getName();
+        ensureRoutingChannelsActive();
+    }
+
     refreshInputChoices();
     refreshStatus();
 }
@@ -1546,7 +2104,21 @@ void MainComponent::timerCallback()
     if (blockPanel != nullptr)
         blockPanel->refresh();
 
+    if (jackStage != nullptr)
+    {
+        if (jackStage->refresh())
+            showJackInspector();
+    }
+
     inspector->refresh();
+
+    // Plugin windows without an editor of their own: their parameter lists.
+    for (const auto& [id, window] : pluginWindows)
+        window->refresh();
+
+    // Outputs muted from Stage or a footswitch: kept in this computer's routing.
+    if (engine.syncOutputMutes())
+        settings.setRouting (engine.getRouting());
 
     // A footswitch can mute too: the button follows the engine.
     if (const auto isMuted = engine.isMuted(); muteButton.getToggleState() != isMuted)
@@ -1559,17 +2131,50 @@ void MainComponent::timerCallback()
     StageSnapshot snapshot;
     snapshot.inputPeak = engine.getInputMeter().take();
     snapshot.outputPeak = engine.getOutputMeter().take();
+    // Every input and output slot, taken once a frame for every view that shows them.
+    for (int slot = 0; slot < routing::maxInputs; ++slot)
+        snapshot.inputSlotPeaks[(size_t) slot] = engine.getInputSlotMeter (slot).take();
+
+    for (int slot = 0; slot < routing::maxOutputs; ++slot)
+        for (int ch = 0; ch < 2; ++ch)
+            snapshot.outputSlotPeaks[(size_t) slot][(size_t) ch] = engine.getOutputSlotMeter (slot, ch).take();
+
+    // The safety limiters' gain reduction (the engine gives it as a negative dB value): the mixer view and Routing read it from here.
+    for (int slot = 0; slot < routing::maxOutputs; ++slot)
+        snapshot.outputLimiterDb[(size_t) slot] = juce::jmax (0.0f, -engine.takeOutputLimiterReductionDb (slot));
+
     snapshot.cpu = engine.getCpuLoad();
     snapshot.overruns = engine.getOverrunCount();
    #if JUCE_WINDOWS
     snapshot.onBattery = system::getPowerSource() == system::PowerSource::battery;
    #endif
 
-    inputMeter.setPeak (snapshot.inputPeak);
-    outputMeter.setPeak (snapshot.outputPeak);
+    // The playing patch's input; the master input meter when routing can't say.
+    inputSummary.setPeak (juce::isPositiveAndBelow (summaryInputSlot, routing::maxInputs) ? snapshot.inputSlotPeaks[(size_t) summaryInputSlot]
+                                                                                          : snapshot.inputPeak);
+
+    if (routingView != nullptr && routingView->isVisible())
+    {
+        routingView->refresh();
+        routingView->update (snapshot);
+    }
+
+    if (jackStage != nullptr)
+        jackStage->update (snapshot);
+
+    for (int i = 0; i < outputsPane.getNumStrips() && i < (int) engine.getRouting().outputs.size(); ++i)
+    {
+        const auto slot = engine.getOutputSlot (engine.getRouting().outputs[(size_t) i].name);
+
+        if (slot >= 0)
+        {
+            outputsPane.setPeaks (i, snapshot.outputSlotPeaks[(size_t) slot][0], snapshot.outputSlotPeaks[(size_t) slot][1]);
+            outputsPane.setLimiterReduction (i, snapshot.outputLimiterDb[(size_t) slot]);
+        }
+    }
 
     if (deviceLost)
-        snapshot.audioProblem = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + "...";
+        snapshot.audioProblem = "AUDIO INTERFACE LOST - reconnecting to " + lastGoodSetup.outputDeviceName + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6"));
 
     // The stage footer: the device line (the lost text while lost) and the footswitch.
     snapshot.deviceLine = deviceLost ? snapshot.audioProblem + " (staying on the cue; check the cable)" : stageDeviceLine;
@@ -1581,7 +2186,7 @@ void MainComponent::timerCallback()
     else if (noticeBar.isVisible())
         showNotice ({}, 0);   // the notice ran out
 
-    outputMeter.setMuted (engine.isMuted());
+    refreshBottomRow();
 
     const auto tunerOpen = engine.isTunerOpen();
 
@@ -1699,6 +2304,23 @@ void MainComponent::timerCallback()
 
     healthLine.setText (shortHealth, juce::dontSendNotification);
     healthLine.setTooltip (health);
+
+    // The health status's second line: "CPU 9% · 5.3 ms".
+    juce::String detail;
+    detail << "CPU " << juce::roundToInt (engine.getCpuLoad() * 100.0) << "%";
+
+    if (roundTripMs > 0.0)
+        detail << sep() << juce::String (roundTripMs, 1) << " ms";
+
+    if (detail != healthDetail)
+    {
+        healthDetail = detail;
+        refreshHealthStatus();
+    }
+    else if (healthDialog != nullptr)
+    {
+        healthDialog->setLines (healthDetailLines());
+    }
 }
 
 //==============================================================================
@@ -1757,71 +2379,48 @@ void MainComponent::layoutToolbar (juce::Rectangle<int> bar)
     const auto outW = (int) std::ceil (textWidth (font (type::label), outLabel.getText()));
     fromRight (outLabel, outW, bar.getHeight() - 1, 0, size::outMargin + size::toolbarGap);
 
-    fromRight (audioSettingsButton, widthOf (audioSettingsButton), buttonH, buttonY, size::toolbarGap);
-    fromRight (midiSettingsButton, widthOf (midiSettingsButton), buttonH, buttonY, size::toolbarGap);
+    fromRight (settingsButton, widthOf (settingsButton), buttonH, buttonY, size::toolbarGap);
     fromRight (tunerButton, widthOf (tunerButton), buttonH, buttonY, size::toolbarGap);
 
     // The LCD centred between the two groups; hidden if it doesn't fit.
     const auto space = right + size::toolbarGap - left;
-    lcd.setAvailableWidth (space);
-    const auto lcdW = lcd.getIdealWidth(), lcdH = kit::Lcd::heightFor (false);
-    lcd.setVisible (lcdW <= space);
-    place (lcd, left + (space - lcdW) / 2, lcdW, lcdH, (bar.getHeight() - 1 - (lcdH - 1)) / 2);
+    statusBar.setAvailableWidth (space);
+    const auto barW = statusBar.getIdealWidth(), barH = kit::StatusBar::heightFor (false);
+    statusBar.setVisible (barW <= space);
+    place (statusBar, left + (space - barW) / 2, barW, barH, (bar.getHeight() - 1 - barH) / 2);
 }
 
 void MainComponent::layoutBottomRow (juce::Rectangle<int> row)
 {
-    inputPane.setBounds (row.removeFromLeft (size::sidebarWidth));
+    // Input | outputs | health (116), gap 8; the input pane narrows to its strip in the mixer view.
+    inputPane.setBounds (row.removeFromLeft (mixerOpen ? InputSummary::mixerWidth() : size::sidebarWidth));
     row.removeFromLeft (size::gap);
-    healthPane.setBounds (row.removeFromRight (size::inspectorWidth));
+    auto health = row.removeFromRight (size::healthColW);
     row.removeFromRight (size::gap);
     metersPane.setBounds (row);
 
-    // Guitar input: label, field, device line, centred (gap 6).
-    {
-        auto r = inputPane.getLocalBounds().reduced (1 + size::inputPadX, 0);
-        const auto h = size::inputLabelH + size::inputGap + size::fieldHeight + size::inputGap + size::deviceLineH;
-        r = r.withSizeKeepingCentre (r.getWidth(), h);
-        inputLabel.setBounds (r.removeFromTop (size::inputLabelH));
-        r.removeFromTop (size::inputGap);
-        inputChoice.setBounds (r.removeFromTop (size::fieldHeight));
-        r.removeFromTop (size::inputGap);
-        deviceLine.setBounds (r);
-    }
+    inputSummary.setBounds (inputPane.getLocalBounds());
+    outputsPane.setBounds (metersPane.getLocalBounds().reduced (1));
 
-    // Meters: two rows, the scale under them (painted by paint()).
-    {
-        auto r = metersPane.getLocalBounds().reduced (1 + size::metersPadX, 0);
-        const auto h = size::meterRowH * 2 + size::meterRowGap + size::meterScaleGap + size::meterScaleH;
-        r = r.withSizeKeepingCentre (r.getWidth(), h);
-        inputMeter.setBounds (r.removeFromTop (size::meterRowH));
-        r.removeFromTop (size::meterRowGap);
-        outputMeter.setBounds (r.removeFromTop (size::meterRowH));
-        r.removeFromTop (size::meterScaleGap);
-        meterScale.setBounds (r.removeFromTop (size::meterScaleH));
+    // The health status: a flat button whose text lines up with the column (its padding hangs out left);
+    // centred, or at the bottom in the mixer view.
+    const auto statusH = 2 * size::healthLineH + size::healthLineGap + 2 * size::healthStatusPad;
+    auto status = health.withTrimmedLeft (-size::healthStatusPad).withHeight (statusH);
+    healthStatus.setBounds (mixerOpen ? status.withY (health.getBottom() - size::healthMixerBottom - statusH)
+                                      : status.withY (health.getCentreY() - statusH / 2));
 
-        // The scale lines up with the meters' tracks.
-        const auto track = inputMeter.getTrackBounds();
-        meterScale.setTrack (track.getX() + (float) (inputMeter.getX() - meterScale.getX()), track.getWidth());
-    }
+    // The mixer view's tab, centred on the outputs pane, rising 7 px over its top edge.
+    mixerTab.setBounds (juce::Rectangle<int> (size::paneTabW, size::paneTabH)
+                            .withCentre ({ metersPane.getBounds().getCentreX(), 0 })
+                            .withY (metersPane.getY() - size::paneTabRise));
 
-    // System health: title and Reset counters, then three lines (gap 3).
-    {
-        auto r = healthPane.getLocalBounds().reduced (1 + size::healthPadX, 1 + size::healthPadY);
-        auto header = r.removeFromTop (size::healthHeaderH);
-        const auto resetW = resetCountersButton.getBestWidthForHeight (size::buttonSmallHeight);
-        resetCountersButton.setBounds (header.removeFromRight (resetW).withHeight (size::buttonSmallHeight + size::buttonDrop));
-        healthTitle.setBounds (header);
+    // Only with the bottom row: never over Stage or the amp builder (F8), which cover it.
+    const auto rowShown = ! (stageView != nullptr && stageView->isVisible())
+                       && ! (ampBuilder != nullptr && ampBuilder->isVisible());
+    mixerTab.setVisible (rowShown);
 
-        for (auto* line : { &healthLine, &latencyLine })
-        {
-            r.removeFromTop (size::healthGap);
-            line->setBounds (r.removeFromTop (size::healthLineH));
-        }
-
-        r.removeFromTop (size::healthGap);
-        warningLine.setBounds (r);   // may wrap to two lines
-    }
+    if (rowShown)
+        mixerTab.toFront (false);
 }
 
 void MainComponent::resized()
@@ -1834,6 +2433,9 @@ void MainComponent::resized()
     if (checkDialog != nullptr)
         checkDialog->getOverlay().setBounds (area);
 
+    if (healthDialog != nullptr)
+        healthDialog->getOverlay().setBounds (area);
+
     if (settingsWindow != nullptr)
         settingsWindow->getOverlay().setBounds (area);
 
@@ -1843,14 +2445,20 @@ void MainComponent::resized()
     if (noticeBar.isVisible())
         noticeBar.setBounds (area.removeFromTop (size::noticeBar + 1));
 
+    if (ampBuilder != nullptr)
+        ampBuilder->setBounds (area);   // the whole area under the toolbar (it pads itself)
+
     area.reduce (size::outerPadding, size::outerPadding);
-    layoutBottomRow (area.removeFromBottom (size::bottomRow));
+    layoutBottomRow (area.removeFromBottom (mixerOpen ? size::mixerRow : size::bottomRow));
     area.removeFromBottom (size::outerPadding);
 
     // Main grid: sidebar 250 | centre | inspector 272 (SCREENS.md §4.3).
     // The full list covers all three columns.
     if (cueEditor != nullptr)
         cueEditor->setBounds (area);
+
+    if (routingView != nullptr)
+        routingView->setBounds (area);
 
     auto sidebar = area.removeFromLeft (size::sidebarWidth);
     area.removeFromLeft (size::gap);
@@ -1870,6 +2478,8 @@ void MainComponent::resized()
     // Centre: header line, chain, block. The tuner covers the centre column.
     editTuner.setBounds (area);
     auto header = area.removeFromTop (size::centreHeaderH);
+    routingButton.setBounds (header.removeFromRight (size::routingButtonW).withSizeKeepingCentre (size::routingButtonW, size::buttonHeight));
+    header.removeFromRight (size::toolbarGap);
     const auto problemsW = problemsLabel.getText().isEmpty() ? 0
                                : juce::jmin (header.getWidth() / 2, (int) std::ceil (textWidth (font (type::label), problemsLabel.getText())) + 1);
     problemsLabel.setBounds (header.removeFromRight (problemsW));
@@ -1892,12 +2502,15 @@ void MainComponent::resized()
     area.removeFromTop (size::gap);
 
     if (chainStrip != nullptr)
-        chainStrip->setBounds (area.removeFromTop (size::chainPaneH));
+        chainStrip->setBounds (area.removeFromTop (chainStrip->getIdealHeight()));
 
     area.removeFromTop (size::gap);
 
     if (blockPanel != nullptr)
         blockPanel->setBounds (area);   // the block stage fills the rest
+
+    if (jackStage != nullptr)
+        jackStage->setBounds (area);
 }
 
 //==============================================================================

@@ -91,8 +91,13 @@ Segment getSegment (const juce::Component& c)          { return (Segment) (int) 
 
 namespace
 {
-    const juce::Identifier iconId { "encoreIcon" }, iconSizeId { "encoreIconSize" }, iconAfterId { "encoreIconAfter" };
-    constexpr int iconGap = 6;
+    const juce::Identifier iconId { "encoreIcon" }, iconSizeId { "encoreIconSize" }, iconAfterId { "encoreIconAfter" }, iconGapId { "encoreIconGap" };
+
+    /** Space between a button's icon and its text: 6, or the button's own. */
+    float iconGapOf (const juce::Component& c)
+    {
+        return (float) c.getProperties().getWithDefault (iconGapId, (float) size::buttonIconGap);
+    }
 
     /** The button's icon, if it has one: icon, size, after the text. */
     std::optional<std::tuple<Icon, float, bool>> buttonIcon (const juce::Component& c)
@@ -106,18 +111,42 @@ namespace
     }
 }
 
+void setAmber (juce::Component& c, bool amber)
+{
+    if (amber != isAmber (c))
+    {
+        c.getProperties().set ("encoreAmber", amber);
+
+        if (auto* box = dynamic_cast<juce::ComboBox*> (&c))
+            box->lookAndFeelChanged();   // the text colour
+
+        c.repaint();
+    }
+}
+
+bool isAmber (const juce::Component& c)
+{
+    return (bool) c.getProperties().getWithDefault ("encoreAmber", false);
+}
+
 void setButtonKeyCap (juce::Button& b, const juce::String& key)
 {
     b.getProperties().set ("encoreKeyCap", key);
     b.repaint();
 }
 
-void setButtonIcon (juce::Button& b, Icon icon, float iconSize, bool afterText)
+void setButtonIcon (juce::Button& b, Icon icon, float iconSize, bool afterText, float gap)
 {
     auto& p = b.getProperties();
     p.set (iconId, (int) icon);
     p.set (iconSizeId, iconSize);
     p.set (iconAfterId, afterText);
+
+    if (gap >= 0.0f)
+        p.set (iconGapId, gap);
+    else
+        p.remove (iconGapId);
+
     b.repaint();
 }
 
@@ -254,6 +283,9 @@ juce::Font EncoreLookAndFeel::getTextButtonFont (juce::TextButton& button, int b
     if (v == Variant::danger || v == Variant::muted)
         return font (type::buttonBold);
 
+    if ((bool) button.getProperties()["encoreCompact"])
+        return font (type::buttonCompact);   // grids of options (amp builder)
+
     return font (type::button);
 }
 
@@ -262,7 +294,7 @@ int EncoreLookAndFeel::getTextButtonWidthToFitText (juce::TextButton& b, int but
     auto w = juce::roundToInt (textWidth (getTextButtonFont (b, buttonHeight), b.getButtonText())) + size::buttonPadX * 2 + 2;
 
     if (const auto icon = buttonIcon (b))
-        w += juce::roundToInt (std::get<1> (*icon)) + iconGap;
+        w += juce::roundToInt (std::get<1> (*icon) + iconGapOf (b));
 
     if (const auto key = b.getProperties()["encoreKeyCap"].toString(); key.isNotEmpty())
         w += kit::KeyCap::widthFor (key) + size::keyCapGap;
@@ -373,12 +405,23 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
 
     if (const auto key = button.getProperties()["encoreKeyCap"].toString(); key.isNotEmpty())
     {
-        // Text and key cap centred together.
+        // [icon] text and key cap centred together (Routing F7).
+        const auto icon = buttonIcon (button);
+        const auto iconW = icon ? std::get<1> (*icon) + iconGapOf (button) : 0.0f;
         const auto capW = (float) kit::KeyCap::widthFor (key);
-        const auto textW = juce::jmin ((float) area.getWidth() - capW - (float) size::keyCapGap, textWidth (f, button.getButtonText()) + 1.0f);
-        auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (textW + (float) size::keyCapGap + capW, (float) area.getWidth()), (float) area.getHeight());
+        const auto textW = juce::jmin ((float) area.getWidth() - capW - iconW - (float) size::keyCapGap, textWidth (f, button.getButtonText()) + 1.0f);
+        auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (iconW + textW + (float) size::keyCapGap + capW, (float) area.getWidth()),
+                                                         (float) area.getHeight());
         const auto cap = row.removeFromRight (capW).withSizeKeepingCentre (capW, (float) size::keyCapH);
         kit::paintKeyCap (g, cap, key);
+
+        if (icon)
+        {
+            const auto size = std::get<1> (*icon);
+            drawIcon (g, std::get<0> (*icon), row.removeFromLeft (size).withSizeKeepingCentre (size, size), colourToUse);
+            row.removeFromLeft (iconGapOf (button));
+        }
+
         g.setFont (f);
         g.setColour (colourToUse);
         g.drawText (button.getButtonText(), row.withTrimmedRight ((float) size::keyCapGap), juce::Justification::centred, true);
@@ -390,7 +433,7 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
         // Text and icon centred together (single line).
         const auto [which, iconSize, after] = *icon;
         const auto hasText = button.getButtonText().isNotEmpty();   // icon-only buttons centre the icon
-        const auto gapW = hasText ? (float) iconGap : 0.0f;
+        const auto gapW = hasText ? iconGapOf (button) : 0.0f;
         const auto textW = hasText ? juce::jmin ((float) area.getWidth() - iconSize - gapW, textWidth (f, button.getButtonText()) + 1.0f) : 0.0f;
         const auto groupW = textW + gapW + iconSize;
         auto row = area.toFloat().withSizeKeepingCentre (juce::jmin (groupW, (float) area.getWidth()), (float) area.getHeight());
@@ -401,6 +444,14 @@ void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
         if (hasText)
             g.drawText (button.getButtonText(), after ? row.withTrimmedRight (gapW) : row.withTrimmedLeft (gapW),
                         juce::Justification::centred, true);
+        return;
+    }
+
+    if ((bool) button.getProperties()["encoreCompact"])
+    {
+        // Option grids (amp builder): one line, 4 px in, squeezed a little before it's cut.
+        g.drawFittedText (button.getButtonText(), button.getLocalBounds().withTrimmedBottom (1).reduced (size::buttonCompactPadX, 0),
+                          juce::Justification::centred, 1, size::buttonCompactMinSqueeze);
         return;
     }
 
@@ -454,18 +505,20 @@ void EncoreLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, 
     if (! enabled)
         g.beginTransparencyLayer (state::disabledAlpha);
 
+    const auto amber = isAmber (box);
+
     if (getVariant (box) == Variant::field)
     {
-        paint::inset (g, r, colour::fieldFill, colour::fieldBorder, (float) size::fieldRadius, colour::fieldShadow);
+        paint::inset (g, r, colour::fieldFill, amber ? colour::amber : colour::fieldBorder, (float) size::fieldRadius, colour::fieldShadow);
     }
     else
     {
         r = r.withTrimmedBottom (1.0f);
 
         if (down || box.isPopupActive())
-            paint::pressed (g, r, (float) size::buttonRadius);
+            paint::pressed (g, r, (float) size::buttonRadius, amber ? colour::amber : colour::buttonBorder);
         else
-            paint::raised (g, r, colour::buttonTop, colour::buttonBot, colour::buttonBorder, (float) size::buttonRadius, true,
+            paint::raised (g, r, colour::buttonTop, colour::buttonBot, amber ? colour::amber : colour::buttonBorder, (float) size::buttonRadius, true,
                            box.isMouseOver (true) ? state::hoverLighten : 0.0f);
     }
 
@@ -486,7 +539,8 @@ void EncoreLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& 
     label.setBounds (8, 1, box.getWidth() - 30, box.getHeight() - 2);
     label.setFont (getComboBoxFont (box));
     label.setBorderSize ({});
-    label.setColour (juce::Label::textColourId, c (getVariant (box) == Variant::field ? colour::fieldText : colour::text));
+    label.setColour (juce::Label::textColourId, c (isAmber (box) ? colour::faultCardText
+                                                   : getVariant (box) == Variant::field ? colour::fieldText : colour::text));
 }
 
 //==============================================================================
@@ -494,10 +548,12 @@ void EncoreLookAndFeel::drawPopupMenuBackgroundWithOptions (juce::Graphics& g, i
 {
     const auto r = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height);
     const auto radius = (float) size::menuRadius;
+    // v3.2 (V3.2-CHANGES §6): a dark fill, the 1 px border and a faint inner
+    // ring just inside it; the window's own drop shadow goes around it.
     g.setColour (c (colour::menu));
     g.fillRoundedRectangle (r, radius);
-    g.setColour (c (colour::menuHighlightBorder));
-    paint::hline (g, r.getX() + radius, 1.0f, r.getWidth() - radius * 2.0f);
+    g.setColour (c (colour::menuInnerRing));
+    g.drawRoundedRectangle (r.reduced (1.5f), radius - 1.0f, 1.0f);
     g.setColour (c (colour::paneBorder));
     g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
 }
@@ -520,7 +576,7 @@ void EncoreLookAndFeel::drawPopupMenuItemWithOptions (juce::Graphics& g, const j
     if (lit)
     {
         g.setColour (c (colour::menuHighlight));
-        g.fillRoundedRectangle (r, 4.0f);
+        g.fillRoundedRectangle (r, (float) size::menuItemRadius);
     }
 
     auto textColour = c (colour::text);
@@ -567,9 +623,9 @@ void EncoreLookAndFeel::drawPopupMenuSectionHeaderWithOptions (juce::Graphics& g
                                                                const juce::String& name, const juce::PopupMenu::Options&)
 {
     g.setFont (font (type::paneHeader));
-    g.setColour (c (colour::textDisabled));
-    g.drawText (name.toUpperCase(), area.toFloat().withTrimmedLeft ((float) menuTickInset + 4.0f).withTrimmedBottom (3.0f),
-                juce::Justification::bottomLeft, true);
+    g.setColour (c (colour::textDim));
+    g.drawText (name.toUpperCase(), area.toFloat().withTrimmedLeft ((float) size::menuHeaderIndent),
+                juce::Justification::centredLeft, true);
 }
 
 void EncoreLookAndFeel::getIdealPopupMenuItemSizeWithOptions (const juce::String& text, bool isSeparator, int,
@@ -595,7 +651,7 @@ void EncoreLookAndFeel::getIdealPopupMenuItemSizeWithOptions (const juce::String
 void EncoreLookAndFeel::getIdealPopupMenuSectionHeaderSizeWithOptions (const juce::String& text, int, int& idealWidth,
                                                                        int& idealHeight, const juce::PopupMenu::Options&)
 {
-    idealWidth = juce::roundToInt (textWidth (font (type::paneHeader), text.toUpperCase())) + 24;
+    idealWidth = juce::roundToInt (textWidth (font (type::paneHeader), text.toUpperCase())) + size::menuHeaderIndent + menuRightPad;
     idealHeight = menuHeaderHeight;
 }
 
@@ -695,7 +751,7 @@ void EncoreLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int w
     const auto track = juce::Rectangle<float> ((float) x, cy - 2.0f, (float) width, 4.0f);
     g.setColour (c (colour::sliderTrack));
     g.fillRoundedRectangle (track, 2.0f);
-    g.setColour (c (colour::sliderFill));
+    g.setColour (c ((bool) slider.getProperties()["encoreOutVolume"] ? colour::outSliderFill : colour::sliderFill));
     g.fillRoundedRectangle (track.withRight (pos), 2.0f);
 
     const auto thumb = juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ pos, cy });

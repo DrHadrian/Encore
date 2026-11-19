@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "model/Routing.h"
 #include "model/ShowFolder.h"
 #include "model/ShowModel.h"
 
@@ -43,6 +44,20 @@ struct PreShowFacts
     std::vector<juce::String> cuesWithoutPatch;
     std::vector<juce::String> pluginProblems;   // "Lead: Shimmer isn't installed on this computer"
 
+    // Routing (milestone 11)
+    struct PatchRouting
+    {
+        juce::String name;
+        juce::String input;                  // "" = the first
+        std::vector<SendModel> sends;
+    };
+
+    RoutingConfig routing = makeDefaultRouting();   // this computer's
+    std::vector<PatchRouting> patchRouting;  // the patches the show plays
+    juce::StringArray unalignedPatches;      // split paths too far apart to line up
+    int deviceInputChannels = -1, deviceOutputChannels = -1;   // -1: no device
+    juce::uint64 switchedOnInputs = ~(juce::uint64) 0, switchedOnOutputs = ~(juce::uint64) 0;   // bit n: channel n + 1
+
     // MIDI
     juce::StringArray midiInputsEnabled, midiInputsConnected;
     bool hasNextCueMapping = false;
@@ -52,11 +67,13 @@ struct PreShowFacts
 struct PreShowCheckResult
 {
     enum class Status { ok, warning, problem };
-    enum class Fix { none, audioSettings, midiSettings, pluginSettings, save, resetCounters, unmute };
+    enum class Fix { none, audioSettings, midiSettings, pluginSettings, save, resetCounters, unmute,
+                     routing, unmuteOutput };
 
     Status status = Status::ok;
     juce::String title, detail;
     Fix fix = Fix::none;
+    juce::String target;                     // unmuteOutput: the output's name
 };
 
 /** The checks, worst first. */
@@ -67,5 +84,11 @@ std::vector<juce::String> findMissingFiles (const ShowModel&, const ShowFolder&)
 
 /** Cues whose patch doesn't exist. */
 std::vector<juce::String> findCuesWithoutPatch (const ShowModel&);
+
+/** The library's patches and the cues' own (not cut), with their routing. */
+std::vector<PreShowFacts::PatchRouting> describePatchRouting (const ShowModel&);
+
+/** "A", "A and B", "A, B and C". */
+juce::String joinNames (const juce::StringArray& names);
 
 } // namespace encore

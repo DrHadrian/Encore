@@ -31,6 +31,7 @@ namespace
         { StageWidgetType::lockButton,     "lockButton",     "Lock button" },
         { StageWidgetType::nextButton,     "nextButton",     "Next button" },
         { StageWidgetType::previousButton, "previousButton", "Previous button" },
+        { StageWidgetType::outputs,        "outputs",        "Outputs" },
         { StageWidgetType::text,           "text",           "Text" },
     };
 

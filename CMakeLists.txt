@@ -119,6 +119,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/blocks/NoiseGateBlock.h
     Source/engine/blocks/PluginBlock.cpp
     Source/engine/blocks/PluginBlock.h
+    Source/engine/blocks/SplitBlocks.cpp
+    Source/engine/blocks/SplitBlocks.h
     Source/engine/core/BackgroundJobs.h
     Source/engine/core/Block.cpp
     Source/engine/core/Block.h
@@ -127,6 +129,8 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/core/LockFreeFifo.h
     Source/engine/core/MessageThread.cpp
     Source/engine/core/MessageThread.h
+    Source/engine/core/OutputStrip.cpp
+    Source/engine/core/OutputStrip.h
     Source/engine/core/PatchPlayer.cpp
     Source/engine/core/PatchPlayer.h
     Source/engine/core/Parameter.cpp
@@ -137,6 +141,7 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/midi/MidiRouter.cpp
     Source/engine/midi/MidiRouter.h
     Source/engine/dsp/Biquad.h
+    Source/engine/dsp/OutputEq.h
     Source/engine/dsp/PitchDetector.cpp
     Source/engine/dsp/PitchDetector.h
     Source/engine/dsp/SafetyLimiter.cpp
@@ -145,8 +150,12 @@ target_sources(EncoreEngine INTERFACE
     Source/engine/dsp/StreamResampler.h
     Source/engine/nam/NamModel.cpp
     Source/engine/nam/NamModel.h
+    Source/model/AmpPreset.cpp
+    Source/model/AmpPreset.h
     Source/model/MidiMapping.cpp
     Source/model/MidiMapping.h
+    Source/model/Routing.cpp
+    Source/model/Routing.h
     Source/model/ShowFolder.cpp
     Source/model/ShowFolder.h
     Source/model/ShowJson.cpp
@@ -159,6 +168,8 @@ target_sources(EncoreEngine INTERFACE
     Source/platform/CrashReport.h
     Source/platform/SystemTuning.cpp
     Source/platform/SystemTuning.h
+    Source/session/AmpLibrary.cpp
+    Source/session/AmpLibrary.h
     Source/session/PatchBuilder.cpp
     Source/session/PluginCatalog.cpp
     Source/session/PluginCatalog.h
@@ -186,7 +197,14 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/fonts/Inter-SemiBold.ttf
         Resources/ui/fonts/Inter-Bold.ttf
         Resources/ui/fonts/Inter-ExtraBold.ttf
+        Resources/ui/fonts/InterReadout-Regular.ttf
+        Resources/ui/fonts/InterReadout-Medium.ttf
+        Resources/ui/fonts/InterReadout-SemiBold.ttf
+        Resources/ui/fonts/InterReadout-Bold.ttf
+        Resources/ui/fonts/InterReadout-ExtraBold.ttf
+        Resources/ui/fonts/DejaVuSerif-Bold.ttf
         Resources/ui/logo/encore-wordmark-ui.svg
+        Resources/ui/logo/encore-icon-clef.svg
         Resources/ui/icons/alert.svg
         Resources/ui/icons/arrow-right.svg
         Resources/ui/icons/audio-wave.svg
@@ -195,14 +213,35 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/icons/chevron-up.svg
         Resources/ui/icons/close.svg
         Resources/ui/icons/duplicate.svg
+        Resources/ui/icons/jack.svg
         Resources/ui/icons/lock.svg
+        Resources/ui/icons/merge.svg
         Resources/ui/icons/midi-port.svg
         Resources/ui/icons/minus.svg
         Resources/ui/icons/plug.svg
         Resources/ui/icons/plus.svg
+        Resources/ui/icons/route.svg
         Resources/ui/icons/sidebar-right.svg
+        Resources/ui/icons/settings.svg
+        Resources/ui/icons/amp.svg
         Resources/ui/icons/sliders.svg
-        Resources/ui/icons/trash.svg)
+        Resources/ui/icons/split.svg
+        Resources/ui/icons/trash.svg
+        Resources/ui/icons/warn.svg
+        Resources/ui/icons/window.svg)
+
+# The amp builder's art (design/textures/AMP-BUILDER-LAYERS.md): 227 WebP layers at 2x
+# (body, panel, grille, corners; rendered by docs/design/textures/render_amp_parts.py)
+# and the knob, switch and light sprites (TEXTURES.md). JUCE decodes WebP itself
+# (JUCE_USE_WEBP); kit::ampArt loads them lazily on the message thread.
+file(GLOB ENCORE_AMP_PARTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui/amp_parts/*.webp")
+file(GLOB ENCORE_AMP_SPRITES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui/amp_sprites/*.png")
+list(SORT ENCORE_AMP_PARTS)
+list(SORT ENCORE_AMP_SPRITES)
+juce_add_binary_data(EncoreAmpArt
+    HEADER_NAME EncoreAmpArt.h
+    NAMESPACE EncoreAmpArt
+    SOURCES ${ENCORE_AMP_PARTS} ${ENCORE_AMP_SPRITES} Resources/amps/amp-templates.json)
 
 # The UI's look (theme) and kit: shared by the app and the UI snapshot tests.
 add_library(EncoreUi INTERFACE)
@@ -218,25 +257,73 @@ target_sources(EncoreUi INTERFACE
     Source/ui/theme/Paint.h
     Source/ui/kit/DialogFrame.cpp
     Source/ui/kit/DialogFrame.h
+    Source/ui/kit/FaultCard.cpp
+    Source/ui/kit/FaultCard.h
     Source/ui/kit/Group.cpp
     Source/ui/kit/Group.h
     Source/ui/kit/GearPlaceholder.cpp
     Source/ui/kit/GearPlaceholder.h
     Source/ui/kit/GearView.h
+    Source/ui/kit/Chip.cpp
+    Source/ui/kit/Chip.h
     Source/ui/kit/IconButton.cpp
     Source/ui/kit/IconButton.h
     Source/ui/kit/KeyCap.cpp
     Source/ui/kit/KeyCap.h
     Source/ui/kit/KnobView.cpp
     Source/ui/kit/KnobView.h
+    Source/ui/kit/MuteButton.cpp
+    Source/ui/kit/MuteButton.h
+    Source/ui/kit/LevelBars.cpp
+    Source/ui/kit/LevelBars.h
+    Source/ui/kit/OutputStrip.cpp
+    Source/ui/kit/OutputStrip.h
+    Source/ui/kit/SmallKnob.cpp
+    Source/ui/kit/SmallKnob.h
+    Source/ui/kit/EqCurve.cpp
+    Source/ui/kit/EqCurve.h
+    Source/ui/kit/Fader.cpp
+    Source/ui/kit/Fader.h
+    Source/ui/kit/InfoList.cpp
+    Source/ui/kit/InfoList.h
+    Source/ui/kit/StageBackdrop.cpp
+    Source/ui/kit/StageBackdrop.h
+    Source/ui/kit/StatusBar.cpp
+    Source/ui/kit/StatusBar.h
+    Source/ui/kit/DbfsMeter.cpp
+    Source/ui/kit/DbfsMeter.h
+    Source/ui/kit/PopupField.cpp
+    Source/ui/kit/PopupField.h
+    Source/ui/kit/PaneTab.cpp
+    Source/ui/kit/PaneTab.h
+    Source/ui/kit/HealthStatus.cpp
+    Source/ui/kit/HealthStatus.h
+    Source/ui/kit/MixerStrip.cpp
+    Source/ui/kit/MixerStrip.h
+    Source/ui/kit/DropBox.cpp
+    Source/ui/kit/DropBox.h
+    Source/ui/kit/DragImage.cpp
+    Source/ui/kit/DragImage.h
+    Source/ui/kit/AmpArt.cpp
+    Source/ui/kit/AmpArt.h
+    Source/ui/kit/AmpFace.cpp
+    Source/ui/kit/AmpFace.h
+    Source/ui/kit/AmpTemplates.cpp
+    Source/ui/kit/AmpTemplates.h
+    Source/ui/kit/AmpFaceView.cpp
+    Source/ui/kit/AmpFaceView.h
     Source/ui/kit/Lcd.cpp
     Source/ui/kit/Lcd.h
     Source/ui/kit/MeterBar.cpp
     Source/ui/kit/MeterBar.h
     Source/ui/kit/NoticeBar.cpp
     Source/ui/kit/NoticeBar.h
+    Source/ui/kit/ParameterList.cpp
+    Source/ui/kit/ParameterList.h
     Source/ui/kit/Pane.cpp
     Source/ui/kit/Pane.h
+    Source/ui/kit/ProgressBar.cpp
+    Source/ui/kit/ProgressBar.h
     Source/ui/kit/RowList.cpp
     Source/ui/kit/RowList.h
     Source/ui/kit/SegmentedControl.cpp
@@ -244,8 +331,10 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/StatusBadge.cpp
     Source/ui/kit/StatusBadge.h
     Source/ui/kit/Toolbar.cpp
-    Source/ui/kit/Toolbar.h)
-target_link_libraries(EncoreUi INTERFACE EncoreUiAssets)
+    Source/ui/kit/Toolbar.h
+    Source/ui/kit/UtilityTile.cpp
+    Source/ui/kit/UtilityTile.h)
+target_link_libraries(EncoreUi INTERFACE EncoreUiAssets EncoreAmpArt)
 
 # ------------------------------------------------------------------------------
 # Build speed (decision 0049). Parsing JUCE's headers is ~95 % of compiling a
@@ -286,6 +375,14 @@ target_sources(Encore PRIVATE
     Source/app/MainComponent.h
     Source/ui/BlockPanel.cpp
     Source/ui/BlockPanel.h
+    Source/ui/AmpBuilderView.cpp
+    Source/ui/AmpBuilderView.h
+    Source/ui/JackStage.cpp
+    Source/ui/JackStage.h
+    Source/ui/RoutingView.cpp
+    Source/ui/RoutingView.h
+    Source/ui/BottomRow.cpp
+    Source/ui/BottomRow.h
     Source/ui/ChainStrip.cpp
     Source/ui/ChainStrip.h
     Source/ui/Inspector.cpp
@@ -409,15 +506,21 @@ if(ENCORE_BUILD_TESTS)
         Tests/UiSnapshot.h
         Tests/UiSnapshotTests.cpp
         Tests/BoardFixtures.h
+        Tests/PluginFixtures.h
         Tests/EditViewTests.cpp
         Tests/HardeningTests.cpp
         Tests/ShowcaseTests.cpp
         Tests/StageBoardTests.cpp
+        Tests/AmpBuilderTests.cpp
         # Screens tested off-screen (rendered into images, no window).
         Source/app/AppSettings.cpp
         Source/app/EventLog.cpp
         Source/app/MainComponent.cpp
         Source/ui/BlockPanel.cpp
+        Source/ui/AmpBuilderView.cpp
+        Source/ui/JackStage.cpp
+        Source/ui/RoutingView.cpp
+        Source/ui/BottomRow.cpp
         Source/ui/ChainStrip.cpp
         Source/ui/Inspector.cpp
         Source/ui/MidiSettings.cpp
@@ -437,7 +540,12 @@ if(ENCORE_BUILD_TESTS)
         Tests/PluginTests.cpp
         Tests/PluginViewTests.cpp
         Tests/ResamplerTests.cpp
+        Tests/RoutingEngineTests.cpp
+        Tests/RoutingSessionTests.cpp
+        Tests/RoutingViewTests.cpp
+        Tests/RoutingTests.cpp
         Tests/SessionTests.cpp
+        Tests/SplitPathTests.cpp
         Tests/TestSignals.h)
 
     target_compile_definitions(EncoreTests PRIVATE

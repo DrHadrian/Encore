@@ -21,18 +21,24 @@ public:
     void setLabel (const juce::String&);   // drawn in capitals
     void setChip (const juce::String&);    // "EXP 1", or empty
 
-    /** 74 × 97: knob, gap, label, gap, chip. */
-    static juce::Rectangle<int> idealBounds();
+    /** Also show the value's text (getTextFromValue) under the label, as the
+        plugin plate does ("35 %", the plugin's own text); the chip goes under it. */
+    void setShowsValue (bool);
+
+    /** 74 × 97: knob, gap, label, gap, chip (+ 13 with the value line). */
+    static juce::Rectangle<int> idealBounds (bool withValue = false);
 
     /** Where the knob is drawn inside the component. */
     juce::Rectangle<int> getKnobBounds() const;
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void valueChanged() override;
 
 private:
-    juce::String labelCaps, chip;
+    juce::String labelCaps, chip, valueText;
     float chipWidth = 0.0f;
+    bool showsValue = false;
 };
 
 /** The two-position gear switch (Level match): a 22 × 36 track, a light

@@ -36,6 +36,10 @@ public:
         pedal whose box is `pedalBounds` in the owner's coordinates. */
     static void paintPedalShadow (juce::Graphics&, juce::Rectangle<float> pedalBounds);
 
+    /** The panel's kind label: its top this far above the bottom (default
+        size::panelLabelBottom; the merge's box puts it lower). */
+    void setLabelBottom (int fromBottom);
+
     void paint (juce::Graphics&) override;
     void resized() override;
 
@@ -46,6 +50,7 @@ private:
     BlockInfo block;
     juce::String kindCaps, plateCaps;
     float pedalScale = 1.0f;
+    int labelBottom = theme::size::panelLabelBottom;
 
     juce::Path boxShape;
     juce::ColourGradient boxFill, footswitchFill;

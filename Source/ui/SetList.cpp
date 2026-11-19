@@ -175,7 +175,7 @@ void SetList::paintRow (juce::Graphics& g, int row, juce::Rectangle<int> bounds)
     }
 
     area.removeFromLeft ((float) size::rowGap);
-    paint::text (g, cue.number, area.removeFromLeft ((float) size::rowNumberW), type::body,
+    paint::text (g, cue.number, area.removeFromLeft ((float) size::rowNumberW), type::bodyReadout,
                  playing ? colour::textStrong : colour::textDim);
     area.removeFromLeft ((float) size::rowGap);
 
@@ -271,15 +271,15 @@ void SetList::showCueMenu (int index)
 
     juce::PopupMenu menu;
     menu.addItem ("Go to this " + words.item, [safeThis, index] { if (safeThis != nullptr) safeThis->session.goToCue (index); });
-    menu.addItem ("Rename...", [safeThis, index] { if (safeThis != nullptr) safeThis->rename (index); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Rename\xe2\x80\xa6")), [safeThis, index] { if (safeThis != nullptr) safeThis->rename (index); });
     menu.addSubMenu ("Patch", patches);
     menu.addSubMenu ("If the previous " + words.item + " uses the same patch", samePatch);
     menu.addSeparator();
-    menu.addItem ("Recall with a program change...", [safeThis, index]
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Recall with a program change\xe2\x80\xa6")), [safeThis, index]
     {
         if (safeThis != nullptr) cuedialogs::editProgramChange (*safeThis, safeThis->session, index);
     });
-    menu.addItem ("MIDI out when this " + words.item + " starts...", [safeThis, index]
+    menu.addItem ("MIDI out when this " + words.item + juce::String (juce::CharPointer_UTF8 (" starts\xe2\x80\xa6")), [safeThis, index]
     {
         if (safeThis != nullptr) cuedialogs::editMidiOut (*safeThis, safeThis->session, index);
     });

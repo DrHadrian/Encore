@@ -247,12 +247,14 @@ void CueListEditor::paintListBoxItem (int row, juce::Graphics& g, int width, int
 
     const auto alpha = item.cut ? state::cutAlpha : 1.0f;
     const auto rowStyle = type::Style { type::tableRow.px, playing ? type::Weight::bold : type::Weight::regular };
-    const auto midiStyle = type::Style { type::tableMidi.px, playing ? type::Weight::bold : type::Weight::regular };
+    const auto midiStyle = type::Style { type::tableMidi.px, playing ? type::Weight::bold : type::Weight::regular, 0.0f, false, true };
+    const auto numberStyle = type::Style { type::tableRow.px, rowStyle.weight, 0.0f, false, true };
     const auto tint = [alpha] (juce::uint32 c, float a) { return paint::c (c).withMultipliedAlpha (a * alpha); };
 
-    g.setFont (font (rowStyle));
+    g.setFont (font (numberStyle));
     g.setColour (tint (colour::text, 0.7f));
     g.drawText (item.cut ? juce::String ("cut") : item.number, cell (Column::number), juce::Justification::centredRight);
+    g.setFont (font (rowStyle));
 
     const auto nameArea = cell (Column::name).withTrimmedLeft ((float) indent);
     g.setColour (tint (colour::text, 1.0f));
@@ -689,11 +691,11 @@ void CueListEditor::showRowMenu (int row)
         menu.addItem ("Rename (Enter)", [safe, row] { if (safe != nullptr) safe->startEditing (row, Column::name, false); });
         menu.addItem ("Bar mark", [safe, row] { if (safe != nullptr) safe->startEditing (row, Column::bar, false); });
         menu.addItem ("Note", [safe, row] { if (safe != nullptr) safe->startEditing (row, Column::note, false); });
-        menu.addItem ("Patch...", [safe, row] { if (safe != nullptr) safe->showPatchMenu (row); });
+        menu.addItem (juce::String (juce::CharPointer_UTF8 ("Patch\xe2\x80\xa6")), [safe, row] { if (safe != nullptr) safe->showPatchMenu (row); });
         menu.addSeparator();
-        menu.addItem ("Recall with a program change...", cueIndex >= 0, false,
+        menu.addItem (juce::String (juce::CharPointer_UTF8 ("Recall with a program change\xe2\x80\xa6")), cueIndex >= 0, false,
                       [safe, cueIndex] { if (safe != nullptr) cuedialogs::editProgramChange (*safe, safe->session, cueIndex); });
-        menu.addItem ("MIDI out when this " + session.getWords().item + " starts...", cueIndex >= 0, false,
+        menu.addItem ("MIDI out when this " + session.getWords().item + juce::String (juce::CharPointer_UTF8 (" starts\xe2\x80\xa6")), cueIndex >= 0, false,
                       [safe, cueIndex] { if (safe != nullptr) cuedialogs::editMidiOut (*safe, safe->session, cueIndex); });
         menu.addSeparator();
         menu.addItem (r.item->cut ? "Restore (uncut)" : "Cut (skip in the show)", [safe] { if (safe != nullptr) safe->toggleCutSelection(); });
@@ -702,7 +704,7 @@ void CueListEditor::showRowMenu (int row)
     menu.addSeparator();
     menu.addItem ("Move up (Ctrl+Up)", [safe] { if (safe != nullptr) safe->moveSelection (-1); });
     menu.addItem ("Move down (Ctrl+Down)", [safe] { if (safe != nullptr) safe->moveSelection (+1); });
-    menu.addItem ("Delete...", [safe] { if (safe != nullptr) safe->deleteSelection(); });
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Delete\xe2\x80\xa6")), [safe] { if (safe != nullptr) safe->deleteSelection(); });
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&list).withMousePosition());
 }

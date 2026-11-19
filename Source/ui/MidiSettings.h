@@ -35,7 +35,12 @@ public:
     void resized() override;
     void paintOverChildren (juce::Graphics&) override;
 
+    /** The action menu (as a row's action button and + Add mapping show it):
+        Mute output ▸ lists `outputs` (this computer's). */
+    static juce::PopupMenu makeActionMenu (const juce::StringArray& outputs);
+
 private:
+    juce::StringArray outputNames() const;
     class Row;
 
     void timerCallback() override;

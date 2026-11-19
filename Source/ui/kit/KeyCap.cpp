@@ -35,7 +35,7 @@ void paintKeyCap (juce::Graphics& g, juce::Rectangle<float> r, const juce::Strin
 {
     g.setColour (paint::c (colour::kbdBorder));
     g.drawRoundedRectangle (r.reduced (0.5f), (float) size::keyCapRadius, 1.0f);
-    paint::text (g, key, r, type::keyCap, colour::textDisabled, juce::Justification::centred);
+    paint::text (g, key, r, type::keyCap, colour::textDim, juce::Justification::centred);
 }
 
 } // namespace encore::kit

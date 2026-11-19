@@ -541,3 +541,92 @@ from scratch each time); the tests took ~1.5. Now:
   isn't the slow step here). The app and the tests compile the shared sources
   twice on purpose (different JUCE settings); sharing a library is the next
   step if builds grow.
+
+## 0050 — Routing belongs to the computer; shows use names (milestone 11)
+
+Inputs and outputs are named per computer ("Guitar" = input 1, "In-ear" =
+outputs 3/4) and stored with its settings (`%APPDATA%\Encore`), never in the
+show, as MIDI mappings and plugins are. A show only names them, so it plays
+right on another interface. Up to 8 inputs and 8 outputs; names 1–32
+characters, unique ignoring case. After updating there is one input
+("Guitar", the old guitar-input setting) and one output, "Main" = all
+outputs, which plays exactly as before. A name a show uses that this
+computer hasn't is never an error that stops anything: the patch plays the
+first input, a send to a missing output goes nowhere, and the pre-show
+check, the Routing view and the IN / OUT stages say so (amber, NOT HERE).
+- Outputs keep their engine slot, meter, mute and delay line by name when
+  the routing changes; MIDI "Mute output" bindings store the name too, so
+  they follow a renamed output only if the binding is renamed.
+- A routing change applies on the next buffer without a click (gains ramp,
+  the EQ glides, a delay change crossfades). The interface channels the
+  routing uses are switched on if the interface has them; Encore never
+  switches a channel off.
+- Mutes are saved: a muted output is still muted after a restart, and the
+  pre-show check warns about it.
+
+## 0051 — Sends per patch; schema 3 only when a show uses routing (milestone 11)
+
+A patch has a send level per output name (−∞…+6 dB); an output the patch
+doesn't list gets 0 dB, so a new output gets every patch until it's turned
+down. Sends ramp over 20 ms on every change and every patch switch, and a
+ringing tail keeps its own patch's sends. A show is written as schema 3 only
+when it uses routing (an input other than the first, a send other than the
+default, or a split); otherwise it stays schema 1 or 2 and older versions
+still open it.
+
+## 0052 — Stereo from where it starts; amp and cab stay mono (milestone 11)
+
+A chain carries one or two channels: each block says what it puts out. NAM
+amps and cab IRs are mono (the captures and IRs are), as are the gate, EQ
+and delay given mono; a stereo plugin and the merge make the patch stereo
+from there on. The guitar is mono until then, which keeps the common patch
+as cheap as before. Mono into a stereo output is the same on both sides;
+stereo into a mono output is (L + R) / 2.
+
+## 0053 — Split paths: one split per patch, aligned by reported latency (milestone 11)
+
+`split` and `merge` are blocks in the main lane; the blocks between them are
+path A, a second lane is path B. One split per patch keeps the model and the
+screens simple (two rows). The split's on/off is "path B off" (so a stomp or
+a footswitch can drop the second amp); the merge has a level and pan per
+path and is never off. Paths are lined up with the latency the blocks report
+when the patch is prepared (a plugin that changes its latency later is lined
+up at the next rebuild), up to 8192 samples (≈170 ms at 48 kHz); more is a
+pre-show warning. Capturing a live chain finds each block's saved settings by
+its id, whichever path it is on, so moving a block between paths keeps them.
+
+## 0054 — Routing lives in Edit (F7), not in Settings (design v3, milestone 11)
+
+As designed: routing, patches and cues are one way of working, so the
+Routing view opens over Edit's centre (Routing button, F7) with *Inputs &
+outputs* (this computer) and *Sends* (this show); the chain gets IN and OUT
+tiles whose stages edit the playing patch's input and sends live. Settings
+keeps Audio | MIDI | Plugins. The bottom row replaces the old input picker
+and master meters with the playing patch's input and a strip per output (M
+and meter), Compact | Full remembered on the computer; Full scrolls sideways
+without a scroll bar, the cut-off strip showing there's more. Picking which
+input a patch plays moved to the IN tile and the Routing view. Changes made
+from a button inside the Routing view apply after its click returns (the
+view rebuilds and a button can't delete itself). The pre-show check's
+"Routing" line (all fine) appears only when the routing is more than the
+default, so a default rig's check doesn't grow.
+
+## 0055 — Stage Outputs widget: opt-in, obeys the lock (milestone 11)
+
+The Outputs widget (a meter and a big Mute / MUTED per output) is added from
+the layout editor; the default layout is unchanged, because most rigs have
+one output. Its mutes go through the same path as the bottom row's M (kept
+in this computer's routing). Locked, they do nothing: the lock guards
+against accidental presses, and only Panic works through it. The Patch
+widget shows the input the patch plays, amber when it isn't the patch's own.
+
+## 0056 — M11 screens: small choices made while building (design v3)
+
+- The IN / OUT tiles' inspector is a read-only list (kit `InfoList`) of what
+  the stage shows, with "Open routing"; nothing there edits.
+- An inspector lists the selected block's own assignments first, then the
+  rest of the patch's.
+- Output names squeeze up to 4 % before they're shortened with "...", as the
+  inspector's lines do (font metrics differ a little between renderers).
+- The global button padding stayed as it was: a wider one improved the
+  routing boards but made the existing Edit boards worse.

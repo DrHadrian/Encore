@@ -56,6 +56,7 @@ public:
     juce::String getLoadedFileInfo() const override { return loadedInfo; }
     void collectGarbage() override { irs.collectGarbage(); }
     int getLatencySamples() const noexcept override { return 0; }
+    int getOutputChannels (int) const noexcept override { return 1; }   // mono IRs (stereo files are summed)
 
     //== Message thread ========================================================
     /** Hands an IR to the audio thread. Used by loadFileAsync() and tests. */
@@ -73,7 +74,7 @@ private:
     void updateFilters (int numSamples) noexcept;
     void describe (const ImpulseResponse& ir);
 
-    const FileSlot fileSlot { "Load cab IR...", "*.wav;*.aif;*.aiff;*.flac" };
+    const FileSlot fileSlot { juce::String (juce::CharPointer_UTF8 ("Load cab IR\xe2\x80\xa6")), "*.wav;*.aif;*.aiff;*.flac" };
 
     Parameter& lowCut;
     Parameter& highCut;

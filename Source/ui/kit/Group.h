@@ -17,6 +17,8 @@ class Group final : public juce::Component
 public:
     explicit Group (const juce::String& title);
 
+    void setGroupTitle (const juce::String& newTitle);
+
     juce::Rectangle<int> getTitleBounds() const;
     juce::Rectangle<int> getBoxBounds() const;
 
@@ -26,7 +28,7 @@ public:
     void paint (juce::Graphics&) override;
 
 private:
-    const juce::String title;   // in capitals
+    juce::String title;   // in capitals
 };
 
 } // namespace encore::kit

@@ -11,6 +11,7 @@
 #include "UiSnapshot.h"
 
 #include "ui/StageView.h"
+#include "ui/kit/MuteButton.h"
 #include "ui/theme/EncoreTheme.h"
 
 namespace encore::test
@@ -56,10 +57,10 @@ public:
     }
 
     /** The board's layout as the show's default, expression pedal 1 at 72 %. */
-    static void setUpStage (AudioEngine& engine, ShowSession& session)
+    static void setUpStage (AudioEngine& engine, ShowSession& session, const std::vector<StageWidget>& widgets = boardStageWidgets())
     {
         const auto id = session.addLayout ("Default", {});
-        session.setLayoutWidgets (id, boardStageWidgets());
+        session.setLayoutWidgets (id, widgets);
         session.setDefaultLayout (id);
 
         MidiBinding pedal;
@@ -108,7 +109,7 @@ public:
             beginTest ("Stage: the interface lost (stage-interface-lost.png)");
             {
                 auto lost = boardSnapshot();
-                lost.audioProblem = "AUDIO INTERFACE LOST - reconnecting to Focusrite USB ASIO...";
+                lost.audioProblem = juce::String (juce::CharPointer_UTF8 ("AUDIO INTERFACE LOST - reconnecting to Focusrite USB ASIO\xe2\x80\xa6"));
                 lost.deviceLine = lost.audioProblem + " (staying on the cue; check the cable)";
                 lost.roundTripMs = 0.0;
 
@@ -159,6 +160,72 @@ public:
             }
         }
 
+        beginTest ("Stage with the Outputs widget: a meter and Mute / MUTED per output, Amp DI muted (m11-stage-outputs)");
+        {
+            ShowSession session (engine);
+            expect (session.openShow (makeStageShow (root)).wasOk());
+            setUpStage (engine, session, outputsStageWidgets());
+            engine.setRouting (makeBoardRouting());
+            settle (engine, session);
+            session.goToCue (2);   // "Ballad in D"
+            settle (engine, session);
+
+            StageView view (engine, session);
+            view.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            juce::StringArray muteCalls;
+            view.onMuteOutput = [&] (const juce::String& name, bool muted)
+            {
+                muteCalls.add (name + (muted ? " muted" : " live"));
+                engine.setOutputMuted (engine.getOutputSlot (name), muted);
+            };
+
+            // The board's levels: front of house at about 60 %, in-ear 45 %, Amp DI muted.
+            auto levels = boardSnapshot();
+            const auto gain = [] (float share) { return juce::Decibels::decibelsToGain (-60.0f + share * 60.0f); };
+            levels.outputSlotPeaks[(size_t) engine.getOutputSlot ("Front of house")] = { gain (0.61f), gain (0.54f) };
+            levels.outputSlotPeaks[(size_t) engine.getOutputSlot ("In-ear")] = { gain (0.46f), gain (0.39f) };
+
+            for (int i = 0; i < 3; ++i)
+                view.update (levels);
+
+            expect (hasContent (renderSnapshot (view, "m11-stage-outputs")));
+            renderSnapshot (view, "m11-stage-outputs@2x", 2.0f);
+
+            std::vector<kit::MuteButton*> mutes;
+            std::function<void (juce::Component&)> collect = [&] (juce::Component& c)
+            {
+                for (auto* child : c.getChildren())
+                {
+                    if (auto* m = dynamic_cast<kit::MuteButton*> (child))
+                        mutes.push_back (m);
+
+                    collect (*child);
+                }
+            };
+            collect (view);
+            expectEquals ((int) mutes.size(), 3);
+
+            if (mutes.size() == 3)
+            {
+                expect (! mutes[0]->getToggleState() && ! mutes[1]->getToggleState() && mutes[2]->getToggleState(), "Amp DI MUTED");
+
+                mutes[1]->triggerClick();
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                expect (muteCalls.contains ("In-ear muted"), muteCalls.joinIntoString (", "));
+                expect (engine.isOutputMuted (engine.getOutputSlot ("In-ear")));
+
+                view.setLocked (true);
+                muteCalls.clear();
+                mutes[2]->triggerClick();
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                expect (muteCalls.isEmpty(), "locked: Mute does nothing");
+                expect (mutes[2]->getToggleState(), "and the button stays as it was");
+                view.setLocked (false);
+            }
+
+            engine.setRouting (makeDefaultRouting());
+        }
+
         beginTest ("Layout editor: the current cue selected, inspector on (layout-editor.png)");
         {
             ShowSession session (engine);
@@ -197,6 +264,178 @@ public:
 
             view.setEditingLayout (false);
             expect (! view.isEditingLayout());
+        }
+
+        beginTest ("Layout editor: drag from the list, move on the stage, nearest free space, refuse when full (V3.2-CHANGES 7)");
+        {
+            using T = StageWidgetType;
+            const auto widget = [] (T t, int x, int y, int w, int h) { StageWidget sw; sw.type = t; sw.x = x; sw.y = y; sw.width = w; sw.height = h; return sw; };
+
+            ShowSession session (engine);
+            expect (session.openShow (makeLayoutShow (root)).wasOk());
+            const auto id = session.addLayout ("Default", {});
+            session.setLayoutWidgets (id, { widget (T::currentCue, 0, 0, 16, 6), widget (T::clock, 16, 0, 4, 2) });
+            session.setDefaultLayout (id);
+            settle (engine, session);
+            session.goToCue (0);
+            settle (engine, session);
+
+            StageView view (engine, session);
+            view.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            view.setEditingLayout (true);
+            view.update (boardSnapshot());
+
+            auto* list = view.getLayoutWidgetList();
+            auto* surface = view.getLayoutSurface();
+            expect (list != nullptr && surface != nullptr);
+
+            if (list == nullptr || surface == nullptr)
+                return;
+
+            // A point on the stage in cells (the surface's size changes as the inspector comes and goes).
+            const auto at = [&] (float cx, float cy)
+            {
+                return juce::Point<int> (juce::roundToInt (cx * (float) surface->getWidth() / (float) stageGridColumns),
+                                         juce::roundToInt (cy * (float) surface->getHeight() / (float) stageGridRows));
+            };
+            const auto now = juce::Time::getCurrentTime();
+
+            // A mouse event on c at p (c's coordinates), pressed at `down`.
+            const auto event = [now] (juce::Component& c, juce::Point<int> p, juce::Point<int> down, bool dragged)
+            {
+                return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), p.toFloat(), juce::ModifierKeys::leftButtonModifier,
+                                         juce::MouseInputSource::defaultPressure, juce::MouseInputSource::defaultOrientation,
+                                         juce::MouseInputSource::defaultRotation, juce::MouseInputSource::defaultTiltX,
+                                         juce::MouseInputSource::defaultTiltY, &c, &c, now, down.toFloat(), now, 1, dragged);
+            };
+
+            // Drag a list row to a point on the stage (surface coordinates); `release` lets go there.
+            const auto dragFromList = [&] (T type, juce::Point<int> onStage, bool release)
+            {
+                const auto row = view.getLayoutListRow (type);
+                const auto p = list->getLocalPoint (surface, onStage);
+                list->mouseDown (event (*list, row, row, false));
+                list->mouseDrag (event (*list, p, row, true));
+
+                if (release)
+                    list->mouseUp (event (*list, p, row, true));
+            };
+
+            const auto overlaps = [] (const std::vector<StageWidget>& ws)
+            {
+                for (size_t i = 0; i < ws.size(); ++i)
+                    for (size_t j = i + 1; j < ws.size(); ++j)
+                        if (ws[i].x < ws[j].x + ws[j].width && ws[j].x < ws[i].x + ws[i].width
+                            && ws[i].y < ws[j].y + ws[j].height && ws[j].y < ws[i].y + ws[i].height)
+                            return true;
+
+                return false;
+            };
+
+            // The list: a grip on each row, the tooltip says what a drag and a click do.
+            if (auto* tip = dynamic_cast<juce::TooltipClient*> (list))
+            {
+                list->mouseMove (event (*list, view.getLayoutListRow (T::patchName), view.getLayoutListRow (T::patchName), false));
+                expectEquals (tip->getTooltip(), juce::String ("Drag onto the stage, or click to add it at the first free place"));
+            }
+
+            // 1. Drag "Patch" over free cells: the drop box shows "Drop: Patch", 4 x 2, snapped.
+            dragFromList (T::patchName, at (6.0f, 9.0f), false);
+            expect (view.getLayoutDropBox() != nullptr && view.getLayoutDropBox()->isVisible(), "the drop box shows while dragging");
+            expectEquals (view.getLayoutDropText(), juce::String ("Drop: Patch"));
+            expect (! view.isLayoutDropRefused());
+            expect (! view.getLayoutDragImage().isVisible(), "over the stage the drop box stands for the dragged row");
+            renderSnapshot (view, "v32-layout-drop");
+
+            list->mouseUp (event (*list, list->getLocalPoint (surface, at (6.0f, 9.0f)), view.getLayoutListRow (T::patchName), true));
+            settle (engine, session);
+            expect (! view.getLayoutDropBox()->isVisible(), "gone after the drop");
+            expect (! view.getLayoutDragImage().isVisible(), "the row's picture goes with the drop");
+            {
+                const auto& ws = view.getShownWidgets();
+                expectEquals ((int) ws.size(), 3);
+                const auto& added = ws.back();
+                expect (added.type == T::patchName);
+                expectEquals (added.width, 4);
+                expectEquals (added.height, 2);
+                expectEquals (added.x, 4);   // centred on the pointer, snapped
+                expectEquals (added.y, 8);
+                expectEquals (view.getSelectedLayoutWidget(), 2, "the dropped widget is selected");
+            }
+
+            // 2. Dropped onto taken cells: the nearest free space of its size.
+            dragFromList (T::setList, at (4.0f, 2.0f), true);
+            settle (engine, session);
+            expectEquals ((int) view.getShownWidgets().size(), 4);
+            expect (! overlaps (view.getShownWidgets()), "nothing ends up on top of another widget");
+            expectEquals (view.getShownWidgets().back().y, 6, "the nearest free row under the current cue");
+
+            // 3. Move the clock by dragging it: the original goes faint, "Move: Clock", it keeps the grab point.
+            {
+                const auto clockIndex = 1;
+                const auto grabPoint = at (17.0f, 1.0f);   // a cell into the clock
+                const auto to = at (21.0f, 13.0f);
+                surface->mouseDown (event (*surface, grabPoint, grabPoint, false));
+                surface->mouseDrag (event (*surface, to, grabPoint, true));
+                expectEquals (view.getLayoutDropText(), juce::String ("Move: Clock"));
+                expectWithinAbsoluteError (view.getShownWidgetAlpha (clockIndex), theme::state::draggedAlpha, 0.001f);
+                renderSnapshot (view, "v32-layout-move");
+                surface->mouseUp (event (*surface, to, grabPoint, true));
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (50);   // the move commits after the mouse-up returns
+                settle (engine, session);
+                expectWithinAbsoluteError (view.getShownWidgetAlpha (clockIndex), 1.0f, 0.001f);
+                const auto& clock = view.getShownWidgets()[(size_t) clockIndex];
+                expect (clock.type == T::clock);
+                expectEquals (clock.x, 20);   // grabbed one cell in: it lands one cell left of the pointer
+                expectEquals (clock.y, 12);
+                expect (! overlaps (view.getShownWidgets()));
+            }
+
+            // 4. A click (no drag) in the list adds the widget at the first place it fits.
+            if (auto* l = view.getLayoutWidgetList())
+            {
+                const auto row = view.getLayoutListRow (T::clock);
+                l->mouseDown (event (*l, row, row, false));
+                l->mouseUp (event (*l, row, row, false));
+                settle (engine, session);
+                expectEquals ((int) view.getShownWidgets().size(), 5);
+                expect (! overlaps (view.getShownWidgets()), "a click adds it where it fits");
+                expectEquals (view.getShownWidgets().back().width, 4, "a click adds 4 x 2, as a drop does");
+                expectEquals (view.getShownWidgets().back().height, 2);
+            }
+
+            // 5. A full stage: the drop box turns amber and nothing is added.
+            session.setLayoutWidgets (id, layoutEditorWidgets());
+            settle (engine, session);
+            view.update (boardSnapshot());
+            const auto before = view.getShownWidgets();
+            dragFromList (T::tuner, at (6.0f, 9.0f), false);
+            expect (view.isLayoutDropRefused(), "no free space: refused");
+            renderSnapshot (view, "v32-layout-refused");
+            list->mouseUp (event (*list, list->getLocalPoint (surface, at (6.0f, 9.0f)), view.getLayoutListRow (T::tuner), true));
+            settle (engine, session);
+            expect (view.getShownWidgets() == before, "nothing changed");
+
+            // Off the stage the row's picture follows the pointer, the grabbed point under it.
+            {
+                const auto offStage = list->getLocalBounds().getCentre();   // list coordinates
+                dragFromList (T::clock, surface->getLocalPoint (list, offStage), false);
+                const auto& ghost = view.getLayoutDragImage();
+                expect (ghost.isVisible(), "the dragged row's picture shows off the stage");
+                expect (! view.getLayoutDropBox()->isVisible());
+                expect (ghost.getBounds().contains (view.getLocalPoint (list, offStage)), "the picture is under the pointer");
+                bool clicksSelf = true, clicksChildren = true;
+                ghost.getInterceptsMouseClicks (clicksSelf, clicksChildren);
+                expect (! clicksSelf && ! clicksChildren, "the picture never takes clicks");
+                renderSnapshot (view, "v32-layout-drag-off-stage");
+            }
+
+            // Let go off the stage: nothing happens.
+            list->mouseUp (event (*list, list->getLocalBounds().getCentre(), view.getLayoutListRow (T::clock), true));
+            expect (! view.getLayoutDragImage().isVisible());
+            expect (view.getShownWidgets() == before);
+
+            view.setEditingLayout (false);
         }
 
         beginTest ("Stage: a musical, typing a cue number (stage-musical-goto.png)");

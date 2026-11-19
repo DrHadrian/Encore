@@ -20,9 +20,10 @@ KnobView::KnobView() : juce::Slider (juce::Slider::RotaryHorizontalVerticalDrag,
     setMouseClickGrabsKeyboardFocus (false);
 }
 
-juce::Rectangle<int> KnobView::idealBounds()
+juce::Rectangle<int> KnobView::idealBounds (bool withValue)
 {
-    return { size::knobColumn, size::knobCell + size::knobLabelGap + size::knobLabelH + size::knobLabelGap + size::chipH };
+    return { size::knobColumn, size::knobCell + size::knobLabelGap + size::knobLabelH + (withValue ? size::knobValueH : 0)
+                                   + size::knobLabelGap + size::chipH };
 }
 
 juce::Rectangle<int> KnobView::getKnobBounds() const
@@ -52,6 +53,27 @@ void KnobView::setChip (const juce::String& text)
     }
 }
 
+void KnobView::setShowsValue (bool shows)
+{
+    showsValue = shows;
+    valueChanged();
+}
+
+void KnobView::valueChanged()
+{
+    // The text is made here, not in paint().
+    if (! showsValue)
+        return;
+
+    const auto text = getTextFromValue (getValue());
+
+    if (text != valueText)
+    {
+        valueText = text;
+        repaint();
+    }
+}
+
 void KnobView::resized() {}
 
 void KnobView::paint (juce::Graphics& g)
@@ -67,9 +89,19 @@ void KnobView::paint (juce::Graphics& g)
     g.setFont (font (type::knobLabel));
     g.drawText (labelCaps, juce::Rectangle<float> (0.0f, y, (float) getWidth(), (float) size::knobLabelH), juce::Justification::centred, true);
 
+    y += (float) size::knobLabelH;
+
+    if (showsValue)
+    {
+        g.setColour (paint::c (colour::textTertiary).withMultipliedAlpha (alpha));
+        g.setFont (font (type::knobValue));
+        g.drawText (valueText, juce::Rectangle<float> (0.0f, y, (float) getWidth(), (float) size::knobValueH), juce::Justification::centred, true);
+        y += (float) size::knobValueH;
+    }
+
     if (chipWidth > 0.0f)
     {
-        y += (float) (size::knobLabelH + size::knobLabelGap);
+        y += (float) size::knobLabelGap;
         const auto r = juce::Rectangle<float> (chipWidth, (float) size::chipH).withCentre ({ (float) getWidth() * 0.5f, y + (float) size::chipH * 0.5f });
         g.setColour (paint::c (colour::knobChipFill).withMultipliedAlpha (alpha));
         g.fillRoundedRectangle (r, (float) size::chipRadius);

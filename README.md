@@ -23,7 +23,9 @@ with an Edit view (running order, signal chain, block stage, inspector),
 the full cue list, a Stage view and its layout editor, one settings window
 (Audio | MIDI | Plugins) and the pre-show check (see [docs/design](docs/design)).
 Milestone 10 adds VST3 plugins as blocks, each new plugin tried in a separate
-process first, with a crash guard while playing.
+process first, with a crash guard while playing. Milestone 11 adds routing:
+named inputs and outputs per computer, sends per patch, stereo, split paths
+A and B, and a mute, EQ, delay and limiter per output.
 
 | Milestone | What you can test |
 | --- | --- |
@@ -38,7 +40,7 @@ process first, with a crash guard while playing.
 | **8 – Theatre cue lists** | Acts/scenes/cues, insert, renumber, cut, go to |
 | **9 – Robustness** ✅ | Crash recovery, reconnect, pre-show check, soak test |
 | **10 – VST3 hosting** | Plugins as blocks, scanned out of process, crash guard |
-| 11 – Routing | FOH/IEM buses, per-cue input/output |
+| **11 – Routing** | Named inputs and outputs, sends per patch, stereo, split paths, mute/EQ/delay per output |
 | 12 – Plugin sandbox | Risky plugins in their own process |
 
 ## Building (Windows)
@@ -110,6 +112,55 @@ effect. For shows also:
 - set Windows' power mode to **Best performance**;
 - use 64 samples or more, so there is headroom for spikes.
 
+## Testing milestone 11 with your guitar
+
+Routing belongs to the computer (like MIDI mappings): it names the
+interface's channels, "Guitar" = input 1, "In-ear" = outputs 3/4. A show only
+uses the names, so it plays right on another interface. After updating,
+nothing changes: there's one input, "Guitar", and one output, "Main", which
+plays on every output as before. Best with an interface that has 4 or more
+outputs and headphones on 3/4.
+
+1. **Routing view**: in Edit, **Routing** (or **F7**). *Inputs & outputs*
+   (this computer): **+ Add input** "Acoustic" on input 2; **+ Add output**
+   "Front of house" on 1/2 and "In-ear" on 3/4; remove "Main" (or keep it:
+   then the pre-show check warns that two outputs share a channel). Each
+   output has a level, **M** (mute) and a meter; select one for its EQ (low
+   cut, high cut, bass, mid, treble), its delay (ms, with metres beside) and
+   its safety limiter.
+   **Back to patches** (or F7) closes it.
+2. **Sends**: *Sends* (this show) is a table of patches × outputs. Turn the
+   In-ear down for one patch: play, switch patches: it moves smoothly, and a
+   ringing tail keeps its own patch's sends. A new output gets every patch at
+   0 dB until you turn it down.
+3. **The chain's IN and OUT**: click the **IN** tile: the patch's input as
+   cards, click "Acoustic" to make the patch listen to input 2 (the tuner
+   follows). Click **OUT**: a fader per output for this patch, live.
+4. **Stereo**: add a stereo plugin (a stereo delay or reverb): from there the
+   patch is stereo to the outputs; before it, the guitar stays mono (cheap).
+   The OUT stage says "Patch ends stereo".
+5. **Two amps**: right-click a block → **Split into paths A and B here**.
+   Path A and path B appear as two rows; right-click a block → *Move to path
+   B*. The **MERGE** block has a level and pan for each path (A left, B right
+   sounds wide). Give the split a stomp switch: it turns path B on and off.
+   Put Level B on an expression pedal to fade from amp A to amp B. Paths
+   with plugins of different latency are lined up (the merge's inspector
+   says by how much).
+6. **Mute one output**: **M** in the bottom row (Compact | Full for many
+   outputs); on Stage, add the **Outputs** widget (Layout → Monitor), a big
+   Mute / MUTED per output; or a footswitch: Settings → MIDI → action **Mute
+   output ▸ In-ear**. Mutes are remembered on this computer. The big Mute
+   and Panic still silence everything.
+7. **Another computer**: open the show where "In-ear" or "Acoustic" doesn't
+   exist (or rename one in Routing). Nothing breaks: the patch plays the
+   first input, a send to a missing output goes nowhere. The pre-show check
+   (F9) lists each missing name with **Routing...**; Routing shows them under
+   *Names this show uses* with **+ Add**, and the IN tile and the faders
+   mark them **NOT HERE**.
+
+Shows that use routing are saved as schema 3; shows that don't stay as they
+were, so older versions still open them.
+
 ## Testing milestone 8 with your guitar
 
 One running order, named for the kind of show: **Set list** with *songs*
@@ -171,8 +222,7 @@ Common Files\VST3 is where they go).
    the inspector (a crashed one: *Load again*). If Encore itself ever goes
    down inside a plugin, that block starts switched off next time.
 
-Encore is still mono until routing (milestone 11): stereo plugins get the
-guitar on both inputs and their output is mixed to mono.
+Since milestone 11 a stereo plugin keeps the patch stereo from there on (see below).
 
 ## Testing milestone 9 with your guitar
 
@@ -203,7 +253,7 @@ guitar on both inputs and their output is mixed to mono.
    footswitch or Space: everything follows. **F11** toggles full screen;
    **Edit view** (top right) or F5 goes back.
 2. **Tuner**: press **T**, click **Tuner**, or map a footswitch to *Tuner*
-   in **MIDI...**. Without a tuner widget in the layout it covers the screen.
+   in **Settings...** (MIDI tab). Without a tuner widget in the layout it covers the screen.
    Play each string: the note turns green within about 2 cents. The output is
    muted while tuning (Show → *Stage settings* → *Tuner mutes the output* to
    change that; *Concert pitch* for A = 442 etc.). Close with T, Esc or a click.
@@ -232,7 +282,7 @@ guitar on both inputs and their output is mixed to mono.
 A USB MIDI keyboard works as a stand-in foot controller: its sustain pedal is a
 footswitch and its mod wheel an expression pedal.
 
-1. **Connect**: plug in the keyboard, click **MIDI...** and tick it under
+1. **Connect**: plug in the keyboard, click **Settings...**, open the MIDI tab and tick it under
    *Listen to*. Press keys: *Last received* shows each message. Encore remembers
    the device and reopens it when you plug it back in.
 2. **Next cue**: the default mappings are *sustain pedal (CC 64) = next cue*,
@@ -254,7 +304,7 @@ footswitch and its mod wheel an expression pedal.
 6. **Program change recall**: right-click a cue → *Recall with a program
    change...* → e.g. 5. A program change 5 from the controller jumps straight
    to that cue (the cue shows *PC 5*).
-7. **MIDI out**: choose an output in **MIDI...** (or none), then right-click a
+7. **MIDI out**: choose an output in **Settings...** › MIDI (or none), then right-click a
    cue → *MIDI out when this cue starts...*: e.g. `PC 1 5` or `CC 1 20 127`
    (one per line). They are sent whenever that cue starts, by footswitch,
    keyboard or click. With a synth or a MIDI monitor on that output you can see
@@ -430,11 +480,11 @@ Source/
                       the plugin catalog (scanning in a separate process)
   engine/             everything that runs on or talks to the audio thread
     core/             Block, Chain, PatchPlayer (switching), Parameter, handovers, lock-free queues
-    blocks/           the built-in blocks (amp, cab, gate, EQ, delay) and the plugin block (VST3)
+    blocks/           the built-in blocks (amp, cab, gate, EQ, delay, split and merge) and the plugin block (VST3)
     dsp/              allocation-free DSP (filters, limiter, sample-rate conversion)
     nam/              loading and running Neural Amp Modeler captures
     midi/             foot controller and pedal input, MIDI out
-  ui/                 the screens: edit view pieces, full cue list, stage view and layout editor,
+  ui/                 the screens: edit view pieces, full cue list, routing view, stage view and layout editor,
                       settings window (audio, MIDI, plugins), plugin windows, pre-show check, tuner display
     theme/            design v3 tokens (EncoreTheme.h), fonts, icons, the LookAndFeel
     kit/              shared components: panes, toolbar, LCD, meters, dialogs, gear placeholders

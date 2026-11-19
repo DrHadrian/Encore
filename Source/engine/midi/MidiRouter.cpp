@@ -54,9 +54,22 @@ MidiRouter::~MidiRouter()
 
 void MidiRouter::setBindings (const std::vector<MidiBinding>& bindings)
 {
+    currentBindings = bindings;
+
     auto t = std::make_unique<Table>();
     t->bindings = bindings;
+
+    for (const auto& b : bindings)
+        t->outputSlots.push_back (b.action == MidiAction::muteOutput && outputSlotFor != nullptr
+                                      ? outputSlotFor (b.output) : -1);
+
     tables.publish (std::move (t));
+}
+
+void MidiRouter::setOutputResolver (std::function<int (const juce::String&)> slotForName)
+{
+    outputSlotFor = std::move (slotForName);
+    refreshOutputs();
 }
 
 void MidiRouter::setCueMidiOut (std::vector<std::vector<MidiOutMessage>> perCue)
@@ -236,19 +249,23 @@ void MidiRouter::handle (const Raw& message, PatchPlayer& player, std::atomic<bo
     if (table == nullptr || learning.load (std::memory_order_relaxed))
         return;
 
-    for (auto& binding : table->bindings)
+    for (size_t i = 0; i < table->bindings.size(); ++i)
     {
+        const auto& binding = table->bindings[i];
+
         if (! matches (binding.trigger, message))
             continue;
 
+        const auto outputSlot = i < table->outputSlots.size() ? table->outputSlots[i] : -1;
+
         if (binding.action == MidiAction::expression)
-            act (binding, message, player, muted);   // continuous: every value counts
+            act (binding, outputSlot, message, player, muted);   // continuous: every value counts
         else if (pressed)
-            act (binding, message, player, muted);
+            act (binding, outputSlot, message, player, muted);
     }
 }
 
-void MidiRouter::act (const MidiBinding& binding, const Raw& message, PatchPlayer& player, std::atomic<bool>& muted) noexcept
+void MidiRouter::act (const MidiBinding& binding, int outputSlot, const Raw& message, PatchPlayer& player, std::atomic<bool>& muted) noexcept
 {
     switch (binding.action)
     {
@@ -283,6 +300,15 @@ void MidiRouter::act (const MidiBinding& binding, const Raw& message, PatchPlaye
         case MidiAction::mute:   muted.store (! muted.load()); break;
         case MidiAction::tuner:  tunerPresses.fetch_add (1); break;
         case MidiAction::panic:  panicPresses.fetch_add (1); break;
+
+        case MidiAction::muteOutput:
+            // An output this computer doesn't have: nothing (Settings shows it in amber).
+            if (outputMutes != nullptr && juce::isPositiveAndBelow (outputSlot, routing::maxOutputs))
+            {
+                auto& mute = (*outputMutes)[(size_t) outputSlot];
+                mute.store (! mute.load (std::memory_order_relaxed), std::memory_order_relaxed);
+            }
+            break;
     }
 }
 

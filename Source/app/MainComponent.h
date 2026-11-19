@@ -5,12 +5,20 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
+#include <optional>
+
 #include "app/AppSettings.h"
 #include "engine/AudioEngine.h"
 #include "platform/SystemTuning.h"
 #include "session/PluginCatalog.h"
 #include "session/ShowSession.h"
 #include "ui/BlockPanel.h"
+#include "ui/JackStage.h"
+#include "ui/AmpBuilderView.h"
+#include "session/AmpLibrary.h"
+#include "ui/BottomRow.h"
+#include "ui/RoutingView.h"
+#include "ui/kit/Fader.h"
 #include "ui/ChainStrip.h"
 #include "ui/Inspector.h"
 #include "ui/MidiSettings.h"
@@ -23,7 +31,9 @@
 #include "ui/SetList.h"
 #include "ui/StageView.h"
 #include "ui/TunerDisplay.h"
-#include "ui/kit/Lcd.h"
+#include "ui/kit/StatusBar.h"
+#include "ui/kit/HealthStatus.h"
+#include "ui/kit/PaneTab.h"
 #include "ui/kit/MeterBar.h"
 #include "ui/kit/NoticeBar.h"
 #include "ui/kit/Pane.h"
@@ -61,10 +71,16 @@ public:
     std::function<void()> onViewChanged;
     bool isShowingStage() const noexcept { return stageView != nullptr && stageView->isVisible(); }
 
-    /** Settings — Audio | MIDI (Audio..., MIDI..., the pre-show check's fixes). */
+    /** Settings — Audio | MIDI | Plugins (Settings... on the tab used last; the
+        pre-show check's fixes, Routing and Find plugins... on their own tab). */
     void openSettings (SettingsWindow::Tab);
+    void openSettingsOnLastTab();
     void closeSettings();
     bool isShowingSettings() const noexcept { return settingsWindow != nullptr; }
+    std::optional<SettingsWindow::Tab> getShownSettingsTab() const   { return settingsWindow != nullptr ? std::optional (settingsWindow->getTab()) : std::nullopt; }
+
+    /** This computer's plugin catalog (Settings › Plugins). */
+    PluginCatalog& getPluginCatalog() noexcept { return *plugins; }
 
     /** The first start (no plugin list yet): scan for plugins in the background. */
     void startFirstPluginScanIfNeeded();
@@ -81,10 +97,30 @@ public:
     void closePreShowCheck();
     bool isShowingPreShowCheck() const noexcept { return checkDialog != nullptr; }
 
+    // The bottom row (tests): the mixer view, the health status and its details.
+    bool isMixerOpen() const noexcept { return mixerOpen; }
+
+    // The amp builder (F8; tests).
+    void setAmpBuilderVisible (bool);
+    bool isShowingAmpBuilder() const noexcept { return ampBuilder != nullptr && ampBuilder->isVisible(); }
+    AmpBuilderView* getAmpBuilder() noexcept { return ampBuilder.get(); }
+    ChainStrip* getChainStrip() noexcept { return chainStrip.get(); }
+    BlockPanel* getBlockPanel() noexcept { return blockPanel.get(); }
+    void setMixerOpen (bool);
+    kit::PaneTab& getMixerTab() noexcept { return mixerTab; }
+    InputSummary& getInputSummary() noexcept { return inputSummary; }
+    OutputsPane& getOutputsPane() noexcept { return outputsPane; }
+    kit::HealthStatus& getHealthStatus() noexcept { return healthStatus; }
+    bool isShowingHealthDetails() const noexcept { return healthDialog != nullptr; }
+    HealthDetailsDialog* getHealthDetails() noexcept { return healthDialog.get(); }
+    void openHealthDetails();
+    void closeHealthDetails();
+    void showInputPicker (juce::Component& anchor);
+
 private:
     // Audio
     void openAudioSettings();
-    void refreshInputChoices();
+    void refreshInputChoices();   // warns when no input channel is on
     void refreshStatus();
     void refreshSystemStatus();
 
@@ -109,7 +145,22 @@ private:
     void watchAudioDevice();
     void reconnectAudioDevice();
     PreShowFacts gatherPreShowFacts();
-    void applyFix (PreShowCheckResult::Fix);
+    void applyFix (const PreShowCheckResult&);
+
+    // Routing (milestone 11): this computer's inputs and outputs.
+    void setRouting (const RoutingConfig&);
+    void setOutputMuted (const juce::String& outputName, bool shouldBeMuted);
+    void ensureRoutingChannelsActive();
+    void openRouting();
+
+public:
+    /** The Routing view (F7): shown or hidden; the Routing button follows. */
+    void setRoutingVisible (bool);
+    bool isShowingRouting() const noexcept { return routingView != nullptr && routingView->isVisible(); }
+    RoutingView* getRoutingView() const noexcept { return routingView.get(); }
+
+private:
+    juce::String lastRoutedDevice;   // the interface whose channels the routing last switched on
     void showNotice (const juce::String& text, int seconds, bool logged = false);
 
     // Cue list
@@ -122,12 +173,13 @@ private:
 
     // Chain view
     void showSelectedBlock();
+    void showJackInspector();
     void relayout();
     void layoutToolbar (juce::Rectangle<int>);
     void layoutBottomRow (juce::Rectangle<int>);
 
     // Status
-    void refreshLcd();
+    void refreshStatusBar();
     void refreshWarningLine();
     void setWarning (const juce::String& text);
 
@@ -150,9 +202,8 @@ private:
     std::unique_ptr<ShowTitle> showTitle;
     juce::TextButton showButton { "Show" };
     kit::SegmentedControl modeSwitch;
-    kit::Lcd lcd { false };
-    juce::TextButton audioSettingsButton { "Audio..." };
-    juce::TextButton midiSettingsButton { "MIDI..." };
+    kit::StatusBar statusBar { false };   // the toolbar's status bar (v3.2; was the LCD)
+    juce::TextButton settingsButton { juce::String (juce::CharPointer_UTF8 ("Settings\xe2\x80\xa6")) };   // Audio | MIDI | Plugins, on the tab used last (v3.2)
     juce::TextButton tunerButton { "Tuner" }, panicButton { "PANIC" };
     juce::Label outLabel { {}, "Out" };
     kit::NoticeBar noticeBar { kit::NoticeBar::Kind::notice };
@@ -171,27 +222,45 @@ private:
     std::unique_ptr<PatchList> patchList;
     std::unique_ptr<ChainStrip> chainStrip;
     std::unique_ptr<BlockPanel> blockPanel;
+    std::unique_ptr<JackStage> jackStage;   // the IN or OUT tile's stage
     juce::Label chainLabel, problemsLabel;
+    juce::TextButton routingButton { "Routing" };   // centre header, F7
+    std::unique_ptr<RoutingView> routingView;
+
+    // The amp builder (design/AMP-BUILDER.md, F8): over the whole area under the toolbar.
+    std::unique_ptr<AmpLibrary> ampLibrary;
+    std::unique_ptr<AmpBuilderView> ampBuilder;
+    int builderBlockIndex = -1;             // the amp block it builds for (-1: none)
+    juce::String builderCaptureInfo;
+    std::unique_ptr<juce::FileChooser> captureChooser;
     juce::TextButton patchPicker;
-    juce::Label loadingLabel { {}, "(loading patches...)" };
+    juce::Label loadingLabel { {}, juce::String (juce::CharPointer_UTF8 ("(loading patches\xe2\x80\xa6)")) };
     juce::Rectangle<int> headerArrow;
     Chain* shownChain = nullptr;
     int shownBlockIndex = -1;
 
-    // Bottom row (SCREENS.md §4.4): guitar input, meters, system health.
-    kit::Pane inputPane, metersPane, healthPane;
+    // Bottom row (V3.2-CHANGES §3): the playing input, the outputs, the health status; the mixer view's tab.
+    kit::Pane inputPane, metersPane;
+    kit::HealthStatus healthStatus;
+    kit::PaneTab mixerTab;
+    bool mixerOpen = false;
+    std::unique_ptr<HealthDetailsDialog> healthDialog;
+    juce::StringArray healthProblems;   // what the health status counts (the warning line's, without plain info)
+    juce::String healthDetail;          // "CPU 9% · 5.3 ms"
+    void refreshHealthStatus();
+    std::vector<HealthDetailsDialog::Line> healthDetailLines();
     std::unique_ptr<Inspector> inspector;
-    juce::Label inputLabel { {}, "Guitar input" }, deviceLine;
-    juce::ComboBox inputChoice;
-    kit::MeterBar inputMeter { "Input" }, outputMeter { "Output" };
-    kit::MeterScale meterScale;
-    juce::Label healthTitle { {}, "System health" };
-    juce::TextButton resetCountersButton { "Reset counters" };
-    juce::Label healthLine, latencyLine, warningLine;   // full text in their tooltips
+    juce::Label deviceLine;   // not shown: the stage footer and Routing read it
+    InputSummary inputSummary;
+    int summaryInputSlot = -1;
+    OutputsPane outputsPane;
+    void refreshBottomRow();
+    void refreshChainJacks();
+    juce::Label healthLine, latencyLine, warningLine;   // not shown: the health details read them (full text in their tooltips)
 
     // What the warning line shows (the most important first: lost, a device
     // or input problem, not ASIO, then the Windows / power line).
-    juce::String warning, systemText;
+    juce::String warning, systemText, mutedOutputsText;
     bool systemProblem = false;
     double roundTripMs = 0.0, sampleRate = 0.0;
     juce::String stageDeviceLine, footswitchLine;   // the stage footer (SCREENS.md §3.4)

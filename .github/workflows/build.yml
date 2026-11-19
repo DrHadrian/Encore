@@ -27,6 +27,9 @@ concurrency:
 env:
   # The long soak at night; short everywhere else (or what was asked for).
   ENCORE_SOAK_SECONDS: ${{ github.event_name == 'schedule' && '14400' || inputs.soak_seconds || '120' }}
+  # Each test process may take this long: with the short soak a hang fails in
+  # 20 minutes (its log names the test that was running), not after hours.
+  ENCORE_TEST_TIMEOUT: ${{ (github.event_name == 'schedule' || (inputs.soak_seconds != '' && inputs.soak_seconds != '120')) && '7200' || '1200' }}
   # Link-time optimisation only where the app is built for players.
   ENCORE_LTO: ${{ github.event_name == 'pull_request' && 'OFF' || 'ON' }}
   SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
@@ -91,7 +94,7 @@ jobs:
 
       # Four test processes at once (robustness, plugins, screens, the rest).
       - name: Run the tests (soak ${{ env.ENCORE_SOAK_SECONDS }} s)
-        run: ctest --test-dir build --output-on-failure --parallel 4 --timeout 7200
+        run: ctest --test-dir build --output-on-failure --parallel 4 --timeout ${{ env.ENCORE_TEST_TIMEOUT }}
 
       - name: Upload Encore.exe
         if: matrix.config == 'Release'

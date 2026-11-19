@@ -3,8 +3,13 @@
 
 #include "ui/StageView.h"
 
+#include <limits>
+#include <optional>
+
 #include "ui/ChainStrip.h"
+#include "ui/kit/DropBox.h"
 #include "ui/kit/GearPlaceholder.h"
+#include "ui/kit/MuteButton.h"
 #include "ui/theme/EncoreFonts.h"
 #include "ui/theme/EncoreLookAndFeel.h"
 #include "ui/theme/Icons.h"
@@ -66,15 +71,16 @@ namespace
 
     float lineOf (const juce::Font& f)          { return f.getAscent() + f.getDescent(); }
 
-    /** A new widget of a type at a cell, at its usual size (as the add menu always made them). */
+    /** A new widget of a type at a cell: 4 × 2 cells, however it's added
+        (dropped from the list, clicked in it or picked from the add menu). */
     StageWidget newWidget (StageWidgetType type, juce::Point<int> cell)
     {
         StageWidget w;
         w.type = type;
         w.x = cell.x;
         w.y = cell.y;
-        w.width = type == StageWidgetType::setList ? 8 : (type == StageWidgetType::tuner ? 10 : 6);
-        w.height = type == StageWidgetType::setList ? 8 : (type == StageWidgetType::tuner ? 5 : 3);
+        w.width = size::newWidgetW;
+        w.height = size::newWidgetH;
 
         if (type == StageWidgetType::text)
             w.text = "Text";
@@ -228,6 +234,9 @@ public:
     {
         noFocus (*this);
 
+        for (auto& levels : outputDb)
+            levels.fill (-60.0f);
+
         if (spec.type == StageWidgetType::tuner)
         {
             tuner = std::make_unique<TunerDisplay>();
@@ -375,7 +384,9 @@ private:
         kit::BlockInfo info;       // stomps
         juce::String label;        // pedals, meters
         bool on = false;
-        int permille = 0;          // pedal position, meter level
+        int permille = 0;          // pedal position, meter level (outputs: left)
+        int permille2 = 0;         // outputs: the right channel
+        juce::String sub;          // outputs: "1/2"
         bool operator== (const Tile&) const = default;
     };
 
@@ -447,8 +458,23 @@ private:
             }
 
             case StageWidgetType::patchName:
+            {
                 out.main = chain != nullptr ? chain->label : juce::String ("-");
+
+                // Under it, the input it plays (amber when the patch's own isn't on this computer).
+                const auto& routing = owner.engine.getRouting();
+
+                if (! routing.inputs.empty())
+                {
+                    const auto* patch = owner.session.getPatch (owner.session.getActivePatchId());
+                    const auto wanted = patch != nullptr ? patch->inputName() : juce::String();
+                    out.sub = routing.inputFor (wanted).name;
+
+                    if (wanted.isNotEmpty() && routing.findInput (wanted) == nullptr)
+                        out.state = State::warning;
+                }
                 break;
+            }
 
             case StageWidgetType::cueNote:
                 out.main = cue != nullptr ? cue->note : juce::String();
@@ -520,6 +546,33 @@ private:
                 break;
             }
 
+            case StageWidgetType::outputs:
+            {
+                // This computer's outputs: name, channels, both channels' level, muted.
+                const auto& outputs = owner.engine.getRouting().outputs;
+
+                for (int i = 0; i < (int) outputs.size() && i < routing::maxOutputs; ++i)
+                {
+                    const auto& o = outputs[(size_t) i];
+                    const auto slot = owner.engine.getOutputSlot (o.name);
+                    const auto muted = slot >= 0 ? owner.engine.isOutputMuted (slot) : o.mute;
+                    int permille[2] {};
+
+                    for (int ch = 0; ch < 2; ++ch)
+                    {
+                        // A mono output shows its one channel in both bars.
+                        const auto peak = slot >= 0 ? snapshot.outputSlotPeaks[(size_t) slot][(size_t) (o.isStereo() ? ch : 0)] : 0.0f;
+                        auto& held = outputDb[(size_t) i][(size_t) ch];
+                        const auto db = juce::Decibels::gainToDecibels (peak, -60.0f);
+                        held = db > held ? db : juce::jmax (-60.0f, held - 0.7f);
+                        permille[ch] = juce::roundToInt ((held + 60.0f) / 60.0f * 1000.0f);
+                    }
+
+                    out.tiles.push_back ({ i, {}, o.name, muted, permille[0], permille[1], describeShortChannels (o) });
+                }
+                break;
+            }
+
             case StageWidgetType::clock:
                 out.main = juce::Time::getCurrentTime().formatted ("%H:%M");
                 break;
@@ -530,7 +583,7 @@ private:
                 {
                     out.title = "System";
                     out.main = "AUDIO LOST";
-                    out.sub = "reconnecting...";
+                    out.sub = juce::String (juce::CharPointer_UTF8 ("reconnecting\xe2\x80\xa6"));
                     out.state = State::alert;
                     break;
                 }
@@ -553,7 +606,7 @@ private:
                 out.state = panicState != AudioEngine::PanicState::none ? State::active : State::normal;
                 out.sub = panicState == AudioEngine::PanicState::silent && owner.engine.getPanicMode() == AudioEngine::PanicMode::latch
                               ? juce::String ("silent - press to return")
-                              : (out.state == State::active ? juce::String ("silencing...") : juce::String ("silence & reset all"));
+                              : (out.state == State::active ? juce::String (juce::String (juce::CharPointer_UTF8 ("silencing\xe2\x80\xa6"))) : juce::String ("silence & reset all"));
                 break;
             }
 
@@ -643,7 +696,7 @@ private:
 
     juce::Font fontFor (const type::Style& style, float px) const
     {
-        return fontOfSize (style.weight, juce::jmax (1.0f, px), style.tracking);
+        return fontOfSize (style.weight, juce::jmax (1.0f, px), style.tracking, style.readout);
     }
 
     /** The style at `k` times its size, shrunk so `text` fits `width`. */
@@ -730,8 +783,26 @@ private:
             {
                 const auto left = b + (float) size::widgetTextX * s;
                 const auto bottom = H - b - (float) size::widgetTextBottom * s;
-                const auto f = fitted (type::patchName, content.main, k, W - 2.0f * left, bottom - tagBottom());
-                addRun (ellipsized (f, content.main, W - 2.0f * left), f, colour::text, left, bottom - f.getDescent());
+                // The input, right-aligned at the bottom: jack icon, name.
+                auto nameRight = W - left;
+
+                if (content.sub.isNotEmpty())
+                {
+                    const auto inputFont = fontFor (type::stagePatchInput, pxOf (type::stagePatchInput, k));
+                    const auto right = W - b - (float) size::patchInputRight * s;
+                    const auto inputBottom = H - b - (float) size::patchInputBottom * s;
+                    const auto textW = juce::jmin (textWidth (inputFont, content.sub), W * 0.4f);
+                    const auto icon = (float) size::patchInputIcon * k;
+                    const auto ink = content.state == State::warning ? colour::amber : colour::textTertiary;
+                    const auto lineH = lineOf (inputFont);
+                    addRun (ellipsized (inputFont, content.sub, textW), inputFont, ink, right - textW, baselineIn (inputFont, inputBottom - lineH, lineH));
+                    const auto iconX = right - textW - (float) size::patchInputGap * k - icon;
+                    marks.push_back ({ Icon::jack, { iconX, inputBottom - lineH * 0.5f - icon * 0.5f, icon, icon }, ink });
+                    nameRight = iconX - (float) size::widgetTextX * s;
+                }
+
+                const auto f = fitted (type::patchName, content.main, k, nameRight - left, bottom - tagBottom());
+                addRun (ellipsized (f, content.main, nameRight - left), f, colour::text, left, bottom - f.getDescent());
                 break;
             }
 
@@ -867,6 +938,7 @@ private:
             case StageWidgetType::stomps:   layOutStomps (W, H); break;
             case StageWidgetType::pedals:   layOutPedals (W, H); break;
             case StageWidgetType::meters:   layOutMeters (W, H); break;
+            case StageWidgetType::outputs:  layOutOutputs (W, H); break;
 
             case StageWidgetType::tuner:
             {
@@ -1137,6 +1209,96 @@ private:
         }
     }
 
+    /** A column per output: name and channels, two level bars with "live" or
+        "muted" beside them, and the big Mute / MUTED under them. */
+    void layOutOutputs (float W, float H)
+    {
+        const auto s = scale(), k = rowScale(), b = 1.0f;
+        const auto count = (int) content.tiles.size();
+
+        // The buttons: one per output, made only when the count changes.
+        while (mutes.size() > count)
+            mutes.removeLast();
+
+        while (mutes.size() < count)
+        {
+            auto* mute = mutes.add (new kit::MuteButton (kit::MuteButton::Style::stage));
+            mute->onClick = [this, mute]
+            {
+                const auto index = mutes.indexOf (mute);
+
+                // Locked: nothing changes (the button goes back as it was).
+                if (owner.locked || ! juce::isPositiveAndBelow (index, (int) content.tiles.size()))
+                {
+                    mute->setToggleState (! mute->getToggleState(), juce::dontSendNotification);
+                    return;
+                }
+
+                if (owner.onMuteOutput != nullptr)
+                    owner.onMuteOutput (content.tiles[(size_t) index].label, mute->getToggleState());
+            };
+            noFocus (*mute);
+            addAndMakeVisible (mute);
+        }
+
+        if (count == 0)
+            return;
+
+        const auto padX = (float) size::stageOutputsPadX * s, gap = (float) size::stageOutputsGap * s;
+        const auto pitch = (W - 2.0f * padX + gap) / (float) count;
+        const auto columnW = juce::jmax (0.0f, pitch - gap);
+        const auto muteH = (float) size::stageOutputMuteH * s;
+        const auto muteTop = H - b - (float) size::stageOutputBottom * s - muteH;
+        const auto nameTop = juce::jmax (b + (float) size::stageOutputNameTop * s, tagBottom());
+        const auto nameH = (float) size::stageOutputNameH * s;
+        const auto meterTop = b + (float) size::stageOutputMeterTop * s;
+        const auto meterBottom = muteTop - (float) size::stageOutputMeterToMute * s;
+        const auto barW = (float) size::stageOutputMeterW * s, barGap = (float) size::stageOutputMeterGap * s;
+        const auto nameFont = fontFor (type::stageOutputName, pxOf (type::stageOutputName, k));
+        const auto channelsFont = fontFor (type::stageOutputChannels, pxOf (type::stageOutputChannels, k));
+        const auto stateFont = fontFor (type::stageOutputState, pxOf (type::stageOutputState, k));
+
+        for (int i = 0; i < count; ++i)
+        {
+            const auto& tile = content.tiles[(size_t) i];
+            const auto x = b + padX + (float) i * pitch;
+
+            // Name, then its channels; the name gives way first.
+            const auto channelsW = textWidth (channelsFont, tile.sub);
+            const auto nameW = juce::jmin (textWidth (nameFont, tile.label), columnW - channelsW - (float) size::stageOutputChannelsGap * k);
+            addRun (ellipsized (nameFont, tile.label, juce::jmax (0.0f, nameW)), nameFont, colour::text, x, baselineIn (nameFont, nameTop, nameH));
+            addRun (tile.sub, channelsFont, colour::widgetTitle, x + juce::jmax (0.0f, nameW) + (float) size::stageOutputChannelsGap * k,
+                    baselineIn (nameFont, nameTop, nameH));
+
+            // The two bars (green, towards yellow above half way), as the level meters.
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                const juce::Rectangle<float> track (x + (float) ch * (barW + barGap), meterTop, barW, juce::jmax (0.0f, meterBottom - meterTop));
+                const auto level = (float) (ch == 0 ? tile.permille : tile.permille2) / 1000.0f;
+                Bar bar;
+                bar.track.addRoundedRectangle (track, (float) size::meterBarRadius);
+                bar.fill = track.withTrimmedTop (track.getHeight() * (1.0f - level));
+                bar.gradient = juce::ColourGradient::vertical (paint::c (colour::stageMeterLow), track.getBottom(),
+                                                               paint::c (level > 0.5f ? colour::stageMeterHigh : colour::stageMeterLow),
+                                                               juce::jmin (bar.fill.getY(), track.getBottom() - 1.0f));
+
+                if (level > 0.5f)
+                    bar.gradient.addColour (0.5f / level, paint::c (colour::stageMeterLow));
+
+                bars.push_back (std::move (bar));
+            }
+
+            addRun (tile.on ? "muted" : "live", stateFont, tile.on ? colour::danger : colour::textTertiary,
+                    x + (float) size::stageOutputStateX * s, meterBottom - stateFont.getDescent());
+
+            auto* mute = mutes[i];
+            mute->setBounds (juce::Rectangle<float> (x, muteTop, columnW, muteH).getSmallestIntegerContainer());
+            mute->setTextScale (k);
+            mute->setToggleState (tile.on, juce::dontSendNotification);
+            mute->setTitle ((tile.on ? "Unmute " : "Mute ") + tile.label);
+        }
+    }
+
     //==========================================================================
     void paintFrame (juce::Graphics& g) const
     {
@@ -1203,6 +1365,7 @@ private:
     StageView& owner;
     Content content;
     mutable float meterDb[2] = { -60.0f, -60.0f };
+    mutable std::array<std::array<float, 2>, routing::maxOutputs> outputDb {};   // the Outputs widget's held levels (set to -60 at first)
 
     std::vector<Run> runs;
     std::vector<Mark> marks;
@@ -1214,6 +1377,7 @@ private:
     juce::Font tagFont { juce::FontOptions() };
 
     juce::OwnedArray<kit::GearPlaceholder> pedals;
+    juce::OwnedArray<kit::MuteButton> mutes;   // the Outputs widget's Mute / MUTED
     std::unique_ptr<TunerDisplay> tuner;
 };
 
@@ -1225,7 +1389,11 @@ private:
 class StageView::Editor final : public juce::Component
 {
 public:
-    explicit Editor (int gapPx) : gap (gapPx) { noFocus (*this); }
+    explicit Editor (int gapPx) : gap (gapPx)
+    {
+        noFocus (*this);
+        addChildComponent (dropBox);
+    }
 
     void setGap (int gapPx)
     {
@@ -1305,6 +1473,97 @@ public:
 
     std::function<void (const std::vector<StageWidget>&)> onPreview, onCommit;
     std::function<void (juce::Point<int> cell)> onAddAt;
+    std::function<void (int index, bool moving)> onMoving;   // the original shows faint while it's dragged
+
+    //==========================================================================
+    // Drag and drop (V3.2-CHANGES §7): a widget dragged from the list, or moved
+    // on the stage, lands where the drop box shows: snapped to the grid, on the
+    // nearest free space of its size; with none, the box turns amber and
+    // nothing changes.
+
+    /** Where a widget would land with its top-left at `topLeft` (pixels):
+        nothing when no free space of its size is left. `ignore` is the
+        widget being moved (-1: a new one). */
+    std::optional<StageWidget> landing (StageWidget w, juce::Point<float> topLeft, int ignore) const
+    {
+        w.x = juce::jlimit (0, juce::jmax (0, stageGridColumns - w.width), juce::roundToInt (topLeft.x / cellWidth()));
+        w.y = juce::jlimit (0, juce::jmax (0, stageGridRows - w.height), juce::roundToInt (topLeft.y / cellHeight()));
+        lastAsked = w;
+
+        const auto taken = [&] (const StageWidget& c)
+        {
+            for (int i = 0; i < (int) widgets.size(); ++i)
+            {
+                const auto& o = widgets[(size_t) i];
+
+                if (i != ignore && c.x < o.x + o.width && o.x < c.x + c.width && c.y < o.y + o.height && o.y < c.y + c.height)
+                    return true;
+            }
+
+            return false;
+        };
+
+        if (! taken (w))
+            return w;
+
+        // The nearest free space of the same size (the closest top-left; ties: higher, then further left).
+        std::optional<StageWidget> best;
+        auto bestDistance = std::numeric_limits<int>::max();
+
+        for (int y = 0; y + w.height <= stageGridRows; ++y)
+        {
+            for (int x = 0; x + w.width <= stageGridColumns; ++x)
+            {
+                auto c = w;
+                c.x = x;
+                c.y = y;
+                const auto d = (x - w.x) * (x - w.x) + (y - w.y) * (y - w.y);
+
+                if (d < bestDistance && ! taken (c))
+                {
+                    best = c;
+                    bestDistance = d;
+                }
+            }
+        }
+
+        return best;
+    }
+
+    /** A new widget from the list (4 × 2 cells), the pointer at its centre. */
+    static StageWidget droppedWidget (StageWidgetType type)
+    {
+        return newWidget (type, {});
+    }
+
+    juce::Point<float> newTopLeft (const StageWidget& w, juce::Point<int> pointer) const
+    {
+        return pointer.toFloat() - juce::Point<float> ((float) w.width * cellWidth(), (float) w.height * cellHeight()) * 0.5f;
+    }
+
+    /** The list's drag over the stage: shows where it would land. */
+    void dragNewOver (StageWidgetType type, juce::Point<int> pointer)
+    {
+        const auto w = droppedWidget (type);
+        const auto at = landing (w, newTopLeft (w, pointer), -1);
+        showDropBox ("Drop: " + describe (type), at.value_or (lastAsked), ! at.has_value());
+    }
+
+    /** The list's drop: the widget to add (nothing when refused). */
+    std::optional<StageWidget> dropNew (StageWidgetType type, juce::Point<int> pointer)
+    {
+        const auto w = droppedWidget (type);
+        auto at = landing (w, newTopLeft (w, pointer), -1);
+        hideDropBox();
+        return at;
+    }
+
+    void hideDropBox()
+    {
+        dropBox.setVisible (false);
+    }
+
+    const kit::DropBox& getDropBox() const noexcept { return dropBox; }
     std::function<void()> onSelectionChanged;
 
     /** Changes the selected widget (the inspector and the right-click menu). */
@@ -1360,6 +1619,8 @@ public:
         {
             original = widgets[(size_t) selected];
             mode = modeAt (bounds (original), e.getPosition());
+            grab = e.position - bounds (original).getPosition().toFloat();   // a move keeps the point it was grabbed at
+            moveTo.reset();
 
             if (e.mods.isPopupMenu())
             {
@@ -1391,11 +1652,26 @@ public:
         if (selected < 0 || mode == Mode::none)
             return;
 
+        if (mode == Mode::move)
+        {
+            // The original stays (faint); the drop box shows where it lands.
+            if (! moving)
+            {
+                moving = true;
+
+                if (onMoving != nullptr)
+                    onMoving (selected, true);
+            }
+
+            moveTo = landing (original, e.position - grab, selected);
+            showDropBox ("Move: " + describe (original.type), moveTo.value_or (lastAsked), ! moveTo.has_value());
+            return;
+        }
+
         const auto dx = juce::roundToInt ((float) e.getDistanceFromDragStartX() / cellWidth());
         const auto dy = juce::roundToInt ((float) e.getDistanceFromDragStartY() / cellHeight());
         auto w = original;
 
-        if (mode == Mode::move)                                          { w.x += dx; w.y += dy; }
         if (mode == Mode::resizeWidth || mode == Mode::resizeBoth)       w.width += dx;
         if (mode == Mode::resizeHeight || mode == Mode::resizeBoth)      w.height += dy;
 
@@ -1418,8 +1694,28 @@ public:
 
     void mouseUp (const juce::MouseEvent&) override
     {
-        if (mode != Mode::none && selected >= 0 && widgets[(size_t) selected] != original)
+        if (moving)
+        {
+            moving = false;
+            hideDropBox();
+
+            if (onMoving != nullptr)
+                onMoving (selected, false);
+
+            // Refused (no free space of its size): nothing moves.
+            if (moveTo.has_value() && juce::isPositiveAndBelow (selected, (int) widgets.size()) && *moveTo != original)
+            {
+                auto copy = widgets;
+                copy[(size_t) selected] = *moveTo;
+                onCommit (copy);
+            }
+
+            moveTo.reset();
+        }
+        else if (mode != Mode::none && selected >= 0 && widgets[(size_t) selected] != original)
+        {
             onCommit (widgets);
+        }
 
         mode = Mode::none;
     }
@@ -1507,7 +1803,7 @@ private:
         menu.addSubMenu ("Text size", sizes);
 
         if (widgets[(size_t) index].type == StageWidgetType::text)
-            menu.addItem ("Edit text...", [safe, index] { if (safe != nullptr) safe->editText (index); });
+            menu.addItem (juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")), [safe, index] { if (safe != nullptr) safe->editText (index); });
 
         menu.addItem ("Duplicate", [safe] { if (safe != nullptr) safe->duplicateSelected(); });
         menu.addItem ("Bring to front", [safe] { if (safe != nullptr) safe->bringSelectedToFront(); });
@@ -1517,11 +1813,25 @@ private:
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
     }
 
+    void showDropBox (const juce::String& label, const StageWidget& at, bool refused)
+    {
+        dropBox.setLabel (label);
+        dropBox.setRefused (refused);
+        dropBox.setBounds (bounds (at));   // repaints only when the snapped place changes
+        dropBox.setVisible (true);
+        dropBox.toFront (false);
+    }
+
     int gap;
     std::vector<StageWidget> widgets;
     StageWidget original;
     Mode mode = Mode::none;
     int selected = -1;
+    bool moving = false;
+    juce::Point<float> grab;
+    std::optional<StageWidget> moveTo;
+    mutable StageWidget lastAsked;   // the snapped place last asked for (where a refused box shows)
+    kit::DropBox dropBox;
 };
 
 //==============================================================================
@@ -1560,9 +1870,10 @@ private:
 };
 
 //==============================================================================
-/** "+ Widget": every widget type in four groups; a click adds one at the
-    next free cell (SCREENS.md §6). */
-class StageView::WidgetPanel final : public juce::Component
+/** "+ Widget": every widget type in four groups. A click adds one at the
+    first free place (SCREENS.md §6); a drag puts it where it's dropped on
+    the stage (V3.2-CHANGES §7): each row has a 6-dot grip on the right. */
+class StageView::WidgetPanel final : public juce::Component, public juce::TooltipClient
 {
 public:
     WidgetPanel()
@@ -1573,7 +1884,7 @@ public:
             { "Show",    { { T::currentCue, "CC" }, { T::nextCue, "NC" }, { T::patchName, "P" }, { T::cueNote, "N" },
                            { T::setList, "SL" }, { T::text, "TX" } } },
             { "Play",    { { T::nextButton, ">" }, { T::previousButton, "<" }, { T::stomps, "SW" }, { T::pedals, "EX" } } },
-            { "Monitor", { { T::meters, "LM" }, { T::health, "SH" }, { T::clock, "CL" }, { T::tuner, "TU" } } },
+            { "Monitor", { { T::meters, "LM" }, { T::outputs, "OU" }, { T::health, "SH" }, { T::clock, "CL" }, { T::tuner, "TU" } } },
             { "Safety",  { { T::panicButton, "!" }, { T::lockButton, "LK" } } },
         };
 
@@ -1588,6 +1899,27 @@ public:
 
     std::function<void (StageWidgetType)> onAdd;
 
+    /** A row dragged out of the list: where the pointer is (screen), and whether it was let go there. */
+    std::function<void (StageWidgetType, juce::Point<int> screen, bool released)> onDrag;
+
+    /** The picture of the dragged row (owned by the view that spans the list and the stage). */
+    kit::DragImage* dragImage = nullptr;
+
+    juce::String getTooltip() override
+    {
+        return hovered >= 0 ? juce::String ("Drag onto the stage, or click to add it at the first free place") : juce::String();
+    }
+
+    /** The middle of the row for a widget type (tests). */
+    juce::Point<int> rowCentre (StageWidgetType t) const
+    {
+        for (int i = 0; i < (int) rows.size(); ++i)
+            if (! rows[(size_t) i].group && rows[(size_t) i].type == t)
+                return rowBounds (i).getCentre();
+
+        return {};
+    }
+
     void paint (juce::Graphics& g) override
     {
         for (int i = 0; i < (int) rows.size(); ++i)
@@ -1598,7 +1930,7 @@ public:
             if (row.group)
             {
                 paint::text (g, row.name, r.withTrimmedLeft ((float) (size::widgetGroupX - size::widgetListPadX)), type::widgetGroup,
-                             colour::textDisabled);
+                             colour::textDim);
                 continue;
             }
 
@@ -1623,14 +1955,61 @@ public:
                 paint::text (g, row.chip, chip, type::widgetChip, colour::iconChipText, juce::Justification::centred);
 
             paint::text (g, row.name, r.withTrimmedLeft ((float) (size::widgetNameX - size::widgetListPadX)), type::body, colour::textRow);
+
+            // The grip: 2 × 3 dots, 4 px apart.
+            const auto grip = juce::Rectangle<float> ((float) size::gripW, (float) size::gripH)
+                                  .withPosition (r.getRight() - (float) (size::gripPadRight + size::gripW), r.getCentreY() - (float) size::gripH * 0.5f);
+            g.setColour (paint::c (colour::gripDots));
+
+            for (int dot = 0; dot < 6; ++dot)
+                g.fillEllipse (grip.getX() + 1.0f + (float) (dot % 2) * 4.0f, grip.getY() + 1.0f + (float) (dot / 2) * 4.0f, 2.0f, 2.0f);
         }
     }
 
     void mouseMove (const juce::MouseEvent& e) override  { setHovered (rowAt (e.y)); }
     void mouseExit (const juce::MouseEvent&) override    { setHovered (-1); }
 
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        pressed = rowAt (e.y);
+        dragging = false;
+    }
+
+    void mouseDrag (const juce::MouseEvent& e) override
+    {
+        if (pressed < 0 || ! e.mouseWasDraggedSinceMouseDown())
+            return;
+
+        if (! dragging && dragImage != nullptr)
+            dragImage->start (*this, rowBounds (pressed), e.getMouseDownPosition());
+
+        dragging = true;
+
+        if (dragImage != nullptr)
+            dragImage->moveTo (e.getScreenPosition());
+
+        if (onDrag != nullptr)
+            onDrag (rows[(size_t) pressed].type, e.getScreenPosition(), false);
+    }
+
     void mouseUp (const juce::MouseEvent& e) override
     {
+        const auto row = pressed;
+        pressed = -1;
+
+        if (dragging)
+        {
+            dragging = false;
+
+            if (dragImage != nullptr)
+                dragImage->stop();
+
+            if (row >= 0 && onDrag != nullptr)
+                onDrag (rows[(size_t) row].type, e.getScreenPosition(), true);
+
+            return;
+        }
+
         const auto i = rowAt (e.y);
 
         if (i >= 0 && onAdd != nullptr && getLocalBounds().contains (e.getPosition()))
@@ -1664,13 +2043,14 @@ private:
         if (i != hovered)
         {
             hovered = i;
-            setMouseCursor (i >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+            setMouseCursor (i >= 0 ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);   // grab: drag it, or click
             repaint();
         }
     }
 
     std::vector<Row> rows;
-    int hovered = -1;
+    int hovered = -1, pressed = -1;
+    bool dragging = false;
 };
 
 //==============================================================================
@@ -1724,7 +2104,7 @@ public:
 
         sizes.setSelected (index);
         const auto isText = w.type == StageWidgetType::text;
-        editTextButton.setButtonText (isText ? "Edit text..." : "Edit text... (Text widget only)");
+        editTextButton.setButtonText (isText ? juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")) : juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6 (Text widget only)")));
         editTextButton.setEnabled (isText);
     }
 
@@ -1772,7 +2152,7 @@ public:
 private:
     std::function<Editor*()> editorOf;
     kit::SegmentedControl sizes;
-    juce::TextButton editTextButton { "Edit text..." }, duplicateButton { "Duplicate" }, frontButton { "Bring to front" },
+    juce::TextButton editTextButton { juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")) }, duplicateButton { "Duplicate" }, frontButton { "Bring to front" },
                      removeButton { "Remove" };
     juce::StringArray notes;
     juce::Rectangle<float> labelBox, notesBox;
@@ -1848,7 +2228,7 @@ StageView::StageView (AudioEngine& e, ShowSession& s) : engine (e), session (s)
     inspectorButton.onClick = [this] { setLayoutInspectorShown (! inspectorShown); };
     hint->setText ("Drag to move, drag the edges to resize, right-click for options, double-click empty space to add");
 
-    for (auto* c : std::initializer_list<juce::Component*> { &modeSwitch, layoutName.get(), &lcd, miniMeters.get(), &lockButton,
+    for (auto* c : std::initializer_list<juce::Component*> { &modeSwitch, layoutName.get(), &statusBar, miniMeters.get(), &lockButton,
                                                              &tunerButton, &muteButton, &layoutsButton, &addWidgetButton,
                                                              &doneButton, &inspectorButton, hint.get(), separator.get() })
     {
@@ -1872,12 +2252,44 @@ StageView::StageView (AudioEngine& e, ShowSession& s) : engine (e), session (s)
     stageHelp = "Lock: Ctrl+L" + middot() + "hold the lock 1 s to unlock" + middot() + "F11 full screen";
 
     // Layout editor panes (shown while editing)
-    widgetPane.setHeader ("+ Widget", "click to add");
+    widgetPane.setHeader ("+ Widget", "drag onto the stage");
     canvasPane.setFill (colour::canvasPane);
     inspectorPane.setHeaderRightColour (colour::accent);
     widgetPanel = std::make_unique<WidgetPanel>();
     widgetPanel->onAdd = [this] (StageWidgetType type) { addWidgetAtFreeCell (type); };
+    widgetPanel->onDrag = [this] (StageWidgetType type, juce::Point<int> screen, bool released)
+    {
+        if (editor == nullptr)
+            return;
+
+        const auto p = editor->getLocalPoint (nullptr, screen);
+
+        // Over the stage the drop box shows where it lands; elsewhere the row's picture shows what's dragged.
+        dragImage.setVisible (dragImage.isDragging() && ! released && ! editor->getLocalBounds().contains (p));
+
+        if (! editor->getLocalBounds().contains (p))
+        {
+            editor->hideDropBox();   // off the stage: let go there and nothing happens
+            return;
+        }
+
+        if (! released)
+        {
+            editor->dragNewOver (type, p);
+            return;
+        }
+
+        if (const auto w = editor->dropNew (type, p))
+        {
+            auto list = current.widgets;
+            list.push_back (*w);
+            editor->select ((int) list.size() - 1);   // the new one is selected
+            commitWidgets (list);
+        }
+    };
     widgetPane.addAndMakeVisible (*widgetPanel);
+    widgetPanel->dragImage = &dragImage;
+    addChildComponent (dragImage);
     artboard = std::make_unique<Artboard>();
     canvasPane.addAndMakeVisible (*artboard);
     layoutInspector = std::make_unique<LayoutInspector> ([this] { return editor.get(); });
@@ -1997,8 +2409,34 @@ juce::Point<int> StageView::nextFreeCell() const
 
 void StageView::addWidgetAtFreeCell (StageWidgetType type)
 {
+    // The first place, row by row, where the whole widget fits on free cells;
+    // with none, the first free cell (as before).
+    auto added = clampToGrid (newWidget (type, nextFreeCell()));
+    const auto fits = [this] (const StageWidget& c)
+    {
+        return std::none_of (current.widgets.begin(), current.widgets.end(), [&c] (const StageWidget& o)
+                             { return c.x < o.x + o.width && o.x < c.x + c.width && c.y < o.y + o.height && o.y < c.y + c.height; });
+    };
+
+    for (int y = 0, found = 0; ! found && y + added.height <= stageGridRows; ++y)
+    {
+        for (int x = 0; x + added.width <= stageGridColumns; ++x)
+        {
+            auto c = added;
+            c.x = x;
+            c.y = y;
+
+            if (fits (c))
+            {
+                added = c;
+                found = 1;
+                break;
+            }
+        }
+    }
+
     auto list = current.widgets;
-    list.push_back (clampToGrid (newWidget (type, nextFreeCell())));
+    list.push_back (added);
 
     if (editor != nullptr)
         editor->select ((int) list.size() - 1);   // the new one is selected
@@ -2024,6 +2462,19 @@ void StageView::selectionChanged()
         resized();
 
     refreshFooter (last);
+}
+
+juce::Component* StageView::getLayoutWidgetList() const noexcept { return widgetPanel.get(); }
+juce::Component* StageView::getLayoutSurface() const noexcept    { return editor.get(); }
+juce::Point<int> StageView::getLayoutListRow (StageWidgetType t) const { return widgetPanel->rowCentre (t); }
+const juce::Component* StageView::getLayoutDropBox() const noexcept { return editor != nullptr ? &editor->getDropBox() : nullptr; }
+juce::String StageView::getLayoutDropText() const { return editor != nullptr ? editor->getDropBox().getLabel() : juce::String(); }
+bool StageView::isLayoutDropRefused() const noexcept { return editor != nullptr && editor->getDropBox().isRefused(); }
+int StageView::getSelectedLayoutWidget() const noexcept { return editor != nullptr ? editor->getSelected() : -1; }
+
+float StageView::getShownWidgetAlpha (int index) const noexcept
+{
+    return juce::isPositiveAndBelow (index, widgets.size()) ? widgets[index]->getAlpha() : 0.0f;
 }
 
 void StageView::selectLayoutWidget (int index)
@@ -2157,8 +2608,8 @@ void StageView::refreshToolbar()
     const auto name = cue != nullptr ? cue->name : ! cues.empty() ? juce::String ("Ready") : (chain != nullptr ? chain->label : dash);
     const auto number = cue != nullptr ? (cue->number.isNotEmpty() ? cue->number : juce::String (index + 1)) : dash;
 
-    const auto lcdWidth = lcd.getIdealWidth();
-    lcd.setItems ({ { number, words.item, 0 }, { name, session.getSectionPath (index), size::lcdMinPatchStage, size::lcdNameMaxW } });
+    const auto lcdWidth = statusBar.getIdealWidth();
+    statusBar.setItems ({ { number, words.item, 0 }, { name, session.getSectionPath (index), size::lcdMinPatchStage, size::lcdNameMaxW } });
 
     const auto oldName = layoutName->getIdealWidth();
     layoutName->setText (juce::String (juce::CharPointer_UTF8 ("Layout \xe2\x80\x9c")) + current.name + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x9d")));
@@ -2183,7 +2634,7 @@ void StageView::refreshToolbar()
     // The lock button sits in the toolbar when the layout has no Lock widget, and while locked.
     const auto lockShown = ! editing && (locked || ! layoutHas (StageWidgetType::lockButton));
 
-    if (lcd.getIdealWidth() != lcdWidth || layoutName->getIdealWidth() != oldName || lockButton.isVisible() != lockShown)
+    if (statusBar.getIdealWidth() != lcdWidth || layoutName->getIdealWidth() != oldName || lockButton.isVisible() != lockShown)
         layoutToolbar();
 }
 
@@ -2289,6 +2740,11 @@ void StageView::setEditingLayout (bool shouldEdit)
         };
         editor->onAddAt = [this] (juce::Point<int> cell) { addWidgetCell = cell; showAddWidgetMenu(); };
         editor->onSelectionChanged = [this] { selectionChanged(); };
+        editor->onMoving = [this] (int index, bool moving)
+        {
+            if (juce::isPositiveAndBelow (index, widgets.size()))
+                widgets[index]->setAlpha (moving ? state::draggedAlpha : 1.0f);
+        };
         artboard->addAndMakeVisible (*editor);
     }
     else
@@ -2304,7 +2760,7 @@ void StageView::setEditingLayout (bool shouldEdit)
                                                              hint.get(), separator.get(), &widgetPane, &canvasPane })
         c->setVisible (editing);
 
-    for (auto* c : std::initializer_list<juce::Component*> { &lcd, miniMeters.get(), &tunerButton, &muteButton, layoutName.get() })
+    for (auto* c : std::initializer_list<juce::Component*> { &statusBar, miniMeters.get(), &tunerButton, &muteButton, layoutName.get() })
         c->setVisible (! editing);
 
     if (! editing)
@@ -2361,7 +2817,7 @@ void StageView::showLayoutMenu()
     };
 
     menu.addSeparator();
-    menu.addItem ("New layout (copy of this one)...", [safe, askName, editingId]
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("New layout (copy of this one)\xe2\x80\xa6")), [safe, askName, editingId]
     {
         askName ("New layout", "Big monitor", [safe, editingId] (juce::String name)
         {
@@ -2371,7 +2827,7 @@ void StageView::showLayoutMenu()
             safe->rebuildWidgets();
         });
     });
-    menu.addItem ("Rename...", [safe, askName, editingId, name = current.name]
+    menu.addItem (juce::String (juce::CharPointer_UTF8 ("Rename\xe2\x80\xa6")), [safe, askName, editingId, name = current.name]
     {
         askName ("Rename layout", name, [safe, editingId] (juce::String newName)
         {
@@ -2551,10 +3007,10 @@ void StageView::layoutToolbar()
 
     // The LCD centred in the space between the two groups; hidden if it doesn't fit.
     const auto space = right - left;
-    lcd.setAvailableWidth (space);
-    const auto lcdW = lcd.getIdealWidth(), lcdH = kit::Lcd::heightFor (true);
-    lcd.setVisible (lcdW <= space);
-    lcd.setBounds (left + (space - lcdW) / 2, (h - (lcdH - 1)) / 2, lcdW, lcdH);
+    statusBar.setAvailableWidth (space);
+    const auto barW = statusBar.getIdealWidth(), barH = kit::StatusBar::heightFor (true);
+    statusBar.setVisible (barW <= space);
+    statusBar.setBounds (left + (space - barW) / 2, (h - barH) / 2, barW, barH);
 }
 
 void StageView::layoutEditor (juce::Rectangle<int> body)

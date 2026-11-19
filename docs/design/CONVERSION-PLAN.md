@@ -18,7 +18,7 @@ Base: main with milestone 8 (PR #11) merged.
 - A debug-only "kit gallery" component (behind a command-line flag or test) rendering every component in every state → snapshot `kit.png` for review.
 
 ## Step 3 — Edit frame
-- Toolbar (logo, Show, name/save state, mode switch, LCD, Tuner, MIDI..., Audio..., Out, PANIC, MUTED/LIVE).
+- Toolbar (logo, Show, name/save state, mode switch, LCD, Tuner, MIDI…, Audio…, Out, PANIC, MUTED/LIVE).
 - Notice bar; main grid columns; bottom row (input, meters, health pane). Status labels → health lines with full-text tooltips.
 - ✔ `edit.png` frame matches; every old top-bar function reachable.
 
@@ -30,7 +30,7 @@ Base: main with milestone 8 (PR #11) merged.
 ## Step 5 — Chain and block stage
 - Centre header line (chain label, patch picker, problems text).
 - Signal chain pane (`ChainStrip` repainted with gear placeholders, board, selection outline, + tile).
-- Block stage pane (`BlockPanel` split): header (dot, title, CPU, Load...), gear placeholder panel with knobs/toggles/LED, group labels for the amp; Edit tuner over the centre.
+- Block stage pane (`BlockPanel` split): header (dot, title, CPU, Load…), gear placeholder panel with knobs/toggles/LED, group labels for the amp; Edit tuner over the centre.
 - ✔ centre of `edit.png` (placeholders), all knob/menu/file behaviour unchanged.
 
 ## Step 6 — Inspector

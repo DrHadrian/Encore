@@ -95,6 +95,28 @@ void SettingsWindow::showTab (Tab t)
     frame.setDialogTitle ("Settings " + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\x94 ")) + names[index]);
     frame.setFooterText (footers[index]);
     body->show (index);
+
+    if (onTabShown != nullptr)
+        onTabShown (tab);
+}
+
+juce::String SettingsWindow::tabName (Tab t)
+{
+    switch (t)
+    {
+        case Tab::midi:     return "midi";
+        case Tab::plugins:  return "plugins";
+        case Tab::audio:    break;
+    }
+
+    return "audio";
+}
+
+SettingsWindow::Tab SettingsWindow::tabNamed (const juce::String& name)
+{
+    if (name == "midi")     return Tab::midi;
+    if (name == "plugins")  return Tab::plugins;
+    return Tab::audio;
 }
 
 void SettingsWindow::setAudioStatus (const AudioSettingsView::Status& status)

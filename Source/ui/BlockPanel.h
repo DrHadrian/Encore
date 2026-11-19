@@ -5,8 +5,13 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <array>
+
 #include "engine/core/Block.h"
 #include "model/MidiMapping.h"
+#include "ui/kit/AmpFaceView.h"
+#include "ui/kit/FaultCard.h"
+#include "ui/kit/StageBackdrop.h"
 #include "ui/kit/GearPlaceholder.h"
 #include "ui/kit/KnobView.h"
 #include "ui/kit/Pane.h"
@@ -51,8 +56,18 @@ public:
     std::function<int (const juce::String& paramId)> getExpressionPedal;
     std::function<void (const juce::String& paramId, int pedal)> onExpressionChosen;
 
-    /** Plugin blocks: "Open plugin window..." in the header. */
+    /** Plugin blocks: "Open plugin window..." in the header (and on the fault card). */
     std::function<void()> onOpenPluginWindow;
+
+    /** Plugin blocks switched off: "Turn back on" / "Load again" on the fault card. */
+    std::function<void()> onTurnPluginBackOn;
+
+    /** Amp blocks (design/AMP-BUILDER.md §4): the amp's face in place of the
+        placeholder, its driving knobs and switches bound to the block's
+        parameters. An amp block without an amp of its own shows Encore Gold 30
+        (set when the panel is made). */
+    void setAmpFace (const AmpPreset&);
+    kit::AmpFaceView* getAmpFace() const noexcept;
 
     /** Loads a file into the block as if picked in the chooser. */
     void loadFile (const juce::File& file);
@@ -75,6 +90,8 @@ private:
 
         Parameter& parameter;
         bool isSwitch = false;
+        juce::Slider* faceKnob = nullptr;     // on an amp face: the knob that drives it (owned by the face)
+        juce::Button* faceSwitch = nullptr;   // ... or the switch
         std::unique_ptr<kit::KnobView> knob;
         std::unique_ptr<kit::GearToggle> toggle;
         int shownPedal = -1;
@@ -98,6 +115,7 @@ private:
     void updateHeader();
     juce::uint32 headerDot() const;
     void layOutGear();
+    void updateFaultCard();
     juce::String headerLabel() const;
 
     Block& block;
@@ -111,16 +129,16 @@ private:
     std::unique_ptr<juce::FileChooser> chooser;
     bool loading = false;
     bool shownProblem = false;   // a plugin not loaded or switched off by the guard
+    int shownFault = -1;         // the fault the card shows (-1: none yet)
     juce::String shownFile, shownInfo, shownCpu;
 
     juce::String statusLabel, statusLabelCaps;
     std::function<bool()> statusLit;
     bool statusWasLit = false;
+    std::array<float, 4> shownMerge { -1.0e9f, -1.0e9f, -1.0e9f, -1.0e9f };   // the merge's level A, pan A, level B, pan B
 
     // The lit stage behind the gear, drawn once per size and screen scale.
-    juce::Image stageImage;
-    juce::Path stageClip;
-    float stageScale = 0.0f;
+    kit::StageBackdrop backdrop;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE (BlockPanel)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BlockPanel)

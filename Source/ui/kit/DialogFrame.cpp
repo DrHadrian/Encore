@@ -300,8 +300,15 @@ DialogOverlay::DialogOverlay (DialogFrame& f, juce::Rectangle<int> frameSize) : 
 juce::Rectangle<int> DialogOverlay::getFrameBounds() const
 {
     const auto area = getLocalBounds().reduced (size::outerPadding);
-    return juce::Rectangle<int> (juce::jmin (wantedSize.getWidth(), area.getWidth()), juce::jmin (wantedSize.getHeight(), area.getHeight()))
-        .withCentre (getLocalBounds().getCentre());
+    const auto w = juce::jmin (wantedSize.getWidth(), area.getWidth());
+    const auto h = juce::jmin (wantedSize.getHeight(), area.getHeight());
+
+    // The inside of the frame is centred and the 1 px border added after,
+    // as the reference boards place every dialog (Settings at 200, 70 in
+    // 1440 x 900).
+    const auto inside = juce::Rectangle<int> (juce::jmax (0, w - 2), juce::jmax (0, h - 2))
+                            .withCentre (getLocalBounds().getCentre());
+    return inside.withSize (w, h);
 }
 
 bool DialogOverlay::keyPressed (const juce::KeyPress& key)

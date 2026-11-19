@@ -20,12 +20,14 @@ namespace
     {
         switch (f)
         {
-            case Fix::audioSettings:  return "Audio settings...";
-            case Fix::midiSettings:   return "MIDI settings...";
-            case Fix::pluginSettings: return "Plugin settings...";
+            case Fix::audioSettings:  return juce::String (juce::CharPointer_UTF8 ("Audio settings\xe2\x80\xa6"));
+            case Fix::midiSettings:   return juce::String (juce::CharPointer_UTF8 ("MIDI settings\xe2\x80\xa6"));
+            case Fix::pluginSettings: return juce::String (juce::CharPointer_UTF8 ("Plugin settings\xe2\x80\xa6"));
             case Fix::save:           return "Save now";
             case Fix::resetCounters:  return "Reset counters";
             case Fix::unmute:         return "Unmute";
+            case Fix::routing:        return juce::String (juce::CharPointer_UTF8 ("Routing\xe2\x80\xa6"));
+            case Fix::unmuteOutput:   return "Unmute";
             case Fix::none:           break;
         }
 
@@ -58,7 +60,7 @@ public:
     explicit Row (PreShowCheckView& o) : owner (o)
     {
         button.setWantsKeyboardFocus (false);
-        button.onClick = [this] { if (owner.applyFix != nullptr) owner.applyFix (result.fix); };
+        button.onClick = [this] { if (owner.applyFix != nullptr) owner.applyFix (result); };
         addChildComponent (button);
     }
 
@@ -117,7 +119,7 @@ public:
 
 private:
     PreShowCheckView& owner;
-    PreShowCheckResult result { Status::ok, "-", "-", Fix::none };
+    PreShowCheckResult result { Status::ok, "-", "-", Fix::none, {} };
     juce::TextButton button;
     juce::Rectangle<float> textBox;
 };
@@ -140,7 +142,7 @@ public:
 };
 
 //==============================================================================
-PreShowCheckView::PreShowCheckView (std::function<PreShowFacts()> g, std::function<void (Fix)> f)
+PreShowCheckView::PreShowCheckView (std::function<PreShowFacts()> g, std::function<void (const PreShowCheckResult&)> f)
     : gather (std::move (g)), applyFix (std::move (f))
 {
     addAndMakeVisible (badge);
@@ -261,7 +263,7 @@ void PreShowCheckView::resized()
 }
 
 //==============================================================================
-PreShowCheckDialog::PreShowCheckDialog (std::function<PreShowFacts()> gather, std::function<void (PreShowCheckResult::Fix)> fix,
+PreShowCheckDialog::PreShowCheckDialog (std::function<PreShowFacts()> gather, std::function<void (const PreShowCheckResult&)> fix,
                                         std::function<void()> close)
     : frame ("Pre-show check", "Close pre-show check"), view (std::move (gather), std::move (fix))
 {

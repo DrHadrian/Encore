@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Encore M11 — Encore v3 — MIDI settings (current features)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#161618}
+*{scrollbar-width:thin;scrollbar-color:#4A4A4F transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#4A4A4F;border:2px solid transparent;border-radius:6px;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#5E5E64;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+a{color:#4C8DF6}a:hover{color:#82AEFA}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #4C8DF6;outline-offset:1px}
+.b{height:24px;padding:0 12px;border:1px solid #0E0E10;border-radius:5px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12),0 1px 0 rgba(0,0,0,0.4);color:#E8E8EB;font-size:12px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.b-on{background:linear-gradient(180deg,#252528,#2E2E31);box-shadow:inset 0 1px 3px rgba(0,0,0,0.7);color:#FFFFFF}
+.pri{border-color:#0B3E86;background:linear-gradient(180deg,#4C8DF6,#2E6FDC);color:#FFFFFF}
+.fld{height:24px;border:1px solid #0C0C0E;border-radius:5px;background:linear-gradient(180deg,#4A4A4F,#3A3A3E);box-shadow:inset 0 1px 0 rgba(255,255,255,0.12);color:#E8E8EB;font-size:12px;padding:0 8px 0 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box}
+.k{font-size:12px;color:#A9A9AF;text-align:right}
+.grp{background:#1A1A1D;border:1px solid #0A0A0B;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03)}
+.gt{font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#85858C;padding:0 2px 6px}
+.tab{width:78px;height:54px;border:0;border-radius:6px;background:transparent;color:#A9A9AF;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11px;font-weight:500}
+.tab-on{background:#3A3A3F;color:#FFFFFF;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08)}
+.ghost{position:absolute;background:#1D1D20;border:1px solid #0A0A0B;border-radius:6px}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #161618; color: #E8E8EB; font-family: Inter, -apple-system, system-ui, sans-serif; font-size: 12.5px; position: relative; overflow: hidden">
+  <div aria-hidden="true" style="position: absolute; inset: 0; filter: blur(2px); opacity: 0.55">
+    <div style="position: absolute; left: 0; right: 0; top: 0; height: 44px; background: linear-gradient(180deg, #333337, #28282B)"></div>
+    <div class="ghost" style="left: 8px; top: 52px; width: 250px; height: 728px"></div>
+    <div class="ghost" style="left: 266px; top: 88px; width: 888px; height: 136px"></div>
+    <div class="ghost" style="left: 266px; top: 232px; width: 888px; height: 548px"></div>
+    <div class="ghost" style="left: 1162px; top: 52px; width: 270px; height: 728px"></div>
+    <div class="ghost" style="left: 8px; top: 788px; width: 1424px; height: 104px"></div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.45)"></div>
+
+  <div role="dialog" aria-label="Settings" style="position: absolute; left: 200px; top: 70px; width: 1040px; height: 760px; border-radius: 10px; background: #232326; border: 1px solid #0A0A0B; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 30px 80px rgba(0,0,0,0.7); display: flex; flex-direction: column; overflow: hidden">
+    <div style="height: 30px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; position: relative; font-size: 12.5px; font-weight: 600; color: #C4C4C9; background: linear-gradient(180deg, #38383C, #2E2E31)">
+      Settings — MIDI
+      <button aria-label="Close settings" style="position: absolute; right: 8px; top: 5px; width: 20px; height: 20px; border: 0; border-radius: 4px; background: transparent; color: #A9A9AF; font-size: 14px">✕</button>
+    </div>
+    <div role="tablist" aria-label="Settings sections" style="height: 66px; flex-shrink: 0; display: flex; justify-content: center; gap: 4px; padding: 6px; background: linear-gradient(180deg, #2E2E31, #28282B); border-bottom: 1px solid #0A0A0B">
+      <button role="tab" class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0"></path></svg>Audio</button>
+      <button role="tab" class="tab tab-on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><circle cx="8.5" cy="11" r="1"></circle><circle cx="15.5" cy="11" r="1"></circle><circle cx="12" cy="8.5" r="1"></circle><circle cx="10" cy="14.5" r="1"></circle><circle cx="14" cy="14.5" r="1"></circle></svg>MIDI</button>
+      
+      
+      
+      
+      <button role="tab" class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v4M15 3v4"></path><path d="M7 7h10v4a5 5 0 0 1-10 0z"></path><path d="M12 16v5"></path></svg>Plugins</button>
+    </div>
+
+    <div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; padding: 16px 20px">
+      <div style="display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 0">
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px">
+          <div>
+            <div class="gt">Listen to</div>
+            <div class="grp" style="padding: 8px 12px; display: flex; flex-direction: column; gap: 6px">
+              <sc-for list="{{inputs}}" as="i" hint-placeholder-count="3">
+                <label style="display: flex; align-items: center; gap: 8px; height: 22px; font-size: 12.5px; color: {{i.fg}}"><input type="checkbox" checked="{{i.on}}" style="accent-color: #4C8DF6; margin: 0"><span style="flex-grow: 1">{{i.name}}</span></label>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <div class="gt">Send cue messages to</div>
+            <div class="grp" style="padding: 10px 12px; display: flex; flex-direction: column; gap: 8px">
+              <span class="fld">FCB1010 (USB) <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>
+              <span style="font-size: 11.5px; color: #8E8E95; line-height: 1.45">Program and control changes each cue sends — to other gear, or your controller's LEDs. Set them per cue in Edit.</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex-grow: 1; min-height: 0; display: flex; flex-direction: column">
+          <div style="display: flex; align-items: flex-end; gap: 10px; padding-bottom: 6px">
+            <div class="gt" style="padding-bottom: 0">Mappings</div>
+            <div style="flex-grow: 1"></div>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #C4C4C9"><input type="checkbox" style="accent-color: #4C8DF6; margin: 0"> This show has its own mappings (instead of this computer's)</label>
+          </div>
+          <div class="grp" style="flex-grow: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative">
+            <div style="height: 26px; flex-shrink: 0; display: grid; grid-template-columns: 200px minmax(0, 1fr) 76px 28px; gap: 10px; align-items: center; padding: 0 12px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #6E6E75; border-bottom: 1px solid #111113; background: #1E1E21">
+              <span>Does</span><span>Footswitch / pedal</span><span></span><span></span>
+            </div>
+            <div style="flex-grow: 1; overflow: auto; display: flex; flex-direction: column">
+              <sc-for list="{{maps}}" as="m" hint-placeholder-count="11">
+                <div style="height: 30px; flex-shrink: 0; display: grid; grid-template-columns: 200px minmax(0, 1fr) 76px 28px; gap: 10px; align-items: center; padding: 0 12px; background: {{m.bg}}; border-bottom: 1px solid #1F1F22">
+                  <button class="fld" style="font-family: Inter, sans-serif; cursor: pointer; background: linear-gradient(180deg, #46464B, #38383C); box-shadow: inset 0 1px 0 rgba(255,255,255,0.1)">{{m.action}} <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+                  <span style="font-size: 12.5px; color: {{m.tfg}}; font-variant-numeric: tabular-nums; font-style: {{m.tstyle}}">{{m.trigger}}</span>
+                  <button class="{{m.lcls}}" style="height: 22px">{{m.learn}}</button>
+                  <button aria-label="Remove mapping" style="width: 22px; height: 22px; border: 0; border-radius: 4px; background: transparent; color: #8E8E95; font-size: 12px">✕</button>
+                </div>
+              </sc-for>
+            </div>
+            <div role="menu" aria-label="Choose control" style="position: absolute; left: 12px; top: 30px; width: 200px; padding: 4px; border-radius: 7px; background: rgba(44,44,48,0.98); border: 1px solid #0A0A0B; box-shadow: 0 0 0 1px rgba(255,255,255,0.06) inset, 0 12px 30px rgba(0,0,0,0.6); z-index: 5; font-size: 12px">
+              <div style="height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px">Next cue</div>
+              <div style="height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px">Previous cue</div>
+              <div style="height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px">Program recall</div>
+              <div style="height: 24px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-radius: 4px">Stomp switch<span>▸</span></div>
+              <div style="height: 24px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-radius: 4px">Expression pedal<span>▸</span></div>
+              <div style="height: 1px; background: #1A1A1C; margin: 4px 2px"></div>
+              <div style="height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px">Mute</div>
+              <div style="height: 24px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-radius: 4px; background: #2E6FDC; color: #FFFFFF">Mute output<span>▸</span></div>
+              <div style="height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px">Tuner</div>
+              <div style="height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px">Panic</div>
+            </div>
+            <div role="menu" aria-label="Mute output" style="position: absolute; left: 216px; top: 179px; width: 170px; padding: 4px; border-radius: 7px; background: rgba(44,44,48,0.98); border: 1px solid #0A0A0B; box-shadow: 0 12px 30px rgba(0,0,0,0.6); z-index: 6; font-size: 12px"><div style="height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px">Front of house</div><div style="height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; background: #2E6FDC; color: #FFFFFF">In-ear</div><div style="height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px">Amp DI</div></div>
+            <div style="height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-top: 1px solid #111113; background: #1E1E21">
+              <button class="b">+ Add mapping</button>
+              <button class="b" title="Sustain pedal = next cue, CC 11 = expression 1, mod wheel = expression 2, program change = recall">Reset to defaults</button>
+              <div style="flex-grow: 1"></div>
+              <span style="font-size: 11.5px; color: #8E8E95">Last received</span>
+              <span style="font-size: 12px; color: #D5E4F7; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 4px; background: #12171D; border: 1px solid #07090B">CC 82, channel 1</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px">
+        <div>
+          <div class="gt">How mappings work</div>
+          <div class="grp" style="padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; font-size: 12px; color: #A9A9AF; line-height: 1.5">
+            <span><b style="color: #E8E8EB">Learn</b> — click, then press the footswitch or move the pedal.</span>
+            <span><b style="color: #E8E8EB">Click the action</b> to change what a control does, <b style="color: #E8E8EB">✕</b> to remove it.</span>
+            <span>Footswitches act once per press, also while Encore is in the background.</span>
+            <span>What <b style="color: #E8E8EB">Stomp 3</b> switches and which knob <b style="color: #E8E8EB">Expression 1</b> moves is set per patch: right-click a block or a knob in Edit.</span>
+          </div>
+        </div>
+        <div>
+          <div class="gt">Defaults</div>
+          <div class="grp" style="padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; font-size: 12px; font-variant-numeric: tabular-nums">
+            <span style="color: #A9A9AF">Sustain pedal (CC 64)</span><span>Next cue</span>
+            <span style="color: #A9A9AF">CC 11</span><span>Expression 1</span>
+            <span style="color: #A9A9AF">Mod wheel (CC 1)</span><span>Expression 2</span>
+            <span style="color: #A9A9AF">Program change</span><span>Program recall</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 20px; border-top: 1px solid #0A0A0B; background: #262629">
+      <span style="flex-grow: 1; font-size: 11.5px; color: #85858C">Mappings save automatically to this computer (%APPDATA%\\Encore), never into the show — unless you choose “This show”.</span>
+      <button class="b" style="width: 84px">Cancel</button>
+      <button class="b pri" style="width: 84px">Done</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var maps = [
+      ['Next cue', 'CC 64, any channel', 0.0, false],
+      ['Previous cue', 'CC 65, channel 1', 0.0, false],
+      ['Program recall', 'Program change, any channel', 0.0, false],
+      ['Stomp 1', 'CC 80, channel 1', 0.0, false],
+      ['Stomp 2', 'CC 81, channel 1', 0.0, false],
+      ['Expression 1', 'CC 11, any channel', 0.72, false],
+      ['Mute', 'Note C2, channel 10', 0.0, false],
+      ['Mute output: In-ear', 'CC 85, channel 1', 0.0, false],
+      ['Mute output: Monitor wedge', 'CC 86, channel 1', 0.0, false, true],
+      ['Tuner', 'CC 69, channel 1', 0.0, false],
+      ['Panic', 'CC 70, channel 1', 0.0, false]
+    ];
+    var log = [
+      ['23:41:08', 'CC 82 = 127 · ch 1', 'Stomp 3'],
+      ['23:41:06', 'CC 11 = 92 · ch 1', 'Expression 1'],
+      ['23:41:06', 'CC 11 = 88 · ch 1', 'Expression 1'],
+      ['23:41:02', 'CC 64 = 127 · ch 1', 'Next cue'],
+      ['23:40:58', 'Note F#3 on · ch 1', 'not mapped'],
+      ['23:40:51', 'Program 5 · ch 1', 'Program recall']
+    ];
+    return {
+      inputs: [
+        { name: 'FCB1010 (USB)', on: true, fg: '#E8E8EB', led: '#30C25A', glow: '0 0 6px #30C25A' },
+        { name: 'Focusrite USB MIDI', on: true, fg: '#E8E8EB', led: '#2a2a2e', glow: 'none' },
+        { name: 'loopMIDI Port', on: false, fg: '#8E8E95', led: '#2a2a2e', glow: 'none' }
+      ],
+      maps: maps.map(function (m, i) {
+        var learning = m[3];
+        return {
+          action: m[0], trigger: learning ? 'Press the control now…' : (m[4] ? m[1] + ' · no output “Monitor wedge” here' : m[1]),
+          tfg: learning || m[4] ? '#FFB340' : '#D5D5DA', tstyle: learning ? 'italic' : 'normal',
+          bg: learning || m[4] ? 'rgba(255,159,10,0.08)' : (i % 2 ? '#1C1C1F' : 'transparent'),
+          act: Math.round(m[2] * 100) + '%', actc: m[2] >= 1 ? '#FFB340' : '#4C8DF6',
+          learn: learning ? 'Cancel' : 'Learn', lcls: learning ? 'b b-on' : 'b'
+        };
+      }),
+      stompNums: [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return { n: n, bg: n === 4 ? '#2E6FDC' : 'transparent' }; }),
+      stompLights: [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) {
+        var hit = n === 3; var mapped = n <= 4;
+        return { n: n, bg: hit ? '#3A2C14' : '#23252A', bd: hit ? '#FF9F0A' : '#33363D', fg: mapped ? '#E8E8EB' : '#6E6E75', led: hit ? '#FF9F0A' : '#3a3a3e', glow: hit ? '0 0 8px #FF9F0A' : 'none' };
+      }),
+      pedals: [{ n: 1, h: '72%', v: '72%' }, { n: 2, h: '0%', v: '0%' }, { n: 3, h: '0%', v: '—' }, { n: 4, h: '0%', v: '—' }],
+      log: log.map(function (l, i) { return { t: l[0], msg: l[1], map: l[2], fg: i === 0 ? '#FFFFFF' : '#C4C4C9', mapc: l[2] === 'not mapped' ? '#6E6E75' : '#4C8DF6' }; })
+    };
+  }
+}
+</script>
+</body>
+</html>

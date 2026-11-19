@@ -62,7 +62,18 @@ juce::Rectangle<int> GearPlaceholder::getControlArea() const
     if (getGearSize() != Size::panel || block.shape == BlockInfo::Shape::cab)
         return {};
 
-    return { size::ampStripX, size::ampStripY, size::ampStripW, size::ampStripH };
+    // 22 px in from both sides (556 on the 600 box).
+    return { size::ampStripX, size::ampStripY, getWidth() - 2 * size::ampStripX, size::ampStripH };
+}
+
+void GearPlaceholder::setLabelBottom (int fromBottom)
+{
+    if (fromBottom == labelBottom)
+        return;
+
+    labelBottom = fromBottom;
+    update();
+    repaint();
 }
 
 bool GearPlaceholder::isPedal() const noexcept
@@ -130,7 +141,7 @@ void GearPlaceholder::update()
         // Amp (and other blocks) on the Edit panel: strip, plate, kind label at the bottom.
         stripArea = getControlArea().toFloat();
         kindStyle = type::gearPanelKind;
-        labelArea = { 0.0f, bounds.getBottom() - (float) size::panelLabelBottom, bounds.getWidth(), (float) size::panelLabelH };
+        labelArea = { 0.0f, bounds.getBottom() - (float) labelBottom, bounds.getWidth(), (float) size::panelLabelH };
         labelJustification = juce::Justification::centred;
 
         if (plateCaps.isNotEmpty())

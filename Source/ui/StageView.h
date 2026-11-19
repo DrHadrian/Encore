@@ -8,8 +8,9 @@
 #include "engine/AudioEngine.h"
 #include "session/ShowSession.h"
 #include "ui/TunerDisplay.h"
-#include "ui/kit/Lcd.h"
+#include "ui/kit/StatusBar.h"
 #include "ui/kit/NoticeBar.h"
+#include "ui/kit/DragImage.h"
 #include "ui/kit/Pane.h"
 #include "ui/kit/SegmentedControl.h"
 #include "ui/kit/Toolbar.h"
@@ -22,6 +23,9 @@ namespace encore
 struct StageSnapshot
 {
     float inputPeak = 0.0f, outputPeak = 0.0f;
+    std::array<float, 8> inputSlotPeaks {};                    // by input slot (routing::maxInputs)
+    std::array<std::array<float, 2>, 8> outputSlotPeaks {};    // by output slot, left and right
+    std::array<float, 8> outputLimiterDb {};                   // by output slot: the safety limiter's gain reduction (dB, >= 0)
     double cpu = 0.0;
     int overruns = 0;
     bool onBattery = false;
@@ -61,6 +65,10 @@ public:
     /** The main window shows the edit view again. */
     std::function<void()> onLeave;
 
+    /** The Outputs widget's Mute / MUTED: the main window keeps the mute in
+        this computer's routing, as the bottom row's M does. */
+    std::function<void (const juce::String& output, bool muted)> onMuteOutput;
+
     /** The layout editor's widget inspector (SCREENS.md §6): the Inspector
         toggle (key I). The main window remembers it per computer. */
     void setLayoutInspectorShown (bool);
@@ -69,6 +77,21 @@ public:
 
     /** Layout editor: selects a widget by its position in the layout (-1: none). */
     void selectLayoutWidget (int index);
+
+    /** Layout editor, for tests: the widget list, the stage surface the
+        widgets are moved on (null when not editing), the list row for a
+        widget type (list coordinates), the drop box, the selection and the
+        widgets as shown. */
+    juce::Component* getLayoutWidgetList() const noexcept;
+    juce::Component* getLayoutSurface() const noexcept;
+    juce::Point<int> getLayoutListRow (StageWidgetType) const;
+    const juce::Component* getLayoutDropBox() const noexcept;
+    const juce::Component& getLayoutDragImage() const noexcept { return dragImage; }
+    juce::String getLayoutDropText() const;
+    bool isLayoutDropRefused() const noexcept;
+    int getSelectedLayoutWidget() const noexcept;
+    const std::vector<StageWidget>& getShownWidgets() const noexcept { return current.widgets; }
+    float getShownWidgetAlpha (int index) const noexcept;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -127,7 +150,7 @@ private:
     kit::SegmentedControl modeSwitch;
     std::unique_ptr<Caption> layoutName, hint;
     std::unique_ptr<juce::Component> separator;
-    kit::Lcd lcd { true };
+    kit::StatusBar statusBar { true };   // the toolbar's status bar (v3.2; was the LCD)
     std::unique_ptr<MiniMeters> miniMeters;
     juce::TextButton lockButton, tunerButton { "Tuner" }, muteButton { "Mute" };
     juce::TextButton layoutsButton, addWidgetButton { "+ Widget" }, doneButton { "Done" }, inspectorButton { "Inspector" };
@@ -137,6 +160,7 @@ private:
     std::unique_ptr<WidgetPanel> widgetPanel;
     std::unique_ptr<Artboard> artboard;
     std::unique_ptr<LayoutInspector> layoutInspector;
+    kit::DragImage dragImage;   // the row dragged out of the widget list, under the pointer
     bool inspectorShown = true;
 
     // Strips under the toolbar (§3.2)
