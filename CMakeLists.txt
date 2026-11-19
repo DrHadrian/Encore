@@ -534,7 +534,10 @@ if(ENCORE_BUILD_TESTS)
             juce::juce_recommended_warning_flags)
 
     juce_add_console_app(EncoreTests PRODUCT_NAME "EncoreTests")
-    add_dependencies(EncoreTests EncoreTestPlugin_VST3)
+    # The tests load the test plugin when they run, so only linking waits for it:
+    # add_dependencies() would hold back every test file until the plugin is
+    # built, leaving the tests' compiles as a serial tail at the end of CI.
+    set_property(TARGET EncoreTests APPEND PROPERTY LINK_DEPENDS "$<TARGET_FILE:EncoreTestPlugin_VST3>")
 
     target_sources(EncoreTests PRIVATE
         Tests/TestMain.cpp
