@@ -659,3 +659,21 @@ Warm runs reuse the cache as before. Still open: new pull requests in a stack
 start cold until main has the stack's code (merging the stack fixes that for
 every later pull request).
 
+## 0058 — Main is protected: changes go in through pull requests with a green "CI"
+
+From 19 Nov 2026, main takes changes only through pull requests, and a pull
+request merges only when the **CI** check is green. That keeps main always
+buildable and tested, for players and for every branch started from it.
+- **One required check, "CI".** It's the last job of the build workflow. It's
+  green when the Windows Debug and Release builds and their tests passed, or
+  when the change needed no build. A required check can't name a matrix job that
+  was skipped, so this job stands for them.
+- **Every pull request runs**, so the check always reports. A job named
+  "Changes" looks at the pull request's files. When only docs changed (`*.md`,
+  `docs/`, `LICENSE`), the Windows builds are skipped and CI is green within a
+  minute. Pushes to main still skip docs-only changes (`paths-ignore`).
+- **The rules apply to admins too**: direct pushes to main, force pushes and
+  deleting main are refused. In an emergency, an admin can switch off "Do not
+  allow bypassing" in the repository's branch settings, then switch it back on.
+- Pull requests merge with a merge commit, which keeps each step's commit.
+

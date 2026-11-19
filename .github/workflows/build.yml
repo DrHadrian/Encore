@@ -1,6 +1,6 @@
 name: Build
 
-# When it runs (decision 0049):
+# When it runs (decisions 0049, 0058):
 # - pull requests, pushes to main, by hand: Debug and Release in parallel,
 #   with a compiler cache, the tests as parallel processes and a short soak;
 # - every night (main) and by hand with a length: the long soak, 4 hours of
@@ -9,8 +9,9 @@ on:
   push:
     branches: [main]
     paths-ignore: ['**.md', 'docs/**', 'LICENSE*']
+  # Every pull request runs (main requires the "CI" check), but one that only
+  # changes docs skips the Windows builds: see the "changes" job.
   pull_request:
-    paths-ignore: ['**.md', 'docs/**', 'LICENSE*']
   schedule:
     - cron: '23 1 * * *'
   workflow_dispatch:
@@ -36,8 +37,36 @@ env:
   SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
 
 jobs:
+  # Does this change touch anything that builds? A pull request that only
+  # changes docs (*.md, docs/, LICENSE) needs no Windows build. Everything that
+  # isn't a pull request builds.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.files.outputs.code }}
+    steps:
+      - id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename' > files.txt
+          echo "Changed files:"; cat files.txt
+          if grep -qvE '(\.md$|^docs/|^LICENSE)' files.txt; then code=true; else code=false; fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Builds needed: $code"
+
   windows:
     name: Windows ${{ matrix.config }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
     timeout-minutes: 150
     strategy:
@@ -111,3 +140,22 @@ jobs:
           name: Encore-windows-x64
           path: build/Encore_artefacts/Release/Encore.exe
           if-no-files-found: error
+
+  # The one check main requires: green when the builds passed, or when the
+  # change needed none (docs only). Required checks can't name matrix jobs
+  # that were skipped, so this job stands for them.
+  ci:
+    name: CI
+    needs: [changes, windows]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          echo "changes: ${{ needs.changes.result }}, builds: ${{ needs.windows.result }}"
+          [ "${{ needs.changes.result }}" = "success" ] || exit 1
+          case "${{ needs.windows.result }}" in
+            success|skipped) exit 0 ;;
+            *) exit 1 ;;
+          esac
+
