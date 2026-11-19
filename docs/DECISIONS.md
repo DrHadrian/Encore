@@ -672,10 +672,14 @@ buildable and tested, for players and for every branch started from it.
   "Changes" looks at the pull request's files. When only docs changed (`*.md`,
   `docs/`, `LICENSE`), the Windows builds are skipped and CI is green within a
   minute. Pushes to main still skip docs-only changes (`paths-ignore`).
-- **The rules apply to admins too**: direct pushes to main, force pushes and
-  deleting main are refused. In an emergency, an admin can switch off "Do not
-  allow bypassing" in the repository's branch settings, then switch it back on.
-- Pull requests merge with a merge commit, which keeps each step's commit.
+- **How it's set:** a repository ruleset named "main" (Settings › Rules ›
+  Rulesets), active on the default branch.
+  - It requires a pull request (0 approvals), the "CI" check, and merge
+    commits only, which keep each step's commit.
+  - It blocks deletions and force pushes.
+- **No one can bypass it, admins included**: the bypass list is empty. In an
+  emergency, an admin sets the ruleset's enforcement to Disabled for a moment
+  (or adds themselves to the bypass list), then sets it back.
 - **Main's cache serves the pull requests.** Pushes to main now build like pull
   requests, without link-time optimisation. A pull request can reuse main's
   compiler cache, but objects built for LTO can't be reused without it. Before
