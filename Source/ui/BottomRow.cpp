@@ -45,7 +45,7 @@ void InputSummary::paint (juce::Graphics& g)
     const auto w = (float) (getWidth() - 2 * size::inputPadX);
     const auto top = juce::Rectangle<float> (x, (float) size::inputSummaryLabelTop, w, (float) size::statusTextH - 1.0f);
     paint::text (g, "Input", top, type::label, colour::textTertiary);
-    paint::text (g, "playing patch", top, type::saveState, colour::textDisabled, juce::Justification::centredRight);
+    paint::text (g, "playing patch", top, type::saveState, colour::textDim, juce::Justification::centredRight);
 
     auto line = juce::Rectangle<float> (x, (float) size::inputSummaryNameTop, w, (float) size::statusTextH + 1.0f);
     const auto nameW = juce::jmin (nameWidth, line.getWidth());
@@ -170,7 +170,7 @@ void OutputsPane::paint (juce::Graphics& g)
     const auto caps = juce::String ("OUTPUTS");
     paint::text (g, caps, head, type::paneHeader, colour::textMuted);
     const auto w = textWidth (font (type::paneHeader), caps);
-    paint::text (g, note, head.withTrimmedLeft (w + 8.0f), type::saveState, colour::textDisabled);
+    paint::text (g, note, head.withTrimmedLeft (w + 8.0f), type::saveState, colour::textDim);
 }
 
 } // namespace encore

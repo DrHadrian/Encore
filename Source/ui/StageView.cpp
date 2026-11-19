@@ -691,7 +691,7 @@ private:
 
     juce::Font fontFor (const type::Style& style, float px) const
     {
-        return fontOfSize (style.weight, juce::jmax (1.0f, px), style.tracking);
+        return fontOfSize (style.weight, juce::jmax (1.0f, px), style.tracking, style.readout);
     }
 
     /** The style at `k` times its size, shrunk so `text` fits `width`. */
@@ -1757,7 +1757,7 @@ public:
             if (row.group)
             {
                 paint::text (g, row.name, r.withTrimmedLeft ((float) (size::widgetGroupX - size::widgetListPadX)), type::widgetGroup,
-                             colour::textDisabled);
+                             colour::textDim);
                 continue;
             }
 

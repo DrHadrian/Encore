@@ -458,9 +458,9 @@ void PluginSettings::paintOverChildren (juce::Graphics& g)
         g.fillRect (head.withTop (head.getBottom() - 1));
 
         const auto c = columnsIn (head);
-        paint::text (g, nameHead, c.name, type::columnHead, colour::textDisabled);
-        paint::text (g, makerHead, c.maker, type::columnHead, colour::textDisabled);
-        paint::text (g, versionHead, c.version, type::columnHead, colour::textDisabled);
+        paint::text (g, nameHead, c.name, type::columnHead, colour::textDim);
+        paint::text (g, makerHead, c.maker, type::columnHead, colour::textDim);
+        paint::text (g, versionHead, c.version, type::columnHead, colour::textDim);
     }
 
     const auto titleRow = pluginsGroup.getBounds().withHeight (size::groupTitleH).toFloat()

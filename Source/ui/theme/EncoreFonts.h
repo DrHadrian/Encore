@@ -23,11 +23,12 @@ public:
 
     static EncoreFonts& get();
 
-    juce::Typeface::Ptr typeface (type::Weight) const;
+    /** Inter, or with `readout` Inter Readout (slashed zero, tabular figures). */
+    juce::Typeface::Ptr typeface (type::Weight, bool readout = false) const;
 
-    /** fontOfSize()'s made fonts: (weight, px x 100, tracking x 1000). Kept
-        here so they go when JUCE shuts down, before its leak checks. */
-    std::map<std::tuple<int, int, int>, juce::Font>& sizedFonts() noexcept { return cache; }
+    /** fontOfSize()'s made fonts: (weight, px x 100, tracking x 1000, readout).
+        Kept here so they go when JUCE shuts down, before its leak checks. */
+    std::map<std::tuple<int, int, int, bool>, juce::Font>& sizedFonts() noexcept { return cache; }
 
     JUCE_DECLARE_SINGLETON_INLINE (EncoreFonts, false)
 
@@ -35,7 +36,8 @@ private:
     EncoreFonts();
 
     juce::Typeface::Ptr regular, medium, semibold, bold, extraBold;
-    std::map<std::tuple<int, int, int>, juce::Font> cache;
+    juce::Typeface::Ptr readoutRegular, readoutMedium, readoutSemibold, readoutBold, readoutExtraBold;
+    std::map<std::tuple<int, int, int, bool>, juce::Font> cache;
 };
 
 /** A token style as a JUCE font, at `scale` times its size. Sizes are the em
@@ -44,7 +46,7 @@ private:
 juce::Font font (const type::Style& style, float scale = 1.0f);
 
 /** A font of a given weight and em size (for text that is fitted to a box). */
-juce::Font fontOfSize (type::Weight weight, float px, float tracking = 0.0f);
+juce::Font fontOfSize (type::Weight weight, float px, float tracking = 0.0f, bool readout = false);
 
 /** Width of a line of text in a font (for fitting and layout, not in paint()). */
 float textWidth (const juce::Font& font, const juce::String& text);

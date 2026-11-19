@@ -66,7 +66,7 @@ void OutputStrip::paint (juce::Graphics& g)
     const auto pad = (float) size::outputStripPadX;
     auto top = juce::Rectangle<float> (pad, (float) size::outputStripNameTop, r.getWidth() - 2.0f * pad, (float) size::statusTextH - 1.0f);
     const auto channelsW = textWidth (font (type::outputChannels), channels) + 1.0f;
-    paint::text (g, channels, top.removeFromRight (channelsW), type::outputChannels, colour::textDisabled, juce::Justification::centredRight);
+    paint::text (g, channels, top.removeFromRight (channelsW), type::outputChannels, colour::textDim, juce::Justification::centredRight);
     top.removeFromRight (6.0f);
     // Squeezed up to 4 % before it's shortened (font metrics differ a little between renderers).
     g.setColour (paint::c (colour::text));

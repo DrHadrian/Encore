@@ -599,7 +599,7 @@ void EncoreLookAndFeel::drawPopupMenuSectionHeaderWithOptions (juce::Graphics& g
                                                                const juce::String& name, const juce::PopupMenu::Options&)
 {
     g.setFont (font (type::paneHeader));
-    g.setColour (c (colour::textDisabled));
+    g.setColour (c (colour::textDim));
     g.drawText (name.toUpperCase(), area.toFloat().withTrimmedLeft ((float) menuTickInset + 4.0f).withTrimmedBottom (3.0f),
                 juce::Justification::bottomLeft, true);
 }

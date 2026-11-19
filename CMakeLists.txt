@@ -193,6 +193,11 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/fonts/Inter-SemiBold.ttf
         Resources/ui/fonts/Inter-Bold.ttf
         Resources/ui/fonts/Inter-ExtraBold.ttf
+        Resources/ui/fonts/InterReadout-Regular.ttf
+        Resources/ui/fonts/InterReadout-Medium.ttf
+        Resources/ui/fonts/InterReadout-SemiBold.ttf
+        Resources/ui/fonts/InterReadout-Bold.ttf
+        Resources/ui/fonts/InterReadout-ExtraBold.ttf
         Resources/ui/logo/encore-wordmark-ui.svg
         Resources/ui/icons/alert.svg
         Resources/ui/icons/arrow-right.svg

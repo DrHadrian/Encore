@@ -947,7 +947,7 @@ private:
         g.fillRect (head);
 
         for (const auto& h : heads)
-            paint::text (g, paint::caps (type::columnHead, h.text), head.toFloat().withTrimmedLeft ((float) h.x), type::columnHead, colour::textDisabled);
+            paint::text (g, paint::caps (type::columnHead, h.text), head.toFloat().withTrimmedLeft ((float) h.x), type::columnHead, colour::textDim);
     }
 
     void paintBar (juce::Graphics& g, juce::Rectangle<int> bar, juce::Button& button, const juce::String& note)
@@ -1199,9 +1199,9 @@ public:
         const auto h = head.toFloat();
         const auto textY = h.getY() + 14.0f;
         const auto hx = h.getX() - 1.0f;
-        paint::text (g, paint::caps (type::columnHead, "Patch"), { hx + (float) size::routingCellPadX, h.getY(), 300.0f, h.getHeight() }, type::columnHead, colour::textDisabled);
-        paint::text (g, paint::caps (type::columnHead, "Input"), { hx + (float) (size::routingCellPadX + size::sendsPatchW), h.getY(), 120.0f, h.getHeight() }, type::columnHead, colour::textDisabled);
-        paint::text (g, paint::caps (type::columnHead, "End"), { hx + (float) (size::routingCellPadX + size::sendsPatchW + size::sendsInputW), h.getY(), 70.0f, h.getHeight() }, type::columnHead, colour::textDisabled);
+        paint::text (g, paint::caps (type::columnHead, "Patch"), { hx + (float) size::routingCellPadX, h.getY(), 300.0f, h.getHeight() }, type::columnHead, colour::textDim);
+        paint::text (g, paint::caps (type::columnHead, "Input"), { hx + (float) (size::routingCellPadX + size::sendsPatchW), h.getY(), 120.0f, h.getHeight() }, type::columnHead, colour::textDim);
+        paint::text (g, paint::caps (type::columnHead, "End"), { hx + (float) (size::routingCellPadX + size::sendsPatchW + size::sendsInputW), h.getY(), 70.0f, h.getHeight() }, type::columnHead, colour::textDim);
 
         for (size_t c = 0; c < columns.size(); ++c)
         {
@@ -1293,7 +1293,7 @@ public:
 
             if (! on)
             {
-                paint::text (g, "off", { x + 8.0f, 0.0f, 40.0f, h }, type::body, colour::textDisabled);
+                paint::text (g, "off", { x + 8.0f, 0.0f, 40.0f, h }, type::body, colour::textDim);
 
                 if (! here)
                     g.endTransparencyLayer();

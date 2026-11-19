@@ -247,12 +247,14 @@ void CueListEditor::paintListBoxItem (int row, juce::Graphics& g, int width, int
 
     const auto alpha = item.cut ? state::cutAlpha : 1.0f;
     const auto rowStyle = type::Style { type::tableRow.px, playing ? type::Weight::bold : type::Weight::regular };
-    const auto midiStyle = type::Style { type::tableMidi.px, playing ? type::Weight::bold : type::Weight::regular };
+    const auto midiStyle = type::Style { type::tableMidi.px, playing ? type::Weight::bold : type::Weight::regular, 0.0f, false, true };
+    const auto numberStyle = type::Style { type::tableRow.px, rowStyle.weight, 0.0f, false, true };
     const auto tint = [alpha] (juce::uint32 c, float a) { return paint::c (c).withMultipliedAlpha (a * alpha); };
 
-    g.setFont (font (rowStyle));
+    g.setFont (font (numberStyle));
     g.setColour (tint (colour::text, 0.7f));
     g.drawText (item.cut ? juce::String ("cut") : item.number, cell (Column::number), juce::Justification::centredRight);
+    g.setFont (font (rowStyle));
 
     const auto nameArea = cell (Column::name).withTrimmedLeft ((float) indent);
     g.setColour (tint (colour::text, 1.0f));

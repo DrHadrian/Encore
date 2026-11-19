@@ -24,7 +24,12 @@ EncoreFonts::EncoreFonts()
       medium    (load (EncoreUiAssets::InterMedium_ttf,    EncoreUiAssets::InterMedium_ttfSize)),
       semibold  (load (EncoreUiAssets::InterSemiBold_ttf,  EncoreUiAssets::InterSemiBold_ttfSize)),
       bold      (load (EncoreUiAssets::InterBold_ttf,      EncoreUiAssets::InterBold_ttfSize)),
-      extraBold (load (EncoreUiAssets::InterExtraBold_ttf, EncoreUiAssets::InterExtraBold_ttfSize))
+      extraBold (load (EncoreUiAssets::InterExtraBold_ttf, EncoreUiAssets::InterExtraBold_ttfSize)),
+      readoutRegular   (load (EncoreUiAssets::InterReadoutRegular_ttf,   EncoreUiAssets::InterReadoutRegular_ttfSize)),
+      readoutMedium    (load (EncoreUiAssets::InterReadoutMedium_ttf,    EncoreUiAssets::InterReadoutMedium_ttfSize)),
+      readoutSemibold  (load (EncoreUiAssets::InterReadoutSemiBold_ttf,  EncoreUiAssets::InterReadoutSemiBold_ttfSize)),
+      readoutBold      (load (EncoreUiAssets::InterReadoutBold_ttf,      EncoreUiAssets::InterReadoutBold_ttfSize)),
+      readoutExtraBold (load (EncoreUiAssets::InterReadoutExtraBold_ttf, EncoreUiAssets::InterReadoutExtraBold_ttfSize))
 {
 }
 
@@ -38,8 +43,22 @@ EncoreFonts& EncoreFonts::get()
     return *getInstance();
 }
 
-juce::Typeface::Ptr EncoreFonts::typeface (type::Weight weight) const
+juce::Typeface::Ptr EncoreFonts::typeface (type::Weight weight, bool readout) const
 {
+    if (readout)
+    {
+        switch (weight)
+        {
+            case type::Weight::medium:     return readoutMedium;
+            case type::Weight::semibold:   return readoutSemibold;
+            case type::Weight::bold:       return readoutBold;
+            case type::Weight::extraBold:  return readoutExtraBold;
+            case type::Weight::regular:    break;
+        }
+
+        return readoutRegular;
+    }
+
     switch (weight)
     {
         case type::Weight::medium:     return medium;
@@ -52,17 +71,17 @@ juce::Typeface::Ptr EncoreFonts::typeface (type::Weight weight) const
     return regular;
 }
 
-juce::Font fontOfSize (type::Weight weight, float px, float tracking)
+juce::Font fontOfSize (type::Weight weight, float px, float tracking, bool readout)
 {
     // Fonts are made once per (weight, size, tracking) and copied after that
     // (a copy shares the font's data), so paint() never builds a font.
     // Message thread only, like all UI.
     JUCE_ASSERT_MESSAGE_THREAD
 
-    using Key = std::tuple<int, int, int>;
+    using Key = std::tuple<int, int, int, bool>;
     auto& cache = EncoreFonts::get().sizedFonts();
 
-    const Key key { (int) weight, juce::roundToInt (juce::jmax (1.0f, px) * 100.0f), juce::roundToInt (tracking * 1000.0f) };
+    const Key key { (int) weight, juce::roundToInt (juce::jmax (1.0f, px) * 100.0f), juce::roundToInt (tracking * 1000.0f), readout };
 
     if (const auto found = cache.find (key); found != cache.end())
         return found->second;
@@ -71,7 +90,7 @@ juce::Font fontOfSize (type::Weight weight, float px, float tracking)
         cache.clear();
 
     const auto em = (float) std::get<1> (key) / 100.0f;
-    juce::Font f (juce::FontOptions (EncoreFonts::get().typeface (weight)).withPointHeight (em));
+    juce::Font f (juce::FontOptions (EncoreFonts::get().typeface (weight, readout)).withPointHeight (em));
 
     // CSS letter-spacing is a share of the em; JUCE's kerning factor is a
     // share of the font's height (ascent + descent, about 1.21 em for Inter).
@@ -84,7 +103,7 @@ juce::Font fontOfSize (type::Weight weight, float px, float tracking)
 
 juce::Font font (const type::Style& style, float scale)
 {
-    return fontOfSize (style.weight, style.px * scale, style.tracking);
+    return fontOfSize (style.weight, style.px * scale, style.tracking, style.readout);
 }
 
 float textWidth (const juce::Font& f, const juce::String& text)

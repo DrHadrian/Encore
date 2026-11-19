@@ -175,7 +175,7 @@ void SetList::paintRow (juce::Graphics& g, int row, juce::Rectangle<int> bounds)
     }
 
     area.removeFromLeft ((float) size::rowGap);
-    paint::text (g, cue.number, area.removeFromLeft ((float) size::rowNumberW), type::body,
+    paint::text (g, cue.number, area.removeFromLeft ((float) size::rowNumberW), type::bodyReadout,
                  playing ? colour::textStrong : colour::textDim);
     area.removeFromLeft ((float) size::rowGap);
 

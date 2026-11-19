@@ -554,7 +554,7 @@ public:
             paint::text (g, key, r.removeFromLeft ((float) size::assignKeyW), type::body, colour::textSoft);
             r.removeFromLeft ((float) size::rowGap);
             paint::text (g, juce::String (juce::CharPointer_UTF8 ("\xe2\x86\x92")), r.removeFromLeft ((float) size::assignArrowW),
-                         type::body, colour::textDisabled);
+                         type::body, colour::textDim);
             r.removeFromLeft ((float) size::rowGap);
             g.setFont (font (type::body));
             g.setColour (paint::c (colour::textRow));

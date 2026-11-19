@@ -148,7 +148,7 @@ public:
         else if (rowIndex % 2 == 1)
             g.fillAll (paint::c (colour::mappingRowAlt));
 
-        paint::text (g, trigger, triggerBox, type::body, learning || missing ? colour::amber : colour::triggerText);
+        paint::text (g, trigger, triggerBox, type::bodyReadout, learning || missing ? colour::amber : colour::triggerText);
     }
 
     void resized() override
@@ -606,8 +606,8 @@ void MidiSettings::paintOverChildren (juce::Graphics& g)
     {
         const auto inner = mappingsBox.reduced (1).toFloat();
         const auto head = inner.withHeight ((float) size::mappingHeaderH);
-        paint::text (g, doesHead, head.withTrimmedLeft ((float) size::mappingPadX), type::columnHead, colour::textDisabled);
-        paint::text (g, controlHead, head.withTrimmedLeft ((float) size::triggerX), type::columnHead, colour::textDisabled);
+        paint::text (g, doesHead, head.withTrimmedLeft ((float) size::mappingPadX), type::columnHead, colour::textDim);
+        paint::text (g, controlHead, head.withTrimmedLeft ((float) size::triggerX), type::columnHead, colour::textDim);
         const auto bar = inner.withTop (inner.getBottom() - (float) size::mappingBarH);
 
         if (rows.isEmpty())
