@@ -77,6 +77,20 @@ public:
     /** Layout editor: selects a widget by its position in the layout (-1: none). */
     void selectLayoutWidget (int index);
 
+    /** Layout editor, for tests: the widget list, the stage surface the
+        widgets are moved on (null when not editing), the list row for a
+        widget type (list coordinates), the drop box, the selection and the
+        widgets as shown. */
+    juce::Component* getLayoutWidgetList() const noexcept;
+    juce::Component* getLayoutSurface() const noexcept;
+    juce::Point<int> getLayoutListRow (StageWidgetType) const;
+    const juce::Component* getLayoutDropBox() const noexcept;
+    juce::String getLayoutDropText() const;
+    bool isLayoutDropRefused() const noexcept;
+    int getSelectedLayoutWidget() const noexcept;
+    const std::vector<StageWidget>& getShownWidgets() const noexcept { return current.widgets; }
+    float getShownWidgetAlpha (int index) const noexcept;
+
     void paint (juce::Graphics&) override;
     void resized() override;
 

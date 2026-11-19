@@ -3,7 +3,11 @@
 
 #include "ui/StageView.h"
 
+#include <limits>
+#include <optional>
+
 #include "ui/ChainStrip.h"
+#include "ui/kit/DropBox.h"
 #include "ui/kit/GearPlaceholder.h"
 #include "ui/kit/MuteButton.h"
 #include "ui/theme/EncoreFonts.h"
@@ -1384,7 +1388,11 @@ private:
 class StageView::Editor final : public juce::Component
 {
 public:
-    explicit Editor (int gapPx) : gap (gapPx) { noFocus (*this); }
+    explicit Editor (int gapPx) : gap (gapPx)
+    {
+        noFocus (*this);
+        addChildComponent (dropBox);
+    }
 
     void setGap (int gapPx)
     {
@@ -1464,6 +1472,100 @@ public:
 
     std::function<void (const std::vector<StageWidget>&)> onPreview, onCommit;
     std::function<void (juce::Point<int> cell)> onAddAt;
+    std::function<void (int index, bool moving)> onMoving;   // the original shows faint while it's dragged
+
+    //==========================================================================
+    // Drag and drop (V3.2-CHANGES §7): a widget dragged from the list, or moved
+    // on the stage, lands where the drop box shows: snapped to the grid, on the
+    // nearest free space of its size; with none, the box turns amber and
+    // nothing changes.
+
+    /** Where a widget would land with its top-left at `topLeft` (pixels):
+        nothing when no free space of its size is left. `ignore` is the
+        widget being moved (-1: a new one). */
+    std::optional<StageWidget> landing (StageWidget w, juce::Point<float> topLeft, int ignore) const
+    {
+        w.x = juce::jlimit (0, juce::jmax (0, stageGridColumns - w.width), juce::roundToInt (topLeft.x / cellWidth()));
+        w.y = juce::jlimit (0, juce::jmax (0, stageGridRows - w.height), juce::roundToInt (topLeft.y / cellHeight()));
+        lastAsked = w;
+
+        const auto taken = [&] (const StageWidget& c)
+        {
+            for (int i = 0; i < (int) widgets.size(); ++i)
+            {
+                const auto& o = widgets[(size_t) i];
+
+                if (i != ignore && c.x < o.x + o.width && o.x < c.x + c.width && c.y < o.y + o.height && o.y < c.y + c.height)
+                    return true;
+            }
+
+            return false;
+        };
+
+        if (! taken (w))
+            return w;
+
+        // The nearest free space of the same size (the closest top-left; ties: higher, then further left).
+        std::optional<StageWidget> best;
+        auto bestDistance = std::numeric_limits<int>::max();
+
+        for (int y = 0; y + w.height <= stageGridRows; ++y)
+        {
+            for (int x = 0; x + w.width <= stageGridColumns; ++x)
+            {
+                auto c = w;
+                c.x = x;
+                c.y = y;
+                const auto d = (x - w.x) * (x - w.x) + (y - w.y) * (y - w.y);
+
+                if (d < bestDistance && ! taken (c))
+                {
+                    best = c;
+                    bestDistance = d;
+                }
+            }
+        }
+
+        return best;
+    }
+
+    /** A new widget from the list (4 × 2 cells), the pointer at its centre. */
+    static StageWidget droppedWidget (StageWidgetType type)
+    {
+        auto w = newWidget (type, {});
+        w.width = size::droppedWidgetW;
+        w.height = size::droppedWidgetH;
+        return w;
+    }
+
+    juce::Point<float> newTopLeft (const StageWidget& w, juce::Point<int> pointer) const
+    {
+        return pointer.toFloat() - juce::Point<float> ((float) w.width * cellWidth(), (float) w.height * cellHeight()) * 0.5f;
+    }
+
+    /** The list's drag over the stage: shows where it would land. */
+    void dragNewOver (StageWidgetType type, juce::Point<int> pointer)
+    {
+        const auto w = droppedWidget (type);
+        const auto at = landing (w, newTopLeft (w, pointer), -1);
+        showDropBox ("Drop: " + describe (type), at.value_or (lastAsked), ! at.has_value());
+    }
+
+    /** The list's drop: the widget to add (nothing when refused). */
+    std::optional<StageWidget> dropNew (StageWidgetType type, juce::Point<int> pointer)
+    {
+        const auto w = droppedWidget (type);
+        auto at = landing (w, newTopLeft (w, pointer), -1);
+        hideDropBox();
+        return at;
+    }
+
+    void hideDropBox()
+    {
+        dropBox.setVisible (false);
+    }
+
+    const kit::DropBox& getDropBox() const noexcept { return dropBox; }
     std::function<void()> onSelectionChanged;
 
     /** Changes the selected widget (the inspector and the right-click menu). */
@@ -1519,6 +1621,8 @@ public:
         {
             original = widgets[(size_t) selected];
             mode = modeAt (bounds (original), e.getPosition());
+            grab = e.position - bounds (original).getPosition().toFloat();   // a move keeps the point it was grabbed at
+            moveTo.reset();
 
             if (e.mods.isPopupMenu())
             {
@@ -1550,11 +1654,26 @@ public:
         if (selected < 0 || mode == Mode::none)
             return;
 
+        if (mode == Mode::move)
+        {
+            // The original stays (faint); the drop box shows where it lands.
+            if (! moving)
+            {
+                moving = true;
+
+                if (onMoving != nullptr)
+                    onMoving (selected, true);
+            }
+
+            moveTo = landing (original, e.position - grab, selected);
+            showDropBox ("Move: " + describe (original.type), moveTo.value_or (lastAsked), ! moveTo.has_value());
+            return;
+        }
+
         const auto dx = juce::roundToInt ((float) e.getDistanceFromDragStartX() / cellWidth());
         const auto dy = juce::roundToInt ((float) e.getDistanceFromDragStartY() / cellHeight());
         auto w = original;
 
-        if (mode == Mode::move)                                          { w.x += dx; w.y += dy; }
         if (mode == Mode::resizeWidth || mode == Mode::resizeBoth)       w.width += dx;
         if (mode == Mode::resizeHeight || mode == Mode::resizeBoth)      w.height += dy;
 
@@ -1577,8 +1696,28 @@ public:
 
     void mouseUp (const juce::MouseEvent&) override
     {
-        if (mode != Mode::none && selected >= 0 && widgets[(size_t) selected] != original)
+        if (moving)
+        {
+            moving = false;
+            hideDropBox();
+
+            if (onMoving != nullptr)
+                onMoving (selected, false);
+
+            // Refused (no free space of its size): nothing moves.
+            if (moveTo.has_value() && juce::isPositiveAndBelow (selected, (int) widgets.size()) && *moveTo != original)
+            {
+                auto copy = widgets;
+                copy[(size_t) selected] = *moveTo;
+                onCommit (copy);
+            }
+
+            moveTo.reset();
+        }
+        else if (mode != Mode::none && selected >= 0 && widgets[(size_t) selected] != original)
+        {
             onCommit (widgets);
+        }
 
         mode = Mode::none;
     }
@@ -1676,11 +1815,25 @@ private:
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
     }
 
+    void showDropBox (const juce::String& label, const StageWidget& at, bool refused)
+    {
+        dropBox.setLabel (label);
+        dropBox.setRefused (refused);
+        dropBox.setBounds (bounds (at));   // repaints only when the snapped place changes
+        dropBox.setVisible (true);
+        dropBox.toFront (false);
+    }
+
     int gap;
     std::vector<StageWidget> widgets;
     StageWidget original;
     Mode mode = Mode::none;
     int selected = -1;
+    bool moving = false;
+    juce::Point<float> grab;
+    std::optional<StageWidget> moveTo;
+    mutable StageWidget lastAsked;   // the snapped place last asked for (where a refused box shows)
+    kit::DropBox dropBox;
 };
 
 //==============================================================================
@@ -1719,9 +1872,10 @@ private:
 };
 
 //==============================================================================
-/** "+ Widget": every widget type in four groups; a click adds one at the
-    next free cell (SCREENS.md §6). */
-class StageView::WidgetPanel final : public juce::Component
+/** "+ Widget": every widget type in four groups. A click adds one at the
+    first free place (SCREENS.md §6); a drag puts it where it's dropped on
+    the stage (V3.2-CHANGES §7): each row has a 6-dot grip on the right. */
+class StageView::WidgetPanel final : public juce::Component, public juce::TooltipClient
 {
 public:
     WidgetPanel()
@@ -1746,6 +1900,24 @@ public:
     }
 
     std::function<void (StageWidgetType)> onAdd;
+
+    /** A row dragged out of the list: where the pointer is (screen), and whether it was let go there. */
+    std::function<void (StageWidgetType, juce::Point<int> screen, bool released)> onDrag;
+
+    juce::String getTooltip() override
+    {
+        return hovered >= 0 ? juce::String ("Drag onto the stage, or click to add it at the first free place") : juce::String();
+    }
+
+    /** The middle of the row for a widget type (tests). */
+    juce::Point<int> rowCentre (StageWidgetType t) const
+    {
+        for (int i = 0; i < (int) rows.size(); ++i)
+            if (! rows[(size_t) i].group && rows[(size_t) i].type == t)
+                return rowBounds (i).getCentre();
+
+        return {};
+    }
 
     void paint (juce::Graphics& g) override
     {
@@ -1782,14 +1954,52 @@ public:
                 paint::text (g, row.chip, chip, type::widgetChip, colour::iconChipText, juce::Justification::centred);
 
             paint::text (g, row.name, r.withTrimmedLeft ((float) (size::widgetNameX - size::widgetListPadX)), type::body, colour::textRow);
+
+            // The grip: 2 × 3 dots, 4 px apart.
+            const auto grip = juce::Rectangle<float> ((float) size::gripW, (float) size::gripH)
+                                  .withPosition (r.getRight() - (float) (size::gripPadRight + size::gripW), r.getCentreY() - (float) size::gripH * 0.5f);
+            g.setColour (paint::c (colour::gripDots));
+
+            for (int dot = 0; dot < 6; ++dot)
+                g.fillEllipse (grip.getX() + 1.0f + (float) (dot % 2) * 4.0f, grip.getY() + 1.0f + (float) (dot / 2) * 4.0f, 2.0f, 2.0f);
         }
     }
 
     void mouseMove (const juce::MouseEvent& e) override  { setHovered (rowAt (e.y)); }
     void mouseExit (const juce::MouseEvent&) override    { setHovered (-1); }
 
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        pressed = rowAt (e.y);
+        dragging = false;
+    }
+
+    void mouseDrag (const juce::MouseEvent& e) override
+    {
+        if (pressed < 0 || ! e.mouseWasDraggedSinceMouseDown())
+            return;
+
+        dragging = true;
+
+        if (onDrag != nullptr)
+            onDrag (rows[(size_t) pressed].type, e.getScreenPosition(), false);
+    }
+
     void mouseUp (const juce::MouseEvent& e) override
     {
+        const auto row = pressed;
+        pressed = -1;
+
+        if (dragging)
+        {
+            dragging = false;
+
+            if (row >= 0 && onDrag != nullptr)
+                onDrag (rows[(size_t) row].type, e.getScreenPosition(), true);
+
+            return;
+        }
+
         const auto i = rowAt (e.y);
 
         if (i >= 0 && onAdd != nullptr && getLocalBounds().contains (e.getPosition()))
@@ -1823,13 +2033,14 @@ private:
         if (i != hovered)
         {
             hovered = i;
-            setMouseCursor (i >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+            setMouseCursor (i >= 0 ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);   // grab: drag it, or click
             repaint();
         }
     }
 
     std::vector<Row> rows;
-    int hovered = -1;
+    int hovered = -1, pressed = -1;
+    bool dragging = false;
 };
 
 //==============================================================================
@@ -2031,11 +2242,38 @@ StageView::StageView (AudioEngine& e, ShowSession& s) : engine (e), session (s)
     stageHelp = "Lock: Ctrl+L" + middot() + "hold the lock 1 s to unlock" + middot() + "F11 full screen";
 
     // Layout editor panes (shown while editing)
-    widgetPane.setHeader ("+ Widget", "click to add");
+    widgetPane.setHeader ("+ Widget", "drag onto the stage");
     canvasPane.setFill (colour::canvasPane);
     inspectorPane.setHeaderRightColour (colour::accent);
     widgetPanel = std::make_unique<WidgetPanel>();
     widgetPanel->onAdd = [this] (StageWidgetType type) { addWidgetAtFreeCell (type); };
+    widgetPanel->onDrag = [this] (StageWidgetType type, juce::Point<int> screen, bool released)
+    {
+        if (editor == nullptr)
+            return;
+
+        const auto p = editor->getLocalPoint (nullptr, screen);
+
+        if (! editor->getLocalBounds().contains (p))
+        {
+            editor->hideDropBox();   // off the stage: let go there and nothing happens
+            return;
+        }
+
+        if (! released)
+        {
+            editor->dragNewOver (type, p);
+            return;
+        }
+
+        if (const auto w = editor->dropNew (type, p))
+        {
+            auto list = current.widgets;
+            list.push_back (*w);
+            editor->select ((int) list.size() - 1);   // the new one is selected
+            commitWidgets (list);
+        }
+    };
     widgetPane.addAndMakeVisible (*widgetPanel);
     artboard = std::make_unique<Artboard>();
     canvasPane.addAndMakeVisible (*artboard);
@@ -2156,8 +2394,34 @@ juce::Point<int> StageView::nextFreeCell() const
 
 void StageView::addWidgetAtFreeCell (StageWidgetType type)
 {
+    // The first place, row by row, where the whole widget fits on free cells;
+    // with none, the first free cell (as before).
+    auto added = clampToGrid (newWidget (type, nextFreeCell()));
+    const auto fits = [this] (const StageWidget& c)
+    {
+        return std::none_of (current.widgets.begin(), current.widgets.end(), [&c] (const StageWidget& o)
+                             { return c.x < o.x + o.width && o.x < c.x + c.width && c.y < o.y + o.height && o.y < c.y + c.height; });
+    };
+
+    for (int y = 0, found = 0; ! found && y + added.height <= stageGridRows; ++y)
+    {
+        for (int x = 0; x + added.width <= stageGridColumns; ++x)
+        {
+            auto c = added;
+            c.x = x;
+            c.y = y;
+
+            if (fits (c))
+            {
+                added = c;
+                found = 1;
+                break;
+            }
+        }
+    }
+
     auto list = current.widgets;
-    list.push_back (clampToGrid (newWidget (type, nextFreeCell())));
+    list.push_back (added);
 
     if (editor != nullptr)
         editor->select ((int) list.size() - 1);   // the new one is selected
@@ -2183,6 +2447,19 @@ void StageView::selectionChanged()
         resized();
 
     refreshFooter (last);
+}
+
+juce::Component* StageView::getLayoutWidgetList() const noexcept { return widgetPanel.get(); }
+juce::Component* StageView::getLayoutSurface() const noexcept    { return editor.get(); }
+juce::Point<int> StageView::getLayoutListRow (StageWidgetType t) const { return widgetPanel->rowCentre (t); }
+const juce::Component* StageView::getLayoutDropBox() const noexcept { return editor != nullptr ? &editor->getDropBox() : nullptr; }
+juce::String StageView::getLayoutDropText() const { return editor != nullptr ? editor->getDropBox().getLabel() : juce::String(); }
+bool StageView::isLayoutDropRefused() const noexcept { return editor != nullptr && editor->getDropBox().isRefused(); }
+int StageView::getSelectedLayoutWidget() const noexcept { return editor != nullptr ? editor->getSelected() : -1; }
+
+float StageView::getShownWidgetAlpha (int index) const noexcept
+{
+    return juce::isPositiveAndBelow (index, widgets.size()) ? widgets[index]->getAlpha() : 0.0f;
 }
 
 void StageView::selectLayoutWidget (int index)
@@ -2448,6 +2725,11 @@ void StageView::setEditingLayout (bool shouldEdit)
         };
         editor->onAddAt = [this] (juce::Point<int> cell) { addWidgetCell = cell; showAddWidgetMenu(); };
         editor->onSelectionChanged = [this] { selectionChanged(); };
+        editor->onMoving = [this] (int index, bool moving)
+        {
+            if (juce::isPositiveAndBelow (index, widgets.size()))
+                widgets[index]->setAlpha (moving ? state::draggedAlpha : 1.0f);
+        };
         artboard->addAndMakeVisible (*editor);
     }
     else

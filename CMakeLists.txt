@@ -280,6 +280,8 @@ target_sources(EncoreUi INTERFACE
     Source/ui/kit/HealthStatus.h
     Source/ui/kit/MixerStrip.cpp
     Source/ui/kit/MixerStrip.h
+    Source/ui/kit/DropBox.cpp
+    Source/ui/kit/DropBox.h
     Source/ui/kit/Lcd.cpp
     Source/ui/kit/Lcd.h
     Source/ui/kit/MeterBar.cpp

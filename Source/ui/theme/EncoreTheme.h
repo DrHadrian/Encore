@@ -279,6 +279,10 @@ namespace colour
     constexpr juce::uint32 artboard        = 0xff121418;   // layout editor: the stage preview
     constexpr juce::uint32 artboardBorder  = 0xff000000;
     constexpr juce::uint32 selectionHalo   = 0x404C8DF6;   // accent at 25 %
+    constexpr juce::uint32 dropBoxFill     = 0x244C8DF6;   // where a dragged widget lands: accent at 14 %
+    constexpr juce::uint32 dropBoxText     = 0xffEEF3FD;
+    constexpr juce::uint32 dropBoxRefused  = 0x24FFB340;   // ... no free space of its size: amber at 14 %
+    constexpr juce::uint32 gripDots        = 0x8CA3A3AA;   // a list row's drag grip: #A3A3AA at 55 %
     constexpr juce::uint32 learningRow     = 0x1FFFB340;   // MIDI row being learned (amber 12 %)
 
     // Patch colours (PatchModel::colour is used as stored; these are the defaults shown in the designs)
@@ -503,6 +507,9 @@ namespace size
     constexpr int widgetListTop = 8, widgetGroupH = 24, widgetGroupX = 11, widgetRowH = 30;
     constexpr int widgetChipX = 15, widgetChipW = 24, widgetChipH = 20, widgetChipRadius = 3, widgetNameX = 48, widgetListPadX = 7;
     constexpr int handle = 8, handleRadius = 2, handleGrab = 14, selectionBorder = 2, selectionHalo = 3;
+    constexpr int dropBoxBorder = 2, dropBoxRadius = 6, dropBoxDash = 6, dropBoxDashGap = 4;   // the drop box (v3.2 §7)
+    constexpr int droppedWidgetW = 4, droppedWidgetH = 2;                                      // a widget dropped from the list, in cells
+    constexpr int gripW = 8, gripH = 12, gripPadRight = 8;                                     // the list rows' 6-dot grip
     constexpr int layoutInspectorPad = 10, layoutLabelGap = 8, layoutButtonGap = 8, layoutHalfGap = 6;
     constexpr int layoutNotesH = 123, layoutNoteGap = 6;
     // Settings window (SCREENS.md §7, settings-*.json)
@@ -788,6 +795,7 @@ namespace type
     constexpr Style muteLetter      { 10.0f, Weight::extraBold };           // "M"
     constexpr Style outputName      { 11.5f, Weight::semibold };            // an output's name on its strip
     constexpr Style outputChannels  { 9.5f, Weight::regular, 0.0f, false, true };             // "1/2"
+    constexpr Style dropBox         { 12.0f, Weight::semibold };            // "Drop: Clock" / "Move: Clock"
     constexpr Style mixerName       { 11.0f, Weight::semibold };            // an output's name over its mixer strip (two lines)
     constexpr Style limLabel        {  8.5f, Weight::bold, 0.06f, true };   // LIM
     constexpr Style peakValue       { 10.0f, Weight::regular, 0.0f, false, true };   // "−8.2" over the fader
@@ -841,6 +849,7 @@ namespace state
     constexpr float hoverLighten  = 0.06f;   // raised controls get 6 % lighter on hover
     constexpr float activeLighten = 0.15f;   // a stage button widget while it acts (panic silencing)
     constexpr float disabledAlpha = 0.45f;
+    constexpr float draggedAlpha  = 0.35f;   // a widget being moved, where it was
     constexpr float cutAlpha      = 0.35f;   // cut items in the full list
     // Summary badge for warning / ok (the boards only draw the problem one):
     // the badge colour lit and darkened the way the problem badge is.

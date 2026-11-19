@@ -266,6 +266,159 @@ public:
             expect (! view.isEditingLayout());
         }
 
+        beginTest ("Layout editor: drag from the list, move on the stage, nearest free space, refuse when full (V3.2-CHANGES 7)");
+        {
+            using T = StageWidgetType;
+            const auto widget = [] (T t, int x, int y, int w, int h) { StageWidget sw; sw.type = t; sw.x = x; sw.y = y; sw.width = w; sw.height = h; return sw; };
+
+            ShowSession session (engine);
+            expect (session.openShow (makeLayoutShow (root)).wasOk());
+            const auto id = session.addLayout ("Default", {});
+            session.setLayoutWidgets (id, { widget (T::currentCue, 0, 0, 16, 6), widget (T::clock, 16, 0, 4, 2) });
+            session.setDefaultLayout (id);
+            settle (engine, session);
+            session.goToCue (0);
+            settle (engine, session);
+
+            StageView view (engine, session);
+            view.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            view.setEditingLayout (true);
+            view.update (boardSnapshot());
+
+            auto* list = view.getLayoutWidgetList();
+            auto* surface = view.getLayoutSurface();
+            expect (list != nullptr && surface != nullptr);
+
+            if (list == nullptr || surface == nullptr)
+                return;
+
+            // A point on the stage in cells (the surface's size changes as the inspector comes and goes).
+            const auto at = [&] (float cx, float cy)
+            {
+                return juce::Point<int> (juce::roundToInt (cx * (float) surface->getWidth() / (float) stageGridColumns),
+                                         juce::roundToInt (cy * (float) surface->getHeight() / (float) stageGridRows));
+            };
+            const auto now = juce::Time::getCurrentTime();
+
+            // A mouse event on c at p (c's coordinates), pressed at `down`.
+            const auto event = [now] (juce::Component& c, juce::Point<int> p, juce::Point<int> down, bool dragged)
+            {
+                return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), p.toFloat(), juce::ModifierKeys::leftButtonModifier,
+                                         juce::MouseInputSource::defaultPressure, juce::MouseInputSource::defaultOrientation,
+                                         juce::MouseInputSource::defaultRotation, juce::MouseInputSource::defaultTiltX,
+                                         juce::MouseInputSource::defaultTiltY, &c, &c, now, down.toFloat(), now, 1, dragged);
+            };
+
+            // Drag a list row to a point on the stage (surface coordinates); `release` lets go there.
+            const auto dragFromList = [&] (T type, juce::Point<int> onStage, bool release)
+            {
+                const auto row = view.getLayoutListRow (type);
+                const auto p = list->getLocalPoint (surface, onStage);
+                list->mouseDown (event (*list, row, row, false));
+                list->mouseDrag (event (*list, p, row, true));
+
+                if (release)
+                    list->mouseUp (event (*list, p, row, true));
+            };
+
+            const auto overlaps = [] (const std::vector<StageWidget>& ws)
+            {
+                for (size_t i = 0; i < ws.size(); ++i)
+                    for (size_t j = i + 1; j < ws.size(); ++j)
+                        if (ws[i].x < ws[j].x + ws[j].width && ws[j].x < ws[i].x + ws[i].width
+                            && ws[i].y < ws[j].y + ws[j].height && ws[j].y < ws[i].y + ws[i].height)
+                            return true;
+
+                return false;
+            };
+
+            // The list: a grip on each row, the tooltip says what a drag and a click do.
+            if (auto* tip = dynamic_cast<juce::TooltipClient*> (list))
+            {
+                list->mouseMove (event (*list, view.getLayoutListRow (T::patchName), view.getLayoutListRow (T::patchName), false));
+                expectEquals (tip->getTooltip(), juce::String ("Drag onto the stage, or click to add it at the first free place"));
+            }
+
+            // 1. Drag "Patch" over free cells: the drop box shows "Drop: Patch", 4 x 2, snapped.
+            dragFromList (T::patchName, at (6.0f, 9.0f), false);
+            expect (view.getLayoutDropBox() != nullptr && view.getLayoutDropBox()->isVisible(), "the drop box shows while dragging");
+            expectEquals (view.getLayoutDropText(), juce::String ("Drop: Patch"));
+            expect (! view.isLayoutDropRefused());
+            renderSnapshot (view, "v32-layout-drop");
+
+            list->mouseUp (event (*list, list->getLocalPoint (surface, at (6.0f, 9.0f)), view.getLayoutListRow (T::patchName), true));
+            settle (engine, session);
+            expect (! view.getLayoutDropBox()->isVisible(), "gone after the drop");
+            {
+                const auto& ws = view.getShownWidgets();
+                expectEquals ((int) ws.size(), 3);
+                const auto& added = ws.back();
+                expect (added.type == T::patchName);
+                expectEquals (added.width, 4);
+                expectEquals (added.height, 2);
+                expectEquals (added.x, 4);   // centred on the pointer, snapped
+                expectEquals (added.y, 8);
+                expectEquals (view.getSelectedLayoutWidget(), 2, "the dropped widget is selected");
+            }
+
+            // 2. Dropped onto taken cells: the nearest free space of its size.
+            dragFromList (T::setList, at (4.0f, 2.0f), true);
+            settle (engine, session);
+            expectEquals ((int) view.getShownWidgets().size(), 4);
+            expect (! overlaps (view.getShownWidgets()), "nothing ends up on top of another widget");
+            expectEquals (view.getShownWidgets().back().y, 6, "the nearest free row under the current cue");
+
+            // 3. Move the clock by dragging it: the original goes faint, "Move: Clock", it keeps the grab point.
+            {
+                const auto clockIndex = 1;
+                const auto grabPoint = at (17.0f, 1.0f);   // a cell into the clock
+                const auto to = at (21.0f, 13.0f);
+                surface->mouseDown (event (*surface, grabPoint, grabPoint, false));
+                surface->mouseDrag (event (*surface, to, grabPoint, true));
+                expectEquals (view.getLayoutDropText(), juce::String ("Move: Clock"));
+                expectWithinAbsoluteError (view.getShownWidgetAlpha (clockIndex), theme::state::draggedAlpha, 0.001f);
+                renderSnapshot (view, "v32-layout-move");
+                surface->mouseUp (event (*surface, to, grabPoint, true));
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (50);   // the move commits after the mouse-up returns
+                settle (engine, session);
+                expectWithinAbsoluteError (view.getShownWidgetAlpha (clockIndex), 1.0f, 0.001f);
+                const auto& clock = view.getShownWidgets()[(size_t) clockIndex];
+                expect (clock.type == T::clock);
+                expectEquals (clock.x, 20);   // grabbed one cell in: it lands one cell left of the pointer
+                expectEquals (clock.y, 12);
+                expect (! overlaps (view.getShownWidgets()));
+            }
+
+            // 4. A click (no drag) in the list adds the widget at the first place it fits.
+            if (auto* l = view.getLayoutWidgetList())
+            {
+                const auto row = view.getLayoutListRow (T::clock);
+                l->mouseDown (event (*l, row, row, false));
+                l->mouseUp (event (*l, row, row, false));
+                settle (engine, session);
+                expectEquals ((int) view.getShownWidgets().size(), 5);
+                expect (! overlaps (view.getShownWidgets()), "a click adds it where it fits");
+            }
+
+            // 5. A full stage: the drop box turns amber and nothing is added.
+            session.setLayoutWidgets (id, layoutEditorWidgets());
+            settle (engine, session);
+            view.update (boardSnapshot());
+            const auto before = view.getShownWidgets();
+            dragFromList (T::tuner, at (6.0f, 9.0f), false);
+            expect (view.isLayoutDropRefused(), "no free space: refused");
+            renderSnapshot (view, "v32-layout-refused");
+            list->mouseUp (event (*list, list->getLocalPoint (surface, at (6.0f, 9.0f)), view.getLayoutListRow (T::tuner), true));
+            settle (engine, session);
+            expect (view.getShownWidgets() == before, "nothing changed");
+
+            // Let go off the stage: nothing happens.
+            dragFromList (T::clock, list->getLocalBounds().getCentre(), true);
+            expect (view.getShownWidgets() == before);
+
+            view.setEditingLayout (false);
+        }
+
         beginTest ("Stage: a musical, typing a cue number (stage-musical-goto.png)");
         {
             ShowSession session (engine);
