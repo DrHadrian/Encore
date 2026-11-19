@@ -683,4 +683,9 @@ buildable and tested, for players and for every branch started from it.
   build (LTO) is made every night and when the workflow is run by hand, with
   its own cache (`windows-Release-lto`). It also tests the LTO build, which a
   pull request doesn't.
+- **One compiler cache per compiler version.** GitHub rolls out new Windows
+  images gradually, so for a while runs land on the old or the new MSVC at
+  random. A cache filled by one compiler misses everything on the other (seen
+  on #17: 0 % hits, MSVC 14.51 after 14.52). The cache key now includes the
+  MSVC version, so each compiler keeps its own cache.
 

@@ -89,21 +89,26 @@ jobs:
         with:
           arch: x64
 
+      # The toolchain this runner has: GitHub changes runner images (and with
+      # them the MSVC version) without notice, and during a rollout runners with
+      # both run side by side. A cache made with another compiler is useless:
+      # compiled objects miss, and JUCE's build helper fails to configure.
+      - name: Toolchain (for the cache keys)
+        shell: pwsh
+        run: |
+          echo "ENCORE_COMPILER=msvc$env:VCToolsVersion" >> $env:GITHUB_ENV
+          echo "ENCORE_TOOLCHAIN=msvc$env:VCToolsVersion-image$env:ImageVersion" >> $env:GITHUB_ENV
+
       # Compiled objects are reused across runs: only what changed compiles.
       # sccache is the cache that works with MSVC (needs /Z7 debug info, set below).
+      # One cache per compiler version (and for LTO), so a rollout costs one cold
+      # run per version, not one each time a run lands on the other image.
       - name: Compiler cache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           variant: sccache
-          key: windows-${{ matrix.config }}${{ env.ENCORE_LTO == 'ON' && '-lto' || '' }}
+          key: windows-${{ matrix.config }}${{ env.ENCORE_LTO == 'ON' && '-lto' || '' }}-${{ env.ENCORE_COMPILER }}
           max-size: 2G
-
-      # The toolchain this runner has: GitHub changes runner images (and with
-      # them the MSVC version) without notice, and a cache made with another
-      # compiler fails to configure (JUCE's build helper remembers its compiler).
-      - name: Toolchain (for the cache keys)
-        shell: pwsh
-        run: echo "ENCORE_TOOLCHAIN=msvc$env:VCToolsVersion-image$env:ImageVersion" >> $env:GITHUB_ENV
 
       # JUCE, NeuralAmpModelerCore and Eigen as downloaded (and JUCE's build
       # helper as built), per toolchain, configuration and generator.
