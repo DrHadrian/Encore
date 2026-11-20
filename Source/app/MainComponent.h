@@ -71,6 +71,10 @@ public:
     std::function<void()> onViewChanged;
     bool isShowingStage() const noexcept { return stageView != nullptr && stageView->isVisible(); }
 
+    /** The Stage playing the show (not its layout editor): widgets act the moment a
+        finger lands, so a two-finger tap is two touches there, not a right click. */
+    bool isOnLiveStage() const noexcept { return isShowingStage() && ! stageView->isEditingLayout(); }
+
     /** Settings — Audio | MIDI | Plugins (Settings... on the tab used last; the
         pre-show check's fixes, Routing and Find plugins... on their own tab). */
     void openSettings (SettingsWindow::Tab);

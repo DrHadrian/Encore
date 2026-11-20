@@ -33,6 +33,10 @@ else()
     FetchContent_MakeAvailable(juce)
 endif()
 
+# The two-finger right click: touch messages reach Encore inside JUCE's own
+# window code (see the script). Sets ENCORE_JUCE_TOUCH_FILTER.
+include(cmake/PatchJuceTouch.cmake)
+
 # NeuralAmpModelerCore (MIT) and the Eigen commit it pins (MPL2).
 # Only the sources are fetched (SOURCE_SUBDIR points nowhere), so neither
 # project's own build runs; nam_core below compiles exactly what we need.
@@ -435,6 +439,8 @@ target_sources(EncoreUi PRIVATE
     Source/ui/PreShowCheckView.cpp
     Source/ui/PreShowCheckView.h
     Source/ui/StageView.cpp
+    Source/ui/TouchGestures.cpp
+    Source/ui/TouchGestures.h
     Source/ui/StageView.h
     Source/ui/TunerDisplay.cpp
     Source/ui/TunerDisplay.h
@@ -447,6 +453,10 @@ target_sources(EncoreUi PRIVATE
     Source/ui/SetList.cpp
     Source/ui/SetList.h)
 target_link_libraries(EncoreUi PUBLIC EncoreEngine EncoreUiAssets EncoreAmpArt)
+# The two-finger right click needs JUCE's touch filter (cmake/PatchJuceTouch.cmake).
+if(ENCORE_JUCE_TOUCH_FILTER)
+    target_compile_definitions(EncoreUi PRIVATE ENCORE_JUCE_TOUCH_FILTER=1)
+endif()
 
 # ------------------------------------------------------------------------------
 # Build speed (decision 0049). Parsing JUCE's headers is ~95 % of compiling a
@@ -546,6 +556,9 @@ if(ENCORE_BUILD_TESTS)
         Tests/TestMain.cpp
         Tests/HangWatchdog.cpp
         Tests/ThreadStopTests.cpp
+        Tests/TouchGestureTests.cpp
+        Tests/TouchInjection.cpp
+        Tests/TouchInjection.h
         Tests/HangWatchdog.h
         Tests/AllocationCounter.cpp
         Tests/AllocationCounter.h

@@ -782,3 +782,43 @@ paint can reach, so only its four rounded corners showed.
 - **`paint::focusRing` takes the room its caller can paint in.** The ring
   goes 2 px outside the control when it fits, or on the control's own edge
   when it doesn't (buttons, pane tabs, fields). It's always drawn whole.
+
+## 0062 — Touch screens: hold is a hold; a two-finger tap is a right click
+
+On a Windows touch screen a finger held still turned into a right click
+(Windows' "press and hold"), so holding or dragging only worked after the
+finger moved a little (Adrian, 20 Nov 2026).
+
+- **Press and hold off:** the main window sets the documented
+  `MicrosoftTabletPenServiceProperty` flags (press and hold, pen feedback and
+  flicks off). It sets them when it opens and whenever it's activated.
+- **A two-finger tap is a right click**, everywhere except the live Stage
+  (Adrian's choice), where widgets act the moment a finger lands.
+  - It starts when a second finger lands within 300 ms of the first, before
+    the first has moved. It counts as a tap when both are lifted within 700 ms
+    and neither moved more than 24 px.
+  - The first finger's press is cancelled, so nothing under it clicks. The
+    second finger never reaches the app.
+  - The right click goes where the first finger was.
+  - The rules are in `TwoFingerTapDetector`, with unit tests.
+- **Inside JUCE, not around it:** the first build hooked its window from
+  outside (`SetWindowSubclass`), and Chrome flagged that download as
+  dangerous; the build without it wasn't flagged. So JUCE's own window code
+  now hands touch messages to Encore first: a small edit made on the
+  fetched JUCE source by `cmake/PatchJuceTouch.cmake`.
+  - The script runs on every configure, but edits the file only once.
+  - It never edits a local JUCE checkout (`ENCORE_JUCE_DIR`).
+  - If the code doesn't match (a new JUCE version), it warns and the app
+    builds without the two-finger tap.
+- **JUCE reads the touches itself** (`setUsingWindowsMultiTouch`, one input
+  source per finger) on the main window. Left to Windows, a touch became a
+  mouse click only when the finger lifted; on a two-finger tap that late click
+  arrived after the right click and closed the menu it had opened (Adrian, 20
+  Nov 2026, on a block in the signal chain). Now a press lands the moment the
+  finger does. Windows' built-in gestures (pinch) stop; Encore uses none.
+- **Tested on a real window:** a test opens a menu with the synthetic right
+  click, and with a two-finger tap made of injected touches
+  (`InjectTouchInput`, no touch screen needed), and checks it stays open. On CI
+  a touch that can't be injected fails the test; elsewhere it's skipped.
+- **Code signing** is still the real answer to download warnings ("Production
+  basics" in the roadmap).
