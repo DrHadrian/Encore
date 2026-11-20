@@ -433,6 +433,79 @@ public:
             expect (hasContent (image));
         }
 
+        beginTest ("The Show menu with Stage settings (this show) open (v32-menu): the items and words as BShowMenu");
+        {
+            const auto folder = root.getChildFile ("Settings menu");
+            folder.createDirectory();
+            AppSettings settings (folder);
+            settings.setLastShowFolder (showFolder);
+            const auto setup = boardDeviceSetup();
+            settings.setAudioDeviceState (&setup);
+
+            MainComponent main (settings, std::make_unique<BoardDeviceType>());
+            main.setBounds (0, 0, theme::size::referenceWidth, theme::size::referenceHeight);
+            pump (800);
+
+            const auto showMenu = main.buildShowMenu();
+            juce::StringArray words;
+            int stageIndex = -1, i = 0;
+            const juce::PopupMenu* stageMenu = nullptr;
+
+            for (juce::PopupMenu::MenuItemIterator it (showMenu); it.next(); ++i)
+            {
+                words.add (it.getItem().isSeparator ? juce::String ("|") : it.getItem().text);
+
+                if (it.getItem().text == "Stage settings (this show)")
+                {
+                    stageIndex = i;
+                    stageMenu = it.getItem().subMenu.get();
+                }
+            }
+
+            // The board's list (v32-README A2 > Show menu); the code has had nothing new since milestone 9.
+            expectEquals (words.joinIntoString (" / "),
+                          juce::String::fromUTF8 ("New show\xe2\x80\xa6 / Open show\xe2\x80\xa6 / | / Save now (Ctrl+S) / "
+                                                  "Save a copy to\xe2\x80\xa6 (USB stick, backup) / | / Show folder in Explorer / Kind of show / | / "
+                                                  "Pre-show check\xe2\x80\xa6 (F9) / Open log folder / | / Stage settings (this show) / | / Open backups folder"));
+
+            auto image = main.createComponentSnapshot (main.getLocalBounds());
+            {
+                juce::Graphics g (image);
+                auto& lnf = main.getLookAndFeel();
+                const juce::Component* showButton = nullptr;
+
+                std::function<void (const juce::Component&)> find = [&] (const juce::Component& parent)
+                {
+                    for (auto* c : parent.getChildren())
+                    {
+                        if (auto* b = dynamic_cast<const juce::TextButton*> (c); b != nullptr && b->getButtonText() == "Show" && b->isVisible())
+                            showButton = b;
+
+                        find (*c);
+                    }
+                };
+                find (main);
+
+                const auto at = showButton != nullptr ? main.getLocalArea (showButton->getParentComponent(), showButton->getBounds()).getBottomLeft()
+                                                      : juce::Point<int>();
+                const auto items = paintMenu (g, lnf, showMenu, at.translated (-theme::size::menuPadding, 0), stageIndex);
+
+                if (stageMenu != nullptr && juce::isPositiveAndBelow (stageIndex, (int) items.size()))
+                {
+                    const auto parent = items[(size_t) stageIndex];
+                    paintMenu (g, lnf, *stageMenu, { parent.getRight() + theme::size::menuPadding - theme::size::menuPadding * 3,
+                                                     parent.getY() - theme::size::menuPadding });
+                }
+            }
+
+            writeSnapshot (image, "v32-menu");
+            expect (hasContent (image));
+
+            // The status bar alone (v32-status-bar): the Edit toolbar, 44 high.
+            writeSnapshot (main.createComponentSnapshot ({ 0, 0, theme::size::referenceWidth, 44 }), "v32-status-bar");
+            writeSnapshot (main.createComponentSnapshot ({ 0, 0, theme::size::referenceWidth, 44 }, true, 2.0f), "v32-status-bar@2x");
+        }
+
         beginTest ("Settings: Audio and MIDI tabs (settings-audio.png, settings-midi.png)");
         {
             AppSettings settings (root.getChildFile ("Settings dialogs"));
@@ -448,6 +521,19 @@ public:
             expect (main.isShowingSettings());
             pump (400);   // the status values arrive from the main window's timer
             expect (hasContent (renderSnapshot (main, "settings-audio")));
+            renderSnapshot (main, "v32-settings");   // BSettingsAudio: Done only, the keys line in the footer
+            renderSnapshot (main, "v32-settings@2x", 2.0f);
+
+            if (auto* window = main.getSettingsWindow())
+            {
+                juce::StringArray footer;
+
+                for (auto* child : window->getFrame().getChildren())
+                    if (auto* b = dynamic_cast<juce::TextButton*> (child))
+                        footer.add (b->getButtonText());
+
+                expect (footer.contains ("Done") && ! footer.contains ("Cancel"), "Done only (audit F18): " + footer.joinIntoString (", "));
+            }
 
             main.openSettings (SettingsWindow::Tab::midi);
             pump (100);

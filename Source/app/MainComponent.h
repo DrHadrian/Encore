@@ -113,6 +113,7 @@ public:
     kit::HealthStatus& getHealthStatus() noexcept { return healthStatus; }
     bool isShowingHealthDetails() const noexcept { return healthDialog != nullptr; }
     HealthDetailsDialog* getHealthDetails() noexcept { return healthDialog.get(); }
+    SettingsWindow* getSettingsWindow() noexcept { return settingsWindow.get(); }
     void openHealthDetails();
     void closeHealthDetails();
     void showInputPicker (juce::Component& anchor);

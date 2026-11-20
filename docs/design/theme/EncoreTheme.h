@@ -446,6 +446,7 @@ namespace size
     constexpr int dialogTitleBar    = 30;
     constexpr int dialogFooter      = 48;    // + 1 px line above it
     constexpr int dialogPadX        = 20;    // footer, content
+    constexpr int dialogFooterLineGap = 3;   // the footer's help text and the keys line under it (Settings)
     constexpr int dialogClose       = 20, dialogCloseInset = 8, dialogCloseIcon = 14;
     constexpr int dialogButtonW     = 84, dialogButtonGap = 8;
     constexpr int dialogShadowY     = 30, dialogShadowBlur = 80;
