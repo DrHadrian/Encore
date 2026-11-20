@@ -277,6 +277,7 @@ void AudioEngine::resetCounters() noexcept
 {
     loadMeasurer.reset (currentSampleRate.load(), currentBlockSize.load());
     clipCount.store (0, std::memory_order_relaxed);
+    player.resetBadCounts();   // "Bad audio caught" counts since the last reset too
 
     for (auto& c : outputClips)
         c.store (0, std::memory_order_relaxed);

@@ -286,6 +286,34 @@ public:
             expectEquals (kit::AmpFace::numCached(), 0);
         }
 
+        beginTest ("Face: label text is Inter caps; an older file's serif draws as caps and is kept when saving (20 Nov)");
+        {
+            auto serif = sampleAmp();   // its "SUPER CRUSH 100" text says font: serif
+            auto caps = serif;
+
+            for (auto& p : caps.parts)
+                if (p.type == "text")
+                    p.font = {};
+
+            expect (serif.parts != caps.parts, "the two amps differ only in the font field");
+
+            const auto a = kit::AmpFace::compose (serif, kit::AmpFace::Layer::everything);
+            const auto b = kit::AmpFace::compose (caps, kit::AmpFace::Layer::everything);
+            auto same = a.getBounds() == b.getBounds();
+
+            for (int y = 0; same && y < a.getHeight(); ++y)
+                for (int x = 0; same && x < a.getWidth(); ++x)
+                    same = a.getPixelAt (x, y) == b.getPixelAt (x, y);
+
+            expect (same, "serif draws exactly as caps");
+
+            juce::String error;
+            const auto back = ampPreset::fromJson (ampPreset::toJson (serif), error);
+            expect (back.has_value() && back->parts == serif.parts, "the font field is kept when saving");
+
+            kit::AmpFace::clearCache();
+        }
+
         beginTest ("Edit: an amp block shows a face; its driving controls are real, Fixed ones only say so, lights follow the block");
         {
             NamAmpBlock block;
@@ -925,6 +953,18 @@ public:
                 builder.edit (kit::ampTemplates::defaultFace());
                 builder.select ("k4");
                 inspectorShot ("v32-amp-inspector-knob", 598);
+
+                // The Symbol choice: icon + word, 2 columns (decided 19 Nov; no board picture yet).
+                if (const auto* amp = example ("example-super-crush-100"))
+                {
+                    builder.edit (*amp);
+                    builder.select ("y1");
+                    inspectorShot ("v32-amp-inspector-symbol", 420);
+                }
+                else
+                {
+                    expect (false, "Super Crush 100 is one of the examples");
+                }
 
                 if (const auto* amp = example ("example-jc-120"))
                 {

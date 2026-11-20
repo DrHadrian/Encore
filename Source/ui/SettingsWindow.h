@@ -19,6 +19,8 @@ namespace encore
 class SettingsWindow final
 {
 public:
+    kit::DialogFrame& getFrame() noexcept { return frame; }
+
     enum class Tab { audio, midi, plugins };
 
     SettingsWindow (juce::AudioDeviceManager&, const system::TuningReport&, std::function<void()> resetCounters,

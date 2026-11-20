@@ -127,7 +127,8 @@ namespace amp
     constexpr int swatchGap = 6, swatchRadius = 5;                          // .ab-sw: 6 px across and down
     constexpr int swatchRingOut = 2, swatchRingRadius = 7, swatchRingW = 2;  // outline 2 px, offset 1: stroke centred 2 px out
     constexpr int swatchMargin = 3;                                          // room for the ring around a swatch group
-    constexpr int labelTopBody = 4, labelTopSymbol = 6, labelLineH = 14;     // Body / Symbol labels sit at the top
+    constexpr int labelTopBody = 4, labelTopSymbol = 4, labelLineH = 14;     // Body / Symbol labels sit at the top (Symbol: 4 since it's icon + word, 19 Nov)
+    constexpr float symbolIcon = 13.0f, symbolIconGap = 3.0f;               // the Symbol choice: the board's icon at 13 px, gap 3, then the word
     constexpr int dropBorder = 2, dropRadius = 6, gapLabelH = 12;
     constexpr int undoDepth = 100;
 }

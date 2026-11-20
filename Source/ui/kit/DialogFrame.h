@@ -45,6 +45,10 @@ public:
     /** Footer: help text left; buttons right, in the order added
         (Cancel, then Done). `showFooter (false)` for dialogs without one. */
     void setFooterText (const juce::String&);
+
+    /** A second, smaller footer line under the text: the keys that work here
+        (Settings, v3.2). Empty: one line, centred as before. */
+    void setFooterKeys (const juce::String&);
     juce::TextButton& addFooterButton (const juce::String& text, theme::Variant = theme::Variant::standard);
     void showFooter (bool);
 
@@ -61,7 +65,7 @@ private:
     int tabsBottom() const noexcept;
     int footerTop() const noexcept;
 
-    juce::String title, footerText;
+    juce::String title, footerText, footerKeys;
     IconButton closeButton;
     juce::OwnedArray<TabButton> tabs;
     juce::OwnedArray<juce::TextButton> footerButtons;
