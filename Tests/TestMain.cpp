@@ -121,7 +121,8 @@ int main (int argc, char* argv[])
         }
     }
 
-    std::cout << "\nEncore tests: " << passes << " passed, " << failures << " failed\n";
+    // Flushed: a hang after this point (shutting down) then shows as one.
+    std::cout << "\nEncore tests: " << passes << " passed, " << failures << " failed" << std::endl;
 
    #if JUCE_WINDOWS && defined (_DEBUG)
     if (crtReports > 0)

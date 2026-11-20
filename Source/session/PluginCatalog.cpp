@@ -2,6 +2,7 @@
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
 #include "session/PluginCatalog.h"
+#include "engine/core/ThreadStop.h"
 
 #include "engine/blocks/PluginBlock.h"
 
@@ -61,7 +62,7 @@ public:
                             + (everything ? "  Scan all again" : "  Scan") + " in " + folders.toString() + "\n");
     }
 
-    ~ScanThread() override { stopThread (10000); }
+    ~ScanThread() override { stopThreadWithoutKilling (*this); }   // never killed (ThreadStop.h)
 
     void run() override
     {

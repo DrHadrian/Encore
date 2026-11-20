@@ -718,21 +718,47 @@ Now (as DESIGN-SYSTEM already said: "only after keyboard navigation, never on cl
   no other place that changes state.
 
 
-## 0060 — A hang in the tests prints its stacks
+## 0060 — Encore never kills a thread; a hang in the tests prints its stacks
 
-Main's CI on 4d72c76 hung once in the amp builder test until ctest's 10-minute
-limit. The log named only the test. The same test passed 60 times in a local
-Release build and 40 times on the Windows runner, so the cause is still open.
+Main's CI on 4d72c76 hung in the amp builder test until ctest's 10-minute
+limit, and the log named only the test. It happened about once in four full
+Windows runs, always with the four test processes running at once.
 
-- **A hang watchdog** (`Tests/HangWatchdog`) now runs in CI:
+**The cause.** `juce::ThreadPool` (the loader pool, `BackgroundJobs`) gives
+each thread 500 ms to stop and then calls `TerminateThread`. A thread that is
+ending holds the Windows loader lock while every DLL is told. On a busy runner
+that can take longer than 500 ms. Killed then, the lock stays held for good:
+every thread start, thread exit and DLL load after it waits forever.
+
+What the watchdog (below) showed in the hung runs:
+- no thread held the lock;
+- new threads were waiting for it inside the loader;
+- the test thread was waiting on a thread that couldn't end;
+- the watchdog's own symbol helper, a new thread, couldn't start.
+
+It hit the test that followed a pool's end. Another run hung at exit instead,
+after its last test. The MIDI sender (1 s), the plugin scan thread (10 s) and
+a test device (10 s) had the same time-limited stop. In the app this could
+have hung Encore at a show change or at quit, however rarely.
+
+**The rule:**
+- **Encore's threads are always joined, never killed.**
+  - `BackgroundJobs` is a small pool of its own (`std::thread`, joined).
+    Jobs still waiting are dropped; a running job finishes. Plugin creation
+    gives up within 50 ms once its show is closed.
+  - Every `juce::Thread` stops through `stopThreadWithoutKilling`
+    (`ThreadStop.h`). It waits as long as it takes and logs once after 5 s.
+  - A test fails on any `stopThread`, `killThread` or `juce::ThreadPool` in
+    `Source/`.
+- **The tests have a hang watchdog** (`Tests/HangWatchdog`):
   - With `ENCORE_TEST_HANG_SECONDS` set (CI: 180 s), a test process with no
     progress for that long prints the step it was in and exits with code 3.
-  - On Windows it also prints every thread's stack, with function names and
-    file:line. This was checked on the runner.
-  - Off by default, so a test paused in a debugger isn't killed.
-- **Progress** is each test step, plus a heartbeat from the soak. The longest
-  step takes about 20 s.
-- **Symbols:** EncoreTests links DbgHelp and gets a PDB in Release (`/DEBUG`,
-  with `/OPT:REF` and `/OPT:ICF` kept on).
-- **The next time it hangs,** the log shows where. The fix follows from that,
-  with a test.
+    Progress is each test step, plus a heartbeat from the soak; the longest
+    step takes about 20 s. It's off by default, so a test paused in a
+    debugger isn't killed.
+  - On Windows it also prints every thread's stack. It does so without the
+    loader, the heap or the console, which a hang may be holding: frames as
+    module + offset first, then names from a helper thread that gets 30 s.
+  - EncoreTests links DbgHelp and gets a PDB in Release (`/DEBUG`, with
+    `/OPT:REF` and `/OPT:ICF` kept on). A failed CI job uploads the exe and
+    the PDB.

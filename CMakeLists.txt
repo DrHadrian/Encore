@@ -168,6 +168,7 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/blocks/SplitBlocks.cpp
     Source/engine/blocks/SplitBlocks.h
     Source/engine/core/BackgroundJobs.h
+    Source/engine/core/ThreadStop.h
     Source/engine/core/Block.cpp
     Source/engine/core/Block.h
     Source/engine/core/Chain.cpp
@@ -544,6 +545,7 @@ if(ENCORE_BUILD_TESTS)
     target_sources(EncoreTests PRIVATE
         Tests/TestMain.cpp
         Tests/HangWatchdog.cpp
+        Tests/ThreadStopTests.cpp
         Tests/HangWatchdog.h
         Tests/AllocationCounter.cpp
         Tests/AllocationCounter.h
@@ -594,6 +596,8 @@ if(ENCORE_BUILD_TESTS)
             nam_core)
 
     encore_precompile_headers(EncoreTests)
+    # The source scan in ThreadStopTests.cpp reads Source/.
+    target_compile_definitions(EncoreTests PRIVATE ENCORE_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
     # Plain C++ that includes windows.h: no JUCE precompiled header.
     set_source_files_properties(Tests/HangWatchdog.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
