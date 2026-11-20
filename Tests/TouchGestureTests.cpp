@@ -248,6 +248,7 @@ private:
                 if (! ready || ! touch::inject (frame, error))
                 {
                     logMessage ("skipped: " + juce::String (error) + " (touch injection needs a desktop session)");
+                    expect (false, "DIAG skipped " + juce::String (error));
                     return;
                 }
 
@@ -279,6 +280,8 @@ private:
         logMessage ("while open: " + lastOpen);
         logMessage ("after: " + state());
 
+        expect (false, "DIAG " + juce::String (byTouch ? "touch" : "synthetic") + " | events: " + target.log.joinIntoString ("; ")
+                       + " | opened " + juce::String (openedAt) + " closed " + juce::String (closedAt) + " | open: " + lastOpen + " | after: " + state());
         expect (target.log.joinIntoString (";").contains ("down mouse0 right"), "the right press arrived");
         expect (openedAt >= 0, "the menu opened");
         expect (closedAt < 0, "the menu stayed open");
