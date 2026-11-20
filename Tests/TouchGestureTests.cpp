@@ -245,8 +245,20 @@ private:
 
             for (const auto& frame : frames)
             {
-                if (! ready || ! touch::inject (frame, error))
+                // Windows can turn a frame down for a moment (error 1460, a timeout; seen
+                // once on CI right after the touch injection started): try it again.
+                auto injected = ready && touch::inject (frame, error);
+
+                for (int attempt = 0; ready && ! injected && attempt < 10; ++attempt)
                 {
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+                    injected = touch::inject (frame, error);
+                }
+
+                if (! injected)
+                {
+                    error += " (frame " + std::to_string (&frame - frames.data()) + ")";
+
                     // CI's Windows runner can inject touches: there a failure must not pass as a skip.
                     const auto onCi = juce::SystemStats::getEnvironmentVariable ("CI", {}).isNotEmpty();
                     expect (! onCi, "touch injection failed on CI: " + juce::String (error));
