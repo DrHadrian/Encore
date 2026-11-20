@@ -435,6 +435,8 @@ target_sources(EncoreUi PRIVATE
     Source/ui/PreShowCheckView.cpp
     Source/ui/PreShowCheckView.h
     Source/ui/StageView.cpp
+    Source/ui/TouchGestures.cpp
+    Source/ui/TouchGestures.h
     Source/ui/StageView.h
     Source/ui/TunerDisplay.cpp
     Source/ui/TunerDisplay.h
@@ -447,6 +449,12 @@ target_sources(EncoreUi PRIVATE
     Source/ui/SetList.cpp
     Source/ui/SetList.h)
 target_link_libraries(EncoreUi PUBLIC EncoreEngine EncoreUiAssets EncoreAmpArt)
+# The two-finger right click subclasses the window (SetWindowSubclass), and
+# includes windows.h itself: no JUCE precompiled header for it.
+set_source_files_properties(Source/ui/TouchGestures.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+if(WIN32)
+    target_link_libraries(EncoreUi PUBLIC comctl32)
+endif()
 
 # ------------------------------------------------------------------------------
 # Build speed (decision 0049). Parsing JUCE's headers is ~95 % of compiling a
@@ -546,6 +554,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/TestMain.cpp
         Tests/HangWatchdog.cpp
         Tests/ThreadStopTests.cpp
+        Tests/TouchGestureTests.cpp
         Tests/HangWatchdog.h
         Tests/AllocationCounter.cpp
         Tests/AllocationCounter.h
