@@ -99,10 +99,32 @@ TwoFingerTapDetector::Action TwoFingerTapDetector::up (int pointerId, juce::Poin
 }
 
 //==============================================================================
+void rightClickAt (juce::Component& window, juce::Point<float> screen)
+{
+    auto* peer = window.getPeer();
+
+    if (peer == nullptr)
+        return;
+
+    using S = juce::MouseInputSource;
+    const auto local = peer->globalToLocal (screen);
+    const auto time = juce::Time::currentTimeMillis();
+    const auto none = juce::ModifierKeys::getCurrentModifiers().withoutMouseButtons();
+    const auto right = none.withFlags (juce::ModifierKeys::rightButtonModifier);
+
+    juce::ModifierKeys::currentModifiers = right;
+    peer->handleMouseEvent (S::InputSourceType::mouse, local, right, S::defaultPressure, S::defaultOrientation, time);
+    juce::ModifierKeys::currentModifiers = none;
+    peer->handleMouseEvent (S::InputSourceType::mouse, local, none, S::defaultPressure, S::defaultOrientation, time);
+}
+
+//==============================================================================
 #if JUCE_WINDOWS && ENCORE_JUCE_TOUCH_FILTER
 
 struct TwoFingerRightClick::Impl
 {
+    static constexpr bool available = true;
+
     explicit Impl (std::function<bool()> a) : allowed (std::move (a))
     {
         active = this;
@@ -156,7 +178,7 @@ struct TwoFingerRightClick::Impl
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<juce::Component> (self->window), where]
             {
                 if (safe != nullptr)
-                    rightClickAt (*safe, where);
+                    rightClickAt (*safe, juce::Desktop::getInstance().getDisplays().physicalToLogical (where));
             });
         }
 
@@ -191,27 +213,6 @@ struct TwoFingerRightClick::Impl
         }
     }
 
-    /** A mouse right click at a physical screen point, as if the mouse had made it. */
-    static void rightClickAt (juce::Component& w, juce::Point<float> physical)
-    {
-        auto* peer = w.getPeer();
-
-        if (peer == nullptr)
-            return;
-
-        using S = juce::MouseInputSource;
-        const auto logical = juce::Desktop::getInstance().getDisplays().physicalToLogical (physical);
-        const auto local = peer->globalToLocal (logical);
-        const auto time = juce::Time::currentTimeMillis();
-        const auto none = juce::ModifierKeys::getCurrentModifiers().withoutMouseButtons();
-        const auto right = none.withFlags (juce::ModifierKeys::rightButtonModifier);
-
-        juce::ModifierKeys::currentModifiers = right;
-        peer->handleMouseEvent (S::InputSourceType::mouse, local, right, S::defaultPressure, S::defaultOrientation, time);
-        juce::ModifierKeys::currentModifiers = none;
-        peer->handleMouseEvent (S::InputSourceType::mouse, local, none, S::defaultPressure, S::defaultOrientation, time);
-    }
-
     static inline Impl* active = nullptr;
     std::function<bool()> allowed;
     TwoFingerTapDetector detector;
@@ -222,6 +223,7 @@ struct TwoFingerRightClick::Impl
 
 struct TwoFingerRightClick::Impl
 {
+    static constexpr bool available = false;
     explicit Impl (std::function<bool()>) {}
     void attachTo (juce::Component&) {}
 };
@@ -230,6 +232,7 @@ struct TwoFingerRightClick::Impl
 
 TwoFingerRightClick::TwoFingerRightClick (std::function<bool()> allowed) : impl (std::make_unique<Impl> (std::move (allowed))) {}
 TwoFingerRightClick::~TwoFingerRightClick() = default;
+bool TwoFingerRightClick::isAvailable() noexcept { return Impl::available; }
 void TwoFingerRightClick::attachTo (juce::Component& window) { impl->attachTo (window); }
 
 } // namespace encore

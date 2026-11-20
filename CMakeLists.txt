@@ -557,6 +557,8 @@ if(ENCORE_BUILD_TESTS)
         Tests/HangWatchdog.cpp
         Tests/ThreadStopTests.cpp
         Tests/TouchGestureTests.cpp
+        Tests/TouchInjection.cpp
+        Tests/TouchInjection.h
         Tests/HangWatchdog.h
         Tests/AllocationCounter.cpp
         Tests/AllocationCounter.h

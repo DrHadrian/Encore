@@ -5,6 +5,7 @@
 // (The Windows glue in TouchGestures.cpp applies these answers; it needs a touch screen.)
 
 #include "ui/TouchGestures.h"
+#include "TouchInjection.h"
 
 namespace encore::test
 {
@@ -120,6 +121,171 @@ public:
             expect (d.move (7, p2) == A::pass);
             expect (d.up (7, p2, 5100, right) == A::pass && ! right);
         }
+
+        // On a real window (Windows: CI runs on a desktop session). A menu that a
+        // right click opens must stay open (Adrian, 20 Nov: on a selected block in
+        // the signal chain it opened and closed again at once).
+        if ((juce::SystemStats::getOperatingSystemType() & juce::SystemStats::Windows) != 0)
+        {
+            beginTest ("A menu opened by the synthetic right click stays open");
+            checkMenuStaysOpen (false);
+
+            beginTest ("A menu opened by a two-finger tap (injected touches) stays open");
+            checkMenuStaysOpen (true);
+        }
+    }
+
+private:
+    /** Opens a menu on a right press, as ChainStrip does for a block. */
+    struct MenuTarget final : juce::Component
+    {
+        MenuTarget() { setName ("target"); setWantsKeyboardFocus (true); }
+
+        void paint (juce::Graphics& g) override { g.fillAll (juce::Colours::darkgrey); }
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            log.add (describe ("down", e));
+
+            if (! e.mods.isPopupMenu())
+                return;
+
+            juce::PopupMenu menu;
+            menu.addItem (1, "One");
+            menu.addItem (2, "Two");
+            menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this)
+                                                          .withTargetScreenArea (localAreaToGlobal (getLocalBounds().reduced (40))));
+        }
+
+        void mouseUp (const juce::MouseEvent& e) override { log.add (describe ("up", e)); }
+
+        static juce::String describe (const char* what, const juce::MouseEvent& e)
+        {
+            return juce::String (what) + (e.source.isTouch() ? " touch" : " mouse") + juce::String (e.source.getIndex())
+                 + (e.mods.isRightButtonDown() ? " right" : e.mods.isLeftButtonDown() ? " left" : "")
+                 + " at " + e.getPosition().toString();
+        }
+
+        juce::StringArray log;
+    };
+
+    static int openMenus() { return juce::ModalComponentManager::getInstance()->getNumModalComponents(); }
+
+    static juce::String state()
+    {
+        juce::String s;
+        s << "foreground " << (juce::Process::isForegroundProcess() ? "yes" : "no");
+        auto* focused = juce::Component::getCurrentlyFocusedComponent();
+        s << ", focused " << (focused != nullptr ? focused->getName().quoted() : juce::String ("none"));
+
+        for (int i = 0; i < juce::ComponentPeer::getNumPeers(); ++i)
+        {
+            auto* peer = juce::ComponentPeer::getPeer (i);
+            s << ", peer " << peer->getComponent().getName().quoted() << (peer->isFocused() ? " focused" : "");
+        }
+
+        s << ", menus " << openMenus();
+
+        for (auto& source : juce::Desktop::getInstance().getMouseSources())
+            s << " | " << (source.isTouch() ? "touch" : "mouse") << source.getIndex()
+              << " " << source.getScreenPosition().roundToInt().toString() << (source.isDragging() ? " down" : "");
+
+        return s;
+    }
+
+    void checkMenuStaysOpen (bool byTouch)
+    {
+        juce::PopupMenu::dismissAllActiveMenus();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+
+        juce::Component window;
+        window.setName ("window");
+        MenuTarget target;
+        window.addAndMakeVisible (target);
+        window.setBounds (240, 200, 520, 320);
+        target.setBounds (window.getLocalBounds());
+        window.addToDesktop (juce::ComponentPeer::windowAppearsOnTaskbar);
+        window.setVisible (true);
+        window.toFront (true);
+        target.grabKeyboardFocus();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+
+        TwoFingerRightClick twoFingers { [] { return true; } };
+        twoFingers.attachTo (window);
+
+        const auto centre = target.localPointToGlobal (target.getLocalBounds().getCentre()).toFloat();
+        logMessage ("before: " + state());
+
+        if (! byTouch)
+        {
+            rightClickAt (window, centre);
+        }
+        else
+        {
+            if (! TwoFingerRightClick::isAvailable())
+            {
+                logMessage ("skipped: the JUCE touch patch isn't in this build");
+                return;
+            }
+
+            using touch::Contact;
+            const auto& displays = juce::Desktop::getInstance().getDisplays();
+            const auto p1 = displays.logicalToPhysical (centre).roundToInt();
+            const auto p2 = displays.logicalToPhysical (centre.translated (60.0f, 0.0f)).roundToInt();
+            const auto c = [] (int id, juce::Point<int> p, Contact::Phase phase) { return Contact { id, p.x, p.y, phase }; };
+            std::string error;
+
+            static const bool ready = touch::initialise (2, error);
+
+            const std::vector<std::vector<Contact>> frames {
+                { c (1, p1, Contact::Phase::down) },
+                { c (1, p1, Contact::Phase::move), c (2, p2, Contact::Phase::down) },
+                { c (1, p1, Contact::Phase::move), c (2, p2, Contact::Phase::move) },
+                { c (1, p1, Contact::Phase::up),   c (2, p2, Contact::Phase::up) } };
+
+            for (const auto& frame : frames)
+            {
+                if (! ready || ! touch::inject (frame, error))
+                {
+                    logMessage ("skipped: " + juce::String (error) + " (touch injection needs a desktop session)");
+                    return;
+                }
+
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (30);
+            }
+        }
+
+        // Watch it for a second.
+        int openedAt = -1, closedAt = -1;
+        juce::String lastOpen;
+
+        for (int ms = 0; ms < 1000; ms += 5)
+        {
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+            const auto open = openMenus() > 0;
+
+            if (open && openedAt < 0)
+                openedAt = ms;
+
+            if (open)
+                lastOpen = state();
+
+            if (! open && openedAt >= 0 && closedAt < 0)
+                closedAt = ms;
+        }
+
+        logMessage ("events: " + target.log.joinIntoString ("; "));
+        logMessage ("opened at " + juce::String (openedAt) + " ms, closed at " + juce::String (closedAt) + " ms");
+        logMessage ("while open: " + lastOpen);
+        logMessage ("after: " + state());
+
+        expect (target.log.joinIntoString (";").contains ("down mouse0 right"), "the right press arrived");
+        expect (openedAt >= 0, "the menu opened");
+        expect (closedAt < 0, "the menu stayed open");
+
+        juce::PopupMenu::dismissAllActiveMenus();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        window.removeFromDesktop();
     }
 };
 
