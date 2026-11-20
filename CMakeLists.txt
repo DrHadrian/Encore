@@ -250,7 +250,6 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/fonts/InterReadout-SemiBold.ttf
         Resources/ui/fonts/InterReadout-Bold.ttf
         Resources/ui/fonts/InterReadout-ExtraBold.ttf
-        Resources/ui/fonts/DejaVuSerif-Bold.ttf
         Resources/ui/logo/encore-wordmark-ui.svg
         Resources/ui/logo/encore-icon-clef.svg
         Resources/ui/icons/alert.svg

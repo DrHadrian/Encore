@@ -76,7 +76,8 @@ namespace
     juce::Path rounded (juce::Rectangle<float> r, float radius) { juce::Path p; p.addRoundedRectangle (r, radius); return p; }
 
     //==========================================================================
-    // Text on the faces: Inter ExtraBold caps with the board's tracking, or the serif.
+    // Text on the faces: Inter ExtraBold caps with the board's tracking (all face print; the
+    // serif style was dropped on 20 Nov 2026, so an older file's "font": "serif" draws as caps).
     juce::Font caps (float px, float trackingEm) { return fontOfSize (type::Weight::extraBold, px, trackingEm); }
 
     /** Lines ('\n') centred on `centreX`, the first starting at `top`, line height `lineH`. */
@@ -587,9 +588,8 @@ namespace
         }
         else if (p.type == "text")
         {
-            const auto serif = p.font == "serif";
-            const auto px = juce::jmax (6.0f, std::round ((float) p.h * (serif ? 0.8f : 0.78f)));
-            g.setFont (serif ? serifOfSize (px, 0.02f) : caps (px, p.h < 12 ? 0.05f : 0.12f));
+            const auto px = juce::jmax (6.0f, std::round ((float) p.h * 0.78f));
+            g.setFont (caps (px, p.h < 12 ? 0.05f : 0.12f));
             g.setColour (pc);
             g.drawText (p.text, r.expanded (40.0f, 0.0f), juce::Justification::centred, false);
         }

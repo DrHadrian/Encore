@@ -1211,11 +1211,6 @@ private:
             static const juce::StringArray names { "Volume", "Treble", "Bass", "Mid / shape", "Gain", "Reverb", "Power", "Input", "Clean", "Dirty" };
             addChoice ("Symbol", names, icons.indexOf (p.icon), 2, [&o] (int i) { o.changeSelected ([i] (AmpPart& q) { q.icon = icons[i]; }); });
         }
-        else if (p.type == "text")
-        {
-            addSeg ("Style", { "Caps", "Serif" }, p.font == "serif" ? 1 : 0,
-                    [&o] (int i) { o.changeSelected ([i] (AmpPart& q) { q.font = i == 1 ? "serif" : "caps"; }); });
-        }
 
         if (p.type == "plate")
             addSeg ("Shape", { "Rectangle", "Oval" }, p.shape == "oval" ? 1 : 0,
