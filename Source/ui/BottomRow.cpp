@@ -3,7 +3,9 @@
 
 #include "ui/BottomRow.h"
 
+#include "ui/kit/Group.h"
 #include "ui/theme/EncoreFonts.h"
+#include "ui/theme/Icons.h"
 #include "ui/theme/Paint.h"
 
 namespace encore
@@ -269,44 +271,307 @@ void OutputsPane::layoutRow()
 }
 
 //==============================================================================
-class HealthDetailsDialog::Content final : public juce::Component
+/** The window's body: the summary painted, the groups as kit::Group boxes,
+    their rows painted over them. Everything is laid out when the report
+    changes, so paint() only draws. */
+class HealthDetailsDialog::Content final : public juce::Component,
+                                           public juce::TooltipClient
 {
 public:
-    void setLines (const std::vector<Line>& lines)
+    Content()
     {
-        while (cells.size() > (int) lines.size())
-            cells.removeLast();
-
-        while (cells.size() < (int) lines.size())
-            addAndMakeVisible (cells.add (std::make_unique<kit::TextCell> (type::body)));
-
-        for (size_t i = 0; i < lines.size(); ++i)
-        {
-            auto* c = cells[(int) i];
-            c->setText (lines[i].text, lines[i].problem ? colour::amber : colour::textSecondary);
-
-            if (c->getTooltip() != lines[i].tooltip)
-                c->setTooltip (lines[i].tooltip);
-        }
-
-        resized();
+        for (auto* group : { &toCheckGroup, &audioGroup, &deviceGroup, &computerGroup })
+            addChildComponent (group);   // they take no clicks: the tooltips are ours
     }
+
+    void setReport (const HealthReport& newReport)
+    {
+        if (newReport == report && laidOut)
+            return;
+
+        report = newReport;
+        layout();
+        repaint();
+    }
+
+    const HealthReport& getReport() const noexcept { return report; }
+
+    /** The body's height at the current width. */
+    int getIdealHeight() const noexcept { return idealHeight; }
 
     void resized() override
     {
-        auto r = getLocalBounds().reduced (size::healthDialogPad);
-
-        for (auto* c : cells)
-            c->setBounds (r.removeFromTop (size::healthDialogLineH));
+        layout();
     }
 
-    juce::OwnedArray<kit::TextCell> cells;
+    void paint (juce::Graphics& g) override
+    {
+        const auto problems = report.toCheck.size();
+
+        // The badge: amber with "!", or green with a tick.
+        g.setColour (paint::c (problems > 0 ? colour::warnBadgeFill : colour::okBadgeFill));
+        g.fillEllipse (badge.toFloat());
+        const auto mark = badge.toFloat().withSizeKeepingCentre ((float) size::healthBadgeIcon, (float) size::healthBadgeIcon);
+
+        if (problems > 0)
+        {
+            g.setColour (paint::c (colour::amber));
+            g.fillPath (exclamation);
+        }
+        else
+        {
+            drawIcon (g, Icon::check, mark, paint::c (colour::healthy));
+        }
+
+        paint::text (g, summaryTitle, title.toFloat(), type::healthSummary, problems > 0 ? colour::amber : colour::text);
+        paint::text (g, report.summary, sub.toFloat(), type::subtitle, colour::textSecondary);
+
+        g.setColour (paint::c (colour::healthy));
+        g.fillEllipse (liveDot.toFloat());
+        paint::text (g, "Live", liveText.toFloat(), type::caption, colour::textMuted);
+    }
+
+    void paintOverChildren (juce::Graphics& g) override
+    {
+        for (const auto& line : checkLines)
+        {
+            drawIcon (g, Icon::warn, line.icon.toFloat(), paint::c (colour::amber));
+            paint::text (g, line.text, line.textArea.toFloat(), type::body, colour::amber);
+        }
+
+        for (const auto& row : rows)
+        {
+            paint::text (g, row.label, row.labelArea.toFloat(), type::bodySmall, colour::textSecondary);
+            paint::text (g, row.value, row.valueArea.toFloat(), type::healthValue, row.problem ? colour::amber : colour::text,
+                         juce::Justification::centredRight);
+        }
+
+        for (const auto& tick : ticks)
+        {
+            drawIcon (g, tick.fine ? Icon::check : Icon::warn, tick.icon.toFloat(), paint::c (tick.fine ? colour::healthy : colour::amber));
+            paint::text (g, tick.text, tick.textArea.toFloat(), type::bodySmall, colour::text);
+        }
+
+        if (! note.isEmpty())
+        {
+            g.setColour (paint::c (colour::textMuted));
+            g.setFont (font (type::caption));
+            g.drawFittedText (noteText, note, juce::Justification::topLeft, 3, 1.0f);
+        }
+    }
+
+    juce::String getTooltip() override
+    {
+        const auto at = getMouseXYRelative();
+
+        for (const auto& tip : tips)
+            if (tip.area.contains (at))
+                return tip.text;
+
+        return {};
+    }
+
+private:
+    struct CheckLine { juce::Rectangle<int> icon, textArea; juce::String text; };
+    struct RowLine   { juce::Rectangle<int> labelArea, valueArea; juce::String label, value; bool problem = false; };
+    struct TickLine  { juce::Rectangle<int> icon, textArea; juce::String text; bool fine = true; };
+    struct Tip       { juce::Rectangle<int> area; juce::String text; };
+
+    HealthReport report;
+    bool laidOut = false;
+    int idealHeight = 0;
+
+    juce::String summaryTitle;
+    juce::Rectangle<int> badge, title, sub, liveDot, liveText, note;
+    juce::Path exclamation;
+    const juce::String noteText { "Counts since the last reset. Reset, then play the show's heaviest patches." };
+
+    std::vector<CheckLine> checkLines;
+    std::vector<RowLine> rows;
+    std::vector<TickLine> ticks;
+    std::vector<Tip> tips;
+
+    kit::Group toCheckGroup { "To check" }, audioGroup { "Audio" }, deviceGroup { "Device" }, computerGroup { "Computer" };
+
+    static int rowsBoxHeight (int numRows) noexcept
+    {
+        // Rows 22 apart, 11 above the first and below the last line (15 high).
+        return numRows > 0 ? 2 * size::healthBoxPadY + (numRows - 1) * size::healthRowH + size::healthRowLineH : 0;
+    }
+
+    void layout()
+    {
+        laidOut = true;
+        checkLines.clear();
+        rows.clear();
+        ticks.clear();
+        tips.clear();
+
+        const auto pad = size::healthDialogPad;
+        const auto width = getWidth() - 2 * pad;
+        const auto problems = report.toCheck.size();
+
+        // Summary.
+        summaryTitle = problems == 0 ? juce::String ("Healthy")
+                                     : juce::String (problems) + (problems == 1 ? " thing to check" : " things to check");
+        const auto summaryTop = size::healthTitleTop;
+        const auto summaryBottom = size::healthSubTop + size::healthSubH;
+        badge = { pad, (summaryTop + summaryBottom - size::healthBadge) / 2, size::healthBadge, size::healthBadge };
+        const auto textX = pad + size::healthBadge + size::healthBadgeGap;
+        const auto liveW = juce::roundToInt (textWidth (font (type::caption), "Live")) + 1;
+        const auto liveRight = pad + width;
+        const auto liveTop = (summaryTop + summaryBottom - size::healthLiveH) / 2;
+        liveText = { liveRight - liveW, liveTop, liveW, size::healthLiveH };
+        liveDot = { liveText.getX() - size::healthLiveGap - size::healthLiveDot, liveTop + (size::healthLiveH - size::healthLiveDot) / 2,
+                    size::healthLiveDot, size::healthLiveDot };
+        tips.push_back ({ liveDot.getUnion (liveText), "Updates while this window is open" });
+        title = { textX, size::healthTitleTop, liveDot.getX() - 8 - textX, size::healthTitleH };
+        sub = { textX, size::healthSubTop, title.getWidth(), size::healthSubH };
+
+        {
+            // "!": a 3 px stroke and a dot, in the badge's 18 px box (24 px viewBox: 12,6 → 12,13; dot at 17.5).
+            const auto box = badge.toFloat().withSizeKeepingCentre ((float) size::healthBadgeIcon, (float) size::healthBadgeIcon);
+            const auto unit = box.getWidth() / 24.0f;
+            juce::Path line;
+            line.startNewSubPath (box.getCentreX(), box.getY() + 6.0f * unit);
+            line.lineTo (box.getCentreX(), box.getY() + 13.0f * unit);
+            exclamation.clear();
+            juce::PathStrokeType (size::healthBadgeMark, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (exclamation, line);
+            exclamation.addEllipse (box.getCentreX() - size::healthBadgeMark * 0.5f, box.getY() + 17.5f * unit - size::healthBadgeMark * 0.5f,
+                                    size::healthBadgeMark, size::healthBadgeMark);
+        }
+
+        auto y = size::healthGroupsTop;
+
+        // To check: one 26 px row each, only when there's something.
+        toCheckGroup.setVisible (problems > 0);
+
+        if (problems > 0)
+        {
+            const auto boxH = 2 * size::healthCheckPadY + problems * size::healthCheckRowH;
+            toCheckGroup.setBounds (pad, y, width, kit::Group::heightFor (boxH));
+            const auto box = toCheckGroup.getBoxBounds() + toCheckGroup.getPosition();
+
+            for (int i = 0; i < problems; ++i)
+            {
+                const auto row = juce::Rectangle<int> (box.getX(), box.getY() + size::healthCheckPadY + i * size::healthCheckRowH,
+                                                       box.getWidth(), size::healthCheckRowH);
+                CheckLine line;
+                line.text = report.toCheck[i];
+                line.icon = juce::Rectangle<int> (row.getX() + size::healthCheckIconX, 0, size::healthCheckIcon, size::healthCheckIcon)
+                                .withCentre ({ row.getX() + size::healthCheckIconX + size::healthCheckIcon / 2, row.getCentreY() });
+                const auto textX2 = line.icon.getRight() + size::healthCheckGap;
+                line.textArea = { textX2, row.getY(), row.getRight() - size::healthCheckIconX - textX2, row.getHeight() };
+                checkLines.push_back (line);
+                tips.push_back ({ row, line.text });   // the full text, when it's cut
+            }
+
+            y = toCheckGroup.getBottom() + size::healthGroupGap;
+        }
+
+        // Two columns: Audio (and its note) | Device, then Computer.
+        const auto colW = (width - size::settingsColumnGap) / 2;
+        const auto addRows = [this] (kit::Group& group, int x, int top, int w, const std::vector<HealthReport::Row>& lines)
+        {
+            group.setVisible (! lines.empty());
+            group.setBounds (x, top, w, kit::Group::heightFor (rowsBoxHeight ((int) lines.size())));
+            const auto box = group.getBoxBounds() + group.getPosition();
+            const auto inner = box.reduced (size::healthRowPadX, 0);
+
+            for (size_t i = 0; i < lines.size(); ++i)
+            {
+                const auto rowY = box.getY() + size::healthBoxPadY + (int) i * size::healthRowH;
+                const auto labelW = juce::roundToInt (textWidth (font (type::bodySmall), lines[i].label)) + 1;
+                RowLine row;
+                row.label = lines[i].label;
+                row.value = lines[i].value;
+                row.problem = lines[i].problem;
+                row.labelArea = { inner.getX(), rowY, juce::jmin (labelW, inner.getWidth()), size::healthRowLineH };
+                const auto valueX = row.labelArea.getRight() + size::healthCheckGap + 4;   // 12 between label and value
+                row.valueArea = { valueX, rowY, juce::jmax (0, inner.getRight() - valueX), size::healthRowLineH };
+                rows.push_back (row);
+                tips.push_back ({ row.labelArea.getUnion (row.valueArea), row.label + ": " + row.value });
+            }
+
+            return group.isVisible() ? group.getBottom() : top;
+        };
+
+        const auto leftX = pad, rightX = pad + colW + size::settingsColumnGap;
+        const auto audioBottom = addRows (audioGroup, leftX, y, colW, report.audio);
+        note = { leftX, audioBottom + size::healthNoteGap, colW,
+                 2 * juce::roundToInt (font (type::caption).getHeight() * 1.45f) };
+        const auto deviceBottom = addRows (deviceGroup, rightX, y, colW, report.device);
+
+        computerGroup.setVisible (! report.computer.empty());
+        auto rightBottom = deviceBottom;
+
+        if (! report.computer.empty())
+        {
+            const auto top = deviceBottom + size::healthGroupGap;
+            computerGroup.setBounds (rightX, top, colW, kit::Group::heightFor (rowsBoxHeight ((int) report.computer.size())));
+            const auto box = computerGroup.getBoxBounds() + computerGroup.getPosition();
+
+            for (size_t i = 0; i < report.computer.size(); ++i)
+            {
+                const auto rowY = box.getY() + size::healthBoxPadY + (int) i * size::healthRowH;
+                TickLine tick;
+                tick.text = report.computer[i].text;
+                tick.fine = report.computer[i].fine;
+                tick.icon = juce::Rectangle<int> (box.getX() + size::healthRowPadX, rowY + (size::healthRowLineH - size::healthTickIcon) / 2,
+                                                  size::healthTickIcon, size::healthTickIcon);
+                const auto tx = tick.icon.getRight() + size::healthTickGap;
+                tick.textArea = { tx, rowY, box.getRight() - size::healthRowPadX - tx, size::healthRowLineH };
+                ticks.push_back (tick);
+                tips.push_back ({ tick.icon.getUnion (tick.textArea), tick.text });
+            }
+
+            rightBottom = computerGroup.getBottom();
+        }
+
+        idealHeight = juce::jmax (note.getBottom(), rightBottom) + size::healthGroupGap;   // the board leaves 18 under Computer: no scroll at 640 x 492
+    }
+};
+
+/** The frame's body: the content, in a viewport that scrolls when needed. */
+class HealthDetailsDialog::Body final : public juce::Component
+{
+public:
+    Body()
+    {
+        viewport.setViewedComponent (&content, false);
+        viewport.setScrollBarsShown (true, false);
+        addAndMakeVisible (viewport);
+    }
+
+    void setReport (const HealthReport& report)
+    {
+        const auto before = content.getIdealHeight();
+        content.setReport (report);
+
+        if (content.getIdealHeight() != before)
+            resized();
+    }
+
+    const HealthReport& getReport() const noexcept { return content.getReport(); }
+
+    void resized() override
+    {
+        viewport.setBounds (getLocalBounds());
+        const auto scrolls = content.getIdealHeight() > getHeight();
+        const auto w = getWidth() - (scrolls ? viewport.getScrollBarThickness() : 0);
+        content.setSize (w, 1);   // lays out at the width, giving the height
+        content.setSize (w, juce::jmax (getHeight(), content.getIdealHeight()));
+    }
+
+private:
+    juce::Viewport viewport;
+    Content content;
 };
 
 HealthDetailsDialog::HealthDetailsDialog (std::function<void()> resetCounters, std::function<void()> close)
-    : frame ("System health", "Close system health"), content (std::make_unique<Content>())
+    : frame ("System health", "Close system health"), body (std::make_unique<Body>())
 {
-    frame.setContent (content.get());
+    frame.setContent (body.get());
     auto& reset = frame.addFooterButton ("Reset counters");
     reset.setTooltip ("Start the overrun, dropout and clip counts again from zero");
     reset.onClick = std::move (resetCounters);
@@ -318,9 +583,14 @@ HealthDetailsDialog::HealthDetailsDialog (std::function<void()> resetCounters, s
 
 HealthDetailsDialog::~HealthDetailsDialog() = default;
 
-void HealthDetailsDialog::setLines (const std::vector<Line>& lines)
+void HealthDetailsDialog::setReport (const HealthReport& report)
 {
-    content->setLines (lines);
+    body->setReport (report);
+}
+
+const HealthReport& HealthDetailsDialog::getReport() const noexcept
+{
+    return body->getReport();
 }
 
 } // namespace encore

@@ -545,6 +545,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/TestMain.cpp
         Tests/HangWatchdog.cpp
         Tests/ThreadStopTests.cpp
+        Tests/V32TargetTests.cpp
         Tests/HangWatchdog.h
         Tests/AllocationCounter.cpp
         Tests/AllocationCounter.h

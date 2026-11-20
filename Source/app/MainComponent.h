@@ -248,7 +248,13 @@ private:
     juce::StringArray healthProblems;   // what the health status counts (the warning line's, without plain info)
     juce::String healthDetail;          // "CPU 9% · 5.3 ms"
     void refreshHealthStatus();
-    std::vector<HealthDetailsDialog::Line> healthDetailLines();
+    HealthReport healthReport();          // what the System health window shows
+    void resetCounters();                 // the engine's counts, and the driver's dropouts from now
+    int driverDropouts();                 // since the last reset (-1: the driver doesn't count them)
+    int dropoutsAtReset = 0;
+    juce::String limiterText { "idle" };   // the last limiter reading (taking it resets it)
+    struct SystemCheck { juce::String text; bool fine = true; };
+    std::vector<SystemCheck> systemChecks; // Windows: power, priority, throttling, the audio thread
     std::unique_ptr<Inspector> inspector;
     juce::Label deviceLine;   // not shown: the stage footer and Routing read it
     InputSummary inputSummary;

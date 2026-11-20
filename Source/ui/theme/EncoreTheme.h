@@ -77,6 +77,7 @@ namespace colour
     // Status
     constexpr juce::uint32 healthy         = 0xff30C25A;   // playing bar, OK, live dots
     constexpr juce::uint32 okBadgeFill     = 0xff1E3A24;
+    constexpr juce::uint32 warnBadgeFill   = 0xff3D2F12;   // System health's round badge when there's something to check
     constexpr juce::uint32 okBadgeTick     = 0xff4CD964;
     constexpr juce::uint32 amber           = 0xffFFB340;   // warnings, section headings (at 85 %), bar marks
     constexpr juce::uint32 amberSection    = 0xD9FFB340;   // amber at 85 %: section headings / kinds
@@ -568,7 +569,16 @@ namespace size
     constexpr int paneTabW = 44, paneTabH = 12, paneTabRise = 7, paneTabRadius = 6, paneTabChevron = 10;
     constexpr int healthStatusPad = 6, healthStatusRadius = 5, healthDot = 6, healthDotGap = 6, healthIcon = 12, healthIconGap = 5;
     constexpr int healthLineGap = 3, healthMixerBottom = 4;
-    constexpr int healthDialogW = 460, healthDialogH = 250, healthDialogPad = 16, healthDialogLineH = 20;   // System health, in full
+    // System health, in full (board BHealth, v32-README A3): 640 x 492, a summary, then groups.
+    constexpr int healthDialogW = 640, healthDialogH = 492, healthDialogPad = 20;
+    constexpr int healthBadge = 34, healthBadgeIcon = 18, healthBadgeGap = 12;    // the round summary badge, then the title
+    constexpr int healthTitleTop = 16, healthTitleH = 20, healthSubTop = 38, healthSubH = 15;
+    constexpr int healthLiveDot = 6, healthLiveGap = 5, healthLiveH = 14;          // "• Live", right
+    constexpr int healthGroupsTop = 67, healthGroupGap = 14, healthNoteGap = 8;   // group titles and boxes below the summary
+    constexpr int healthRowH = 22, healthBoxPadY = 11, healthRowPadX = 15, healthRowLineH = 15;   // Audio / Device / Computer rows
+    constexpr int healthCheckRowH = 26, healthCheckPadY = 7, healthCheckIcon = 13, healthCheckIconX = 13, healthCheckGap = 8;   // "To check"
+    constexpr int healthTickIcon = 12, healthTickGap = 8;                          // Computer: ✓ or ⚠, then the words
+    constexpr float healthBadgeMark = 3.0f;                                        // the "!" stroke
     constexpr int outputStripFullW = 170, outputStripH = 71, outputStripRadius = 5, outputStripPadX = 9, outputStripNameTop = 7;
     constexpr int outputStripBarsTop = 31, outputStripValueTop = 51, outputStripGap = 6, outputStripMuteTop = 26;
     constexpr int outputsPaneTop = 30, outputsHeaderTop = 10, outputsSegmentW = 89, outputsSegmentCompactW = 57, outputsSegmentH = 18;
@@ -726,6 +736,8 @@ namespace type
     constexpr Style saveState       { 10.5f, Weight::regular };             // "Saved 23:28"
     constexpr Style headerLine      { 14.0f, Weight::semibold };            // "Cue 1 of 8: Clean"
     constexpr Style healthTitle     { 11.5f, Weight::semibold };            // "System health"
+    constexpr Style healthSummary   { 16.0f, Weight::bold };                // "1 thing to check" / "Healthy" (System health window)
+    constexpr Style healthValue     { 12.0f, Weight::regular, 0.0f, false, true };   // its values: tabular, slashed zero
     constexpr Style plusGlyph       { 22.0f, Weight::regular };             // "+" tile in the chain
     constexpr Style cabCaption      { 12.0f, Weight::bold };                // "Cab · <IR> (IR)" under the cab
     constexpr Style gearKind        {  8.0f, Weight::bold, 0.08f, true };   // AMP on chain tiles
