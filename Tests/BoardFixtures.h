@@ -12,6 +12,7 @@
 #include <cmath>
 #include <vector>
 
+#include "engine/core/ThreadStop.h"
 #include "model/Routing.h"
 #include "model/ShowFolder.h"
 #include "model/ShowModel.h"
@@ -91,10 +92,8 @@ public:
 
     void stop() override
     {
-        // Never killed by force (that can leave a lock held for good): it has
-        // ten seconds, and if it ever needs them CI's log says so.
-        if (! stopThread (10000))
-            std::cout << "BoardDevice: the device thread didn't stop within 10 s" << std::endl;
+        // Never killed by force: that can leave a lock held for good (ThreadStop.h).
+        stopThreadWithoutKilling (*this);
 
         if (auto* cb = std::exchange (callback, nullptr))
             cb->audioDeviceStopped();

@@ -32,6 +32,10 @@ env:
   # 10 minutes (its log names the test that was running), not after hours. A
   # test group takes about a minute (Release) to three (Debug, 2-minute soak).
   ENCORE_TEST_TIMEOUT: ${{ (github.event_name == 'schedule' || (inputs.soak_seconds != '' && inputs.soak_seconds != '120')) && '7200' || '600' }}
+  # A test step that makes no progress for this long (the longest takes about
+  # 20 s; the soak reports as it goes) ends its process at once, printing the
+  # step and every thread's stack: a hang shows where it is (Tests/HangWatchdog.h).
+  ENCORE_TEST_HANG_SECONDS: '180'
   # Link-time optimisation only for the players' build: every night and when run
   # by hand. Pull requests and pushes to main build alike, so main's compiler
   # cache is the one every pull request reuses (LTO objects can't be reused
@@ -148,6 +152,19 @@ jobs:
           name: Encore-windows-x64
           path: build/Encore_artefacts/Release/Encore.exe
           if-no-files-found: error
+
+      # A failed or hung run: the program and its symbols, to name the
+      # watchdog's module + offset stacks (llvm-symbolizer reads the PDB).
+      - name: Upload the test program and its symbols
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EncoreTests-${{ matrix.config }}-symbols
+          path: |
+            build/EncoreTests_artefacts/${{ matrix.config }}/EncoreTests.exe
+            build/**/EncoreTests.pdb
+          retention-days: 14
+          if-no-files-found: warn
 
   # The one check main requires: green when the builds passed, or when the
   # change needed none (docs only). Required checks can't name matrix jobs

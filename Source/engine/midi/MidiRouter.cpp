@@ -2,6 +2,7 @@
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
 #include "engine/midi/MidiRouter.h"
+#include "engine/core/ThreadStop.h"
 
 namespace encore
 {
@@ -49,7 +50,7 @@ MidiRouter::MidiRouter (bool startSender)
 MidiRouter::~MidiRouter()
 {
     if (sender != nullptr)
-        sender->stopThread (1000);
+        stopThreadWithoutKilling (*sender);   // never killed (ThreadStop.h)
 }
 
 void MidiRouter::setBindings (const std::vector<MidiBinding>& bindings)

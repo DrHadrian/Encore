@@ -4,6 +4,7 @@
 #include "AllocationCounter.h"
 #include "FakeDevice.h"
 #include "TestSignals.h"
+#include "HangWatchdog.h"
 
 #include "engine/AudioEngine.h"
 #include "engine/core/RealtimeHandover.h"
@@ -463,6 +464,9 @@ public:
 
         for (int block = 0; block < totalBlocks; ++block)
         {
+            if ((block & 1023) == 0)
+                encore::testing::heartbeat();   // a long soak is progress, not a hang
+
             for (auto& x : input)
             {
                 if (--noteSamples <= 0)
