@@ -10,6 +10,7 @@
 #include "ui/theme/EncoreTheme.h"
 #include "engine/core/Realtime.h"
 #include "session/PluginCatalog.h"
+#include "platform/SystemTuning.h"
 
 namespace encore
 {
@@ -73,6 +74,14 @@ public:
         centreWithSize (juce::jmin (theme::size::referenceWidth, screen.getWidth() - theme::size::screenMargin),
                         juce::jmin (theme::size::referenceHeight, screen.getHeight() - theme::size::screenMargin));
         setVisible (true);
+        applyTouchSettings();
+    }
+
+    // Again whenever it's activated: JUCE makes a new native window for some changes (full screen).
+    void activeWindowStatusChanged() override
+    {
+        DocumentWindow::activeWindowStatusChanged();
+        applyTouchSettings();
     }
 
     void closeButtonPressed() override
@@ -81,6 +90,13 @@ public:
     }
 
 private:
+    /** Touch screens: holding a finger still is a held press, not a right click. */
+    void applyTouchSettings()
+    {
+        if (auto* peer = getPeer())
+            system::disableTouchPressAndHold (peer->getNativeHandle());
+    }
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
 };
 
