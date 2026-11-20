@@ -145,17 +145,6 @@ jobs:
       - name: Run the tests (soak ${{ env.ENCORE_SOAK_SECONDS }} s)
         run: ctest --test-dir build --output-on-failure --parallel 4 --timeout ${{ env.ENCORE_TEST_TIMEOUT }}
 
-      # TEMPORARY (removed before merging):
-      # repeat the whole suite to catch the hang.
-      - name: Repeat the whole suite
-        if: matrix.config == 'Release'
-        shell: bash
-        run: |
-          for i in $(seq 1 10); do
-            echo "== round $i"
-            ctest --test-dir build --output-on-failure --parallel 4 --timeout ${{ env.ENCORE_TEST_TIMEOUT }} || exit 1
-          done
-
       - name: Upload Encore.exe
         if: matrix.config == 'Release'
         uses: actions/upload-artifact@v4
