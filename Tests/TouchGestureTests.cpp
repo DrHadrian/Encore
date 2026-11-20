@@ -238,13 +238,15 @@ private:
             static const bool ready = touch::initialise (2, error);
 
             const std::vector<std::vector<Contact>> frames {
-                { c (1, p1, Contact::Phase::down) },
-                { c (1, p1, Contact::Phase::move), c (2, p2, Contact::Phase::down) },
-                { c (1, p1, Contact::Phase::move), c (2, p2, Contact::Phase::move) },
-                { c (1, p1, Contact::Phase::up),   c (2, p2, Contact::Phase::up) } };
+                { c (0, p1, Contact::Phase::down) },
+                { c (0, p1, Contact::Phase::move), c (1, p2, Contact::Phase::down) },
+                { c (0, p1, Contact::Phase::move), c (1, p2, Contact::Phase::move) },
+                { c (0, p1, Contact::Phase::up),   c (1, p2, Contact::Phase::up) } };
 
             for (const auto& frame : frames)
             {
+                error += " (frame " + std::to_string (&frame - frames.data()) + ")";
+
                 if (! ready || ! touch::inject (frame, error))
                 {
                     logMessage ("skipped: " + juce::String (error) + " (touch injection needs a desktop session)");

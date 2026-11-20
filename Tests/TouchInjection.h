@@ -16,7 +16,7 @@ struct Contact
 {
     enum class Phase { down, move, up };
 
-    int id = 0;
+    int id = 0;         // 0 to maxContacts - 1
     int x = 0, y = 0;   // physical screen pixels
     Phase phase = Phase::down;
 };
