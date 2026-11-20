@@ -342,6 +342,31 @@ public:
                 if (! v.mixer && v.outputs == 3)
                     expect (! outputs.getStrip (0)->isValueOnOwnLine(), "wide strips keep the level beside the meters");
 
+                if (v.outputs == 3)
+                {
+                    // The whole Edit window as BEditV32 (v32-edit, v32-edit-mixer).
+                    const juce::String name (v.mixer ? "v32-edit-mixer" : "v32-edit");
+                    renderSnapshot (main, name);
+                    renderSnapshot (main, name + "@2x", 2.0f);
+
+                    // The tab sits centred on the Outputs pane: x 765-809 collapsed, 687-731 open.
+                    const auto tab = main.getMixerTab().getBounds();
+                    expectEquals (tab.getCentreX(), v.mixer ? 709 : 787, "the mixer tab is centred on the Outputs pane");
+                    expectEquals (tab.getWidth(), theme::size::paneTabW);
+
+                    // The amp and cab scale down evenly to fit a shorter stage (never above 1x).
+                    if (auto* panel = main.getBlockPanel())
+                    {
+                        const auto scale = panel->getGearScale();
+                        expect (scale <= 1.0f);
+
+                        if (v.mixer)
+                            expect (scale < 1.0f && scale > 0.85f, "the mixer view's shorter stage scales the amp: " + juce::String (scale, 3));
+                        else
+                            expectEquals (scale, 1.0f, "a tall enough stage: 1x");
+                    }
+                }
+
                 if (auto* pane = outputs.getParentComponent())
                 {
                     // The band from the tab's top to the row's bottom.
