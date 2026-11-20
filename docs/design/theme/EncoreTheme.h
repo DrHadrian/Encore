@@ -514,6 +514,7 @@ namespace size
     constexpr int dropBoxBorder = 2, dropBoxRadius = 6, dropBoxDash = 6, dropBoxDashGap = 4;   // the drop box (v3.2 §7)
     constexpr int newWidgetW = 4, newWidgetH = 2;                                              // a new widget (dropped, clicked or from the menu), in cells
     constexpr int gripW = 8, gripH = 12, gripPadRight = 8;                                     // the list rows' 6-dot grip
+    constexpr int stageOutlineAtRest = 2;     // Next / Panic button "At rest" Outline: the border
     constexpr int layoutInspectorPad = 10, layoutLabelGap = 8, layoutButtonGap = 8, layoutHalfGap = 6;
     constexpr int layoutNotesH = 123, layoutNoteGap = 6;
     // Settings window (SCREENS.md §7, settings-*.json)

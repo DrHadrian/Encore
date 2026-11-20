@@ -248,6 +248,62 @@ public:
             expect (hasContent (renderSnapshot (view, "layout-editor")));
             renderSnapshot (view, "layout-editor@2x", 2.0f);
 
+            // "At rest" for Next button and Panic button (decided 19 Nov): Full colour (default) | Outline,
+            // in the inspector and the right-click menu, stored per widget with the show.
+            {
+                const auto& shown = view.getShownWidgets();
+                const auto indexOf = [&shown] (StageWidgetType t)
+                {
+                    for (size_t i = 0; i < shown.size(); ++i)
+                        if (shown[i].type == t)
+                            return (int) i;
+                    return -1;
+                };
+                const auto next = indexOf (StageWidgetType::nextButton);
+                expect (next >= 0, "the board's layout has a Next button");
+                auto* atRest = view.getLayoutAtRest();
+                expect (atRest != nullptr);
+
+                view.selectLayoutWidget (0);   // Current cue: no "At rest"
+                expect (atRest != nullptr && ! atRest->isVisible(), "only Next button and Panic button have it");
+
+                if (next >= 0 && atRest != nullptr)
+                {
+                    view.selectLayoutWidget (next);
+                    expect (atRest->isVisible());
+                    expectEquals (atRest->getSelected(), 0, "Full colour by default");
+                    expectEquals (atRest->getSegmentButton (0)->getButtonText(), juce::String ("Full colour"));
+                    expectEquals (atRest->getSegmentButton (1)->getButtonText(), juce::String ("Outline"));
+                    expectEquals (atRest->getSegmentButton (1)->getTooltip(),
+                                  juce::String ("Dark with a coloured outline until it's pressed, so the cue and any warning stand out in a dark room"));
+                    atRest->getSegmentButton (1)->onClick();
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);   // the commit is async
+                    settle (engine, session);
+                    view.update (boardSnapshot());
+                    expect (view.getShownWidgets()[(size_t) next].outlineAtRest, "stored with the widget");
+                    expectEquals (atRest->getSelected(), 1);
+                    renderSnapshot (view, "v32-layout-at-rest");
+                    renderSnapshot (view, "v32-layout-at-rest@2x", 2.0f);
+
+                    // Saved with the show: it survives the round trip; Full colour isn't written.
+                    StageSettings stage;
+                    StageLayout layout;
+                    layout.id = "x";
+                    layout.widgets = view.getShownWidgets();
+                    stage.layouts = { layout };
+                    const auto back = stageFromVar (stageToVar (stage));
+                    expect (back.layouts.size() == 1 && back.layouts[0].widgets == layout.widgets, "At rest round-trips");
+
+                    atRest->getSegmentButton (0)->onClick();
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);   // the commit is async
+                    settle (engine, session);
+                    view.update (boardSnapshot());
+                    expect (! view.getShownWidgets()[(size_t) next].outlineAtRest);
+                }
+
+                view.selectLayoutWidget (0);
+            }
+
             // Inspector off: the artboard takes the width; nothing selected: the same.
             view.setLayoutInspectorShown (false);
             expect (! view.isLayoutInspectorShown());
@@ -415,6 +471,15 @@ public:
             list->mouseUp (event (*list, list->getLocalPoint (surface, at (6.0f, 9.0f)), view.getLayoutListRow (T::tuner), true));
             settle (engine, session);
             expect (view.getShownWidgets() == before, "nothing changed");
+
+            // A click on a full stage adds nothing either (decided 19 Nov: never on top of another).
+            {
+                const auto row = view.getLayoutListRow (T::clock);
+                list->mouseDown (event (*list, row, row, false));
+                list->mouseUp (event (*list, row, row, false));
+                settle (engine, session);
+                expect (view.getShownWidgets() == before, "a click with no free place adds nothing");
+            }
 
             // Off the stage the row's picture follows the pointer, the grabbed point under it.
             {

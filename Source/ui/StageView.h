@@ -90,6 +90,7 @@ public:
     juce::String getLayoutDropText() const;
     bool isLayoutDropRefused() const noexcept;
     int getSelectedLayoutWidget() const noexcept;
+    kit::SegmentedControl* getLayoutAtRest() const noexcept;   // the inspector's "At rest" (Next / Panic button)
     const std::vector<StageWidget>& getShownWidgets() const noexcept { return current.widgets; }
     float getShownWidgetAlpha (int index) const noexcept;
 

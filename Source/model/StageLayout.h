@@ -41,6 +41,7 @@ struct StageWidget
     int x = 0, y = 0, width = 4, height = 2;   // grid cells
     float textScale = 1.0f;                    // 0.5..3: bigger for far away
     juce::String text;                         // text widget only
+    bool outlineAtRest = false;                // Next / Panic button: "At rest" Outline (else Full colour)
 
     bool operator== (const StageWidget&) const = default;
 };

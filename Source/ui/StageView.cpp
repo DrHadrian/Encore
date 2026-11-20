@@ -247,6 +247,7 @@ public:
     }
 
     StageWidget spec;
+    bool held = false;   // an outlined Next / Panic button while pressed
 
     void update (const StageSnapshot& snapshot)
     {
@@ -314,7 +315,7 @@ public:
 
         for (auto& run : runs)
         {
-            g.setColour (paint::c (run.colour));
+            g.setColour (paint::c (inkAtRest (run.colour)));
             g.setFont (run.font);
             g.drawSingleLineText (run.text, juce::roundToInt (run.x), juce::roundToInt (run.baseline), run.justification);
         }
@@ -322,10 +323,34 @@ public:
         paintTag (g);
     }
 
+    /** "At rest" Outline (Next / Panic button) and not lit: dark, with a coloured outline. */
+    bool isOutlinedAtRest() const noexcept
+    {
+        const auto canOutline = spec.type == StageWidgetType::nextButton || spec.type == StageWidgetType::panicButton;
+        return canOutline && spec.outlineAtRest && ! held && content.state != State::active;   // pressed, it lights fully
+    }
+
+    /** Text colours at rest: Panic's words in its danger red and its sub line grey. */
+    juce::uint32 inkAtRest (juce::uint32 ink) const noexcept
+    {
+        if (! isOutlinedAtRest() || spec.type != StageWidgetType::panicButton)
+            return ink;
+
+        if (ink == colour::textStrong) return colour::danger;
+        if (ink == colour::panicSub)   return colour::textTertiary;
+        return ink;
+    }
+
     void mouseDown (const juce::MouseEvent& e) override
     {
         if (spec.type == StageWidgetType::lockButton && owner.locked)
             owner.beginUnlockPress();
+
+        if ((spec.type == StageWidgetType::nextButton || spec.type == StageWidgetType::panicButton) && ! e.mods.isPopupMenu() && spec.outlineAtRest)
+        {
+            held = true;   // an outlined button lights fully while pressed
+            repaint();
+        }
 
         // Panic always works, even locked: it's the emergency stop.
         if (spec.type == StageWidgetType::panicButton && ! e.mods.isPopupMenu())
@@ -365,6 +390,12 @@ public:
     {
         if (spec.type == StageWidgetType::lockButton)
             owner.endUnlockPress();
+
+        if (held)
+        {
+            held = false;
+            repaint();
+        }
     }
 
 private:
@@ -1308,6 +1339,16 @@ private:
         const auto alert = type == StageWidgetType::panicButton || (type == StageWidgetType::health && content.state == State::alert);
         auto border = colour::widgetBorder;
 
+        if (isOutlinedAtRest())
+        {
+            // At rest, outlined: the widget's own dark fill and a 2 px border in its colour.
+            g.setColour (paint::c (colour::widget));
+            g.fillRoundedRectangle (r, radius);
+            g.setColour (paint::c (type == StageWidgetType::panicButton ? colour::panicBorder : colour::accent));
+            g.drawRoundedRectangle (r.reduced (1.0f), radius - 1.0f, (float) size::stageOutlineAtRest);
+            return;
+        }
+
         if (alert || type == StageWidgetType::nextButton)
         {
             paint::verticalGradient (g, r, alert ? colour::panicTop : colour::primaryTop, alert ? colour::panicBot : colour::primaryBot, radius);
@@ -1610,6 +1651,31 @@ public:
         changeSelected ([value] (auto& w, size_t i) { w[i].textScale = value; });
     }
 
+    /** Next button and Panic button: "At rest" Outline, or Full colour (decided 19 Nov). */
+    void setSelectedOutlineAtRest (bool outline)
+    {
+        changeSelected ([outline] (auto& w, size_t i) { w[i].outlineAtRest = outline; });
+    }
+
+    static bool hasAtRest (StageWidgetType type) noexcept
+    {
+        return type == StageWidgetType::nextButton || type == StageWidgetType::panicButton;
+    }
+
+    /** The "At rest" words (approved by Adrian, 19 Nov). */
+    static const juce::StringArray& atRestNames()
+    {
+        static const juce::StringArray names { "Full colour", "Outline" };
+        return names;
+    }
+
+    static const juce::StringArray& atRestTips()
+    {
+        static const juce::StringArray tips { "Filled with its colour all the time",
+                                              "Dark with a coloured outline until it's pressed, so the cue and any warning stand out in a dark room" };
+        return tips;
+    }
+
     void mouseDown (const juce::MouseEvent& e) override
     {
         select (widgetAt (e.getPosition()));
@@ -1801,6 +1867,17 @@ private:
         juce::PopupMenu menu;
         menu.addSectionHeader (describe (widgets[(size_t) index].type));
         menu.addSubMenu ("Text size", sizes);
+
+        if (hasAtRest (widgets[(size_t) index].type))
+        {
+            juce::PopupMenu atRest;
+
+            for (int i = 0; i < atRestNames().size(); ++i)
+                atRest.addItem (atRestNames()[i], true, widgets[(size_t) index].outlineAtRest == (i == 1),
+                                [safe, outline = i == 1] { if (safe != nullptr) safe->setSelectedOutlineAtRest (outline); });
+
+            menu.addSubMenu ("At rest", atRest);
+        }
 
         if (widgets[(size_t) index].type == StageWidgetType::text)
             menu.addItem (juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")), [safe, index] { if (safe != nullptr) safe->editText (index); });
@@ -2074,6 +2151,19 @@ public:
                 editor->setSelectedTextScale (Editor::textSizes()[(size_t) index].second);
         };
 
+        atRest.setSegments (Editor::atRestNames());
+        atRest.setTitle ("At rest");
+
+        for (int i = 0; i < atRest.getNumSegments(); ++i)
+            atRest.getSegmentButton (i)->setTooltip (Editor::atRestTips()[i]);
+
+        atRest.onClick = [this] (int index)
+        {
+            if (auto* editor = editorOf())
+                editor->setSelectedOutlineAtRest (index == 1);
+        };
+        addChildComponent (atRest);
+
         editTextButton.onClick = [this] { if (auto* editor = editorOf()) editor->editText (editor->getSelected()); };
         duplicateButton.onClick = [this] { if (auto* editor = editorOf()) editor->duplicateSelected(); };
         frontButton.onClick = [this] { if (auto* editor = editorOf()) editor->bringSelectedToFront(); };
@@ -2088,6 +2178,11 @@ public:
 
         for (int i = 0; i < sizes.getNumSegments(); ++i)
             noFocus (*sizes.getSegmentButton (i));
+
+        noFocus (atRest);
+
+        for (int i = 0; i < atRest.getNumSegments(); ++i)
+            noFocus (*atRest.getSegmentButton (i));
 
         notes = { "Widgets snap to the 24 " + juce::String (juce::CharPointer_UTF8 ("\xc3\x97")) + " 16 grid and scale with the window, "
                   "so one layout works on a laptop and on a big monitor.",
@@ -2106,7 +2201,20 @@ public:
         const auto isText = w.type == StageWidgetType::text;
         editTextButton.setButtonText (isText ? juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")) : juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6 (Text widget only)")));
         editTextButton.setEnabled (isText);
+
+        // "At rest", for Next button and Panic button only.
+        const auto showAtRest = Editor::hasAtRest (w.type);
+        atRest.setSelected (w.outlineAtRest ? 1 : 0);
+
+        if (showAtRest != atRest.isVisible())
+        {
+            atRest.setVisible (showAtRest);
+            resized();
+            repaint();
+        }
     }
+
+    kit::SegmentedControl& getAtRest() noexcept { return atRest; }
 
     void resized() override
     {
@@ -2116,6 +2224,17 @@ public:
         r.removeFromTop (size::layoutLabelGap);
         sizes.setBounds (r.removeFromTop (size::buttonHeight + 2));
         r.removeFromTop (size::layoutButtonGap);
+
+        if (atRest.isVisible())
+        {
+            atRestLabel = r.removeFromTop (juce::roundToInt (lineOf (font (type::label)))).toFloat();
+            r.removeFromTop (size::layoutLabelGap);
+            atRest.setBounds (r.removeFromTop (size::buttonHeight + 2));
+            r.removeFromTop (size::layoutButtonGap);
+            atRestNote = r.removeFromTop (2 * juce::roundToInt (lineOf (font (type::layoutNote)))).toFloat();
+            r.removeFromTop (size::layoutButtonGap);
+        }
+
         editTextButton.setBounds (r.removeFromTop (buttonH));
         r.removeFromTop (size::layoutButtonGap - size::buttonDrop);
         auto row = r.removeFromTop (buttonH);
@@ -2131,6 +2250,15 @@ public:
     void paint (juce::Graphics& g) override
     {
         paint::text (g, "Text size", labelBox, type::label, colour::textTertiary);
+
+        if (atRest.isVisible())
+        {
+            paint::text (g, "At rest", atRestLabel, type::label, colour::textTertiary);
+            g.setColour (paint::c (colour::textTertiary));
+            g.setFont (font (type::layoutNote));
+            g.drawFittedText ("Outline keeps the stage dark until you press it. Pressed, it always lights fully.", atRestNote.toNearestInt(),
+                              juce::Justification::topLeft, 2, 1.0f);
+        }
 
         // The notes, under a line, at the bottom.
         g.setColour (paint::c (colour::paneHeaderLine));
@@ -2151,7 +2279,8 @@ public:
 
 private:
     std::function<Editor*()> editorOf;
-    kit::SegmentedControl sizes;
+    kit::SegmentedControl sizes, atRest;
+    juce::Rectangle<float> atRestLabel, atRestNote;
     juce::TextButton editTextButton { juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")) }, duplicateButton { "Duplicate" }, frontButton { "Bring to front" },
                      removeButton { "Remove" };
     juce::StringArray notes;
@@ -2410,8 +2539,9 @@ juce::Point<int> StageView::nextFreeCell() const
 void StageView::addWidgetAtFreeCell (StageWidgetType type)
 {
     // The first place, row by row, where the whole widget fits on free cells;
-    // with none, the first free cell (as before).
+    // with none, nothing is added (decided 19 Nov: never on top of another).
     auto added = clampToGrid (newWidget (type, nextFreeCell()));
+    bool placed = false;
     const auto fits = [this] (const StageWidget& c)
     {
         return std::none_of (current.widgets.begin(), current.widgets.end(), [&c] (const StageWidget& o)
@@ -2430,10 +2560,14 @@ void StageView::addWidgetAtFreeCell (StageWidgetType type)
             {
                 added = c;
                 found = 1;
+                placed = true;
                 break;
             }
         }
     }
+
+    if (! placed)
+        return;
 
     auto list = current.widgets;
     list.push_back (added);
@@ -2471,6 +2605,7 @@ const juce::Component* StageView::getLayoutDropBox() const noexcept { return edi
 juce::String StageView::getLayoutDropText() const { return editor != nullptr ? editor->getDropBox().getLabel() : juce::String(); }
 bool StageView::isLayoutDropRefused() const noexcept { return editor != nullptr && editor->getDropBox().isRefused(); }
 int StageView::getSelectedLayoutWidget() const noexcept { return editor != nullptr ? editor->getSelected() : -1; }
+kit::SegmentedControl* StageView::getLayoutAtRest() const noexcept { return layoutInspector != nullptr ? &layoutInspector->getAtRest() : nullptr; }
 
 float StageView::getShownWidgetAlpha (int index) const noexcept
 {
