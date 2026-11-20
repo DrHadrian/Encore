@@ -140,7 +140,20 @@ struct TwoFingerRightClick::Impl
         }
     }
 
-    void attachTo (juce::Component& w) { window = &w; }
+    /** JUCE takes the window's touches itself (WM_POINTER, one input source per finger)
+        instead of leaving them to Windows, which turns a touch into a mouse click only
+        when the finger lifts. That late click landed after the right click and closed
+        its menu (Adrian, 20 Nov; the injected-touch test shows it). No built-in
+        gestures are lost: Encore uses none (no pinch). */
+    void attachTo (juce::Component& w)
+    {
+        window = &w;
+
+        if (auto* top = dynamic_cast<juce::TopLevelWindow*> (&w))
+            top->setUsingWindowsMultiTouch (true);   // kept when JUCE makes a new native window
+        else if (auto* peer = w.getPeer())
+            peer->setWindowsCanUseMultiTouch (true);
+    }
 
     /** JUCE's window code asks this first, for each touch message (phase 0 down, 1 move, 2 up). */
     static bool filter (juce::Component& w, int phase, unsigned int pointerId, juce::Point<float> at)

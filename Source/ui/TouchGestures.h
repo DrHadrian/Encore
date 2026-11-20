@@ -82,7 +82,9 @@ public:
     ~TwoFingerRightClick();
 
     /** The window whose touches it reads (JUCE hands them over first, through
-        the small JUCE patch in cmake/PatchJuceTouch.cmake; no window hook). */
+        the small JUCE patch in cmake/PatchJuceTouch.cmake; no window hook).
+        Turns on JUCE's own touch input for that window (one source per finger,
+        a press the moment a finger lands), which the gesture needs. */
     void attachTo (juce::Component& window);
 
     /** False where the JUCE patch isn't in (not Windows, or the patch didn't apply). */
