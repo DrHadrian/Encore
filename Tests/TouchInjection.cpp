@@ -50,7 +50,7 @@ bool inject (const std::vector<Contact>& frame, std::string& error)
         t.touchMask = TOUCH_MASK_CONTACTAREA | TOUCH_MASK_ORIENTATION | TOUCH_MASK_PRESSURE;
         t.rcContact = { c.x - 2, c.y - 2, c.x + 2, c.y + 2 };
         t.orientation = 90;
-        t.pressure = 32000;
+        t.pressure = 512;   // 0 to 1024
     }
 
     if (InjectTouchInput ((UINT32) infos.size(), infos.data()))
