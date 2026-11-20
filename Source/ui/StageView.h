@@ -61,6 +61,16 @@ public:
 
     void setEditingLayout (bool);
     bool isEditingLayout() const noexcept { return editing; }
+    bool isTunerHoldPending() const noexcept;   // Tuner pressed, not held long enough yet
+
+    /** A tap on a set-list row (the Set list widget): the first arms it for 2 s
+        ("Tap again to go to 6"), a second tap goes there (audit S2). */
+    void tapCue (int index);
+    int getArmedCue() const noexcept { return armedCue; }
+
+    /** The Tuner button or widget pressed / let go: held 0.5 s, the tuner opens (audit S3). */
+    void beginTunerHold();
+    void endTunerHold();
 
     /** The main window shows the edit view again. */
     std::function<void()> onLeave;
@@ -153,7 +163,16 @@ private:
     std::unique_ptr<juce::Component> separator;
     kit::StatusBar statusBar { true };   // the toolbar's status bar (v3.2; was the LCD)
     std::unique_ptr<MiniMeters> miniMeters;
-    juce::TextButton lockButton, tunerButton { "Tuner" }, muteButton { "Mute" };
+    /** The Stage toolbar's Tuner: "Tuner" with "hold" under it (audit S3). */
+    struct HoldButton final : public juce::TextButton
+    {
+        HoldButton (const juce::String& text, const juce::String& sub) : juce::TextButton (text), subText (sub) {}
+        void paintButton (juce::Graphics&, bool highlighted, bool down) override;
+        const juce::String subText;
+    };
+
+    juce::TextButton lockButton, muteButton { "Mute" };
+    HoldButton tunerButton { "Tuner", "hold" };
     juce::TextButton layoutsButton, addWidgetButton { "+ Widget" }, doneButton { "Done" }, inspectorButton { "Inspector" };
 
     // Layout editor (§6): widget list, the artboard with the stage preview, the widget inspector.
@@ -175,7 +194,10 @@ private:
 
     StageSnapshot last;
     int lastOverruns = 0;
-    juce::uint32 lastOverrunTime = 0, unlockPressStart = 0;
+    juce::uint32 lastOverrunTime = 0, unlockPressStart = 0, tunerPressStart = 0;
+    bool tunerOpenedByHold = false;
+    int armedCue = -1;           // the set list cue tapped once (-1: none)
+    juce::uint32 armedAt = 0;
     bool recentOverrun = false;
     juce::Point<int> addWidgetCell;
 

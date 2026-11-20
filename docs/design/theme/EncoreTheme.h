@@ -141,6 +141,16 @@ namespace colour
     constexpr juce::uint32 widgetTagFill   = 0x8C000000;   // name tag (black 55 %)
     constexpr juce::uint32 widgetTagText   = 0xffD8D8DC;
     constexpr juce::uint32 widgetTitle     = 0xffA2A8B3;   // "SONG 3   SET 1"
+    constexpr juce::uint32 armedRowFill    = 0x1FFFB340;   // a set-list row tapped once (amber 12 %), with an amber outline
+    constexpr juce::uint32 stompOnTop      = 0xff3A2422;   // a stomp that's on: dark red fill...
+    constexpr juce::uint32 stompOnBot      = 0xff2A1C1B;
+    constexpr juce::uint32 stompOnEdge     = 0xffFF3B30;   // ...and red outline
+    constexpr juce::uint32 stompOffTop     = 0xff2A2A2E;   // off: grey
+    constexpr juce::uint32 stompOffBot     = 0xff222225;
+    constexpr juce::uint32 stompOffEdge    = 0xff3A3A3F;
+    constexpr juce::uint32 stompFootTop    = 0xff4A4A4F;   // the footswitch
+    constexpr juce::uint32 stompFootBot    = 0xff2E2E32;
+    constexpr juce::uint32 stompFootEdge   = 0xff0E0E10;
     constexpr juce::uint32 widgetTrack     = 0xff2A2D33;   // empty meter / pedal track
     constexpr juce::uint32 expressionTop   = 0xff6EA5FA;   // EXP bar gradient, top (bottom: expressionBot)
     constexpr juce::uint32 stageMeterLow   = 0xff2BC24F;   // stage level bars: green to half way...
@@ -263,7 +273,7 @@ namespace colour
     constexpr juce::uint32 stageFooter     = 0xff1B1B1E;   // Stage footer strip
     constexpr juce::uint32 tunerOverlay    = 0xF70E0E10;   // tuner over the grid (97 %)
     constexpr juce::uint32 stageNumberDim  = 0xff8C8C93;   // numbers in stage lists
-    constexpr juce::uint32 panicSub        = 0xffF3C4C0;   // "silence & reset all"
+    constexpr juce::uint32 panicSub        = 0xffFFD3CE;   // "silence & reset all" (BStage, 19 Nov)
     constexpr juce::uint32 expressionBot   = 0xff3A7AE6;   // EXP bar gradient, bottom
     constexpr juce::uint32 blockStageTop   = 0xff3A3A3E;   // block stage radial light, centre
     constexpr juce::uint32 blockStageMid   = 0xff1C1C1F;
@@ -355,7 +365,7 @@ namespace size
 
     // Toolbars and strips
     constexpr int toolbarEdit       = 44;    // Edit and Layout (+ 1 px bottom line = 45)
-    constexpr int toolbarStage      = 48;    // Stage (+ 1 px bottom line = 49)
+    constexpr int toolbarStage      = 64;    // Stage (+ 1 px bottom line = 65; BStage, 19 Nov: was 48)
     constexpr int noticeBar         = 30;    // Edit notice bar
     constexpr int stageBanner       = 34;    // Stage: lost banner, notice strip
     constexpr int mutedBanner       = 28;    // Stage: "Output muted" bar
@@ -398,7 +408,7 @@ namespace size
     constexpr int buttonCompactPadX = 4;          // option grids (amp builder): text 4 px in, one line (board: padding 0 4, nowrap)
     constexpr float buttonCompactMinSqueeze = 0.85f;   // and squeezed this far before it is cut
     constexpr int toolbarButtonH    = 26;    // segmented mode switch in Edit/Layout
-    constexpr int stageToolbarButtonH = 36;  // Stage: Tuner, Mute
+    constexpr int stageToolbarButtonH = 56, stageToolbarButtonW = 96;   // Stage: Tuner, Mute (BStage, audit S4)
     constexpr int stageModeButtonH  = 30;
     constexpr int fieldHeight       = 22;
     constexpr int fieldRadius       = 4;
@@ -476,7 +486,7 @@ namespace size
     constexpr int widgetRadius      = 6;
     constexpr int widgetTagInset    = 6;     // name tag at (6, 6)
     constexpr int stageListRow      = 48;    // set list widget rows at text scale 1
-    constexpr int stageHeadingRow   = 30;
+    constexpr int stageHeadingRow   = 33;
     // Read from the Stage board (V3Stage.dc.html; content sizes at the
     // reference size, scaled with the window and the widget's text size).
     constexpr int widgetTagPadX = 6, widgetTagH = 15;
@@ -484,7 +494,7 @@ namespace size
     constexpr int stageToolbarPadX = 12, stageToolbarGap = 12, stageModeSegmentW = 72, stageButtonPadX = 14, stageMuteMinW = 84;
     constexpr int miniMetersW = 80, miniMeterBarH = 4, miniMeterGap = 3;
     constexpr int stageFooterPadX = 12, stageFooterGap = 16;
-    constexpr int widgetTitleX = 22, widgetTitleY = 34;                       // "SONG 3   SET 1"
+    constexpr int widgetTitleX = 22, widgetTitleY = 20, widgetHeadingY = 9;   // "SONG 3   SET 1"; "PATCH" (BStage: no tags on the live Stage)
     constexpr int currentNameX = 18, currentNameBottom = 22;
     constexpr int widgetTextX = 16, widgetTextBottom = 10;                    // Patch, Next cue (Cue note: bottom 12)
     constexpr int patchInputRight = 15, patchInputBottom = 18, patchInputIcon = 15, patchInputGap = 4;   // the Patch widget's input (M11)
@@ -498,6 +508,10 @@ namespace size
     constexpr float nextCuePatchShare = 0.3f;   // Next cue: the patch name keeps at least this share of the width (then it's cut)  // stomp pedals: 0.7 of 160 x 210 at the reference size
     constexpr int widgetTagRadius = 3, stageEmptyPadX = 8;
     constexpr int stompsX = 14, stompsRight = 10, stompsBottom = 10, stompsGap = 22, stageShadowH = 8;
+    // Stomp switches as lit tiles (BStage, audit S7): on = red outline and fill, "ON"; off = grey, "OFF".
+    constexpr int stompTileW = 112, stompTileH = 147, stompTileRadius = 10;
+    constexpr int stompNameTop = 14, stompStateTop = 35, stompLabelTop = 72, stompFootTop = 100, stompFootW = 42, stompFootH = 33;
+    constexpr float stompOnBorder = 2.0f, stompOffBorder = 1.0f, armedRowBorder = 2.0f;
     constexpr int barsTop = 34, barsBottom = 30, barsLabelBottom = 8, meterBarsGap = 8;
     constexpr int pedalTrackRadius = 4, meterBarRadius = 3;
     constexpr float pedalTrackInset = 0.30f, meterBarsInset = 0.18f;        // of the widget's width, each side
@@ -766,27 +780,31 @@ namespace type
 
     // Stage (scaled by the widget's text size and the widget's height)
     constexpr Style widgetTag       { 10.5f, Weight::semibold };
-    constexpr Style widgetTitle     { 13.0f, Weight::bold, 0.08f, true };
+    constexpr Style widgetTitle     { 20.0f, Weight::bold, 0.08f, true };   // "SONG 3   SET 1" (BStage, 19 Nov)
+    constexpr Style widgetHeading   { 15.0f, Weight::bold, 0.08f, true };   // "PATCH", "NEXT", "BAR 1 / A" on the live Stage
     constexpr Style currentName     { 168.0f, Weight::extraBold, -0.04f };  // fits the widget; shrink to fit
     constexpr Style stageListName   { 20.0f, Weight::bold };
     constexpr Style stageListHeading{ 13.0f, Weight::extraBold, 0.06f, true };
-    constexpr Style stageListNumber { 13.0f, Weight::regular, 0.0f, false, true };
-    constexpr Style stageListPatch  { 15.0f, Weight::regular };
+    constexpr Style stageListNumber { 16.0f, Weight::semibold, 0.0f, false, true };
+    constexpr Style stageListPatch  { 18.0f, Weight::regular };
     constexpr Style clock           { 52.0f, Weight::extraBold, 0.0f, false, true };
     constexpr Style healthMain      { 30.0f, Weight::extraBold };            // "CPU 7%", "AUDIO LOST"
-    constexpr Style healthSub       { 12.0f, Weight::bold };                 // "OK · 0 dropouts · 5.3 ms"
+    constexpr Style healthSub       { 16.0f, Weight::semibold };             // "OK · 0 dropouts · 5.3 ms"
     constexpr Style lockLabel       { 38.0f, Weight::extraBold };
-    constexpr Style lockHint        { 14.0f, Weight::regular };
+    constexpr Style lockHint        { 15.0f, Weight::regular };
     constexpr Style panicLabel      { 50.0f, Weight::extraBold };
-    constexpr Style panicHint       { 13.0f, Weight::regular };
+    constexpr Style panicHint       { 15.0f, Weight::regular };
     constexpr Style patchName       { 40.0f, Weight::extraBold };
-    constexpr Style cueNote         { 18.0f, Weight::semibold };
+    constexpr Style cueNote         { 24.0f, Weight::semibold };
     constexpr Style cueBar          { 13.0f, Weight::regular };
     constexpr Style nextCueName     { 44.0f, Weight::extraBold };
-    constexpr Style nextCuePatch    { 18.0f, Weight::regular };
+    constexpr Style nextCuePatch    { 22.0f, Weight::regular };
     constexpr Style backButton      { 26.0f, Weight::bold };
     constexpr Style nextButton      { 30.0f, Weight::extraBold };
-    constexpr Style barLabel        { 12.0f, Weight::regular };              // "EXP 1 · 72%", IN, OUT
+    constexpr Style barLabel        { 16.0f, Weight::semibold };             // "EXP 1 · 72%", IN, OUT (BStage, audit S5)
+    constexpr Style stompName       { 12.0f, Weight::bold, 0.08f, true };   // "DELAY" on a stomp tile
+    constexpr Style stompState      { 26.0f, Weight::extraBold, 0.02f };    // "ON" / "OFF"
+    constexpr Style stompLabel      { 13.0f, Weight::regular };             // "Stomp 1"
     constexpr Style stageEmpty      { 16.0f, Weight::regular };              // "No stomp switches in this patch"
     constexpr Style stageText       { 40.0f, Weight::semibold };             // Text widget (shrinks to fit)
     constexpr Style stageFooter     { 11.0f, Weight::regular };
@@ -824,6 +842,9 @@ namespace type
     constexpr Style pickerCompact   { 11.0f, Weight::semibold };            // the mixer view's "Guitar"
     constexpr Style outputValue     { 10.5f, Weight::regular, 0.0f, false, true };             // "-6.0 dB", "muted"
     constexpr Style inputSummaryName{ 13.0f, Weight::semibold };            // the playing patch's input
+    constexpr Style stageToolbarButton { 14.0f, Weight::medium };           // Stage toolbar: "Tuner"
+    constexpr Style stageToolbarSub { 10.5f, Weight::medium };              // its "hold"
+    constexpr Style stageToolbarMute{ 15.0f, Weight::bold };                // "Mute" / "MUTED"
     constexpr Style stageMute       { 15.0f, Weight::extraBold, 0.04f };    // Mute / MUTED on the Outputs widget
     constexpr Style stageOutputName { 15.0f, Weight::bold };                // "Front of house" on the Outputs widget
     constexpr Style stageOutputChannels { 11.0f, Weight::regular };         // its "1/2"

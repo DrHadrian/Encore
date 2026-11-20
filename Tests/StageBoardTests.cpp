@@ -106,6 +106,87 @@ public:
                 renderSnapshot (view, "stage@2x", 2.0f);
             }
 
+            beginTest ("Stage at the BStage sizes (v32-stage, v32-stage-outline): S2 tap again, S3 hold for the Tuner, S7 lit stomps");
+            {
+                // The live Stage has no name tags; Patch, Next cue and Cue note carry headings.
+                expect (! view.isEditingLayout());
+
+                // S2: a tap on another song arms it; a tap on the playing one does nothing.
+                view.tapCue (2);
+                expectEquals (view.getArmedCue(), -1, "the cue playing: nothing to arm");
+                view.tapCue (5);   // "6 Acoustic Set"
+                expectEquals (view.getArmedCue(), 5, "a first tap arms it");
+                expectEquals (session.getCurrentCue(), 2, "and doesn't go");
+
+                for (int i = 0; i < 3; ++i)
+                    view.update (boardSnapshot());
+
+                renderSnapshot (view, "v32-stage");
+                renderSnapshot (view, "v32-stage@2x", 2.0f);
+
+                // Next and Panic at "Outline".
+                {
+                    auto widgets = view.getShownWidgets();
+
+                    for (auto& w : widgets)
+                        if (w.type == StageWidgetType::nextButton || w.type == StageWidgetType::panicButton)
+                            w.outlineAtRest = true;
+
+                    session.setLayoutWidgets (session.getShow().stage.defaultLayoutId, widgets);
+                    settle (engine, session);
+
+                    for (int i = 0; i < 3; ++i)
+                        view.update (boardSnapshot());
+
+                    renderSnapshot (view, "v32-stage-outline");
+                    renderSnapshot (view, "v32-stage-outline@2x", 2.0f);
+
+                    for (auto& w : widgets)
+                        w.outlineAtRest = false;
+
+                    session.setLayoutWidgets (session.getShow().stage.defaultLayoutId, widgets);
+                    settle (engine, session);
+                }
+
+                // The second tap (within 2 s) goes; the armed row clears. (Armed again first:
+                // the snapshots above take about the 2 s in Debug, so the first tap may have lapsed.)
+                view.tapCue (session.getCurrentCue());   // a tap on the playing cue clears any armed one
+                expectEquals (view.getArmedCue(), -1);
+                view.tapCue (5);
+                expectEquals (view.getArmedCue(), 5);
+                view.tapCue (5);
+                expectEquals (view.getArmedCue(), -1, "the second tap clears the armed row");
+                settle (engine, session);   // going to a cue builds its patch first
+                expectEquals (session.getCurrentCue(), 5, "a second tap goes");
+
+                // An armed tap that isn't followed lapses after 2 s.
+                view.tapCue (3);
+                expectEquals (view.getArmedCue(), 3);
+                juce::Thread::sleep (2100);
+                view.update (boardSnapshot());
+                expectEquals (view.getArmedCue(), -1, "back to normal after 2 s");
+
+                // S3: Tuner opens only when held, and a tap closes it.
+                expect (! engine.isTunerOpen());
+                view.beginTunerHold();
+                view.endTunerHold();
+                view.update (boardSnapshot());
+                expect (! engine.isTunerOpen(), "a brush doesn't open the tuner");
+                view.beginTunerHold();
+                juce::Thread::sleep (550);
+                view.update (boardSnapshot());
+                expect (engine.isTunerOpen(), "held 0.5 s: it opens");
+                view.endTunerHold();
+                engine.setTunerOpen (false);
+                view.update (boardSnapshot());
+
+                session.goToCue (2);
+                settle (engine, session);
+
+                for (int i = 0; i < 3; ++i)
+                    view.update (boardSnapshot());
+            }
+
             beginTest ("Stage: the interface lost (stage-interface-lost.png)");
             {
                 auto lost = boardSnapshot();
