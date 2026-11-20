@@ -56,7 +56,11 @@ namespace paint
     /** The focus ring: 2 px accent, 1 px outside `r`. */
     /** The keyboard-focus ring around r, drawn only when focus last moved by the
         keyboard (theme::focusRings::visible); a click hides it. */
-    void focusRing (juce::Graphics&, juce::Rectangle<float> r, float radius);
+    /** The keyboard-focus ring of a control drawn in `r` (radius `radius`): 2 px
+        outside it when `room` (what the paint can reach: the component's bounds)
+        has space for it, else on the control's own edge. Drawn outside a
+        component's bounds, it was cut down to four blue corners. */
+    void focusRing (juce::Graphics&, juce::Rectangle<float> r, float radius, juce::Rectangle<float> room);
 
     /** A tick (✓) or cross (✕) drawn as a path, in `r`. */
     void tick (juce::Graphics&, juce::Rectangle<float> r, juce::Colour, float thickness);

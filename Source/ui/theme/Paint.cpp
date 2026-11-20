@@ -110,13 +110,19 @@ juce::String caps (const type::Style& style, const juce::String& s)
     return style.uppercase ? s.toUpperCase() : s;
 }
 
-void focusRing (juce::Graphics& g, juce::Rectangle<float> r, float radius)
+void focusRing (juce::Graphics& g, juce::Rectangle<float> r, float radius, juce::Rectangle<float> room)
 {
     if (! focusRings::visible())
         return;   // only after the keyboard moved focus, never after a click (CSS :focus-visible)
 
+    const auto width = (float) size::focusRing;
+    const auto outside = r.expanded (2.0f);
     g.setColour (c (colour::accent));
-    g.drawRoundedRectangle (r.expanded (2.0f), radius + 2.0f, (float) size::focusRing);
+
+    if (room.contains (outside.expanded (width * 0.5f)))
+        g.drawRoundedRectangle (outside, radius + 2.0f, width);
+    else
+        g.drawRoundedRectangle (r.reduced (width * 0.5f), juce::jmax (0.0f, radius - width * 0.5f), width);
 }
 
 void tick (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour colourToUse, float thickness)

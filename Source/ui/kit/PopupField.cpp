@@ -75,7 +75,7 @@ void PopupField::paintButton (juce::Graphics& g, bool highlighted, bool down)
     }
 
     if (hasKeyboardFocus (false) && getWantsKeyboardFocus())
-        paint::focusRing (g, r, radius);
+        paint::focusRing (g, r, radius, getLocalBounds().toFloat());
 }
 
 } // namespace encore::kit

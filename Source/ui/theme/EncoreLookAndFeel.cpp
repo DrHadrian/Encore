@@ -364,7 +364,7 @@ void EncoreLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
 
     // Keyboard focus only (decision 0025: clicks never take focus).
     if (button.hasKeyboardFocus (false) && button.isShowing() && button.getWantsKeyboardFocus())
-        paint::focusRing (g, r, radius);
+        paint::focusRing (g, r, radius, button.getLocalBounds().toFloat());
 }
 
 void EncoreLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button, bool, bool)

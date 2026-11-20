@@ -69,7 +69,7 @@ void PaneTab::paintButton (juce::Graphics& g, bool highlighted, bool)
               paint::c (highlighted ? colour::textStrong : colour::textTertiary));
 
     if (hasKeyboardFocus (false) && getWantsKeyboardFocus())
-        paint::focusRing (g, getLocalBounds().toFloat(), (float) size::paneTabRadius);
+        paint::focusRing (g, getLocalBounds().toFloat(), (float) size::paneTabRadius, getLocalBounds().toFloat());
 }
 
 } // namespace encore::kit
