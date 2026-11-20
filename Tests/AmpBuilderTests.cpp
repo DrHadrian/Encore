@@ -954,6 +954,18 @@ public:
                 builder.select ("k4");
                 inspectorShot ("v32-amp-inspector-knob", 598);
 
+                // The Symbol choice: icon + word, 2 columns (decided 19 Nov; no board picture yet).
+                if (const auto* amp = example ("example-super-crush-100"))
+                {
+                    builder.edit (*amp);
+                    builder.select ("y1");
+                    inspectorShot ("v32-amp-inspector-symbol", 420);
+                }
+                else
+                {
+                    expect (false, "Super Crush 100 is one of the examples");
+                }
+
                 if (const auto* amp = example ("example-jc-120"))
                 {
                     builder.edit (*amp);

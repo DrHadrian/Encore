@@ -842,6 +842,11 @@ juce::Image AmpFace::compose (const AmpPreset& preset, Layer layer, float scale)
     return image;
 }
 
+const juce::Path& AmpFace::symbolOutline (const juce::String& icon)
+{
+    return symbolPath (icon);
+}
+
 void AmpFace::paintKnobPicture (juce::Graphics& g, const juce::String& style, juce::Rectangle<float> r)
 {
     paintKnobCap (g, style, r, 20);   // value 0.5 of the 41 frames

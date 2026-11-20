@@ -786,6 +786,22 @@ private:
             }
         }
 
+        /** Each button its printed symbol, then its word, left-aligned (the Symbol
+            choice, decided 19 Nov). `symbols` are the AmpFace symbol names, in order. */
+        void setSymbols (const juce::StringArray& symbols)
+        {
+            for (int i = 0; i < buttons.size(); ++i)
+            {
+                auto* b = buttons[i];
+                b->getProperties().set (symbolId, symbols[i]);
+                b->getProperties().set ("encoreAmpSymbolWord", b->getButtonText());
+                b->setTitle (b->getButtonText());   // screen readers still hear the word
+                b->setButtonText ({});              // drawn here, after the icon, left-aligned
+            }
+
+            symbolsShown = true;
+        }
+
         /** Pictures in place of words (the knob styles), each button `height` tall. */
         void setIcons (const std::vector<juce::Image>& pictures, int height)
         {
@@ -803,10 +819,16 @@ private:
 
             for (int i = 0; i < buttons.size(); ++i)
                 buttons[i]->setBounds ((i % cols) * (w + 4), (i / cols) * (rowH + 4), w, rowH);
+
+            if (symbolsShown)
+                buttonsMoved();
         }
 
         void paintOverChildren (juce::Graphics& g) override
         {
+            if (symbolsShown)
+                paintSymbols (g);
+
             for (int i = 0; i < buttons.size() && i < (int) icons.size(); ++i)
                 g.drawImage (icons[(size_t) i], buttons[i]->getBounds().toFloat().withSizeKeepingCentre ((float) amp::knobPictureSize, (float) amp::knobPictureSize),
                              juce::RectanglePlacement::centred);
@@ -815,6 +837,54 @@ private:
         int cols, rowH = 22;
         juce::OwnedArray<juce::TextButton> buttons;
         std::vector<juce::Image> icons;
+
+    private:
+        static inline const juce::Identifier symbolId { "encoreAmpSymbol" };
+        bool symbolsShown = false;
+        std::vector<juce::Path> strokes;   // each button's symbol, stroked, where it sits (built on resize)
+
+        void buttonsMoved()
+        {
+            strokes.clear();
+
+            for (auto* b : buttons)
+            {
+                const auto& outline = kit::AmpFace::symbolOutline (b->getProperties()[symbolId].toString());
+                const auto box = juce::Rectangle<float> ((float) b->getX() + (float) size::buttonCompactPadX,
+                                                         (float) b->getBounds().getCentreY() - amp::symbolIcon * 0.5f,
+                                                         amp::symbolIcon, amp::symbolIcon);
+                const auto scale = amp::symbolIcon / 24.0f;
+                juce::Path stroked;
+                // The board's stroke 2 in the 24 px box, at the icon's size (the width applies after the transform).
+                juce::PathStrokeType (2.0f * scale, juce::PathStrokeType::curved, juce::PathStrokeType::rounded)
+                    .createStrokedPath (stroked, outline, juce::AffineTransform::scale (scale).translated (box.getX(), box.getY()));
+                strokes.push_back (stroked);
+            }
+        }
+
+        void paintSymbols (juce::Graphics& g)
+        {
+            if (strokes.size() != (size_t) buttons.size())
+                return;
+
+            for (int i = 0; i < buttons.size(); ++i)
+            {
+                auto* b = buttons[i];
+                auto ink = paint::c (b->getToggleState() ? colour::textStrong : colour::text);
+
+                if (! b->isEnabled())
+                    ink = ink.withMultipliedAlpha (state::disabledAlpha);
+
+                g.setColour (ink);
+                g.fillPath (strokes[(size_t) i]);
+
+                const auto words = b->getBounds().toFloat().withTrimmedLeft ((float) size::buttonCompactPadX + amp::symbolIcon + amp::symbolIconGap)
+                                       .withTrimmedRight ((float) size::buttonCompactPadX).withTrimmedBottom (1.0f);
+                g.setFont (b->getLookAndFeel().getTextButtonFont (*b, b->getHeight()));
+                g.drawFittedText (b->getProperties()["encoreAmpSymbolWord"].toString(), words.toNearestInt(), juce::Justification::centredLeft,
+                                  1, size::buttonCompactMinSqueeze);   // squeezed a little before it's cut, as the other option buttons
+            }
+        }
     };
 
     /** The five knob styles in the board's order, each its picture only (no shadow, no pointer), 24 px at 2x. */
@@ -1209,7 +1279,11 @@ private:
         {
             static const juce::StringArray icons { "volume", "treble", "bass", "mid", "gain", "reverb", "power", "input", "clean", "dirty" };
             static const juce::StringArray names { "Volume", "Treble", "Bass", "Mid / shape", "Gain", "Reverb", "Power", "Input", "Clean", "Dirty" };
-            addChoice ("Symbol", names, icons.indexOf (p.icon), 2, [&o] (int i) { o.changeSelected ([i] (AmpPart& q) { q.icon = icons[i]; }); });
+            auto symbols = std::make_unique<Choice> (names, icons.indexOf (p.icon), 2, [&o] (int i) { o.changeSelected ([i] (AmpPart& q) { q.icon = icons[i]; }); });
+            symbols->setButtonHeight (amp::choiceH);
+            symbols->setSymbols (icons);
+            const auto h = juce::jmax (amp::rowMinH, symbols->heightFor());
+            add ("Symbol", std::move (symbols), h);
         }
 
         if (p.type == "plate")
