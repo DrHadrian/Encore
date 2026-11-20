@@ -77,7 +77,8 @@ public:
     explicit TwoFingerRightClick (std::function<bool()> allowed);
     ~TwoFingerRightClick();
 
-    /** Watches `window`'s native window; call again when it may have a new one. */
+    /** The window whose touches it reads (JUCE hands them over first, through
+        the small JUCE patch in cmake/PatchJuceTouch.cmake; no window hook). */
     void attachTo (juce::Component& window);
 
 private:

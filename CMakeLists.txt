@@ -33,6 +33,10 @@ else()
     FetchContent_MakeAvailable(juce)
 endif()
 
+# The two-finger right click: touch messages reach Encore inside JUCE's own
+# window code (see the script). Sets ENCORE_JUCE_TOUCH_FILTER.
+include(cmake/PatchJuceTouch.cmake)
+
 # NeuralAmpModelerCore (MIT) and the Eigen commit it pins (MPL2).
 # Only the sources are fetched (SOURCE_SUBDIR points nowhere), so neither
 # project's own build runs; nam_core below compiles exactly what we need.
@@ -449,11 +453,9 @@ target_sources(EncoreUi PRIVATE
     Source/ui/SetList.cpp
     Source/ui/SetList.h)
 target_link_libraries(EncoreUi PUBLIC EncoreEngine EncoreUiAssets EncoreAmpArt)
-# The two-finger right click subclasses the window (SetWindowSubclass), and
-# includes windows.h itself: no JUCE precompiled header for it.
-set_source_files_properties(Source/ui/TouchGestures.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
-if(WIN32)
-    target_link_libraries(EncoreUi PUBLIC comctl32)
+# The two-finger right click needs JUCE's touch filter (cmake/PatchJuceTouch.cmake).
+if(ENCORE_JUCE_TOUCH_FILTER)
+    target_compile_definitions(EncoreUi PRIVATE ENCORE_JUCE_TOUCH_FILTER=1)
 endif()
 
 # ------------------------------------------------------------------------------

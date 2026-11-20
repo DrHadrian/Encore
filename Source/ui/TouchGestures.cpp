@@ -3,13 +3,14 @@
 
 #include "ui/TouchGestures.h"
 
-#if JUCE_WINDOWS
- #ifndef NOMINMAX
-  #define NOMINMAX
- #endif
- #include <windows.h>
- #include <windowsx.h>
- #include <commctrl.h>   // SetWindowSubclass (comctl32, linked in CMakeLists.txt)
+#if JUCE_WINDOWS && ENCORE_JUCE_TOUCH_FILTER
+namespace juce
+{
+    // Added to JUCE's Windows window code by cmake/PatchJuceTouch.cmake: JUCE asks
+    // it first for each touch message; true means Encore took the message.
+    using WindowsTouchFilter = bool (*) (Component& window, int phase, unsigned int pointerId, Point<float> physicalScreenPosition);
+    extern WindowsTouchFilter windowsTouchFilter;
+}
 #endif
 
 namespace encore
@@ -98,89 +99,59 @@ TwoFingerTapDetector::Action TwoFingerTapDetector::up (int pointerId, juce::Poin
 }
 
 //==============================================================================
-#if JUCE_WINDOWS
+#if JUCE_WINDOWS && ENCORE_JUCE_TOUCH_FILTER
 
 struct TwoFingerRightClick::Impl
 {
-    explicit Impl (std::function<bool()> a) : allowed (std::move (a)) {}
+    explicit Impl (std::function<bool()> a) : allowed (std::move (a))
+    {
+        active = this;
+        juce::windowsTouchFilter = &Impl::filter;
+    }
 
     ~Impl()
     {
-        detach();
-    }
-
-    void attachTo (juce::Component& w)
-    {
-        window = &w;
-        auto* peer = w.getPeer();
-        const auto handle = peer != nullptr ? (HWND) peer->getNativeHandle() : nullptr;
-
-        if (handle == hwnd)
-            return;
-
-        detach();
-        hwnd = handle;
-
-        if (hwnd != nullptr)
-            SetWindowSubclass (hwnd, &Impl::proc, subclassId, (DWORD_PTR) this);
-    }
-
-    void detach()
-    {
-        if (hwnd != nullptr && IsWindow (hwnd))
-            RemoveWindowSubclass (hwnd, &Impl::proc, subclassId);
-
-        hwnd = nullptr;
-    }
-
-    static LRESULT CALLBACK proc (HWND h, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR data)
-    {
-        auto* self = reinterpret_cast<Impl*> (data);
-
-        if (message == WM_NCDESTROY)
+        if (active == this)
         {
-            RemoveWindowSubclass (h, &Impl::proc, subclassId);
-            self->hwnd = nullptr;
-            return DefSubclassProc (h, message, wParam, lParam);
+            juce::windowsTouchFilter = nullptr;
+            active = nullptr;
         }
+    }
 
-        if (message != WM_POINTERDOWN && message != WM_POINTERUPDATE && message != WM_POINTERUP)
-            return DefSubclassProc (h, message, wParam, lParam);
+    void attachTo (juce::Component& w) { window = &w; }
 
-        const auto id = (UINT32) GET_POINTERID_WPARAM (wParam);
-        POINTER_INPUT_TYPE type = PT_POINTER;
+    /** JUCE's window code asks this first, for each touch message (phase 0 down, 1 move, 2 up). */
+    static bool filter (juce::Component& w, int phase, unsigned int pointerId, juce::Point<float> at)
+    {
+        auto* self = active;
 
-        if (! GetPointerType (id, &type) || type != PT_TOUCH)
-            return DefSubclassProc (h, message, wParam, lParam);
+        if (self == nullptr || self->window.getComponent() != &w)
+            return false;   // another window (a plugin's): untouched
 
-        const juce::Point<float> at ((float) GET_X_LPARAM (lParam), (float) GET_Y_LPARAM (lParam));   // physical screen pixels
-        const auto now = (juce::uint32) GetTickCount();
         auto& detector = self->detector;
+        const auto id = (int) pointerId;
+        const auto now = juce::Time::getMillisecondCounter();
         using A = TwoFingerTapDetector::Action;
 
-        if (message == WM_POINTERDOWN)
+        if (phase == 0)
         {
-            const auto action = detector.down ((int) id, at, now, self->allowed == nullptr || self->allowed());
+            const auto action = detector.down (id, at, now, self->allowed == nullptr || self->allowed());
 
             if (action == A::cancelFirstAndSwallow)
-            {
                 self->cancelFirstPress();
-                return 0;
-            }
 
-            return action == A::swallow ? 0 : DefSubclassProc (h, message, wParam, lParam);
+            return action != A::pass;
         }
 
-        if (message == WM_POINTERUPDATE)
-            return detector.move ((int) id, at) == A::swallow ? 0 : DefSubclassProc (h, message, wParam, lParam);
+        if (phase == 1)
+            return detector.move (id, at) == A::swallow;
 
         bool rightClick = false;
-        const auto action = detector.up ((int) id, at, now, rightClick);
-        const auto result = action == A::swallow ? 0 : DefSubclassProc (h, message, wParam, lParam);
+        const auto taken = detector.up (id, at, now, rightClick) == A::swallow;
 
         if (rightClick)
         {
-            // After the window procedure has finished with this message.
+            // After JUCE has finished with this message.
             const auto where = detector.getFirstPosition();
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<juce::Component> (self->window), where]
             {
@@ -189,12 +160,12 @@ struct TwoFingerRightClick::Impl
             });
         }
 
-        return result;
+        return taken;
     }
 
     /** The first finger already pressed something: move that press off the
         window and lift it there, so nothing it touched clicks. Its moves are
-        swallowed from now on (one would press again), its lift passes as a hover. */
+        taken from now on (one would press again); its lift reaches JUCE as a hover. */
     void cancelFirstPress()
     {
         for (auto& source : juce::Desktop::getInstance().getMouseSources())
@@ -202,38 +173,38 @@ struct TwoFingerRightClick::Impl
             if (source.getType() != juce::MouseInputSource::InputSourceType::touch || ! source.isDragging())
                 continue;
 
-            auto* under = source.getComponentUnderMouse();
-            auto* peer = under != nullptr ? under->getPeer() : (window != nullptr ? window->getPeer() : nullptr);
+            auto* peer = window != nullptr ? window->getPeer() : nullptr;
 
             if (peer == nullptr)
-                continue;
+                return;
 
+            using S = juce::MouseInputSource;
             const auto time = juce::Time::currentTimeMillis();
-            const auto pressed = juce::ModifierKeys::getCurrentModifiers().withoutMouseButtons().withFlags (juce::ModifierKeys::leftButtonModifier);
             const auto released = juce::ModifierKeys::getCurrentModifiers().withoutMouseButtons();
-            peer->handleMouseEvent (juce::MouseInputSource::InputSourceType::touch, juce::MouseInputSource::offscreenMousePos, pressed,
-                                    juce::MouseInputSource::defaultPressure, juce::MouseInputSource::defaultOrientation, time, {}, source.getIndex());
-            peer->handleMouseEvent (juce::MouseInputSource::InputSourceType::touch, juce::MouseInputSource::offscreenMousePos, released,
-                                    juce::MouseInputSource::defaultPressure, juce::MouseInputSource::defaultOrientation, time, {}, source.getIndex());
+            const auto pressed = released.withFlags (juce::ModifierKeys::leftButtonModifier);
+            peer->handleMouseEvent (S::InputSourceType::touch, S::offscreenMousePos, pressed, S::defaultPressure, S::defaultOrientation,
+                                    time, {}, source.getIndex());
+            peer->handleMouseEvent (S::InputSourceType::touch, S::offscreenMousePos, released, S::defaultPressure, S::defaultOrientation,
+                                    time, {}, source.getIndex());
             juce::ModifierKeys::currentModifiers = released;
-            break;   // only one finger was down
+            return;   // only one finger was down
         }
     }
 
     /** A mouse right click at a physical screen point, as if the mouse had made it. */
-    static void rightClickAt (juce::Component& window, juce::Point<float> physical)
+    static void rightClickAt (juce::Component& w, juce::Point<float> physical)
     {
-        auto* peer = window.getPeer();
+        auto* peer = w.getPeer();
 
         if (peer == nullptr)
             return;
 
+        using S = juce::MouseInputSource;
         const auto logical = juce::Desktop::getInstance().getDisplays().physicalToLogical (physical);
         const auto local = peer->globalToLocal (logical);
         const auto time = juce::Time::currentTimeMillis();
         const auto none = juce::ModifierKeys::getCurrentModifiers().withoutMouseButtons();
         const auto right = none.withFlags (juce::ModifierKeys::rightButtonModifier);
-        using S = juce::MouseInputSource;
 
         juce::ModifierKeys::currentModifiers = right;
         peer->handleMouseEvent (S::InputSourceType::mouse, local, right, S::defaultPressure, S::defaultOrientation, time);
@@ -241,11 +212,10 @@ struct TwoFingerRightClick::Impl
         peer->handleMouseEvent (S::InputSourceType::mouse, local, none, S::defaultPressure, S::defaultOrientation, time);
     }
 
-    static constexpr UINT_PTR subclassId = 0x456E636F;   // "Enco"
+    static inline Impl* active = nullptr;
     std::function<bool()> allowed;
     TwoFingerTapDetector detector;
     juce::Component::SafePointer<juce::Component> window;
-    HWND hwnd = nullptr;
 };
 
 #else
