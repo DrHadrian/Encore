@@ -810,5 +810,15 @@ finger moved a little (Adrian, 20 Nov 2026).
   - It never edits a local JUCE checkout (`ENCORE_JUCE_DIR`).
   - If the code doesn't match (a new JUCE version), it warns and the app
     builds without the two-finger tap.
+- **JUCE reads the touches itself** (`setUsingWindowsMultiTouch`, one input
+  source per finger) on the main window. Left to Windows, a touch became a
+  mouse click only when the finger lifted; on a two-finger tap that late click
+  arrived after the right click and closed the menu it had opened (Adrian, 20
+  Nov 2026, on a block in the signal chain). Now a press lands the moment the
+  finger does. Windows' built-in gestures (pinch) stop; Encore uses none.
+- **Tested on a real window:** a test opens a menu with the synthetic right
+  click, and with a two-finger tap made of injected touches
+  (`InjectTouchInput`, no touch screen needed), and checks it stays open. On CI
+  a touch that can't be injected fails the test; elsewhere it's skipped.
 - **Code signing** is still the real answer to download warnings ("Production
   basics" in the roadmap).

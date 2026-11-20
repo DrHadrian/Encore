@@ -65,6 +65,10 @@ private:
     void reset() noexcept;
 };
 
+/** A mouse right click at a point on the screen (logical coordinates), as if the
+    mouse had made it: the press, then the release. */
+void rightClickAt (juce::Component& window, juce::Point<float> screen);
+
 /** On Windows, a two-finger tap on the main window is a right click where the
     first finger was, wherever right clicks open menus, except on the live
     Stage (where widgets act the moment a finger lands). Holding one finger
@@ -78,8 +82,13 @@ public:
     ~TwoFingerRightClick();
 
     /** The window whose touches it reads (JUCE hands them over first, through
-        the small JUCE patch in cmake/PatchJuceTouch.cmake; no window hook). */
+        the small JUCE patch in cmake/PatchJuceTouch.cmake; no window hook).
+        Turns on JUCE's own touch input for that window (one source per finger,
+        a press the moment a finger lands), which the gesture needs. */
     void attachTo (juce::Component& window);
+
+    /** False where the JUCE patch isn't in (not Windows, or the patch didn't apply). */
+    static bool isAvailable() noexcept;
 
 private:
     struct Impl;

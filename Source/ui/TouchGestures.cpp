@@ -99,10 +99,32 @@ TwoFingerTapDetector::Action TwoFingerTapDetector::up (int pointerId, juce::Poin
 }
 
 //==============================================================================
+void rightClickAt (juce::Component& window, juce::Point<float> screen)
+{
+    auto* peer = window.getPeer();
+
+    if (peer == nullptr)
+        return;
+
+    using S = juce::MouseInputSource;
+    const auto local = peer->globalToLocal (screen);
+    const auto time = juce::Time::currentTimeMillis();
+    const auto none = juce::ModifierKeys::getCurrentModifiers().withoutMouseButtons();
+    const auto right = none.withFlags (juce::ModifierKeys::rightButtonModifier);
+
+    juce::ModifierKeys::currentModifiers = right;
+    peer->handleMouseEvent (S::InputSourceType::mouse, local, right, S::defaultPressure, S::defaultOrientation, time);
+    juce::ModifierKeys::currentModifiers = none;
+    peer->handleMouseEvent (S::InputSourceType::mouse, local, none, S::defaultPressure, S::defaultOrientation, time);
+}
+
+//==============================================================================
 #if JUCE_WINDOWS && ENCORE_JUCE_TOUCH_FILTER
 
 struct TwoFingerRightClick::Impl
 {
+    static constexpr bool available = true;
+
     explicit Impl (std::function<bool()> a) : allowed (std::move (a))
     {
         active = this;
@@ -118,7 +140,20 @@ struct TwoFingerRightClick::Impl
         }
     }
 
-    void attachTo (juce::Component& w) { window = &w; }
+    /** JUCE takes the window's touches itself (WM_POINTER, one input source per finger)
+        instead of leaving them to Windows, which turns a touch into a mouse click only
+        when the finger lifts. That late click landed after the right click and closed
+        its menu (Adrian, 20 Nov; the injected-touch test shows it). No built-in
+        gestures are lost: Encore uses none (no pinch). */
+    void attachTo (juce::Component& w)
+    {
+        window = &w;
+
+        if (auto* top = dynamic_cast<juce::TopLevelWindow*> (&w))
+            top->setUsingWindowsMultiTouch (true);   // kept when JUCE makes a new native window
+        else if (auto* peer = w.getPeer())
+            peer->setWindowsCanUseMultiTouch (true);
+    }
 
     /** JUCE's window code asks this first, for each touch message (phase 0 down, 1 move, 2 up). */
     static bool filter (juce::Component& w, int phase, unsigned int pointerId, juce::Point<float> at)
@@ -156,7 +191,7 @@ struct TwoFingerRightClick::Impl
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<juce::Component> (self->window), where]
             {
                 if (safe != nullptr)
-                    rightClickAt (*safe, where);
+                    rightClickAt (*safe, juce::Desktop::getInstance().getDisplays().physicalToLogical (where));
             });
         }
 
@@ -191,27 +226,6 @@ struct TwoFingerRightClick::Impl
         }
     }
 
-    /** A mouse right click at a physical screen point, as if the mouse had made it. */
-    static void rightClickAt (juce::Component& w, juce::Point<float> physical)
-    {
-        auto* peer = w.getPeer();
-
-        if (peer == nullptr)
-            return;
-
-        using S = juce::MouseInputSource;
-        const auto logical = juce::Desktop::getInstance().getDisplays().physicalToLogical (physical);
-        const auto local = peer->globalToLocal (logical);
-        const auto time = juce::Time::currentTimeMillis();
-        const auto none = juce::ModifierKeys::getCurrentModifiers().withoutMouseButtons();
-        const auto right = none.withFlags (juce::ModifierKeys::rightButtonModifier);
-
-        juce::ModifierKeys::currentModifiers = right;
-        peer->handleMouseEvent (S::InputSourceType::mouse, local, right, S::defaultPressure, S::defaultOrientation, time);
-        juce::ModifierKeys::currentModifiers = none;
-        peer->handleMouseEvent (S::InputSourceType::mouse, local, none, S::defaultPressure, S::defaultOrientation, time);
-    }
-
     static inline Impl* active = nullptr;
     std::function<bool()> allowed;
     TwoFingerTapDetector detector;
@@ -222,6 +236,7 @@ struct TwoFingerRightClick::Impl
 
 struct TwoFingerRightClick::Impl
 {
+    static constexpr bool available = false;
     explicit Impl (std::function<bool()>) {}
     void attachTo (juce::Component&) {}
 };
@@ -230,6 +245,7 @@ struct TwoFingerRightClick::Impl
 
 TwoFingerRightClick::TwoFingerRightClick (std::function<bool()> allowed) : impl (std::make_unique<Impl> (std::move (allowed))) {}
 TwoFingerRightClick::~TwoFingerRightClick() = default;
+bool TwoFingerRightClick::isAvailable() noexcept { return Impl::available; }
 void TwoFingerRightClick::attachTo (juce::Component& window) { impl->attachTo (window); }
 
 } // namespace encore
