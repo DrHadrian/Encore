@@ -200,7 +200,7 @@ public:
         }
 
         if (focused >= 0 && hasKeyboardFocus (false))
-            paint::focusRing (g, rowBounds (focused).toFloat(), (float) size::rowRadius);
+            paint::focusRing (g, rowBounds (focused).toFloat(), (float) size::rowRadius, getLocalBounds().toFloat());
     }
 
     void mouseMove (const juce::MouseEvent& e) override { setHovered (rowAt (e.y)); }
@@ -488,7 +488,7 @@ public:
         }
 
         if (hasKeyboardFocus (false) && owner.selection.isEmpty())
-            paint::focusRing (g, getLocalBounds().toFloat().reduced (1.0f), 6.0f);
+            paint::focusRing (g, getLocalBounds().toFloat().reduced (1.0f), 6.0f, getLocalBounds().toFloat());
     }
 
     void mouseDown (const juce::MouseEvent& e) override

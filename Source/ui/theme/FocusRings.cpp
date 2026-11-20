@@ -42,35 +42,59 @@ namespace
                 focused->repaint();
         }
 
+        /** A click: the pointer is in charge, rings go. */
+        void pointerPressed()
+        {
+            keyboard = false;
+            show (false);
+        }
+
+        /** Focus moved. By a key held down now (Tab, an arrow, a shortcut...):
+            the keyboard is in charge, rings show. Moved by code (a rebuilt
+            panel, a dialog's default button): whoever was in charge stays, so a
+            click never ends with a ring however long its work takes. */
+        void focusMoved (bool byKey)
+        {
+            if (byKey)
+                keyboard = true;
+
+            show (keyboard);
+        }
+
         JUCE_DECLARE_SINGLETON_INLINE (Watcher, false)
 
     private:
-        juce::uint32 lastPointer = 0;
+        bool keyboard = false;
         juce::Component::SafePointer<juce::Component> lastFocused;
 
         void mouseDown (const juce::MouseEvent&) override
         {
-            lastPointer = juce::Time::getMillisecondCounter();
-            show (false);
+            pointerPressed();
         }
 
-        void mouseUp (const juce::MouseEvent&) override
+        static bool focusKeyHeld()
         {
-            lastPointer = juce::Time::getMillisecondCounter();
+            using K = juce::KeyPress;
+            static const int keys[] { K::tabKey, K::upKey, K::downKey, K::leftKey, K::rightKey, K::homeKey, K::endKey,
+                                      K::pageUpKey, K::pageDownKey, K::returnKey, K::spaceKey, K::escapeKey,
+                                      K::F1Key, K::F2Key, K::F3Key, K::F4Key, K::F5Key, K::F6Key, K::F7Key,
+                                      K::F8Key, K::F9Key, K::F10Key, K::F11Key, K::F12Key };
+
+            for (auto key : keys)
+                if (K::isKeyCurrentlyDown (key))
+                    return true;
+
+            return false;
         }
 
-        // (Desktop calls this asynchronously, after the click that moved focus has been seen.)
+        // (Desktop calls this asynchronously, before the key that moved focus is let go.)
         void globalFocusChanged (juce::Component* focused) override
         {
-            const auto sincePointer = juce::Time::getMillisecondCounter() - lastPointer;
-            const auto fromPointer = juce::ModifierKeys::currentModifiers.isAnyMouseButtonDown()
-                                  || sincePointer < (juce::uint32) state::focusFromPointerMs;
-
             if (lastFocused != nullptr)
                 lastFocused->repaint();
 
             lastFocused = focused;
-            show (! fromPointer);
+            focusMoved (! juce::ModifierKeys::currentModifiers.isAnyMouseButtonDown() && focusKeyHeld());
 
             if (focused != nullptr)
                 focused->repaint();
@@ -86,7 +110,13 @@ bool visible()
 
 void setVisibleForTests (bool shouldShow)
 {
-    Watcher::getInstance()->show (shouldShow);
+    if (shouldShow)
+        Watcher::getInstance()->focusMoved (true);
+    else
+        Watcher::getInstance()->pointerPressed();
 }
+
+void clickForTests()                      { Watcher::getInstance()->pointerPressed(); }
+void focusMovedForTests (bool byKey)      { Watcher::getInstance()->focusMoved (byKey); }
 
 } // namespace encore::theme::focusRings

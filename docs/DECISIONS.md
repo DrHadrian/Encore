@@ -762,3 +762,23 @@ have hung Encore at a show change or at quit, however rarely.
   - EncoreTests links DbgHelp and gets a PDB in Release (`/DEBUG`, with
     `/OPT:REF` and `/OPT:ICF` kept on). A failed CI job uploads the exe and
     the PDB.
+
+## 0061 — Focus rings: who moved focus decides, not timing
+
+Decision 0059's rings still showed after a click (Adrian, 20 Nov 2026): picking
+an amp template rebuilt the inspector, focus landed on its first button
+("British gold") more than 300 ms after the click, and the rule ("focus that
+moves within 300 ms of a click came from the click") took it for the keyboard.
+The ring was also drawn 2 px outside the button, beyond what the button's
+paint can reach, so only its four rounded corners showed.
+
+- **Rings show as CSS `:focus-visible` does, without a clock:**
+  - a click hides them, and the pointer is in charge;
+  - focus moved while a key is held (Tab, an arrow, Return, Space, Esc, F1–F12)
+    shows them, and the keyboard is in charge;
+  - focus set by code (a rebuilt panel, a dialog's default button) keeps
+    whoever is in charge.
+  The token `state::focusFromPointerMs` is gone.
+- **`paint::focusRing` takes the room its caller can paint in.** The ring
+  goes 2 px outside the control when it fits, or on the control's own edge
+  when it doesn't (buttons, pane tabs, fields). It's always drawn whole.

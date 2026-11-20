@@ -86,7 +86,7 @@ void HealthStatus::paintButton (juce::Graphics& g, bool highlighted, bool down)
     paint::text (g, detail, second, type::healthStatus, colour::textDim);
 
     if (hasKeyboardFocus (false) && getWantsKeyboardFocus())
-        paint::focusRing (g, r, radius);
+        paint::focusRing (g, r, radius, getLocalBounds().toFloat());
 }
 
 } // namespace encore::kit

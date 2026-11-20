@@ -220,7 +220,7 @@ public:
                     juce::Image image (juce::Image::ARGB, 40, 40, true);
                     {
                         juce::Graphics g (image);
-                        theme::paint::focusRing (g, { 8.0f, 8.0f, 24.0f, 24.0f }, 4.0f);
+                        theme::paint::focusRing (g, { 8.0f, 8.0f, 24.0f, 24.0f }, 4.0f, { 0.0f, 0.0f, 40.0f, 40.0f });
                     }
                     int drawn = 0;
                     for (int y = 0; y < image.getHeight(); ++y)
@@ -235,6 +235,35 @@ public:
                 theme::focusRings::setVisibleForTests (true);
                 expect (theme::focusRings::visible());
                 expect (ringPixels() > 0, "after Tab: the ring");
+
+                // Who moved focus decides, not how long after a click: picking an
+                // amp template rebuilt the inspector, focus landed on its first
+                // button later than 300 ms, and that counted as the keyboard.
+                theme::focusRings::clickForTests();
+                theme::focusRings::focusMovedForTests (false);
+                expect (! theme::focusRings::visible(), "focus set by code after a click (however late): no ring");
+                theme::focusRings::focusMovedForTests (true);
+                expect (theme::focusRings::visible(), "focus moved by a key: the ring");
+                theme::focusRings::focusMovedForTests (false);
+                expect (theme::focusRings::visible(), "focus set by code while the keyboard is in charge: the ring stays");
+                theme::focusRings::clickForTests();
+                expect (! theme::focusRings::visible(), "a click: no ring");
+
+                // A control that fills its component (a button) gets its ring on its own
+                // edge, whole: drawn outside, it was cut down to four blue corners.
+                {
+                    theme::focusRings::setVisibleForTests (true);
+                    juce::Image image (juce::Image::ARGB, 60, 24, true);
+                    {
+                        juce::Graphics g (image);
+                        const auto bounds = image.getBounds().toFloat();
+                        theme::paint::focusRing (g, bounds, 5.0f, bounds);
+                    }
+                    const auto lit = [&image] (int x, int y) { return image.getPixelAt (x, y).getAlpha() > 128; };
+                    expect (lit (30, 0) && lit (30, 23) && lit (0, 12) && lit (59, 12), "all four sides of the ring are drawn");
+                    expect (! lit (30, 12), "only the ring: the middle stays clear");
+                }
+
                 theme::focusRings::setVisibleForTests (false);
             }
         }
