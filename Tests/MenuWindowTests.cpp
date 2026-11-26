@@ -161,9 +161,11 @@ private:
 
         if (layer != nullptr)
         {
+            const auto paints = theme::ShapedShadow::paintsForTests();   // before the snapshot paints it too
             const auto snapshot = layer->createComponentSnapshot (layer->getLocalBounds(), true, 1.0f);
             report << ", layer " << layer->getScreenBounds().toString() << (layer->isVisible() ? " visible" : " hidden")
                    << " alpha at its bottom middle " << (int) snapshot.getPixelAt (snapshot.getWidth() / 2, snapshot.getHeight() - 50).getAlpha()
+                   << ", on screen " << paints
                    << ", windows above: backdrop " << screen::windowsAbove (backdrop.getWindowHandle())
                    << " menu " << screen::windowsAbove (window->getWindowHandle())
                    << " layer " << screen::windowsAbove (layer->getWindowHandle())

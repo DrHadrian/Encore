@@ -46,6 +46,9 @@ struct ShapedShadow::Layer final : juce::Component
 
     void paint (juce::Graphics& g) override
     {
+        ++paints;
+        lastPaintClip = g.getClipBounds();
+
         if (owner == nullptr)
             return;
 
@@ -61,6 +64,9 @@ struct ShapedShadow::Layer final : juce::Component
 
         g.drawImage (image, getLocalBounds().toFloat());
     }
+
+    static inline int paints = 0;
+    static inline juce::Rectangle<int> lastPaintClip;
 
     juce::Component::SafePointer<juce::Component> owner;
     Look look;
@@ -257,9 +263,11 @@ void ShapedShadow::update()
 
     if (layer == nullptr)
     {
+        // Made hidden at its size and shown once placed (as a menu window is): a
+        // layered window paints in full when it is shown; made visible at 1 x 1 and
+        // then resized, it was never painted on screen (CI, 26 Nov).
         layer = std::make_unique<Layer> (*o, look);
-        layer->setSize (1, 1);   // never a zero-size window
-        layer->setVisible (true);
+        layer->setBounds (marginsFor (look).addedTo (o->getBounds()));
 
         if (onDesktop)
         {
@@ -309,8 +317,14 @@ void ShapedShadow::update()
         layer->setBounds (bounds);
     }
 
+    layer->setVisible (true);
     layer->toBehind (o);
     layer->repaint();
+}
+
+juce::String ShapedShadow::paintsForTests()
+{
+    return juce::String (Layer::paints) + " paints, last clip " + Layer::lastPaintClip.toString();
 }
 
 void ShapedShadow::componentMovedOrResized (juce::Component&, bool, bool) { update(); }
