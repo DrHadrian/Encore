@@ -18,6 +18,9 @@ namespace encore::test::screen
     Empty (and why) where it can't capture. */
 std::vector<std::uint32_t> capture (int x, int y, int width, int height, std::string& error);
 
+/** Native facts about a window: visible, its rectangle, its extended style. */
+std::string describeWindow (void* nativeWindow);
+
 /** How many top-level windows are above this native window (-1 where unknown). */
 int windowsAbove (void* nativeWindow);
 
