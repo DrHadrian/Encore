@@ -801,6 +801,12 @@ if a square menu were drawn under the rounded one.
   frame. It follows the menu (moves, hides, goes with it), is placed like JUCE's
   own shadow windows (screen scale, second screens), and sits behind the menu
   as a sibling when a menu lives inside a component.
+- **The shadow window paints with JUCE's software renderer** and paints the
+  moment it is shown. On CI, Direct2D drew fills into a semi-transparent window
+  but no image at all (a software image or a native one), so a Direct2D shadow
+  window stayed empty; and Windows sends no paint message to such a window, so
+  waiting for one left the shadow empty now and then. The image is cached, so
+  the software renderer costs one copy when the menu opens.
 - **Text 10 px in, as the v3.2 boards draw it** (items padded `0 10`). A menu
   with a check mark keeps the 14 px tick column (text 24 px in, headers 20).
   A menu window finds out for itself, as it opens, whether any item is ticked.
