@@ -333,6 +333,12 @@ void ShapedShadow::update()
     layer->setVisible (true);
     layer->toBehind (o);
     layer->repaint();
+
+    // Painted now, not on a later frame: a semi-transparent window gets no paint
+    // message from Windows, and on CI a shadow shown at 150 % was once still empty
+    // 600 ms later. The image is cached, so this costs a copy.
+    if (auto* layerPeer = onDesktop ? layer->getPeer() : nullptr)
+        layerPeer->performAnyPendingRepaintsNow();
 }
 
 juce::String ShapedShadow::paintsForTests()
