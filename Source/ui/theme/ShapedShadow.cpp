@@ -267,10 +267,11 @@ void ShapedShadow::update()
             // owner's: that matters only inside a plugin host. Encore is the
             // process, per-monitor aware throughout.)
             layer->setAlwaysOnTop (o->isAlwaysOnTop());
-            layer->addToDesktop (juce::DesktopWindowOptions().withStyleFlags (juce::ComponentPeer::windowIgnoresMouseClicks
-                                                                              | juce::ComponentPeer::windowIsTemporary
-                                                                              | juce::ComponentPeer::windowIgnoresKeyPresses)
-                                                             .withAssociatedComponent (o));
+            // Not owned by the menu: Windows keeps an owned window above its owner,
+            // and on CI an owned shadow window behind its menu was never shown.
+            layer->addToDesktop (juce::ComponentPeer::windowIgnoresMouseClicks
+                                 | juce::ComponentPeer::windowIsTemporary
+                                 | juce::ComponentPeer::windowIgnoresKeyPresses);
 
             if (auto* ownerPeer = o->getPeer())
                 if (auto* layerPeer = layer->getPeer())
