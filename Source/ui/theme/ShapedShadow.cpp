@@ -57,10 +57,7 @@ struct ShapedShadow::Layer final : juce::Component
 
         if (image.isNull() || ownerSize != imageOwnerSize || ! juce::approximatelyEqual (scale, imageScale))
         {
-            // As a native image: a software image drawn into a semi-transparent
-            // window (Direct2D) never reached the screen (CI, 26 Nov: a plain fill
-            // did, the same fill as a software image didn't).
-            image = juce::NativeImageType().convert (render (ownerSize, look, scale));
+            image = render (ownerSize, look, scale);
             imageOwnerSize = ownerSize;
             imageScale = scale;
         }
@@ -284,9 +281,22 @@ void ShapedShadow::update()
                                  | juce::ComponentPeer::windowIsTemporary
                                  | juce::ComponentPeer::windowIgnoresKeyPresses);
 
-            if (auto* ownerPeer = o->getPeer())
-                if (auto* layerPeer = layer->getPeer())
+            if (auto* layerPeer = layer->getPeer())
+            {
+                if (auto* ownerPeer = o->getPeer())
                     layerPeer->setCustomPlatformScaleFactor (ownerPeer->getPlatformScaleFactor());
+
+                // Painted by the software renderer: in a semi-transparent window,
+                // Direct2D drew fills but no image at all (CI, 26 Nov: the same black
+                // fill showed when filled and didn't when drawn as an image, software
+                // or native). The shadow is one cached image, painted only when shown
+                // or resized, so this costs nothing.
+                const auto engines = layerPeer->getAvailableRenderingEngines();
+                const auto software = engines.indexOf ("Software Renderer");
+
+                if (software >= 0)
+                    layerPeer->setCurrentRenderingEngine (software);
+            }
         }
         else
         {
