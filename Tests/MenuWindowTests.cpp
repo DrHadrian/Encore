@@ -32,6 +32,9 @@ public:
             return;
         }
 
+        beginTest ("DIAG transparent windows");
+        diagTransparentWindows();
+
         beginTest ("A real menu's rounded corners: the window behind, under the menu's shadow");
         checkOnScreen (1.0f);
 
@@ -40,6 +43,60 @@ public:
     }
 
 private:
+    void diagTransparentWindows()
+    {
+        auto& mm = *juce::MessageManager::getInstance();
+        struct Backdrop final : juce::Component
+        {
+            Backdrop() { setOpaque (true); }
+            void paint (juce::Graphics& g) override { g.fillAll (juce::Colour (0xFFFF00FF)); }
+        } backdrop;
+        backdrop.setBounds (200, 150, 640, 480);
+        backdrop.addToDesktop (0);
+        backdrop.setVisible (true);
+        backdrop.toFront (true);
+        mm.runDispatchLoopUntil (300);
+
+        struct Probe final : juce::Component
+        {
+            explicit Probe (int k) : kind (k) {}
+            void paint (juce::Graphics& g) override
+            {
+                ++paints;
+                if (kind < 2) { g.fillAll (juce::Colour (0x80000000)); return; }
+                juce::Image im (juce::Image::ARGB, getWidth(), getHeight(), true, juce::SoftwareImageType());
+                { juce::Graphics ig (im); ig.fillAll (juce::Colour (0x80000000)); }
+                g.drawImage (im, getLocalBounds().toFloat());
+            }
+            int kind, paints = 0;
+        };
+
+        juce::String report;
+        for (int kind = 0; kind < 6; ++kind)
+        {
+            Probe probe (kind);
+            const auto flags = juce::ComponentPeer::windowIsTemporary | juce::ComponentPeer::windowIgnoresKeyPresses
+                             | (kind >= 1 ? juce::ComponentPeer::windowIgnoresMouseClicks : 0);
+            if (kind >= 3) probe.setAlwaysOnTop (true);
+            if (kind == 5) { probe.setSize (1, 1); probe.setVisible (true); }
+            else probe.setBounds (300, 250, 100, 100);
+            probe.addToDesktop (flags);
+            if (kind == 5) probe.setBounds (300, 250, 100, 100);
+            if (kind == 4) probe.getPeer()->setCustomPlatformScaleFactor (probe.getPeer()->getPlatformScaleFactor());
+            probe.setVisible (true);
+            probe.toFront (false);
+            mm.runDispatchLoopUntil (400);
+            std::string error;
+            const auto px = screen::capture (350, 300, 1, 1, error);
+            report << " | kind " << kind << " paints " << probe.paints << " px "
+                   << (px.empty() ? juce::String (error) : juce::String::toHexString ((int) (px[0] & 0xFFFFFF)));
+            probe.removeFromDesktop();
+        }
+
+        expect (false, "DIAG" + report);
+        backdrop.removeFromDesktop();
+    }
+
     void checkRenderedShadow()
     {
         const theme::ShapedShadow::Look look { 10.0f, juce::Colour (0x99000000), 30, { 0, 12 } };
