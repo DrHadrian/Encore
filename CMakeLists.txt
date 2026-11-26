@@ -561,6 +561,9 @@ if(ENCORE_BUILD_TESTS)
         Tests/KitGallery.h
         Tests/UiSnapshot.h
         Tests/UiSnapshotTests.cpp
+        Tests/MenuWindowTests.cpp
+        Tests/ScreenCapture.cpp
+        Tests/ScreenCapture.h
         Tests/BoardFixtures.h
         Tests/PluginFixtures.h
         Tests/EditViewTests.cpp
