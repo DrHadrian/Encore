@@ -73,7 +73,22 @@ std::vector<std::uint32_t> capture (int x, int y, int width, int height, std::st
     return pixels;
 }
 
+int windowsAbove (void* nativeWindow)
+{
+    if (nativeWindow == nullptr)
+        return -1;
+
+    int count = 0;
+
+    for (auto w = GetWindow ((HWND) nativeWindow, GW_HWNDPREV); w != nullptr; w = GetWindow (w, GW_HWNDPREV))
+        ++count;
+
+    return count;
+}
+
 #else
+
+int windowsAbove (void*) { return -1; }
 
 std::vector<std::uint32_t> capture (int, int, int, int, std::string& error)
 {

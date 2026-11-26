@@ -239,11 +239,12 @@ void ShapedShadow::update()
     const auto canShow = o != nullptr && o->isShowing() && o->getWidth() > 0 && o->getHeight() > 0
                       && (juce::Desktop::canUseSemiTransparentWindows() || o->getParentComponent() != nullptr);
 
+    // Gone while the owner is hidden, made again when it shows (as JUCE's own
+    // shadow windows): a semi-transparent window that is shown after it was made
+    // hidden may never be painted.
     if (! canShow)
     {
-        if (layer != nullptr)
-            layer->setVisible (false);
-
+        layer = nullptr;
         return;
     }
 
@@ -258,6 +259,7 @@ void ShapedShadow::update()
     {
         layer = std::make_unique<Layer> (*o, look);
         layer->setSize (1, 1);   // never a zero-size window
+        layer->setVisible (true);
 
         if (onDesktop)
         {
@@ -306,8 +308,8 @@ void ShapedShadow::update()
         layer->setBounds (bounds);
     }
 
-    layer->setVisible (true);
     layer->toBehind (o);
+    layer->repaint();
 }
 
 void ShapedShadow::componentMovedOrResized (juce::Component&, bool, bool) { update(); }
