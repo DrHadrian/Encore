@@ -90,6 +90,9 @@ private:
         } backdrop;
 
         backdrop.setBounds (200, 150, 640, 480);
+        // Always on top, as the menu: another test's window (ctest runs groups side by
+        // side) once covered it, and the corners showed that window instead.
+        backdrop.setAlwaysOnTop (true);
         backdrop.addToDesktop (0);
         backdrop.setVisible (true);
         backdrop.toFront (true);
