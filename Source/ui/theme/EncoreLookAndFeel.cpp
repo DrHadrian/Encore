@@ -8,6 +8,7 @@
 
 #include "ui/theme/Icons.h"
 #include "ui/theme/Paint.h"
+#include "ui/theme/ShapedShadow.h"
 #include "ui/kit/KeyCap.h"
 
 namespace encore::theme
@@ -19,8 +20,10 @@ namespace
 
     juce::Colour c (juce::uint32 argb) { return juce::Colour (argb); }
 
-    /** Menu geometry (DESIGN-SYSTEM.md §5.8, measured on the boards). */
-    constexpr int menuTextIndent = 24;   // from the item's left edge
+    /** Menu geometry (DESIGN-SYSTEM.md §5.8; v3.2 boards: an item is padded
+        0 10, or 0 10 0 6 with a 14 px tick column and a 4 px gap). */
+    constexpr int menuTextIndent = 24;          // from the item's left edge, in a menu with check marks
+    constexpr int menuTextIndentNoTicks = 10;   // in a menu without
     constexpr int menuTickInset = 6;
     constexpr int menuRightPad = 10;
     constexpr int menuArrowWidth = 6;
@@ -549,7 +552,7 @@ void EncoreLookAndFeel::drawPopupMenuBackgroundWithOptions (juce::Graphics& g, i
     const auto r = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height);
     const auto radius = (float) size::menuRadius;
     // v3.2 (V3.2-CHANGES §6): a dark fill, the 1 px border and a faint inner
-    // ring just inside it; the window's own drop shadow goes around it.
+    // ring just inside it. The shadow is its own window (preparePopupMenuWindow).
     g.setColour (c (colour::menu));
     g.fillRoundedRectangle (r, radius);
     g.setColour (c (colour::menuInnerRing));
@@ -559,8 +562,15 @@ void EncoreLookAndFeel::drawPopupMenuBackgroundWithOptions (juce::Graphics& g, i
 }
 
 void EncoreLookAndFeel::drawPopupMenuItemWithOptions (juce::Graphics& g, const juce::Rectangle<int>& area, bool highlighted,
-                                                      const juce::PopupMenu::Item& item, const juce::PopupMenu::Options&)
+                                                      const juce::PopupMenu::Item& item, const juce::PopupMenu::Options& options)
 {
+    if (tickProbe.active)
+    {
+        tickProbe.options = &options;
+        tickProbe.ticked = tickProbe.ticked || item.isTicked;
+        return;
+    }
+
     if (item.isSeparator)
     {
         g.setColour (c (colour::menuSeparator));
@@ -597,7 +607,7 @@ void EncoreLookAndFeel::drawPopupMenuItemWithOptions (juce::Graphics& g, const j
     auto [label, shortcut] = item.shortcutKeyDescription.isNotEmpty() ? std::pair { item.text, item.shortcutKeyDescription }
                                                                        : splitShortcut (item.text);
 
-    auto textArea = r.withTrimmedLeft ((float) menuTextIndent).withTrimmedRight ((float) menuRightPad);
+    auto textArea = r.withTrimmedLeft (menuTextIndentFor (options)).withTrimmedRight ((float) menuRightPad);
 
     if (hasSubMenu)
     {
@@ -620,11 +630,14 @@ void EncoreLookAndFeel::drawPopupMenuItemWithOptions (juce::Graphics& g, const j
 }
 
 void EncoreLookAndFeel::drawPopupMenuSectionHeaderWithOptions (juce::Graphics& g, const juce::Rectangle<int>& area,
-                                                               const juce::String& name, const juce::PopupMenu::Options&)
+                                                               const juce::String& name, const juce::PopupMenu::Options& options)
 {
+    if (tickProbe.active)
+        return;
+
     g.setFont (font (type::paneHeader));
     g.setColour (c (colour::textDim));
-    g.drawText (name.toUpperCase(), area.toFloat().withTrimmedLeft ((float) size::menuHeaderIndent),
+    g.drawText (name.toUpperCase(), area.toFloat().withTrimmedLeft (menuHeaderIndentFor (options)),
                 juce::Justification::centredLeft, true);
 }
 
@@ -663,6 +676,62 @@ juce::Font EncoreLookAndFeel::getPopupMenuFont()
 int EncoreLookAndFeel::getPopupMenuBorderSizeWithOptions (const juce::PopupMenu::Options&)
 {
     return size::menuPadding;
+}
+
+int EncoreLookAndFeel::getMenuWindowFlags()
+{
+    return 0;
+}
+
+void EncoreLookAndFeel::preparePopupMenuWindow (juce::Component& menuWindow)
+{
+    // Ask each item (by drawing it nowhere) whether it has a check mark.
+    tickProbe = { true, nullptr, false };
+    {
+        juce::Image nowhere (juce::Image::ARGB, 1, 1, true, juce::SoftwareImageType());
+        juce::Graphics g (nowhere);
+
+        for (auto* item : menuWindow.getChildren())
+            item->paint (g);
+    }
+    const auto probe = tickProbe;
+    tickProbe = {};
+
+    if (probe.options != nullptr)
+        menuTicks[probe.options] = probe.ticked;
+
+    ShapedShadow::attach (menuWindow,
+                          { (float) size::menuRadius, c (colour::menuShadow), size::menuShadowBlur, { 0, size::menuShadowY } },
+                          [this, options = probe.options]
+                          {
+                              if (options != nullptr)
+                                  menuTicks.erase (options);
+                          });
+}
+
+void EncoreLookAndFeel::setMenuHasTicks (const juce::PopupMenu::Options& options, bool hasTicks)
+{
+    menuTicks[&options] = hasTicks;
+}
+
+void EncoreLookAndFeel::forgetMenu (const juce::PopupMenu::Options& options)
+{
+    menuTicks.erase (&options);
+}
+
+float EncoreLookAndFeel::menuTextIndentFor (const juce::PopupMenu::Options& options) const
+{
+    // Not known (a menu drawn some other way): leave room for a check mark.
+    const auto known = menuTicks.find (&options);
+    const auto ticks = known == menuTicks.end() || known->second;
+    return (float) (ticks ? menuTextIndent : menuTextIndentNoTicks);
+}
+
+float EncoreLookAndFeel::menuHeaderIndentFor (const juce::PopupMenu::Options& options) const
+{
+    const auto known = menuTicks.find (&options);
+    const auto ticks = known == menuTicks.end() || known->second;
+    return (float) (ticks ? size::menuHeaderIndent : menuTextIndentNoTicks);
 }
 
 void EncoreLookAndFeel::drawPopupMenuUpDownArrowWithOptions (juce::Graphics& g, int width, int height, bool isScrollUpArrow,

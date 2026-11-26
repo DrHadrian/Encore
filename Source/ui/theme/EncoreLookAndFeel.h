@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <map>
+
 #include "ui/theme/EncoreFonts.h"
 #include "ui/theme/EncoreTheme.h"
 #include "ui/theme/Icons.h"
@@ -88,6 +90,17 @@ public:
     int getPopupMenuBorderSizeWithOptions (const juce::PopupMenu::Options&) override;
     void drawPopupMenuUpDownArrowWithOptions (juce::Graphics&, int width, int height, bool isScrollUpArrow,
                                               const juce::PopupMenu::Options&) override;
+    /** No JUCE window shadow (it is square): preparePopupMenuWindow gives each
+        menu the design's shadow around its rounded shape (ShapedShadow). */
+    int getMenuWindowFlags() override;
+    void preparePopupMenuWindow (juce::Component& menuWindow) override;
+
+    /** Whether the menu drawn with `options` has a check mark on any item: then
+        its text leaves room for one (24 px in), else it starts 10 px in (the
+        v3.2 boards). A menu window finds this out itself; tests that draw a
+        menu by hand say it, and forget it afterwards. */
+    void setMenuHasTicks (const juce::PopupMenu::Options&, bool hasTicks);
+    void forgetMenu (const juce::PopupMenu::Options&);
 
     // Scrollbars
     int getDefaultScrollbarWidth() override;
@@ -128,6 +141,21 @@ public:
     static std::pair<juce::String, juce::String> splitShortcut (const juce::String& text);
 
 private:
+    float menuTextIndentFor (const juce::PopupMenu::Options&) const;
+    float menuHeaderIndentFor (const juce::PopupMenu::Options&) const;
+
+    // Menus known to have (or not have) a check mark, by their window's options.
+    std::map<const juce::PopupMenu::Options*, bool> menuTicks;
+
+    // While preparePopupMenuWindow asks each item whether it is ticked: items
+    // report instead of drawing.
+    struct TickProbe
+    {
+        bool active = false;
+        const juce::PopupMenu::Options* options = nullptr;
+        bool ticked = false;
+    } tickProbe;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EncoreLookAndFeel)
 };
 

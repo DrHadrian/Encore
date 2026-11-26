@@ -184,7 +184,8 @@ namespace colour
     // Menus, dialogs, scrollbars
     constexpr juce::uint32 menu            = 0xFA232327;   // rgba(35,35,39,.98) (v3.2 menus)
     constexpr juce::uint32 menuInnerRing   = 0x0FFFFFFF;   // 1 px ring inside the border (white 6 %)
-    constexpr juce::uint32 menuSeparator   = 0xff3A3A3F;   // v3.2 board
+    constexpr juce::uint32 menuSeparator   = 0xff3A3A3F;   // v3.2 boards (the §6 text says #34343A; the boards draw #3A3A3F)
+    constexpr juce::uint32 menuShadow      = 0x99000000;   // 0, 12, 30 px, black 60 % (v3.2 menus)
     constexpr juce::uint32 menuShortcut    = 0xff9A9AA1;
     constexpr juce::uint32 dialog          = 0xff232326;
     constexpr juce::uint32 dialogTitleTop  = 0xff38383C;
@@ -429,7 +430,8 @@ namespace size
     constexpr int menuPadding       = 4;
     constexpr int menuRadius        = 10;
     constexpr int menuItemRadius    = 6;
-    constexpr int menuHeaderIndent  = 20;    // section header text from the item's left edge
+    constexpr int menuHeaderIndent  = 20;    // section header text from the item's left edge (menu with check marks)
+    constexpr int menuShadowY = 12, menuShadowBlur = 30;   // menu drop shadow (v3.2)
     constexpr int menuSeparatorH    = 9;     // 1 px line + 4 px above and below
     constexpr int dialogRadius      = 10;
     constexpr int dialogTitleBar    = 30;

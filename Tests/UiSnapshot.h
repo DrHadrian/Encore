@@ -3,9 +3,12 @@
 
 #pragma once
 
+#include <algorithm>
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "ui/theme/EncoreLookAndFeel.h"
+#include "ui/theme/ShapedShadow.h"
 
 namespace encore::test
 {
@@ -69,10 +72,31 @@ inline std::vector<juce::Rectangle<int>> paintMenu (juce::Graphics& g, juce::Loo
         height += h;
     }
 
+    // As a real menu window finds out for itself: room for check marks only when an item has one.
+    auto* encoreLook = dynamic_cast<theme::EncoreLookAndFeel*> (&lnf);
+    const auto hasTicks = std::any_of (items.begin(), items.end(), [] (const auto& item) { return item.isTicked; });
+
+    if (encoreLook != nullptr)
+        encoreLook->setMenuHasTicks (options, hasTicks);
+
+    const juce::ScopeGuard forget { [&] { if (encoreLook != nullptr) encoreLook->forgetMenu (options); } };
+
     const auto menuW = width + 2 * border, menuH = height + 2 * border;
     std::vector<juce::Rectangle<int>> areas;
     const juce::Graphics::ScopedSaveState state (g);
     g.setOrigin (at);
+
+    // The menu's shadow, as its shadow window draws it on screen.
+    if (encoreLook != nullptr)
+    {
+        const theme::ShapedShadow::Look shadow { (float) theme::size::menuRadius, juce::Colour (theme::colour::menuShadow),
+                                                 theme::size::menuShadowBlur, { 0, theme::size::menuShadowY } };
+        const auto margins = theme::ShapedShadow::marginsFor (shadow);
+        const auto scale = (float) g.getInternalContext().getPhysicalPixelScaleFactor();
+        g.drawImage (theme::ShapedShadow::render ({ menuW, menuH }, shadow, scale),
+                     margins.addedTo (juce::Rectangle<int> (menuW, menuH)).toFloat());
+    }
+
     lnf.drawPopupMenuBackgroundWithOptions (g, menuW, menuH, options);
     auto y = border;
 
