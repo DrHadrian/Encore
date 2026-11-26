@@ -188,6 +188,7 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/midi/MidiRouter.cpp
     Source/engine/midi/MidiRouter.h
     Source/engine/dsp/Biquad.h
+    Source/engine/dsp/Crossfade.h
     Source/engine/dsp/OutputEq.h
     Source/engine/dsp/PitchDetector.cpp
     Source/engine/dsp/PitchDetector.h
@@ -553,6 +554,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/DspTests.cpp
         Tests/EngineCoreTests.cpp
         Tests/MidiTests.cpp
+        Tests/ModuleBaseTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
         Tests/RobustnessTests.cpp
