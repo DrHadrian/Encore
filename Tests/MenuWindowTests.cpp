@@ -101,12 +101,23 @@ private:
         menu.addSeparator();
         menu.addItem (3, "Close show", true, false);
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea ({ 360, 260, 1, 1 }));
-        mm.runDispatchLoopUntil (600);
 
+        // The menu window exists as soon as it's shown. A menu closes itself when the
+        // app isn't in front and the mouse isn't over it, and CI can't always bring
+        // the test to the front (once it closed before it was read, Release, 150 %):
+        // the mouse goes onto the menu's top padding, over no item.
         auto* window = juce::ModalComponentManager::getInstance()->getModalComponent (0);
         expect (window != nullptr, "the menu opened");
 
         if (window == nullptr)
+            return;
+
+        const auto parkMouse = window->getScreenBounds().toFloat().getCentre().withY ((float) window->getScreenY() + 2.0f);
+        desktop.setMousePosition (parkMouse.roundToInt());
+        mm.runDispatchLoopUntil (600);
+        expect (juce::ModalComponentManager::getInstance()->getModalComponent (0) == window, "the menu stayed open");
+
+        if (juce::ModalComponentManager::getInstance()->getModalComponent (0) != window)
             return;
 
         auto* layer = theme::ShapedShadow::findLayer (*window);
