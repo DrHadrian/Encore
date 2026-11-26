@@ -16,9 +16,18 @@ struct BlockType
 {
     juce::String id;
     juce::String displayName;
+
+    /** Not offered in the Add block menu (a module still being built, or the
+        engine's test unit). createBlock, shows, the tests and EncoreRender
+        still make it (decision 0062). */
+    bool hidden = false;
 };
 
+/** Every type Encore can build, hidden ones included. */
 const std::vector<BlockType>& getBlockTypes();
+
+/** The types the Add block menu offers: getBlockTypes() without the hidden ones. */
+std::vector<BlockType> getMenuBlockTypes();
 
 /** A new block of the given type, or null if the type is unknown. */
 std::unique_ptr<Block> createBlock (const juce::String& typeId);

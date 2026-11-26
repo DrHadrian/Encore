@@ -157,6 +157,8 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/blocks/CabIrBlock.h
     Source/engine/blocks/DelayBlock.cpp
     Source/engine/blocks/DelayBlock.h
+    Source/engine/blocks/EngineProbeBlock.cpp
+    Source/engine/blocks/EngineProbeBlock.h
     Source/engine/blocks/EqBlock.cpp
     Source/engine/blocks/EqBlock.h
     Source/engine/blocks/NamAmpBlock.cpp
@@ -555,6 +557,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/EngineCoreTests.cpp
         Tests/MidiTests.cpp
         Tests/ModuleBaseTests.cpp
+        Tests/ModuleTypeTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
         Tests/RobustnessTests.cpp
