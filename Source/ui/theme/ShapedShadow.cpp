@@ -57,7 +57,10 @@ struct ShapedShadow::Layer final : juce::Component
 
         if (image.isNull() || ownerSize != imageOwnerSize || ! juce::approximatelyEqual (scale, imageScale))
         {
-            image = render (ownerSize, look, scale);
+            // As a native image: a software image drawn into a semi-transparent
+            // window (Direct2D) never reached the screen (CI, 26 Nov: a plain fill
+            // did, the same fill as a software image didn't).
+            image = juce::NativeImageType().convert (render (ownerSize, look, scale));
             imageOwnerSize = ownerSize;
             imageScale = scale;
         }
