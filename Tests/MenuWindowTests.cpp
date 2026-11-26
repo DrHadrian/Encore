@@ -167,7 +167,9 @@ private:
                    << ", windows above: backdrop " << screen::windowsAbove (backdrop.getWindowHandle())
                    << " menu " << screen::windowsAbove (window->getWindowHandle())
                    << " layer " << screen::windowsAbove (layer->getWindowHandle())
-                   << ", on top: menu " << (int) window->isAlwaysOnTop() << " layer " << (int) layer->isAlwaysOnTop();
+                   << ", on top: menu " << (int) window->isAlwaysOnTop() << " layer " << (int) layer->isAlwaysOnTop()
+                   << ", native menu [" << screen::describeWindow (window->getWindowHandle())
+                   << "] layer [" << screen::describeWindow (layer->getWindowHandle()) << "] menu hwnd " << juce::String::toHexString ((juce::pointer_sized_int) window->getWindowHandle());
         }
 
         logMessage (report);

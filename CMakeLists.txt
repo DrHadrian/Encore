@@ -564,6 +564,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/UiSnapshot.h
         Tests/UiSnapshotTests.cpp
         Tests/MenuWindowTests.cpp
+        Tests/LayerDiagTests.cpp
         Tests/ScreenCapture.cpp
         Tests/ScreenCapture.h
         Tests/BoardFixtures.h
