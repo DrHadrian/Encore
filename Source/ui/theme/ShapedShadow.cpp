@@ -261,10 +261,9 @@ void ShapedShadow::update()
 
         if (onDesktop)
         {
-           #if JUCE_WINDOWS
-            const juce::ScopedThreadDPIAwarenessSetter dpi { o->getWindowHandle() };
-           #endif
-
+            // (JUCE's own shadow windows also set the thread's DPI awareness to the
+            // owner's: that matters only inside a plugin host. Encore is the
+            // process, per-monitor aware throughout.)
             layer->setAlwaysOnTop (o->isAlwaysOnTop());
             layer->addToDesktop (juce::DesktopWindowOptions().withStyleFlags (juce::ComponentPeer::windowIgnoresMouseClicks
                                                                               | juce::ComponentPeer::windowIsTemporary
