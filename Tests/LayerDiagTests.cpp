@@ -21,28 +21,32 @@ public:
         backdrop.setBounds (100, 100, 800, 500); backdrop.addToDesktop (0); backdrop.setVisible (true); backdrop.toFront (true);
         mm.runDispatchLoopUntil (300);
         const auto flags = juce::ComponentPeer::windowIgnoresMouseClicks | juce::ComponentPeer::windowIsTemporary | juce::ComponentPeer::windowIgnoresKeyPresses;
-        Shade a, b, c, d, e;
-        // a: visible first, no association
-        a.setBounds (150, 150, 60, 60); a.setVisible (true); a.addToDesktop (flags);
-        // b: hidden first, shown later
-        b.setBounds (250, 150, 60, 60); b.addToDesktop (flags); b.setVisible (true);
-        // c: visible first, associated with backdrop
-        c.setVisible (true); c.setSize (1, 1); c.addToDesktop (juce::DesktopWindowOptions().withStyleFlags (flags).withAssociatedComponent (&backdrop)); c.setBounds (350, 150, 60, 60);
-        // d: like c, always on top
-        d.setVisible (true); d.setSize (1, 1); d.setAlwaysOnTop (true); d.addToDesktop (juce::DesktopWindowOptions().withStyleFlags (flags).withAssociatedComponent (&backdrop)); d.setBounds (450, 150, 60, 60);
-        // e: like a, toBehind backdrop? no: plain, setOpaque false explicitly, without temporary flag
-        e.setOpaque (false); e.setBounds (550, 150, 60, 60); e.setVisible (true); e.addToDesktop (juce::ComponentPeer::windowIgnoresMouseClicks);
+        using P = juce::ComponentPeer;
+        const int variants[] { P::windowIsTemporary, P::windowIgnoresKeyPresses, P::windowIgnoresMouseClicks, 0,
+                               P::windowIsTemporary | P::windowIgnoresKeyPresses, P::windowIgnoresMouseClicks | P::windowIgnoresKeyPresses,
+                               flags, flags };
+        juce::OwnedArray<Shade> shades;
+        for (int i = 0; i < 8; ++i)
+        {
+            auto* s = shades.add (new Shade());
+            s->setBounds (130 + i * 90, 150, 60, 60);
+            s->setVisible (true);
+            s->addToDesktop (variants[i]);
+            if (i == 7)
+                if (auto* peer = s->getPeer())
+                    peer->setCurrentRenderingEngine (0);   // GDI
+        }
         mm.runDispatchLoopUntil (800);
         juce::String r;
-        for (auto* s : { &a, &b, &c, &d, &e })
+        for (auto* s : shades)
         {
             const auto p = juce::Desktop::getInstance().getDisplays().logicalToPhysical (s->getScreenBounds().getCentre());
             std::string err;
             const auto px = screen::capture (p.x, p.y, 1, 1, err);
-            r << juce::String::toHexString ((int) (px.empty() ? 0 : px[0])) << " paints " << s->paints << " [" << screen::describeWindow (s->getWindowHandle()) << "] ";
+            r << shades.indexOf (s) << ": " << juce::String::toHexString ((int) (px.empty() ? 0 : px[0])) << " paints " << s->paints << " [" << screen::describeWindow (s->getWindowHandle()) << "] ";
         }
         expect (false, "LAYERDIAG " + r);
-        for (auto* s : { &a, &b, &c, &d, &e }) s->removeFromDesktop();
+        for (auto* s : shades) s->removeFromDesktop();
         backdrop.removeFromDesktop();
     }
 };
