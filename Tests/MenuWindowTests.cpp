@@ -120,9 +120,12 @@ private:
         std::string error;
         const auto pixels = screen::capture (shot.getX(), shot.getY(), shot.getWidth(), shot.getHeight(), error);
 
-        juce::PopupMenu::dismissAllActiveMenus();
-        mm.runDispatchLoopUntil (100);
-        backdrop.removeFromDesktop();
+        const juce::ScopeGuard close { [&]
+        {
+            juce::PopupMenu::dismissAllActiveMenus();
+            mm.runDispatchLoopUntil (100);
+            backdrop.removeFromDesktop();
+        } };
 
         if (pixels.empty())
         {
@@ -156,7 +159,19 @@ private:
                << " bottom " << at (w / 2, h - 1 + o).toDisplayString (false)
                << " right " << at (w - 1 + o, h / 2).toDisplayString (false);
 
+        if (layer != nullptr)
+        {
+            const auto snapshot = layer->createComponentSnapshot (layer->getLocalBounds(), true, 1.0f);
+            report << ", layer " << layer->getScreenBounds().toString() << (layer->isVisible() ? " visible" : " hidden")
+                   << " alpha at its bottom middle " << (int) snapshot.getPixelAt (snapshot.getWidth() / 2, snapshot.getHeight() - 50).getAlpha()
+                   << ", windows above: backdrop " << screen::windowsAbove (backdrop.getWindowHandle())
+                   << " menu " << screen::windowsAbove (window->getWindowHandle())
+                   << " layer " << screen::windowsAbove (layer->getWindowHandle())
+                   << ", on top: menu " << (int) window->isAlwaysOnTop() << " layer " << (int) layer->isAlwaysOnTop();
+        }
+
         logMessage (report);
+        expect (false, "DIAG " + report);
 
         // A corner is the backdrop, at most darkened by the shadow: still magenta
         // (red and blue well above green). A square menu or shadow there is grey.
