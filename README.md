@@ -99,6 +99,26 @@ The tests run as four processes side by side (robustness and its soak,
 plugins, screens, everything else). `ENCORE_TEST_ONLY=<name>|<name>` runs
 just those, `ENCORE_TEST_SKIP` all but those.
 
+### Rendering offline (EncoreRender)
+
+`EncoreRender` runs a WAV through one block or a whole patch, offline, with the
+same engine code the app plays: for listening to and measuring native modules
+(FX Units), hidden ones included (decision 0062). It writes a 32-bit float WAV
+and prints peak, RMS, latency and CPU per block.
+
+```powershell
+cmake --build --preset release --target EncoreRender
+$r = ".\build\release\EncoreRender_artefacts\Release\EncoreRender.exe"
+& $r --make-sweep sweep.wav
+& $r --in sweep.wav --out out.wav --block engineProbe --set shape=Bell --set gain=6
+& $r --in di.wav --out rendered.wav --show "My show" --patch 2
+& $r --list    # block types and their parameters
+```
+
+Settings can also come from a JSON file (`--settings file.json`,
+`{ "parameter id": value }`; a choice by its name). The tests' CPU benchmark
+writes `benchmark.txt` in the build folder.
+
 Build speed: JUCE and Encore's own code are compiled once and linked by both
 the app and the tests, so the tests run exactly what ships. Encore's sources
 compile against a precompiled JUCE header (`ENCORE_PCH`, on by default;
