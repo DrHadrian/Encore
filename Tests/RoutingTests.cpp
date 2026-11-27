@@ -296,7 +296,8 @@ public:
             juce::String error;
             expect (json::fromJson (R"({ "format": "encore-show", "schemaVersion": 3 })", error).has_value());
             expect (json::fromJson (R"({ "format": "encore-show", "schemaVersion": 4 })", error).has_value(), "4: amps from the amp builder");
-            expect (! json::fromJson (R"({ "format": "encore-show", "schemaVersion": 5 })", error).has_value());
+            expect (json::fromJson (R"({ "format": "encore-show", "schemaVersion": 5 })", error).has_value(), "5: new native modules");
+            expect (! json::fromJson (R"({ "format": "encore-show", "schemaVersion": 6 })", error).has_value());
         }
 
         beginTest ("Round trip: input, sends (with off and -inf), split, merge, path B");

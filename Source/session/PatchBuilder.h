@@ -21,6 +21,11 @@ struct BlockType
         engine's test unit). createBlock, shows, the tests and EncoreRender
         still make it (decision 0062). */
     bool hidden = false;
+
+    /** A native module that an older Encore doesn't know: a show that uses it
+        is saved as schema 5, so an older Encore refuses the show instead of
+        skipping the block (decision 0062; ShowModel::requiredSchemaVersion). */
+    bool newModule = false;
 };
 
 /** Every type Encore can build, hidden ones included. */

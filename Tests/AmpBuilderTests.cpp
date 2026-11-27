@@ -688,7 +688,8 @@ public:
             }
 
             // A newer schema is refused (the user is told to update).
-            auto newer = json::toJson (show).replace ("\"schemaVersion\": 4", "\"schemaVersion\": 5");
+            auto newer = json::toJson (show).replace ("\"schemaVersion\": 4",
+                                                      "\"schemaVersion\": " + juce::String (ShowModel::currentSchemaVersion + 1));
             expect (! json::fromJson (newer, error).has_value());
         }
 

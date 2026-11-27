@@ -94,6 +94,81 @@ public:
     }
 };
 
+class NewModuleSchemaTests final : public juce::UnitTest
+{
+public:
+    NewModuleSchemaTests() : juce::UnitTest ("Schema 5 (new modules)", "Encore") {}
+
+    static BlockModel probeBlock()
+    {
+        BlockModel b;
+        b.id = "probe-1";
+        b.type = EngineProbeBlock::typeId;
+        return b;
+    }
+
+    void runTest() override
+    {
+        beginTest ("Only types marked as new modules count");
+        {
+            expect (isNewModuleBlockType (EngineProbeBlock::typeId));
+
+            for (const auto& t : getBlockTypes())
+                if (t.id != EngineProbeBlock::typeId)
+                    expect (! isNewModuleBlockType (t.id), t.id);
+
+            expect (! isNewModuleBlockType ("noSuchType"));
+            expectEquals (ShowModel::currentSchemaVersion, 5);
+        }
+
+        beginTest ("Without a new module a show keeps the version it needs today");
+        {
+            const auto show = makeDefaultShow ("Old");
+            expectEquals (show.requiredSchemaVersion(), 1);
+            expect (json::toJson (show).contains ("\"schemaVersion\": 1"));
+        }
+
+        beginTest ("With a new module it is saved as schema 5 and opens again here");
+        {
+            auto show = makeDefaultShow ("New");
+            show.patches[0].mainLane().blocks.push_back (probeBlock());
+            expectEquals (show.requiredSchemaVersion(), 5);
+
+            const auto text = json::toJson (show);
+            expect (text.contains ("\"schemaVersion\": 5"));
+
+            juce::String error;
+            const auto back = json::fromJson (text, error);
+            expect (back.has_value(), error);
+            expect (back.has_value() && back->requiredSchemaVersion() == 5);
+
+            // A block in a cue's own patch counts too.
+            auto cueOnly = makeDefaultShow ("Cue");
+            PatchModel own = cueOnly.patches[0];
+            own.mainLane().blocks.push_back (probeBlock());
+            auto cue = RunItem::makeCue ("cue-own", "Own patch", {});
+            cue.uniquePatch = own;
+            cueOnly.runningOrder.children.push_back (cue);
+            expectEquals (cueOnly.requiredSchemaVersion(), 5);
+        }
+
+        beginTest ("An older Encore refuses it with its \"newer Encore\" message");
+        {
+            // Encore before this change read up to schema 4: what it does with a
+            // newer show is what this one does with one newer than 5.
+            auto show = makeDefaultShow ("Newer");
+            show.patches[0].mainLane().blocks.push_back (probeBlock());
+            const auto newer = json::toJson (show).replace ("\"schemaVersion\": 5",
+                                                           "\"schemaVersion\": " + juce::String (ShowModel::currentSchemaVersion + 1));
+            juce::String error;
+            expect (! json::fromJson (newer, error).has_value());
+            expect (error.contains ("newer version of Encore"), error);
+            expectGreaterThan (show.requiredSchemaVersion(), 4, "above what the previous Encore accepts");
+        }
+    }
+};
+
 static HiddenBlockTypeTests hiddenBlockTypeTests;
+static NewModuleSchemaTests newModuleSchemaTests;
 
 } // namespace encore::test

@@ -25,9 +25,18 @@ const std::vector<BlockType>& getBlockTypes()
         { NoiseGateBlock::typeId, "Noise gate" },
         { EqBlock::typeId,        "EQ" },
         { DelayBlock::typeId,     "Delay" },
-        { EngineProbeBlock::typeId, "Engine probe", true },
+        { EngineProbeBlock::typeId, "Engine probe", true, true },
     };
     return types;
+}
+
+bool isNewModuleBlockType (const juce::String& blockType)
+{
+    for (const auto& type : getBlockTypes())
+        if (type.id == blockType)
+            return type.newModule;
+
+    return false;
 }
 
 std::vector<BlockType> getMenuBlockTypes()
