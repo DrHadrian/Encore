@@ -197,13 +197,16 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/core/RealtimeHandover.h
     Source/engine/midi/MidiRouter.cpp
     Source/engine/midi/MidiRouter.h
+    Source/engine/dsp/AdaptiveGate.h
     Source/engine/dsp/Biquad.h
     Source/engine/dsp/Crossfade.h
     Source/engine/dsp/Detector.h
+    Source/engine/dsp/FadingDelay.h
     Source/engine/dsp/FilterBand.cpp
     Source/engine/dsp/FilterBand.h
     Source/engine/dsp/FilterDesign.cpp
     Source/engine/dsp/FilterDesign.h
+    Source/engine/dsp/LookAhead.h
     Source/engine/dsp/OutputEq.h
     Source/engine/dsp/Oversampler.cpp
     Source/engine/dsp/Oversampler.h
@@ -580,6 +583,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/TouchInjection.h
         Tests/V32TargetTests.cpp
         Tests/HangWatchdog.h
+        Tests/AdaptiveGateTests.cpp
         Tests/AllocationCounter.cpp
         Tests/BenchmarkTests.cpp
         Tests/AllocationCounter.h
