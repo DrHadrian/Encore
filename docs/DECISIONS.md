@@ -885,3 +885,42 @@ finger moved a little (Adrian, 20 Nov 2026).
   a touch that can't be injected fails the test; elsewhere it's skipped.
 - **Code signing** is still the real answer to download warnings ("Production
   basics" in the roadmap).
+
+## 0064 — Menus: the design's shadow around the rounded shape, and text 10 px in
+
+*20 Nov 2026.* Adrian saw a "triangle" under each rounded corner of a menu, as
+if a square menu were drawn under the rounded one.
+
+- **Why:** JUCE draws a window's drop shadow for a square window
+  (`DropShadower`). Around a rounded menu its square edge showed, and the corner
+  the rounding leaves out stayed unshadowed. A test that reads a real menu off
+  the screen on Windows saw both: clear corners, a square shadow outside.
+- **Now:** menus ask JUCE for no shadow (`getMenuWindowFlags` = 0).
+  `preparePopupMenuWindow` gives each menu window a `theme::ShapedShadow`: one
+  click-through window right behind it with the design's shadow, `0 12 30
+  rgba(0,0,0,.6)`, drawn as CSS draws `box-shadow`. That means the rounded shape
+  moved 12 px down, blurred by a Gaussian of half the blur (15 px), and left out
+  inside the menu. Its image is made once per size and screen scale, never per
+  frame. It follows the menu (moves, hides, goes with it), is placed like JUCE's
+  own shadow windows (screen scale, second screens), and sits behind the menu
+  as a sibling when a menu lives inside a component.
+- **The shadow window paints with JUCE's software renderer** and paints the
+  moment it is shown. On CI, Direct2D drew fills into a semi-transparent window
+  but no image at all (a software image or a native one), so a Direct2D shadow
+  window stayed empty; and Windows sends no paint message to such a window, so
+  waiting for one left the shadow empty now and then. The image is cached, so
+  the software renderer costs one copy when the menu opens.
+- **Text 10 px in, as the v3.2 boards draw it** (items padded `0 10`). A menu
+  with a check mark keeps the 14 px tick column (text 24 px in, headers 20).
+  A menu window finds out for itself, as it opens, whether any item is ticked.
+  Unknown means room for a tick, so a tick never covers text.
+- **Separators stay #3A3A3F:** the boards draw that; the §6 text says #34343A.
+- **Tests:** the rendered shadow (clear inside, round at the corners, the same
+  at 1×, 1.5× and 2×). On Windows, a real menu over a magenta window, read back
+  from the screen at 100 % and 150 %: the corners show the window behind them,
+  darkened by the shadow under the bottom ones, and the menu has its shadow
+  window. Menu snapshots draw the same shadow.
+- **Left as it is:** other shadows (dialogs, fault cards) pass the design's
+  blur to `juce::DropShadow`. Its radius is not a CSS blur (about √radius
+  standard deviation), so those shadows are tighter than the boards. They
+  could move to the same Gaussian later.

@@ -337,6 +337,8 @@ target_sources(EncoreUi PRIVATE
     Source/ui/theme/FocusRings.h
     Source/ui/theme/Paint.cpp
     Source/ui/theme/Paint.h
+    Source/ui/theme/ShapedShadow.cpp
+    Source/ui/theme/ShapedShadow.h
     Source/ui/kit/DialogFrame.cpp
     Source/ui/kit/DialogFrame.h
     Source/ui/kit/FaultCard.cpp
@@ -592,6 +594,9 @@ if(ENCORE_BUILD_TESTS)
         Tests/KitGallery.h
         Tests/UiSnapshot.h
         Tests/UiSnapshotTests.cpp
+        Tests/MenuWindowTests.cpp
+        Tests/ScreenCapture.cpp
+        Tests/ScreenCapture.h
         Tests/BoardFixtures.h
         Tests/PluginFixtures.h
         Tests/EditViewTests.cpp
