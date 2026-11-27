@@ -561,6 +561,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/ThreadStopTests.cpp
         Tests/HangWatchdog.h
         Tests/AllocationCounter.cpp
+        Tests/BenchmarkTests.cpp
         Tests/AllocationCounter.h
         Tests/CabTests.cpp
         Tests/DspTests.cpp
@@ -642,7 +643,8 @@ if(ENCORE_BUILD_TESTS)
 
     list(JOIN encore_slow_tests "|" encore_all_slow)
     add_test(NAME EncoreTests.engine COMMAND EncoreTests)
-    set_tests_properties(EncoreTests.engine PROPERTIES ENVIRONMENT "ENCORE_TEST_SKIP=${encore_all_slow}")
+    set_tests_properties(EncoreTests.engine PROPERTIES ENVIRONMENT
+        "ENCORE_TEST_SKIP=${encore_all_slow};ENCORE_BENCHMARK_REPORT=${CMAKE_CURRENT_BINARY_DIR}/benchmark.txt")
 
     # --------------------------------------------------------------------------
     # EncoreRender: a WAV through one block or a whole patch, offline, from the
