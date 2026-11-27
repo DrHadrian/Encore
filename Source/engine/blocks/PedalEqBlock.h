@@ -21,7 +21,7 @@ namespace encore
 
 /** The Pedal EQ "G7": a 7-band graphic EQ pedal, the first FX Unit (native
     module; its DSP is the Encore Engine's). Spec: claude/EQ-PLAN.md §3;
-    decision 0063.
+    decision 0065.
 
     Signal: Input (Pad / Normal / Boost) -> character capture (a NAM capture
     of a pedal's buffer, optional) -> seven bells at 100 Hz .. 6.4 kHz ->

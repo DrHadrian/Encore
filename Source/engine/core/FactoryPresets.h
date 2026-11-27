@@ -21,7 +21,7 @@ struct PresetValue
 };
 
 /** A factory preset: compiled in, shared format for every FX Unit
-    (MODULES-PLAN §3.1; decision 0063).
+    (MODULES-PLAN §3.1; decision 0065).
 
     - `id` is stable (shows and, later, user preset libraries refer to it):
       never renamed once merged. `name` is what players see.

@@ -924,3 +924,60 @@ if a square menu were drawn under the rounded one.
   blur to `juce::DropShadow`. Its radius is not a CSS blur (about √radius
   standard deviation), so those shadows are tighter than the boards. They
   could move to the same Gaussian later.
+
+## 0065 — Pedal EQ engine: proportional Q, the 9 V soft clip, factory preset format, capture slot
+
+The Pedal EQ "G7" (`pedalEq`) is the first FX Unit: stage B1 of the native
+modules (EQ-PLAN §3). Its sound, parameters, presets and show format are
+built; it stays **hidden** (no UI until U1, then Adrian's rig test) and is a
+new module, so a show that uses it saves as schema 5 (0062).
+
+- **Signal:** Input (Pad −6 dB / Normal / Boost +6 dB) → character capture →
+  seven decramped bells at 100 Hz … 6.4 kHz → the 9 V soft clip → Level
+  (±15 dB). It keeps the channels it gets; no tail.
+- **Proportional Q** (Classic): Q = 1.07 + 1.80 · |gain| / 15, so about
+  1.3 octaves near 0 dB and 0.5 octave at ±15 dB, following the ramped
+  gain, as an analog gyrator graphic EQ does; Wide is a constant 1.07.
+  Measured: the bandwidth at ±15 dB is Q 2.87 / 1.07 within 3 %.
+- **Smooth sliders, a shared change:** redesigning every 16 samples left
+  zipper noise at −53 dB on a 30 dB sweep in 50 ms. `dsp::FilterBand::glideTo`
+  now designs for the end of each 16-sample chunk and moves the filter's
+  natural parameters (g, k and the mix) every sample: −88 dB, as good as
+  redesigning every sample, at a fraction of the cost.
+- **The 9 V soft clip** (`dsp/SoftClip.h`, shared with the drives to come):
+  exactly linear to −6 dBFS, then a tanh shoulder that joins the line without
+  a kink; 1 dB down at +6 dBFS (positive) and +5 dBFS (negative), so the
+  slight asymmetry adds a little even-order warmth when it's pushed (values
+  Proposed, tuned on the rig in U1). Oversampled by Quality, then a 1 Hz DC
+  blocker. THD below −80 dB at −12 dBFS with Boost; slammed, aliasing
+  −24.5 / −39 / −69 dB at Live / High / Max.
+- **When the clip is in the path** (Adrian, 27 Nov, `realClip`): Off
+  (default): only when the settings can push it (a slider above 0 dB, or
+  Boost), so Flat stays bit-exact with no latency even for a hot input. On:
+  always, so a hot input from an earlier block clips like a real pedal.
+  Coming in or out crossfades 30 ms and the reported latency follows (split
+  paths align, 0053); the stage enters settled, from the last 128 samples.
+- **`dsp::Crossfade` is a smoothstep, a shared change:** still equal-amplitude,
+  but without the corners of a straight ramp, which sprayed sidebands to
+  −58 dB when fading between paths a few samples apart.
+- **HOT:** a lock-free flag, on while the clip takes off more than 1 dB and
+  for 300 ms after (Proposed); U1 shows it next to Level.
+- **Factory presets, the shared format** (MODULES-PLAN §3.1): compiled-in
+  tables of { stable id, name, parameter values }. A preset sets parameters
+  only; every parameter the block counts as part of a preset goes to its
+  default, then to the preset's values, so a preset is the whole sound and
+  one undo step later. The Pedal EQ's six (EQ-PLAN §4, Proposed): flat,
+  midPush, scoop, cleanBoost, bright, thicken. They set the face (sliders,
+  Level, Q, Input), not the setup (Quality, Capture level, Real pedal
+  clipping). EncoreRender renders a preset by id. User presets, the menu
+  and A/B come with U1.
+- **The character capture** (MODULES-PLAN §4): "Load capture…", a NAM capture
+  of a real pedal's buffer, after Input and before the bands. It reuses the
+  amp's NAM path (background load and prewarm, lock-free handover, 30 ms
+  crossfade, freed on the message thread, copied into the show's models
+  folder). One copy per side (Adrian: for now; a setting later).
+  `captureLevel` (Adrian: a per-pedal setting, not on the face): As captured
+  (default) or Level-matched (a gain measured once with noise at −18 dBFS RMS).
+  A missing file plays "DSP only" and the info says it's not on this computer.
+- **CPU:** every slider at ±10, Classic, Live, the clip in the path: within
+  the plan's 0.5 % target at 48 kHz / 64 (the CI benchmark reports it).

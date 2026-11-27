@@ -1,7 +1,7 @@
 // Encore — live guitar rig host
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
-// The Pedal EQ's character capture slot (stage B1, decision 0063): a NAM
+// The Pedal EQ's character capture slot (stage B1, decision 0065): a NAM
 // capture after Input, one copy per side, loaded off the audio thread,
 // swapped lock-free, "DSP only" when empty or missing.
 

@@ -1,7 +1,7 @@
 // Encore — live guitar rig host
 // Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
 
-// The Pedal EQ "G7" (FX Unit, stage B1, decision 0063): its parameters and
+// The Pedal EQ "G7" (FX Unit, stage B1, decision 0065): its parameters and
 // its sound, measured against its maths.
 
 #include "AllocationCounter.h"

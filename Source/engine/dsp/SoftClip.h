@@ -9,7 +9,7 @@ namespace encore::dsp
 {
 
 /** A smooth, slightly asymmetric soft clipper, like a 9 V pedal's op-amp
-    stage running into its rails (the Encore Engine's DSP, decision 0063).
+    stage running into its rails (the Encore Engine's DSP, decision 0065).
     Shared: the Pedal EQ's HOT stage now, the drives later.
 
     The curve, for x above the linear limit L (and mirrored, with its own

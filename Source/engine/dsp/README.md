@@ -10,10 +10,11 @@ from papers and maths in our own words, never copied.
 |---|---|
 | `FilterDesign` | Second-order sections: decramped (matched) bells and shelves after Vicanek (2016), bilinear low/high/band pass, notch, all pass, first order; Butterworth Qs; the analog prototypes' magnitudes |
 | `Svf.h` | The TPT state-variable filter (Zavalishin, Simper); plays any stable section exactly and stays stable under fast modulation |
-| `FilterBand` | A band (bell, shelves, cuts 6–96 dB/oct, notch, band pass, all pass) as up to 8 sections, and the one response function the audio and the UI share |
+| `FilterBand` | A band (bell, shelves, cuts 6–96 dB/oct, notch, band pass, all pass) as up to 8 sections, and the one response function the audio and the UI share; `glideTo` moves a band to a new design sample by sample (no zipper noise when a slider or pedal moves) |
 | `Detector.h` | Peak / RMS level detectors and a gate envelope (attack, hold, release, hysteresis) |
 | `Oversampler` | The Quality switch: 2× / 4× / 8×, prepared up front, crossfaded, latency reported |
-| `Crossfade.h` | The 10 ms true crossfade for a choice change (old and new setting side by side) |
+| `Crossfade.h` | The 10 ms true crossfade for a choice change (old and new setting side by side), equal-amplitude with a smoothstep shape |
+| `SoftClip.h` | A smooth, slightly asymmetric soft clipper (a 9 V op-amp stage into its rails): linear to −6 dBFS, 1 dB down at +6 / +5 dBFS; the Pedal EQ's clip, the drives later (decision 0065) |
 | `Biquad.h`, `OutputEq.h`, `SafetyLimiter`, `PitchDetector`, `StreamResampler` | Older engine pieces (today's EQ, output EQ, limiter, tuner, resampling) |
 
 Tests: `Tests/ModuleDspTests.cpp` (every rate from 44.1 to 192 kHz, generated
