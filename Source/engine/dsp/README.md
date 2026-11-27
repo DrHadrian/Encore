@@ -17,6 +17,7 @@ from papers and maths in our own words, never copied.
 | `Oversampler` | The Quality switch: 2× / 4× / 8×, prepared up front, crossfaded, latency reported |
 | `Crossfade.h` | The 10 ms true crossfade for a choice change (old and new setting side by side), equal-amplitude with a smoothstep shape |
 | `SoftClip.h` | A smooth, slightly asymmetric soft clipper (a 9 V op-amp stage into its rails): linear to −6 dBFS, 1 dB down at +6 / +5 dBFS; the Pedal EQ's clip, the drives later (decision 0065) |
+| `Loudness.h` | K-weighting (ITU-R BS.1770) for any rate, and a sliding loudness meter in LUFS (bins, a window, the last bin): the Studio EQ's Smart auto gain (decision 0067) |
 | `Biquad.h`, `OutputEq.h`, `SafetyLimiter`, `PitchDetector`, `StreamResampler` | Older engine pieces (today's EQ, output EQ, limiter, tuner, resampling) |
 
 ## Shapes and slopes (B3, the Studio EQ's bands)
