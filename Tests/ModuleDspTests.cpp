@@ -412,6 +412,62 @@ public:
     }
 };
 
+class TestSignalTests final : public juce::UnitTest
+{
+public:
+    TestSignalTests() : juce::UnitTest ("Module test signals", "Encore") {}
+
+    void runTest() override
+    {
+        beginTest ("Deterministic: the same seed gives the same samples");
+        {
+            expect (pinkNoise (0.5f, 4096, 3) == pinkNoise (0.5f, 4096, 3));
+            expect (pinkNoise (0.5f, 4096, 3) != pinkNoise (0.5f, 4096, 4));
+            expect (pluck (9600, 100, 0.5f, 500.0, -70.0f, 110.0, 6, 8).signal == pluck (9600, 100, 0.5f, 500.0, -70.0f, 110.0, 6, 8).signal);
+            expect (logSweep (20.0, 20000.0, 0.5f, 48000) == logSweep (20.0, 20000.0, 0.5f, 48000));
+        }
+
+        beginTest ("Pink noise has equal power per octave; white rises 3 dB per octave");
+        {
+            const auto bandPower = [] (const std::vector<float>& signal, double centre)
+            {
+                dsp::FilterBand<1> band;
+                band.setDesign (dsp::FilterBandDesign::make ({ dsp::FilterShape::bandPass, centre, 0.0, 1.41 }, sampleRate));
+                auto filtered = signal;
+                float* channels[1] = { filtered.data() };
+                band.process (channels, 1, (int) filtered.size());
+                return toDb (rms (filtered, 4800, (int) filtered.size()));
+            };
+
+            const auto pink = pinkNoise (0.5f, 480000, 11);
+            const auto white = whiteNoise (0.5f, 480000, 11);
+            expectWithinAbsoluteError (bandPower (pink, 2000.0) - bandPower (pink, 250.0), 0.0f, 1.5f);
+            expectWithinAbsoluteError (bandPower (white, 2000.0) - bandPower (white, 250.0), 9.03f, 1.0f);
+        }
+
+        beginTest ("A pluck: the stated envelope over the stated floor");
+        {
+            const auto note = pluck (96000, 4800, 0.5f, 1000.0, -70.0f);
+            expectLessOrEqual (peak (note.signal, 0, note.onset), note.noiseFloor);
+            expectWithinAbsoluteError (note.envelope[(size_t) note.onset + 95], 0.5f, 1.0e-6f, "peak at the end of the 2 ms rise");
+            expectWithinAbsoluteError (toDb (note.envelope[(size_t) note.onset + 96 + 48000]), toDb (0.5f) - 60.0f, 0.1f, "60 dB down after the decay time");
+            expectLessOrEqual (peak (note.signal, note.onset, (int) note.signal.size()), 0.5f + note.noiseFloor);
+        }
+
+        beginTest ("Impulse and sweep");
+        {
+            const auto i = impulse (64, 10, 0.5f);
+            expectEquals (i[10], 0.5f);
+            expectEquals (peak (i, 0, 10), 0.0f);
+
+            const auto sweep = logSweep (20.0, 20000.0, 0.5f, 48000);
+            expectLessOrEqual (peak (sweep, 0, 48000), 0.5f);
+            expectGreaterThan (peak (sweep, 0, 48000), 0.49f);
+        }
+    }
+};
+
 static FilterTests filterTests;
+static TestSignalTests testSignalTests;
 
 } // namespace encore::test
