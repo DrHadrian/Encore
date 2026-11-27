@@ -191,6 +191,10 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/midi/MidiRouter.h
     Source/engine/dsp/Biquad.h
     Source/engine/dsp/Crossfade.h
+    Source/engine/dsp/FilterBand.cpp
+    Source/engine/dsp/FilterBand.h
+    Source/engine/dsp/FilterDesign.cpp
+    Source/engine/dsp/FilterDesign.h
     Source/engine/dsp/OutputEq.h
     Source/engine/dsp/PitchDetector.cpp
     Source/engine/dsp/PitchDetector.h
@@ -198,6 +202,7 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/dsp/SafetyLimiter.h
     Source/engine/dsp/StreamResampler.cpp
     Source/engine/dsp/StreamResampler.h
+    Source/engine/dsp/Svf.h
     Source/engine/nam/NamModel.cpp
     Source/engine/nam/NamModel.h
     Source/model/AmpPreset.cpp
@@ -557,6 +562,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/EngineCoreTests.cpp
         Tests/MidiTests.cpp
         Tests/ModuleBaseTests.cpp
+        Tests/ModuleDspTests.cpp
         Tests/ModuleTypeTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp

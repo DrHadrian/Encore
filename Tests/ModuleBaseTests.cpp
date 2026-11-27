@@ -8,6 +8,7 @@
 #include "TestSignals.h"
 
 #include "engine/core/Parameter.h"
+#include "engine/blocks/EngineProbeBlock.h"
 #include "engine/core/Realtime.h"
 #include "engine/dsp/Crossfade.h"
 #include "model/ShowJson.h"
@@ -177,7 +178,79 @@ public:
     }
 };
 
+class EngineProbeTests final : public juce::UnitTest
+{
+public:
+    EngineProbeTests() : juce::UnitTest ("Engine test unit", "Encore") {}
+
+    void runTest() override
+    {
+        beginTest ("Switching a shape crossfades: no jump in the output");
+        {
+            EngineProbeBlock probe;
+            probe.prepare (spec);
+            const auto input = sine (200.0f, 0.5f, 9600);
+            auto maxInputStep = 0.0f;
+
+            for (size_t i = 1; i < input.size(); ++i)
+                maxInputStep = std::max (maxInputStep, std::abs (input[i] - input[i - 1]));
+
+            // Off -> a 96 dB/oct low cut at 1 kHz, which removes the 200 Hz sine.
+            std::vector<float> output;
+            const auto switchAt = blockSize * (2400 / blockSize);
+
+            for (int start = 0; start < (int) input.size(); start += blockSize)
+            {
+                if (start == switchAt)
+                {
+                    probe.findParameter ("freq")->setValue (1000.0f);
+                    probe.findParameter ("slope")->setValue (15.0f);
+                    probe.findParameter ("shape")->setValue (4.0f);   // Low cut
+                }
+
+                std::vector<float> chunk (input.begin() + start, input.begin() + start + blockSize);
+                float* channels[1] = { chunk.data() };
+                probe.process (channels, 1, blockSize, {});
+                output.insert (output.end(), chunk.begin(), chunk.end());
+            }
+
+            auto maxStep = 0.0f;
+
+            for (size_t i = 1; i < output.size(); ++i)
+                maxStep = std::max (maxStep, std::abs (output[i] - output[i - 1]));
+
+            expectLessThan (maxStep, maxInputStep * 1.5f, "a hard switch would jump");
+            expectLessThan (peak (output, 7200, 9600), 0.01f, "the new setting is in place after the fade");
+            expect (std::equal (output.begin(), output.begin() + switchAt, input.begin()), "Off is bit-exact");
+        }
+
+        beginTest ("No allocation while playing and switching");
+        {
+            EngineProbeBlock probe;
+            probe.prepare (spec);
+            std::vector<float> a ((size_t) blockSize, 0.25f), b ((size_t) blockSize, -0.25f);
+            float* channels[2] = { a.data(), b.data() };
+            auto* shapeParameter = probe.findParameter ("shape");   // looking up by name builds a String: not on the audio thread
+            auto* freqParameter = probe.findParameter ("freq");
+
+            const auto before = realtimeAllocationCount();
+            {
+                const rt::ScopedRealtimeSection realtime;
+
+                for (int i = 0; i < 200; ++i)
+                {
+                    shapeParameter->setValue ((float) (i / 10 % 9));
+                    freqParameter->setValue (100.0f + (float) i * 50.0f);
+                    probe.process (channels, 2, blockSize, {});
+                }
+            }
+            expectEquals (realtimeAllocationCount() - before, 0);
+        }
+    }
+};
+
 static ParameterChoiceTests parameterChoiceTests;
+static EngineProbeTests engineProbeTests;
 static CrossfadeTests crossfadeTests;
 
 } // namespace encore::test
