@@ -477,7 +477,7 @@ juce::PopupMenu ChainStrip::blockTypeMenu (int insertAt, int lane)
     // The new block is selected once built: its index in the chain.
     const auto flatIndex = lane == 0 || chain == nullptr ? insertAt : chain->getNumMainBlocks() + insertAt;
 
-    for (auto& type : getBlockTypes())
+    for (auto& type : getMenuBlockTypes())
         menu.addItem (type.displayName, [safeThis, id = type.id, insertAt, lane, flatIndex]
         {
             if (safeThis != nullptr)
