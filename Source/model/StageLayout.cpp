@@ -156,6 +156,9 @@ juce::var stageToVar (const StageSettings& stage)
             if (w.text.isNotEmpty())
                 o->setProperty ("text", w.text);
 
+            if (w.outlineAtRest)
+                o->setProperty ("atRest", "outline");   // Full colour, the default, isn't written
+
             widgets.add (juce::var (o));
         }
 
@@ -210,6 +213,7 @@ StageSettings stageFromVar (const juce::var& v)
                     w.height = (int) prop (o, "h", 2);
                     w.textScale = (float) (double) prop (o, "scale", 1.0);
                     w.text = prop (o, "text", juce::String()).toString();
+                    w.outlineAtRest = prop (o, "atRest", juce::String()).toString() == "outline";
                     layout.widgets.push_back (clampToGrid (w));
                 }
             }

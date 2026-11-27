@@ -36,6 +36,14 @@ void ensureAudioThreadIsProAudio() noexcept;
 /** True once some audio thread has been registered as Pro Audio. */
 bool isAudioThreadProAudio() noexcept;
 
+/** Windows touch screens: a finger held still on `nativeWindow` (an HWND, from
+    ComponentPeer::getNativeHandle()) stays a held left press instead of
+    turning into a right click (Windows' "press and hold"), so holding and
+    dragging work without wiggling the finger; flicks (swipes Windows turns
+    into back / forward / scroll commands) are off too. Safe to call again;
+    no-op elsewhere or for null. */
+void disableTouchPressAndHold (void* nativeWindow) noexcept;
+
 /** Memory Encore is using (private bytes), or 0 if unknown. */
 juce::int64 getProcessMemoryBytes();
 

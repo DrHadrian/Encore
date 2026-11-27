@@ -72,29 +72,42 @@ const PatchModel* ShowModel::findPatch (const juce::String& patchId) const
 
 namespace
 {
-    bool hasPlugin (const PatchModel& patch)
+    template <typename Predicate>
+    bool hasBlock (const PatchModel& patch, Predicate&& isIt)
     {
         for (const auto& lane : patch.lanes)
             for (const auto& b : lane.blocks)
-                if (b.type == pluginBlockType)
+                if (isIt (b))
                     return true;
 
         return false;
     }
 
-    bool hasPlugin (const RunItem& item)
+    template <typename Predicate>
+    bool hasBlock (const RunItem& item, Predicate&& isIt)
     {
-        if (item.uniquePatch && hasPlugin (*item.uniquePatch))
+        if (item.uniquePatch && hasBlock (*item.uniquePatch, isIt))
             return true;
 
-        return std::any_of (item.children.begin(), item.children.end(), [] (const RunItem& c) { return hasPlugin (c); });
+        return std::any_of (item.children.begin(), item.children.end(), [&isIt] (const RunItem& c) { return hasBlock (c, isIt); });
+    }
+
+    template <typename Predicate>
+    bool showHasBlock (const ShowModel& show, Predicate&& isIt)
+    {
+        return std::any_of (show.patches.begin(), show.patches.end(), [&isIt] (const PatchModel& p) { return hasBlock (p, isIt); })
+               || hasBlock (show.runningOrder, isIt);
     }
 }
 
 bool ShowModel::usesPlugins() const
 {
-    return std::any_of (patches.begin(), patches.end(), [] (const PatchModel& p) { return hasPlugin (p); })
-           || hasPlugin (runningOrder);
+    return showHasBlock (*this, [] (const BlockModel& b) { return b.type == pluginBlockType; });
+}
+
+bool ShowModel::usesNewModules() const
+{
+    return showHasBlock (*this, [] (const BlockModel& b) { return isNewModuleBlockType (b.type); });
 }
 
 //==============================================================================

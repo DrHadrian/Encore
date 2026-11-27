@@ -33,6 +33,10 @@ else()
     FetchContent_MakeAvailable(juce)
 endif()
 
+# The two-finger right click: touch messages reach Encore inside JUCE's own
+# window code (see the script). Sets ENCORE_JUCE_TOUCH_FILTER.
+include(cmake/PatchJuceTouch.cmake)
+
 # NeuralAmpModelerCore (MIT) and the Eigen commit it pins (MPL2).
 # Only the sources are fetched (SOURCE_SUBDIR points nowhere), so neither
 # project's own build runs; nam_core below compiles exactly what we need.
@@ -157,6 +161,8 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/blocks/CabIrBlock.h
     Source/engine/blocks/DelayBlock.cpp
     Source/engine/blocks/DelayBlock.h
+    Source/engine/blocks/EngineProbeBlock.cpp
+    Source/engine/blocks/EngineProbeBlock.h
     Source/engine/blocks/EqBlock.cpp
     Source/engine/blocks/EqBlock.h
     Source/engine/blocks/NamAmpBlock.cpp
@@ -188,13 +194,22 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/midi/MidiRouter.cpp
     Source/engine/midi/MidiRouter.h
     Source/engine/dsp/Biquad.h
+    Source/engine/dsp/Crossfade.h
+    Source/engine/dsp/Detector.h
+    Source/engine/dsp/FilterBand.cpp
+    Source/engine/dsp/FilterBand.h
+    Source/engine/dsp/FilterDesign.cpp
+    Source/engine/dsp/FilterDesign.h
     Source/engine/dsp/OutputEq.h
+    Source/engine/dsp/Oversampler.cpp
+    Source/engine/dsp/Oversampler.h
     Source/engine/dsp/PitchDetector.cpp
     Source/engine/dsp/PitchDetector.h
     Source/engine/dsp/SafetyLimiter.cpp
     Source/engine/dsp/SafetyLimiter.h
     Source/engine/dsp/StreamResampler.cpp
     Source/engine/dsp/StreamResampler.h
+    Source/engine/dsp/Svf.h
     Source/engine/nam/NamModel.cpp
     Source/engine/nam/NamModel.h
     Source/model/AmpPreset.cpp
@@ -217,6 +232,8 @@ target_sources(EncoreEngine PRIVATE
     Source/platform/SystemTuning.h
     Source/session/AmpLibrary.cpp
     Source/session/AmpLibrary.h
+    Source/session/OfflineRender.cpp
+    Source/session/OfflineRender.h
     Source/session/PatchBuilder.cpp
     Source/session/PluginCatalog.cpp
     Source/session/PluginCatalog.h
@@ -250,7 +267,6 @@ juce_add_binary_data(EncoreUiAssets
         Resources/ui/fonts/InterReadout-SemiBold.ttf
         Resources/ui/fonts/InterReadout-Bold.ttf
         Resources/ui/fonts/InterReadout-ExtraBold.ttf
-        Resources/ui/fonts/DejaVuSerif-Bold.ttf
         Resources/ui/logo/encore-wordmark-ui.svg
         Resources/ui/logo/encore-icon-clef.svg
         Resources/ui/icons/alert.svg
@@ -437,6 +453,8 @@ target_sources(EncoreUi PRIVATE
     Source/ui/PreShowCheckView.cpp
     Source/ui/PreShowCheckView.h
     Source/ui/StageView.cpp
+    Source/ui/TouchGestures.cpp
+    Source/ui/TouchGestures.h
     Source/ui/StageView.h
     Source/ui/TunerDisplay.cpp
     Source/ui/TunerDisplay.h
@@ -449,6 +467,10 @@ target_sources(EncoreUi PRIVATE
     Source/ui/SetList.cpp
     Source/ui/SetList.h)
 target_link_libraries(EncoreUi PUBLIC EncoreEngine EncoreUiAssets EncoreAmpArt)
+# The two-finger right click needs JUCE's touch filter (cmake/PatchJuceTouch.cmake).
+if(ENCORE_JUCE_TOUCH_FILTER)
+    target_compile_definitions(EncoreUi PRIVATE ENCORE_JUCE_TOUCH_FILTER=1)
+endif()
 
 # ------------------------------------------------------------------------------
 # Build speed (decision 0049). Parsing JUCE's headers is ~95 % of compiling a
@@ -548,13 +570,22 @@ if(ENCORE_BUILD_TESTS)
         Tests/TestMain.cpp
         Tests/HangWatchdog.cpp
         Tests/ThreadStopTests.cpp
+        Tests/TouchGestureTests.cpp
+        Tests/TouchInjection.cpp
+        Tests/TouchInjection.h
+        Tests/V32TargetTests.cpp
         Tests/HangWatchdog.h
         Tests/AllocationCounter.cpp
+        Tests/BenchmarkTests.cpp
         Tests/AllocationCounter.h
         Tests/CabTests.cpp
         Tests/DspTests.cpp
         Tests/EngineCoreTests.cpp
         Tests/MidiTests.cpp
+        Tests/ModuleBaseTests.cpp
+        Tests/ModuleDspTests.cpp
+        Tests/ModuleTypeTests.cpp
+        Tests/RenderTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
         Tests/RobustnessTests.cpp
@@ -630,7 +661,36 @@ if(ENCORE_BUILD_TESTS)
 
     list(JOIN encore_slow_tests "|" encore_all_slow)
     add_test(NAME EncoreTests.engine COMMAND EncoreTests)
-    set_tests_properties(EncoreTests.engine PROPERTIES ENVIRONMENT "ENCORE_TEST_SKIP=${encore_all_slow}")
+    set_tests_properties(EncoreTests.engine PROPERTIES ENVIRONMENT
+        "ENCORE_TEST_SKIP=${encore_all_slow};ENCORE_BENCHMARK_REPORT=${CMAKE_CURRENT_BINARY_DIR}/benchmark.txt")
+
+    # --------------------------------------------------------------------------
+    # EncoreRender: a WAV through one block or a whole patch, offline, from the
+    # same engine objects (native modules, decision 0062). Built with the tests
+    # and run by ctest on a generated sweep.
+    #   EncoreRender --in IN.wav --out OUT.wav --block engineProbe --set gain=6
+    # --------------------------------------------------------------------------
+    juce_add_console_app(EncoreRender PRODUCT_NAME "EncoreRender")
+    target_sources(EncoreRender PRIVATE Tools/EncoreRender/Main.cpp)
+    target_link_libraries(EncoreRender
+        PRIVATE
+            EncoreJuce
+            EncoreEngine
+            nam_core)
+    encore_precompile_headers(EncoreRender)
+
+    set(encore_render_dir "${CMAKE_CURRENT_BINARY_DIR}/render")
+    add_test(NAME EncoreRender.sweep
+             COMMAND EncoreRender --make-sweep "${encore_render_dir}/sweep.wav" --seconds 3)
+    add_test(NAME EncoreRender.probe
+             COMMAND EncoreRender --in "${encore_render_dir}/sweep.wav" --out "${encore_render_dir}/sweep-probe.wav"
+                     --block engineProbe --set shape=Bell --set freq=800 --set gain=6 --set q=1
+                     --set drive=12 --set quality=High --report "${encore_render_dir}/sweep-probe.txt")
+    add_test(NAME EncoreRender.null
+             COMMAND EncoreRender --in "${encore_render_dir}/sweep.wav" --out "${encore_render_dir}/sweep-null.wav"
+                     --block engineProbe --report "${encore_render_dir}/sweep-null.txt")
+    set_tests_properties(EncoreRender.sweep PROPERTIES FIXTURES_SETUP encore_render_sweep)
+    set_tests_properties(EncoreRender.probe EncoreRender.null PROPERTIES FIXTURES_REQUIRED encore_render_sweep)
 endif()
 
 if(MSVC)

@@ -283,6 +283,9 @@ juce::Font EncoreLookAndFeel::getTextButtonFont (juce::TextButton& button, int b
     if (v == Variant::small || buttonHeight <= size::buttonSmallHeight)
         return font (type::buttonSmall);
 
+    if ((bool) button.getProperties()["encoreStageToolbar"])   // the Stage toolbar's 56 px Tuner and Mute
+        return font (v == Variant::danger || v == Variant::muted ? type::stageToolbarMute : type::stageToolbarButton);
+
     if (v == Variant::danger || v == Variant::muted)
         return font (type::buttonBold);
 

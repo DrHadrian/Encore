@@ -145,6 +145,15 @@ void DialogFrame::setFooterText (const juce::String& text)
     }
 }
 
+void DialogFrame::setFooterKeys (const juce::String& text)
+{
+    if (text != footerKeys)
+    {
+        footerKeys = text;
+        repaint (0, footerTop(), getWidth(), getHeight() - footerTop());
+    }
+}
+
 juce::TextButton& DialogFrame::addFooterButton (const juce::String& text, Variant variant)
 {
     auto* b = footerButtons.add (new juce::TextButton (text));
@@ -269,9 +278,22 @@ void DialogFrame::paint (juce::Graphics& g)
             for (auto* button : footerButtons)
                 textRight = juce::jmin (textRight, (float) button->getX() - (float) size::dialogButtonGap);
 
-            paint::text (g, footerText, juce::Rectangle<float>::leftTopRightBottom ((float) size::dialogPadX, top + 1.0f, textRight,
-                                                                                     top + 1.0f + (float) size::dialogFooter),
-                         type::label, colour::textMuted);
+            const auto area = juce::Rectangle<float>::leftTopRightBottom ((float) size::dialogPadX, top + 1.0f, textRight,
+                                                                          top + 1.0f + (float) size::dialogFooter);
+
+            if (footerKeys.isEmpty())
+            {
+                paint::text (g, footerText, area, type::label, colour::textMuted);
+            }
+            else
+            {
+                // The help text, then the keys under it, centred together.
+                const auto textH = font (type::label).getHeight(), keysH = font (type::caption).getHeight();
+                const auto y = area.getY() + (area.getHeight() - textH - keysH - (float) size::dialogFooterLineGap) * 0.5f;
+                paint::text (g, footerText, area.withY (y).withHeight (textH), type::label, colour::textMuted);
+                paint::text (g, footerKeys, area.withY (y + textH + (float) size::dialogFooterLineGap).withHeight (keysH), type::caption,
+                             colour::textMuted);
+            }
         }
     }
 

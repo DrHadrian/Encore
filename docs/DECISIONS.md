@@ -783,7 +783,110 @@ paint can reach, so only its four rounded corners showed.
   goes 2 px outside the control when it fits, or on the control's own edge
   when it doesn't (buttons, pane tabs, fields). It's always drawn whole.
 
-## 0063 — Menus: the design's shadow around the rounded shape, and text 10 px in
+## 0062 — Native modules: shared base; choices, hidden types, schema 5 for new modules
+
+Encore's own effects ("native modules"; players will see them as **FX
+Units**, their DSP branded the **Encore Engine**) are `Block`s in our own
+C++, never VST3. Stage B0 of their build plan adds what every module needs
+and nothing players see (Adrian, 26–27 Nov 2026).
+
+- **Parameter choices.** `Parameter::Spec` can carry named steps
+  (`Spec::choice`): the value is an index 0..n−1, saved by index, shown by
+  name, clamped and snapped. A choice never ramps.
+- **A choice change is a true crossfade** (Adrian: "I prefer the true
+  crossfade"): `dsp::Crossfade` lets a module run its old setting beside the
+  new one for 10 ms and blend them linearly (the two paths are correlated).
+  Only the module can run both, so it's a helper modules use, not something
+  `Block` does for every parameter. A change during a fade waits for it.
+- **Hidden block types.** `BlockType::hidden` keeps a type out of the Add
+  block menu (`getMenuBlockTypes()`); `createBlock`, shows, the tests and
+  EncoreRender still make it. Every FX Unit stays hidden until its UI is done
+  and Adrian's rig test has passed; main stays show-safe.
+- **The engine's test unit** (`engineProbe`, hidden, Adrian's pick): one
+  filter band, a drive with the Quality switch, a trim. It lets the tests,
+  EncoreRender and the benchmark run a real block before the first FX Unit.
+  Bit-exact at its defaults.
+- **Schema 5.** `BlockType::newModule` marks a module an older Encore
+  doesn't know (it would skip the block and play the show without it). A
+  show that uses one is saved as schema 5; any other show keeps the version
+  it needs (as 0047, 0051 and the amp builder did), and an older Encore
+  refuses schema 5 with its "newer version of Encore" message. The model
+  asks `isNewModuleBlockType()`, declared in `ShowModel.h` and defined with
+  the registry, so it keeps no list of its own.
+- **Shared DSP in `Source/engine/dsp/`** (written from papers and maths;
+  coefficients and states in double, buffers float; see its README):
+  - `FilterDesign`: decramped bells and shelves (impulse-invariant poles,
+    the magnitude matched to the analog prototype at DC, the centre and
+    Nyquist, after Vicanek 2016; a cut is the reciprocal of its boost and a
+    high shelf is G over the low shelf, so every case is stable and minimum
+    phase); bilinear sections; Butterworth cuts 6–96 dB/oct.
+  - `Svf`: the TPT state-variable filter (after Zavalishin and Simper),
+    which plays any of those sections exactly and stays stable under fast
+    modulation.
+  - `FilterBand`: a band as up to 8 sections, and **one response function**
+    computed from the numbers the audio plays, so a curve on screen is what
+    you hear.
+  - `Detector`: Peak and RMS detectors with a detector time, and a gate
+    envelope with attack, hold, release and hysteresis, sample-accurate.
+  - `Oversampler`: the Quality switch (Live 2×, High 4×, Max 8×), all three
+    prepared up front so switching allocates nothing, crossfaded; polyphase
+    IIR with integer latency (Adrian: lowest latency for live use), reported
+    per Quality.
+- **Measured, with stated tolerances,** at 44.1, 48, 96 and 192 kHz on
+  generated, seeded signals only (sweeps, noise, plucks, palm-mutes, a
+  decaying sine): measured = computed response; bells and shelves within
+  0.45 dB of the analog curve to fs/16 at up to 15 dB, 0.9 dB to fs/4, up to
+  3.5 dB only for 30 dB right at the top; aliasing of a hard tanh −24 / −36 /
+  −57 dB at 2× / 4× / 8× (−15 dB without); no allocation; no NaN.
+- **EncoreRender** (`Tools/EncoreRender`, core in `session/OfflineRender`):
+  a WAV through one block or a patch, settings as JSON, a 32-bit float WAV
+  and a report (peak, RMS, latency, CPU per block). ctest renders a
+  generated sweep; CI prints the report and uploads the renders.
+- **A CPU benchmark** in EncoreTests (48 kHz, 64 samples, fixed settings):
+  a report per block and DSP piece, not a failing test; module stages
+  compare it with their plan's targets.
+
+## 0063 — Touch screens: hold is a hold; a two-finger tap is a right click
+
+On a Windows touch screen a finger held still turned into a right click
+(Windows' "press and hold"), so holding or dragging only worked after the
+finger moved a little (Adrian, 20 Nov 2026).
+
+- **Press and hold off:** the main window sets the documented
+  `MicrosoftTabletPenServiceProperty` flags (press and hold, pen feedback and
+  flicks off). It sets them when it opens and whenever it's activated.
+- **A two-finger tap is a right click**, everywhere except the live Stage
+  (Adrian's choice), where widgets act the moment a finger lands.
+  - It starts when a second finger lands within 300 ms of the first, before
+    the first has moved. It counts as a tap when both are lifted within 700 ms
+    and neither moved more than 24 px.
+  - The first finger's press is cancelled, so nothing under it clicks. The
+    second finger never reaches the app.
+  - The right click goes where the first finger was.
+  - The rules are in `TwoFingerTapDetector`, with unit tests.
+- **Inside JUCE, not around it:** the first build hooked its window from
+  outside (`SetWindowSubclass`), and Chrome flagged that download as
+  dangerous; the build without it wasn't flagged. So JUCE's own window code
+  now hands touch messages to Encore first: a small edit made on the
+  fetched JUCE source by `cmake/PatchJuceTouch.cmake`.
+  - The script runs on every configure, but edits the file only once.
+  - It never edits a local JUCE checkout (`ENCORE_JUCE_DIR`).
+  - If the code doesn't match (a new JUCE version), it warns and the app
+    builds without the two-finger tap.
+- **JUCE reads the touches itself** (`setUsingWindowsMultiTouch`, one input
+  source per finger) on the main window. Left to Windows, a touch became a
+  mouse click only when the finger lifted; on a two-finger tap that late click
+  arrived after the right click and closed the menu it had opened (Adrian, 20
+  Nov 2026, on a block in the signal chain). Now a press lands the moment the
+  finger does. Windows' built-in gestures (pinch) stop; Encore uses none.
+- **Tested on a real window:** a test opens a menu with the synthetic right
+  click, and with a two-finger tap made of injected touches
+  (`InjectTouchInput`, no touch screen needed), and checks it stays open. On CI
+  a touch that can't be injected fails the test; elsewhere it's skipped.
+- **Code signing** is still the real answer to download warnings ("Production
+  basics" in the roadmap).
+
+## 0064 — Menus: the design's shadow around the rounded shape, and text 10 px in
 
 *20 Nov 2026.* Adrian saw a "triangle" under each rounded corner of a menu, as
 if a square menu were drawn under the rounded one.

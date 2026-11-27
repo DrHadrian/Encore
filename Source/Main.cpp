@@ -10,6 +10,8 @@
 #include "ui/theme/EncoreTheme.h"
 #include "engine/core/Realtime.h"
 #include "session/PluginCatalog.h"
+#include "platform/SystemTuning.h"
+#include "ui/TouchGestures.h"
 
 namespace encore
 {
@@ -53,6 +55,9 @@ public:
         content->setSize (w, h);
     }
 
+public:
+    MainComponent& getMain() noexcept { return *content; }
+
 private:
     std::unique_ptr<MainComponent> content;
 };
@@ -64,7 +69,9 @@ public:
         : DocumentWindow (name, juce::Colour (theme::colour::window), DocumentWindow::allButtons)
     {
         setUsingNativeTitleBar (true);
-        setContentOwned (new ScrollingContent (settings), false);
+        auto* scrolling = new ScrollingContent (settings);
+        main = &scrolling->getMain();
+        setContentOwned (scrolling, false);
         setResizable (true, true);
         setResizeLimits (640, 480, 8192, 8192);
 
@@ -73,6 +80,14 @@ public:
         centreWithSize (juce::jmin (theme::size::referenceWidth, screen.getWidth() - theme::size::screenMargin),
                         juce::jmin (theme::size::referenceHeight, screen.getHeight() - theme::size::screenMargin));
         setVisible (true);
+        applyTouchSettings();
+    }
+
+    // Again whenever it's activated: JUCE makes a new native window for some changes (full screen).
+    void activeWindowStatusChanged() override
+    {
+        DocumentWindow::activeWindowStatusChanged();
+        applyTouchSettings();
     }
 
     void closeButtonPressed() override
@@ -81,6 +96,20 @@ public:
     }
 
 private:
+    /** Touch screens: holding a finger still is a held press, not a right click. */
+    void applyTouchSettings()
+    {
+        if (auto* peer = getPeer())
+            system::disableTouchPressAndHold (peer->getNativeHandle());
+
+        twoFingers.attachTo (*this);
+    }
+
+    MainComponent* main = nullptr;
+
+    // A two-finger tap is a right click, except on the live Stage.
+    TwoFingerRightClick twoFingers { [this] { return main == nullptr || ! main->isOnLiveStage(); } };
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
 };
 

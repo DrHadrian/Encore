@@ -48,7 +48,7 @@ struct AmpPart
     juce::String style, size, drives, label, labelPos, scale, switchStyle, top, colour, lights;
     float value = 0.5f;
 
-    // section / plate / trim: mat; title / text / plate: text; text: font caps | serif;
+    // section / plate / trim: mat; title / text / plate: text; text: font (caps; an older "serif" draws as caps and is kept when saving);
     // symbol: icon; plate: shape rect | oval; logo: colour, logoSize.
     juce::String mat, text, font, icon, shape;
     int logoSize = 0;
