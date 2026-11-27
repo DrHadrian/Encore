@@ -9,6 +9,7 @@
 #include "engine/blocks/EngineProbeBlock.h"
 #include "engine/blocks/PedalEqBlock.h"
 #include "engine/blocks/PedalGateBlock.h"
+#include "engine/blocks/StudioGateBlock.h"
 #include "model/ShowJson.h"
 #include "session/PatchBuilder.h"
 
@@ -117,7 +118,10 @@ public:
             expect (isNewModuleBlockType (PedalEqBlock::typeId));
             expect (isNewModuleBlockType (PedalGateBlock::typeId));
 
-            const juce::StringArray newModules { EngineProbeBlock::typeId, PedalEqBlock::typeId, PedalGateBlock::typeId };
+            expect (isNewModuleBlockType (StudioGateBlock::typeId));
+
+            const juce::StringArray newModules { EngineProbeBlock::typeId, PedalEqBlock::typeId, PedalGateBlock::typeId,
+                                                 StudioGateBlock::typeId };
 
             for (const auto& t : getBlockTypes())
                 if (! newModules.contains (t.id))
@@ -284,6 +288,45 @@ public:
             expect (old != nullptr && ! old->newModule, "the old gate stays in the menu, schema unchanged");
             auto oldBlock = createBlock ("gate");
             expect (oldBlock != nullptr && oldBlock->findParameter ("detectGuitar") != nullptr, "and is still today's");
+        }
+
+        beginTest ("The Studio Gate is hidden and a new module, under its own id while today's gate keeps \"gate\"");
+        {
+            const auto* type = HiddenBlockTypeTests::findType (getBlockTypes(), StudioGateBlock::typeId);
+            expect (type != nullptr && type->hidden && type->newModule);
+            expect (HiddenBlockTypeTests::findType (getMenuBlockTypes(), StudioGateBlock::typeId) == nullptr);
+            auto block = createBlock (StudioGateBlock::typeId);
+            expect (block != nullptr && block->getTypeId() == StudioGateBlock::typeId);
+            expect (createBlock ("gate")->getTypeId() == juce::String ("gate"));
+        }
+
+        beginTest ("A show with a Studio Gate saves as schema 5, loads back and plays");
+        {
+            auto show = makeDefaultShow ("X4");
+            BlockModel x4;
+            x4.id = "x4-1";
+            x4.type = StudioGateBlock::typeId;
+            x4.params["mode"] = 2.0f;
+            x4.params["range"] = -12.0f;
+            x4.refs["keyBlock"] = "somewhere";
+            show.patches[0].mainLane().blocks.push_back (x4);
+
+            const auto text = json::toJson (show);
+            expect (text.contains ("\"schemaVersion\": 5"));
+            juce::String error;
+            const auto loaded = json::fromJson (text, error);
+            expect (loaded.has_value(), error);
+
+            if (! loaded)
+                return;
+
+            juce::StringArray problems;
+            auto chain = buildChain (loaded->patches[0], ShowFolder(), spec, problems);
+            const auto& last = chain->getBlocks().back();
+            expect (last->getTypeId() == StudioGateBlock::typeId);
+            expectEquals (last->findParameter ("mode")->getChoiceIndex(), 2);
+            expectEquals (last->findParameter ("range")->getValue(), -12.0f);
+            expectEquals (last->getRef ("keyBlock"), juce::String ("somewhere"));
         }
 
         beginTest ("A show with a Pedal Gate saves as schema 5, loads back and plays");

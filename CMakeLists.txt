@@ -169,6 +169,8 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/blocks/PedalEqBlock.h
     Source/engine/blocks/PedalGateBlock.cpp
     Source/engine/blocks/PedalGateBlock.h
+    Source/engine/blocks/StudioGateBlock.cpp
+    Source/engine/blocks/StudioGateBlock.h
     Source/engine/blocks/EqBlock.cpp
     Source/engine/blocks/EqBlock.h
     Source/engine/blocks/NamAmpBlock.cpp
@@ -602,6 +604,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/PedalEqTests.cpp
         Tests/PedalGateTests.cpp
         Tests/GateKeyTests.cpp
+        Tests/StudioGateTests.cpp
         Tests/RenderTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
