@@ -108,6 +108,11 @@ public:
             const auto text = r.report();
             expect (text.contains ("Peak") && text.contains ("RMS") && text.contains ("Latency " + juce::String (r.latencySamples))
                     && text.contains ("engineProbe"), text);
+            expect (text.contains ("Peak   in -6.0 dBFS"), text);   // a 0.5 sine
+            expect (text.contains ("RMS    in -9.0 dBFS"), text);
+
+            const auto quiet = render::renderBlock (toBuffer (std::vector<float> (480, 0.0f)), sampleRate, EngineProbeBlock::typeId, {});
+            expect (quiet.report().contains ("Peak   in silence"), quiet.report());
         }
 
         beginTest ("WAV files: 32-bit float, bit-exact round trip; a sweep to render");

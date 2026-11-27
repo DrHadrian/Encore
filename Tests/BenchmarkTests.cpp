@@ -66,6 +66,7 @@ public:
     void runTest() override
     {
         beginTest ("CPU per buffer at 48 kHz / 64 samples (a report)");
+        const juce::ScopedNoDenormals noDenormals;   // as in the audio callback (AudioEngine)
 
         std::vector<Line> lines;
         const auto input = pinkNoise (0.3f, (int) (seconds * rate), 21);

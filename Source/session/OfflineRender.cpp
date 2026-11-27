@@ -63,7 +63,10 @@ namespace
         levels (r.output, r.peakOut, r.rmsOut);
     }
 
-    juce::String db (float gain) { return juce::Decibels::toString (gain, 1, -200.0f); }
+    juce::String dbfs (float gain)
+    {
+        return gain > 0.0f ? juce::String (juce::Decibels::gainToDecibels (gain), 1) + " dBFS" : juce::String ("silence");
+    }
 }
 
 //==============================================================================
@@ -165,6 +168,10 @@ Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, co
     block->prepare ({ sampleRate, blockSize });
     block->reset();
 
+    // As in the audio callback: denormals flushed (they'd make some buffers
+    // many times slower than they are when playing).
+    const juce::ScopedNoDenormals noDenormals;
+
     // Work buffer with room for the block's output channels.
     juce::AudioBuffer<float> work (Block::maxChannels, blockSize);
     r.output.setSize (outChannels, input.getNumSamples());
@@ -219,6 +226,8 @@ Result renderPatch (const juce::AudioBuffer<float>& input, double sampleRate, co
     chain->prepare (spec);
     chain->reset();
 
+    const juce::ScopedNoDenormals noDenormals;   // as in the audio callback
+
     juce::AudioBuffer<float> work (Block::maxChannels, blockSize);
     r.output.setSize (juce::jlimit (1, Block::maxChannels, chain->getOutputChannels()), input.getNumSamples());
 
@@ -270,8 +279,8 @@ juce::String Result::report() const
 
     s << "Rendered " << output.getNumSamples() << " samples, " << output.getNumChannels() << " channel(s), at "
       << juce::String (sampleRate, 0) << " Hz in buffers of " << blockSize << "\n";
-    s << "Peak   in " << db (peakIn) << " dBFS, out " << db (peakOut) << " dBFS\n";
-    s << "RMS    in " << db (rmsIn) << " dBFS, out " << db (rmsOut) << " dBFS\n";
+    s << "Peak   in " << dbfs (peakIn) << ", out " << dbfs (peakOut) << "\n";
+    s << "RMS    in " << dbfs (rmsIn) << ", out " << dbfs (rmsOut) << "\n";
     s << "Latency " << latencySamples << " samples (" << juce::String (latencySamples * 1000.0 / juce::jmax (1.0, sampleRate), 2) << " ms)\n";
     s << "CPU per buffer (this computer, offline; average / worst):\n";
 
