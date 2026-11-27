@@ -92,6 +92,28 @@ bool isAudioThreadProAudio() noexcept
     return anyThreadRegistered.load();
 }
 
+void disableTouchPressAndHold (void* nativeWindow) noexcept
+{
+   #if JUCE_WINDOWS
+    if (nativeWindow == nullptr)
+        return;
+
+    // The Tablet PC flags a window opts out with (tpcshrd.h), set as a window
+    // property the way Microsoft documents it (an atom held while setting it).
+    constexpr DWORD disablePressAndHold = 0x00000001, disablePenTapFeedback = 0x00000008,
+                    disablePenBarrelFeedback = 0x00000010, disableFlicks = 0x00010000;
+    constexpr auto property = L"MicrosoftTabletPenServiceProperty";
+    const auto atom = GlobalAddAtomW (property);
+    SetPropW ((HWND) nativeWindow, property,
+              (HANDLE) (ULONG_PTR) (disablePressAndHold | disablePenTapFeedback | disablePenBarrelFeedback | disableFlicks));
+
+    if (atom != 0)
+        GlobalDeleteAtom (atom);
+   #else
+    juce::ignoreUnused (nativeWindow);
+   #endif
+}
+
 juce::int64 getProcessMemoryBytes()
 {
    #if JUCE_WINDOWS
