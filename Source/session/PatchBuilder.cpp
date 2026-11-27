@@ -181,6 +181,12 @@ std::unique_ptr<Chain> buildChain (const PatchModel& patch, const ShowFolder& fo
                 if (auto ir = CabIrBlock::readFile (file, error))
                     cab->loadBeforePlaying (std::move (ir));
             }
+            else if (auto* pedalEq = dynamic_cast<PedalEqBlock*> (block.get()))
+            {
+                // A missing capture plays "DSP only"; its info says it's not on this computer.
+                if (auto capture = PedalEqBlock::loadCapture (file, spec.isValid() ? spec : ProcessSpec { 48000.0, 512 }, error))
+                    pedalEq->installCaptureBeforePlaying (std::move (capture));
+            }
 
             if (error.isNotEmpty())
                 problems.add (patch.name + ": " + error);

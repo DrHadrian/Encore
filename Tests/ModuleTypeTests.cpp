@@ -215,6 +215,45 @@ public:
             expectEquals (first->findParameter ("g800")->getValue(), 6.0f);
             expectEquals (first->findParameter ("input")->getChoiceIndex(), 2);
         }
+
+        beginTest ("A show round trip keeps the capture; a missing one plays DSP only");
+        {
+            const auto capture = juce::File (ENCORE_NAM_EXAMPLE_MODELS).getChildFile ("wavenet_a1_standard.nam");
+            auto patch = makeDefaultShow ("Capture").patches[0];
+            BlockModel g7;
+            g7.id = "g7-cap";
+            g7.type = PedalEqBlock::typeId;
+            g7.file = capture.getFullPathName();
+            patch.mainLane().blocks.insert (patch.mainLane().blocks.begin(), g7);
+
+            juce::StringArray problems;
+            auto chain = buildChain (patch, ShowFolder(), spec, problems);
+            expect (problems.isEmpty(), problems.joinIntoString ("; "));
+            auto* eq = dynamic_cast<PedalEqBlock*> (chain->getBlocks().front().get());
+            expect (eq != nullptr && eq->getLoadedFile() == capture);
+
+            PatchModel saved = patch;
+            captureChain (*chain, saved, ShowFolder());
+            expectEquals (saved.mainLane().blocks.front().file, capture.getFullPathName());
+
+            juce::String error;
+            const auto back = json::fromJson (json::toJson ([&] { auto show = makeDefaultShow ("Capture"); show.patches[0] = saved; return show; }()), error);
+            expect (back.has_value() && back->patches[0].mainLane().blocks.front().file == capture.getFullPathName(), error);
+
+            // Missing: a problem is reported, the block still builds and plays DSP only.
+            auto missing = patch;
+            missing.mainLane().blocks.front().file = "models/not here.nam";
+            problems.clear();
+            auto missingChain = buildChain (missing, ShowFolder(), spec, problems);
+            auto* fallback = dynamic_cast<PedalEqBlock*> (missingChain->getBlocks().front().get());
+            expect (fallback != nullptr && fallback->getLatestCapture() == nullptr);
+            expectEquals (fallback->getLoadedFileInfo(), juce::String ("Capture not on this computer: DSP only"));
+
+            PatchModel keep = missing;
+            captureChain (*missingChain, keep, ShowFolder());
+            expectEquals (keep.mainLane().blocks.front().file, juce::String ("models/not here.nam"), "what was asked for is kept");
+            expectEquals (ShowFolder::subfolderFor (PedalEqBlock::typeId), juce::String ("models"), "copied into the show with the amps' captures");
+        }
     }
 };
 

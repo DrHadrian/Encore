@@ -590,6 +590,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/ModuleBaseTests.cpp
         Tests/ModuleDspTests.cpp
         Tests/ModuleTypeTests.cpp
+        Tests/PedalEqCaptureTests.cpp
         Tests/PedalEqTests.cpp
         Tests/RenderTests.cpp
         Tests/ModelTests.cpp

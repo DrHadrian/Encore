@@ -3,11 +3,14 @@
 
 #pragma once
 
+#include "engine/core/BackgroundJobs.h"
 #include "engine/core/Block.h"
+#include "engine/core/RealtimeHandover.h"
 #include "engine/dsp/Crossfade.h"
 #include "engine/dsp/FilterBand.h"
 #include "engine/dsp/Oversampler.h"
 #include "engine/dsp/SoftClip.h"
+#include "engine/nam/NamModel.h"
 
 #include <atomic>
 
@@ -76,7 +79,61 @@ public:
     static constexpr int clipWarmupSamples = 128;    // history run through the clip stage before it comes in
     static constexpr double clipFadeSeconds = 0.03;  // in/out of the path: a latency change, so a longer fade
 
+    //== The character capture (EQ-PLAN §3.1, MODULES-PLAN §4) ================
+    /** A NAM capture of a real pedal's buffer and op-amp stages, played after
+        Input and before the bands. One copy per side (Adrian, 27 Nov: one per
+        side for now; a setting later), so stereo stays stereo; mono uses the
+        left. Empty = "DSP only". Built off the audio thread (loadCapture). */
+    struct Capture
+    {
+        juce::File file;
+        std::array<std::unique_ptr<NamModel>, maxChannels> sides;
+
+        /** The gain that makes the capture's output as loud as its input
+            (pink noise at -18 dBFS RMS, measured when loaded): "Level-matched". */
+        float matchGain = 1.0f;
+
+        bool isEmpty() const noexcept { return sides[0] == nullptr; }
+        int getLatencySamples() const noexcept { return isEmpty() ? 0 : sides[0]->getLatencySamples(); }
+        double getCpuLoadPerSide() const noexcept { return isEmpty() ? 0.0 : sides[0]->getMeasuredCpuLoad(); }
+
+        /** For a new sample rate or buffer size. Off the audio thread. */
+        void prepare (const ProcessSpec& spec);
+    };
+
+    static constexpr double captureFadeSeconds = 0.03;
+    static constexpr float captureMatchLevelDb = -18.0f;
+
+    /** Loads a capture (both sides, prepared and measured). Background or
+        message thread, never the audio thread: it parses, allocates and
+        prewarms. Null with the reason if it can't. */
+    static std::unique_ptr<Capture> loadCapture (const juce::File& file, const ProcessSpec& spec, juce::String& error);
+
+    /** Hands a capture (or an empty one: DSP only) to the audio thread; it
+        crossfades 30 ms from the old one. Message thread. */
+    void installCapture (std::unique_ptr<Capture> capture);
+
+    /** For a block that isn't playing yet: active from the first sample. */
+    void installCaptureBeforePlaying (std::unique_ptr<Capture> capture);
+
+    /** Back to DSP only (message thread). */
+    void unloadCapture() { installCapture (std::make_unique<Capture>()); }
+
+    /** The capture the UI should describe (newest installed), or null when DSP only. */
+    const Capture* getLatestCapture() const noexcept;
+
+    /** Captures still in memory (playing, fading or waiting to be freed). */
+    int getNumCapturesInMemory() const { return captures.getNumOwned(); }
+
+    //== Block: files (message thread) =========================================
+    const FileSlot* getFileSlot() const noexcept override { return &fileSlot; }
+    void loadFileAsync (const juce::File& file, std::function<void (juce::String)> onDone) override;
+    juce::File getLoadedFile() const override;
+    juce::String getLoadedFileInfo() const override;
+    void collectGarbage() override { captures.collectGarbage(); }
+
     PedalEqBlock();
+    ~PedalEqBlock() override;
 
     /** The 9 V clip took off more than 1 dB within the last 300 ms: the UI
         shows HOT next to Level (U1). Any thread. */
@@ -113,6 +170,8 @@ private:
 
     // Audio thread.
     void processInput (float* const* channels, int numChannels, int numSamples) noexcept;
+    void processCapture (float* const* channels, int numChannels, int numSamples) noexcept;
+    void runCapture (const Capture* capture, float* const* channels, int numChannels, int numSamples, bool smoothedGain) noexcept;
     void processBands (float* const* channels, int numChannels, int numSamples) noexcept;
     void processLevel (float* const* channels, int numChannels, int numSamples) noexcept;
     void processClip (float* const* channels, int numChannels, int numSamples) noexcept;
@@ -124,6 +183,16 @@ private:
     // The Input switch moves its gain over 10 ms: for a gain, the same as a
     // crossfade between the two settings, at no extra cost.
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> inputGain;
+
+    // The capture: handed over lock-free, crossfaded on a swap, freed on
+    // the message thread (collectGarbage), as the amp's models are.
+    const FileSlot fileSlot { juce::String (juce::CharPointer_UTF8 ("Load capture\xe2\x80\xa6")), "*.nam" };
+    RealtimeHandover<Capture, 8> captures;
+    Capture* currentCapture = nullptr;
+    Capture* fadingCapture = nullptr;
+    dsp::Crossfade captureFade;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> captureGain;
+    juce::SharedResourcePointer<BackgroundJobs> jobs;
 
     // The 9 V clip stage: oversampled soft clip, then a DC blocker. Only in
     // the path when it can work (or Real pedal clipping is on); going in or

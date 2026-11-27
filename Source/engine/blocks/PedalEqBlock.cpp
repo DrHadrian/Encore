@@ -3,6 +3,8 @@
 
 #include "engine/blocks/PedalEqBlock.h"
 
+#include <juce_events/juce_events.h>
+
 namespace encore
 {
 
@@ -59,6 +61,8 @@ PedalEqBlock::PedalEqBlock()
 {
 }
 
+PedalEqBlock::~PedalEqBlock() = default;
+
 std::array<Parameter*, PedalEqBlock::numBands> PedalEqBlock::addBands()
 {
     // The sliders lead the parameter list, as on the pedal (left to right), then Level.
@@ -114,7 +118,154 @@ std::array<dsp::FilterBandDesign, PedalEqBlock::numBands> PedalEqBlock::getBandD
 
 int PedalEqBlock::getLatencySamples() const noexcept
 {
-    return isClipInPath() ? oversampler.getLatencySamples() : 0;
+    const auto* capture = getLatestCapture();
+    return (isClipInPath() ? oversampler.getLatencySamples() : 0) + (capture != nullptr ? capture->getLatencySamples() : 0);
+}
+
+//== The character capture =====================================================
+void PedalEqBlock::Capture::prepare (const ProcessSpec& spec)
+{
+    for (auto& side : sides)
+        if (side != nullptr && ! (side->getSpec() == spec))
+            side->prepare (spec);
+}
+
+std::unique_ptr<PedalEqBlock::Capture> PedalEqBlock::loadCapture (const juce::File& file, const ProcessSpec& spec, juce::String& error)
+{
+    auto capture = std::make_unique<Capture>();
+    capture->file = file;
+
+    // One copy per side: a capture is mono and has state of its own.
+    for (auto& side : capture->sides)
+    {
+        side = NamModel::load (file, spec, error);
+
+        if (side == nullptr)
+            return nullptr;
+    }
+
+    // Level match: pink-ish noise at -18 dBFS RMS through one side, then
+    // that side is reset so it starts clean.
+    const auto rate = spec.sampleRate > 0.0 ? spec.sampleRate : 48000.0;
+    const auto block = juce::jmax (1, spec.maxBlockSize);
+    const auto length = (int) (0.5 * rate);
+    std::vector<float> noise ((size_t) length), out ((size_t) length);
+    juce::Random random (0x9e7);
+    auto lowpass = 0.0f;
+
+    for (auto& x : noise)
+    {
+        lowpass += 0.25f * ((random.nextFloat() * 2.0f - 1.0f) - lowpass);   // a gentle tilt towards guitar-like content
+        x = lowpass;
+    }
+
+    const auto rmsOf = [] (const std::vector<float>& v, size_t from)
+    {
+        double sum = 0.0;
+
+        for (auto i = from; i < v.size(); ++i)
+            sum += (double) v[i] * v[i];
+
+        return std::sqrt (sum / (double) juce::jmax ((size_t) 1, v.size() - from));
+    };
+
+    const auto target = juce::Decibels::decibelsToGain ((double) captureMatchLevelDb);
+    const auto scale = (float) (target / juce::jmax (1.0e-9, rmsOf (noise, 0)));
+
+    for (auto& x : noise)
+        x *= scale;
+
+    for (int start = 0; start < length; start += block)
+    {
+        const auto n = juce::jmin (block, length - start);
+        capture->sides[0]->process (noise.data() + start, out.data() + start, n);
+    }
+
+    const auto settled = (size_t) length / 4;
+    const auto outRms = rmsOf (out, settled);
+    capture->matchGain = outRms > 1.0e-9 ? (float) juce::jlimit (0.01, 100.0, rmsOf (noise, settled) / outRms) : 1.0f;
+    capture->sides[0]->reset();   // clean state again
+    return capture;
+}
+
+void PedalEqBlock::installCapture (std::unique_ptr<Capture> capture)
+{
+    jassert (capture != nullptr);
+
+    // The device may have changed rate while it was loading.
+    if (const auto& spec = getPreparedSpec(); spec.isValid())
+        capture->prepare (spec);
+
+    captures.publish (std::move (capture));
+}
+
+void PedalEqBlock::installCaptureBeforePlaying (std::unique_ptr<Capture> capture)
+{
+    jassert (capture != nullptr && currentCapture == nullptr && fadingCapture == nullptr);
+
+    if (const auto& spec = getPreparedSpec(); spec.isValid())
+        capture->prepare (spec);
+
+    // Nothing is processing this block yet, so taking it straight off the
+    // queue here (instead of on the audio thread) is safe.
+    captures.publish (std::move (capture));
+    currentCapture = captures.takeNext();
+}
+
+const PedalEqBlock::Capture* PedalEqBlock::getLatestCapture() const noexcept
+{
+    const auto* latest = captures.getLatest();
+    return latest != nullptr && ! latest->isEmpty() ? latest : nullptr;
+}
+
+void PedalEqBlock::loadFileAsync (const juce::File& file, std::function<void (juce::String)> onDone)
+{
+    const auto spec = getPreparedSpec();
+    juce::WeakReference<Block> weakThis (this);
+
+    // Parsing, prewarming and measuring take up to a second: never on the
+    // message thread, never on the audio thread.
+    jobs->add ([file, spec, weakThis, onDone]
+    {
+        juce::String error;
+        auto loaded = loadCapture (file, spec.isValid() ? spec : ProcessSpec { 48000.0, 512 }, error);
+        auto holder = std::make_shared<std::unique_ptr<Capture>> (std::move (loaded));
+
+        juce::MessageManager::callAsync ([weakThis, holder, error, onDone]
+        {
+            if (auto* block = dynamic_cast<PedalEqBlock*> (weakThis.get()))
+                if (*holder != nullptr)
+                    block->installCapture (std::move (*holder));
+
+            if (onDone != nullptr)
+                onDone (error);
+        });
+    });
+}
+
+juce::File PedalEqBlock::getLoadedFile() const
+{
+    const auto* capture = getLatestCapture();
+    return capture != nullptr ? capture->file : juce::File();
+}
+
+juce::String PedalEqBlock::getLoadedFileInfo() const
+{
+    const auto* capture = getLatestCapture();
+
+    if (capture == nullptr)
+        return getRequestedFile().isNotEmpty() ? "Capture not on this computer: DSP only" : "DSP only";
+
+    juce::String info;
+    info << capture->file.getFileNameWithoutExtension();
+
+    if (capture->sides[0]->isResampling())
+        info << ", " << juce::String (capture->sides[0]->getModelRate() / 1000.0, 1) << " kHz (converted)";
+
+    if (const auto cpu = capture->getCpuLoadPerSide(); cpu > 0.0)
+        info << ", ~" << juce::String (cpu * 100.0, 1) << " % CPU per side";
+
+    return info;
 }
 
 //==============================================================================
@@ -126,6 +277,11 @@ void PedalEqBlock::prepareBlock (const ProcessSpec& spec)
 
     oversampler.setQuality ((dsp::Quality) quality.getChoiceIndex());
     oversampler.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate);
+
+    // Audio is stopped: re-prepare every capture we own (playing or waiting).
+    captures.forEachOwned ([&spec] (Capture& c) { c.prepare (spec); });
+    captureFade.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate, captureFadeSeconds);
+    captureGain.reset (spec.sampleRate, dsp::Crossfade::defaultSeconds);
     clipFade.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate, clipFadeSeconds);
     dcBlocker.setDesign (dsp::FilterBandDesign::make ({ dsp::FilterShape::lowCut, dcBlockerHz, 0.0, 0.7071, 6 }, spec.sampleRate));
     hotHoldSamples = juce::roundToInt (hotHoldSeconds * spec.sampleRate);
@@ -148,6 +304,7 @@ void PedalEqBlock::resetBlock() noexcept
 
     qFade.reset();
     inputGain.setCurrentAndTargetValue (inputGainFor ((Input) input.getChoiceIndex()));
+    captureFade.reset();
 
     oversampler.reset();
     dcBlocker.reset();
@@ -314,6 +471,87 @@ void PedalEqBlock::processInput (float* const* channels, int numChannels, int nu
     }
 }
 
+void PedalEqBlock::runCapture (const Capture* capture, float* const* channels, int numChannels, int numSamples,
+                               bool smoothedGain) noexcept
+{
+    if (capture == nullptr || capture->isEmpty())
+        return;   // DSP only: nothing touched
+
+    for (int ch = 0; ch < numChannels; ++ch)
+        capture->sides[(size_t) ch]->process (channels[ch], channels[ch], numSamples);
+
+    const auto matched = captureLevel.getChoiceIndex() == (int) CaptureLevel::levelMatched;
+
+    if (! smoothedGain)
+    {
+        // The capture fading out keeps its own gain.
+        if (matched)
+            for (int ch = 0; ch < numChannels; ++ch)
+                juce::FloatVectorOperations::multiply (channels[ch], capture->matchGain, numSamples);
+
+        return;
+    }
+
+    // As captured <-> Level-matched moves the gain over 10 ms (a crossfade, for a gain).
+    captureGain.setTargetValue (matched ? capture->matchGain : 1.0f);
+
+    if (! captureGain.isSmoothing())
+    {
+        if (const auto g = captureGain.getCurrentValue(); ! juce::exactlyEqual (g, 1.0f))
+            for (int ch = 0; ch < numChannels; ++ch)
+                juce::FloatVectorOperations::multiply (channels[ch], g, numSamples);
+
+        return;
+    }
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto g = captureGain.getNextValue();
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            channels[ch][i] *= g;
+    }
+}
+
+void PedalEqBlock::processCapture (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    captureLevel.skip (numSamples);
+
+    // A new capture (or DSP only) arrived: crossfade 30 ms from what was playing.
+    while (auto* next = captures.takeNext())
+    {
+        if (captureFade.isActive() && fadingCapture != nullptr)
+            captures.retire (fadingCapture);   // a third while fading: cut the oldest
+
+        fadingCapture = currentCapture;
+        currentCapture = next;
+        captureGain.setCurrentAndTargetValue (captureLevel.getChoiceIndex() == (int) CaptureLevel::levelMatched
+                                                  && ! next->isEmpty() ? next->matchGain : 1.0f);
+        captureFade.start();
+    }
+
+    const auto fading = captureFade.isActive();
+
+    if (fading)
+    {
+        captureFade.copyInput (channels, numChannels, numSamples);
+        runCapture (fadingCapture, captureFade.oldChannels(), numChannels, numSamples, false);
+    }
+
+    runCapture (currentCapture, channels, numChannels, numSamples, true);
+
+    if (fading)
+    {
+        captureFade.mix (channels, numChannels, numSamples);
+
+        if (! captureFade.isActive() && fadingCapture != nullptr)
+        {
+            captures.retire (fadingCapture);   // freed later on the message thread
+            fadingCapture = nullptr;
+        }
+    }
+}
+
 void PedalEqBlock::processLevel (float* const* channels, int numChannels, int numSamples) noexcept
 {
     if (! level.isSmoothing())
@@ -401,6 +639,7 @@ void PedalEqBlock::processBlock (float* const* channels, int numChannels, int nu
 {
     // EQ-PLAN §3.1: Input -> character capture -> 7 bands -> soft clip -> Level.
     processInput (channels, numChannels, numSamples);
+    processCapture (channels, numChannels, numSamples);
     processBands (channels, numChannels, numSamples);
     processClip (channels, numChannels, numSamples);
     processLevel (channels, numChannels, numSamples);
