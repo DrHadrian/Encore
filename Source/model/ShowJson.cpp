@@ -146,6 +146,19 @@ namespace
             set (o, "refs", refs);
         }
 
+        if (b.compare.isUsed())
+        {
+            auto compare = object();
+            auto other = object();
+
+            for (auto& [paramId, value] : b.compare.other)
+                set (other, juce::Identifier (paramId), value);
+
+            set (compare, "playing", juce::String (b.compare.bPlaying ? "B" : "A"));
+            set (compare, "other", other);
+            set (o, "compare", compare);
+        }
+
         return o;
     }
 
@@ -184,6 +197,16 @@ namespace
             for (auto& r : refs->getProperties())
                 if (r.value.isString() && r.value.toString().isNotEmpty())
                     b.refs[r.name.toString()] = r.value.toString();
+
+        // A / B: FX Units only (an old block that somehow carries it ignores it).
+        if (const auto compare = get (o, "compare"); compare.isObject() && isNewModuleBlockType (b.type))
+        {
+            if (auto* other = get (compare, "other").getDynamicObject())
+                for (auto& p : other->getProperties())
+                    b.compare.other[p.name.toString()] = (float) (double) p.value;
+
+            b.compare.bPlaying = str (compare, "playing") == "B" && b.compare.isUsed();
+        }
 
         return b;
     }

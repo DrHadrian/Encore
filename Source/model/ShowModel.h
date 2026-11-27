@@ -85,6 +85,21 @@ struct BlockModel
         of a preset: a preset never sets them. Saved from schema 5. */
     std::map<juce::String, juce::String> refs;
 
+    /** A / B (MODULES-PLAN §3.1, B3): the other set of the block's parameter
+        values, and which set `params` is. Only values: never on/off, stomp,
+        expression or refs. Empty = A/B never used, and nothing extra is saved.
+        FX Units only (they need schema 5 anyway); ignored on other blocks. */
+    struct Compare
+    {
+        std::map<juce::String, float> other;   // the set that isn't playing
+        bool bPlaying = false;                 // params is set B (else A)
+
+        bool isUsed() const noexcept { return ! other.empty(); }
+        bool operator== (const Compare&) const = default;
+    };
+
+    Compare compare;
+
     bool operator== (const BlockModel&) const = default;
 };
 
