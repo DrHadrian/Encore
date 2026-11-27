@@ -793,6 +793,36 @@ namespace
     {
         return b.type == splitBlockType || b.type == mergeBlockType;
     }
+
+    juce::StringArray blockIds (const PatchModel& patch)
+    {
+        juce::StringArray ids;
+
+        for (const auto& lane : patch.lanes)
+            for (const auto& b : lane.blocks)
+                ids.add (b.id);
+
+        return ids;
+    }
+
+    /** B2: blocks that pointed at a removed block (a follower's linkTo, a
+        gate's keyBlock) let go of it, in the same edit (so one undo step). */
+    void dropRefsToRemoved (PatchModel& patch, const juce::StringArray& before)
+    {
+        const auto after = blockIds (patch);
+
+        for (auto& lane : patch.lanes)
+            for (auto& b : lane.blocks)
+                for (auto it = b.refs.begin(); it != b.refs.end();)
+                {
+                    const auto pointsAtBlock = it->first == "linkTo" || it->first == "keyBlock";
+
+                    if (pointsAtBlock && before.contains (it->second) && ! after.contains (it->second))
+                        it = b.refs.erase (it);
+                    else
+                        ++it;
+                }
+    }
 }
 
 void ShowSession::addBlock (const juce::String& typeId, int index, int lane)
@@ -845,6 +875,7 @@ void ShowSession::removeBlock (int index)
         return;
 
     auto& blocks = patch->lanes[(size_t) lane].blocks;
+    const auto idsBefore = blockIds (*patch);
 
     // The split or the merge: the split goes (path A stays, path B with it).
     if (isSplitOrMerge (blocks[(size_t) at]))
@@ -852,6 +883,7 @@ void ShowSession::removeBlock (int index)
     else
         blocks.erase (blocks.begin() + at);
 
+    dropRefsToRemoved (*patch, idsBefore);
     changed (true);
     rebuildPatch (activePatchId);
 }
@@ -938,7 +970,9 @@ void ShowSession::removeSplit()
 
     if (auto* patch = findPatchForKey (activePatchId); patch != nullptr && patch->hasSplit())
     {
+        const auto idsBefore = blockIds (*patch);
         encore::removeSplit (*patch);
+        dropRefsToRemoved (*patch, idsBefore);
         changed (true);
         rebuildPatch (activePatchId);
     }

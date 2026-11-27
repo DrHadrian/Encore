@@ -606,6 +606,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/GateKeyTests.cpp
         Tests/StudioGateTests.cpp
         Tests/GateLinkTests.cpp
+        Tests/GateSessionTests.cpp
         Tests/RenderTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
