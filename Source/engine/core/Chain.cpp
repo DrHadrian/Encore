@@ -107,21 +107,13 @@ void Chain::prepare (const ProcessSpec& spec)
         return channels;
     };
 
-    auto sumLatency = [this] (int from, int to)
-    {
-        int total = 0;
-
-        for (int i = from; i < to; ++i)
-            total += blocks[(size_t) i]->getLatencySamples();
-
-        return total;
-    };
-
     if (splitAt < 0)
     {
         outputChannels = run (0, numMain, 1);
         latencyA = latencyB = 0;
         alignmentLimited = false;
+        alignA.prepare (0, spec.sampleRate);
+        alignB.prepare (0, spec.sampleRate);
     }
     else
     {
@@ -133,13 +125,13 @@ void Chain::prepare (const ProcessSpec& spec)
         channelsOut[(size_t) mergeAt] = 2;
         outputChannels = run (mergeAt + 1, numMain, 2);
 
-        latencyA = sumLatency (splitAt + 1, mergeAt);
-        latencyB = sumLatency (numMain, (int) blocks.size());
-        const auto difference = std::abs (latencyB - latencyA);
-        alignmentLimited = difference > maxAlignmentSamples;
-        const auto align = juce::jmin (difference, maxAlignmentSamples);
-        alignA.prepare (latencyB > latencyA ? align : 0, spec.maxBlockSize);
-        alignB.prepare (latencyA > latencyB ? align : 0, spec.maxBlockSize);
+        // Sized for the most that can be lined up, so a latency that changes
+        // while playing only moves the delay (updateAlignment).
+        alignA.prepare (maxAlignmentSamples, spec.sampleRate, alignmentFadeSeconds);
+        alignB.prepare (maxAlignmentSamples, spec.sampleRate, alignmentFadeSeconds);
+        updateAlignment();
+        alignA.setDelayNow (alignA.getDelay());
+        alignB.setDelayNow (alignB.getDelay());
     }
 
     pathB.setSize (Block::maxChannels, spec.maxBlockSize, false, true, false);
@@ -166,47 +158,31 @@ void Chain::prepare (const ProcessSpec& spec)
         saveSnapshot();
 }
 
-void Chain::Alignment::prepare (int samples, int maxBlockSize)
+int Chain::sumLatency (int from, int to) const noexcept
 {
-    delay = juce::jmax (0, samples);
+    int total = 0;
 
-    for (auto& line : lines)
-        line.assign (delay > 0 ? (size_t) (delay + maxBlockSize + 1) : 0, 0.0f);
+    for (int i = from; i < to; ++i)
+        total += juce::jmax (0, blocks[(size_t) i]->getLatencySamples());
 
-    writeIndex = 0;
+    return total;
 }
 
-void Chain::Alignment::reset() noexcept
+void Chain::updateAlignment() noexcept
 {
-    for (auto& line : lines)
-        std::fill (line.begin(), line.end(), 0.0f);
-
-    writeIndex = 0;
-}
-
-void Chain::Alignment::process (float* const* channels, int numChannels, int numSamples) noexcept
-{
-    if (delay <= 0)
+    if (splitAt < 0)
         return;
 
-    const auto size = (int) lines[0].size();
+    const auto a = sumLatency (splitAt + 1, mergeAt);
+    const auto b = sumLatency (numMain, (int) blocks.size());
+    const auto difference = std::abs (b - a);
+    const auto align = juce::jmin (difference, maxAlignmentSamples);
 
-    for (int i = 0; i < numSamples; ++i)
-    {
-        auto readIndex = writeIndex - delay;
-
-        if (readIndex < 0)
-            readIndex += size;
-
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            auto& line = lines[(size_t) ch];
-            line[(size_t) writeIndex] = channels[ch][i];
-            channels[ch][i] = line[(size_t) readIndex];
-        }
-
-        writeIndex = writeIndex + 1 < size ? writeIndex + 1 : 0;
-    }
+    latencyA.store (a, std::memory_order_relaxed);
+    latencyB.store (b, std::memory_order_relaxed);
+    alignmentLimited.store (difference > maxAlignmentSamples, std::memory_order_relaxed);
+    alignA.setDelay (b > a ? align : 0);
+    alignB.setDelay (a > b ? align : 0);
 }
 
 void Chain::saveSnapshot()
@@ -392,7 +368,9 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) 
             pathBGain[(size_t) i] = pathBFade.getNextValue();
     }
 
-    // Line the shorter path up with the longer one.
+    // Line the shorter path up with the longer one (following any latency
+    // that changed in this buffer, crossfaded).
+    updateAlignment();
     alignA.process (channels, aChannels, numSamples);
 
     if (! pathBAsleep)
@@ -420,7 +398,10 @@ int Chain::getLatencySamples() const noexcept
         if (splitAt < 0 || i < splitAt || i > mergeAt)
             total += blocks[(size_t) i]->getLatencySamples();
 
-    return total + (splitAt >= 0 ? juce::jmax (latencyA, latencyB) : 0);
+    if (splitAt >= 0)
+        total += juce::jmax (sumLatency (splitAt + 1, mergeAt), sumLatency (numMain, (int) blocks.size()));
+
+    return total;
 }
 
 } // namespace encore

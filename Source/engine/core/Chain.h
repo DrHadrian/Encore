@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "engine/core/Block.h"
+#include "engine/dsp/FadingDelay.h"
 #include "model/Routing.h"
 
 namespace encore
@@ -57,12 +58,19 @@ public:
     int getMergeIndex() const noexcept      { return mergeAt; }
 
     /** How much later path B is than path A, in samples (negative: A is later),
-        and whether that was more than can be lined up (maxAlignmentSamples). */
-    int getPathLatencyDifference() const noexcept { return latencyB - latencyA; }
-    bool isAlignmentLimited() const noexcept      { return alignmentLimited; }
+        and whether that was more than can be lined up (maxAlignmentSamples).
+        Follows the blocks' latency while playing (a Pedal EQ's clip stage
+        coming in, a gate's look-ahead): any thread. */
+    int getPathLatencyDifference() const noexcept { return latencyB.load (std::memory_order_relaxed) - latencyA.load (std::memory_order_relaxed); }
+    bool isAlignmentLimited() const noexcept      { return alignmentLimited.load (std::memory_order_relaxed); }
 
     static constexpr int maxAlignmentSamples = 8192;
     static constexpr double pathBFadeSeconds = 0.02;
+
+    /** When a path's latency changes while playing, the alignment delay moves
+        to the new difference with a crossfade this long (as the Pedal EQ's
+        clip stage fades in), never a jump. */
+    static constexpr double alignmentFadeSeconds = 0.03;
 
     const std::vector<std::unique_ptr<Block>>& getBlocks() const noexcept { return blocks; }
     Block* findBlock (const juce::String& typeId) const noexcept;
@@ -149,16 +157,9 @@ public:
     juce::String label;
 
 private:
-    /** A fixed delay for lining up one path with the other (2 channels). */
-    struct Alignment
-    {
-        std::array<std::vector<float>, 2> lines;
-        int delay = 0, writeIndex = 0;
-
-        void prepare (int samples, int maxBlockSize);
-        void reset() noexcept;
-        void process (float* const* channels, int numChannels, int numSamples) noexcept;
-    };
+    /** Audio thread: re-reads both paths' latency and moves the alignment. */
+    void updateAlignment() noexcept;
+    int sumLatency (int from, int to) const noexcept;
 
     int processRange (int from, int to, float* const* channels, int numChannels, int numSamples,
                       const ProcessContext& context) noexcept;
@@ -167,9 +168,9 @@ private:
     int numMain = 0;                       // blocks [0, numMain) are the main lane, the rest path B
     int splitAt = -1, mergeAt = -1;
     MergeBlock* merge = nullptr;
-    int latencyA = 0, latencyB = 0;
-    bool alignmentLimited = false;
-    Alignment alignA, alignB;
+    std::atomic<int> latencyA { 0 }, latencyB { 0 };
+    std::atomic<bool> alignmentLimited { false };
+    dsp::FadingDelay alignA, alignB;       // each delays its path to line up with the other
     juce::AudioBuffer<float> pathB;        // path B's own channels
     std::vector<float> pathBGain;          // its fade, per sample
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> pathBFade { 1.0f };
