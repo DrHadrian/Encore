@@ -35,6 +35,12 @@ public:
         R"({ "g100": 10, "g200": -10, "g400": 10, "g800": -10, "g1k6": 10, "g3k2": -10, "g6k4": 10, "quality": "Live" })";
     static constexpr double pedalEqTargetPercent = 0.5;
 
+    // The gates' plan targets (GATE-PLAN §7, Proposed): the S2 <= 0.2 %; the X4
+    // with its key filter (HP 100 Hz, LP 5 kHz) and look-ahead 1 ms <= 0.4 %.
+    static constexpr const char* studioGateTargetCase =
+        R"({ "keyHp": 100, "keyLp": 5000, "lookahead": "On", "lookaheadTime": 1 })";
+    static constexpr double pedalGateTargetPercent = 0.2, studioGateTargetPercent = 0.4;
+
     struct Line
     {
         juce::String name;
@@ -84,7 +90,7 @@ public:
         stereo.copyFrom (0, 0, input.data(), (int) input.size());
         stereo.copyFrom (1, 0, input.data(), (int) input.size());
 
-        struct Case { const char* label; const char* type; const char* settings; bool stereo; };
+        struct Case { const char* label; const char* type; const char* settings; bool stereo; double target = 0.0; };
         const Case cases[] = {
             { "engineProbe: null (bit-exact)",              "engineProbe", "{}", false },
             { "engineProbe: bell",                          "engineProbe", R"({ "shape": "Bell", "gain": 6, "freq": 800, "q": 1 })", false },
@@ -94,10 +100,19 @@ public:
             { "engineProbe: drive, High (4x)",              "engineProbe", R"({ "drive": 12, "quality": "High" })", false },
             { "engineProbe: drive, Max (8x)",               "engineProbe", R"({ "drive": 12, "quality": "Max" })", false },
             { "pedalEq: flat (bit-exact)",                  "pedalEq",     "{}", false },
-            { "pedalEq: +/-10, Classic, Live (clip in)",    "pedalEq",     pedalEqTargetCase, false },
+            { "pedalEq: +/-10, Classic, Live (clip in)",    "pedalEq",     pedalEqTargetCase, false, pedalEqTargetPercent },
             { "pedalEq: +/-10, Classic, High",              "pedalEq",     R"({ "g100": 10, "g200": -10, "g400": 10, "g800": -10, "g1k6": 10, "g3k2": -10, "g6k4": 10, "quality": "High" })", false },
             { "pedalEq: +/-10, Classic, Max",               "pedalEq",     R"({ "g100": 10, "g200": -10, "g400": 10, "g800": -10, "g1k6": 10, "g3k2": -10, "g6k4": 10, "quality": "Max" })", false },
             { "pedalEq: +/-10, Live, stereo",               "pedalEq",     pedalEqTargetCase, true },
+            { "pedalGate: defaults (Hard)",          "pedalGate",   "{}", false, pedalGateTargetPercent },
+            { "pedalGate: Soft, Detect Guitar",             "pedalGate",   R"({ "soft": "Soft", "detect": "Guitar" })", false },
+            { "pedalGate: stereo",                          "pedalGate",   "{}", true },
+            { "studioGate: defaults (Gate)",                "studioGate",  "{}", false },
+            { "studioGate: key filter + look-ahead 1 ms",   "studioGate",  studioGateTargetCase, false, studioGateTargetPercent },
+            { "studioGate: Smart",                          "studioGate",  R"({ "mode": "Smart" })", false },
+            { "studioGate: Expander, RMS",                  "studioGate",  R"({ "mode": "Expander", "detector": "RMS" })", false },
+            { "studioGate: key filter + look-ahead, stereo independent", "studioGate",
+              R"({ "keyHp": 100, "keyLp": 5000, "lookahead": "On", "lookaheadTime": 1, "stereoLink": "Independent" })", true },
             { "eq (today's EQ, for comparison)",            "eq",          R"({ "bass": 3, "mid": -3, "treble": 2 })", false },
             { "gate (today's gate, for comparison)",        "gate",        "{}", false },
             { "delay (today's delay, for comparison)",      "delay",       "{}", false },
@@ -114,11 +129,11 @@ public:
             {
                 lines.push_back ({ juce::String ("block ") + c.label, r.cpu[0].averageMicros, r.cpu[0].worstMicros });
 
-                // The plan's target (EQ-PLAN, Proposed): the Pedal EQ <= 0.5 % at Live.
-                if (c.settings == pedalEqTargetCase && ! c.stereo)
-                    targets << "Target: pedalEq +/-10, Classic, Live <= " << juce::String (pedalEqTargetPercent, 1) << " % of the buffer: "
+                // The plans' targets (EQ-PLAN, GATE-PLAN §7; Proposed).
+                if (c.target > 0.0)
+                    targets << "Target: " << c.label << " <= " << juce::String (c.target, 1) << " % of the buffer: "
                             << juce::String (r.cpu[0].averagePercent, 2) << " % average, "
-                            << (r.cpu[0].averagePercent <= pedalEqTargetPercent ? "within the target" : "OVER THE TARGET") << "\n";
+                            << (r.cpu[0].averagePercent <= c.target ? "within the target" : "OVER THE TARGET") << "\n";
             }
         }
 
