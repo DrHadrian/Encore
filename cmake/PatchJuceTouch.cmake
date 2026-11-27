@@ -1,5 +1,5 @@
 # Encore — a small change to JUCE's Windows window code: touch messages go to
-# Encore before JUCE handles them (the two-finger right click, decision 0062).
+# Encore before JUCE handles them (the two-finger right click, decision 0063).
 #
 # Encore used to hook its window from outside (SetWindowSubclass) for this, and
 # Chrome's Safe Browsing flagged that build as dangerous (20 Nov 2026). Inside

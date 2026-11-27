@@ -5,6 +5,7 @@
 
 #include "engine/blocks/CabIrBlock.h"
 #include "engine/blocks/DelayBlock.h"
+#include "engine/blocks/EngineProbeBlock.h"
 #include "engine/blocks/EqBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
@@ -24,8 +25,29 @@ const std::vector<BlockType>& getBlockTypes()
         { NoiseGateBlock::typeId, "Noise gate" },
         { EqBlock::typeId,        "EQ" },
         { DelayBlock::typeId,     "Delay" },
+        { EngineProbeBlock::typeId, "Engine probe", true, true },
     };
     return types;
+}
+
+bool isNewModuleBlockType (const juce::String& blockType)
+{
+    for (const auto& type : getBlockTypes())
+        if (type.id == blockType)
+            return type.newModule;
+
+    return false;
+}
+
+std::vector<BlockType> getMenuBlockTypes()
+{
+    std::vector<BlockType> menu;
+
+    for (const auto& type : getBlockTypes())
+        if (! type.hidden)
+            menu.push_back (type);
+
+    return menu;
 }
 
 std::unique_ptr<Block> createBlock (const juce::String& typeId)
@@ -35,6 +57,7 @@ std::unique_ptr<Block> createBlock (const juce::String& typeId)
     if (typeId == NoiseGateBlock::typeId) return std::make_unique<NoiseGateBlock>();
     if (typeId == EqBlock::typeId)        return std::make_unique<EqBlock>();
     if (typeId == DelayBlock::typeId)     return std::make_unique<DelayBlock>();
+    if (typeId == EngineProbeBlock::typeId) return std::make_unique<EngineProbeBlock>();
     if (typeId == SplitBlock::typeId)     return std::make_unique<SplitBlock>();
     if (typeId == MergeBlock::typeId)     return std::make_unique<MergeBlock>();
     return nullptr;

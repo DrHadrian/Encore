@@ -81,9 +81,9 @@ jobs:
       matrix:
         include:
           - config: Release
-            targets: Encore EncoreTests
+            targets: Encore EncoreTests EncoreRender
           - config: Debug
-            targets: EncoreTests
+            targets: EncoreTests EncoreRender
     steps:
       - uses: actions/checkout@v4
 
@@ -144,6 +144,23 @@ jobs:
       # Four test processes at once (robustness, plugins, screens, the rest).
       - name: Run the tests (soak ${{ env.ENCORE_SOAK_SECONDS }} s)
         run: ctest --test-dir build --output-on-failure --parallel 4 --timeout ${{ env.ENCORE_TEST_TIMEOUT }}
+
+      # EncoreRender's renders of the generated sweep and the CPU benchmark
+      # (ctest made them above): printed here, and uploaded.
+      - name: EncoreRender report (synthetic sweep) and CPU benchmark
+        if: matrix.config == 'Release'
+        shell: bash
+        run: cat build/render/sweep-probe.txt build/render/sweep-null.txt build/benchmark.txt
+
+      - name: Upload the renders and the benchmark
+        if: matrix.config == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: EncoreRender-sweep-and-benchmark
+          path: |
+            build/render/
+            build/benchmark.txt
+          if-no-files-found: error
 
       - name: Upload Encore.exe
         if: matrix.config == 'Release'

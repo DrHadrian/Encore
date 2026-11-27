@@ -23,6 +23,8 @@ using namespace theme;
 namespace
 {
     constexpr juce::uint32 unlockHoldMs = 1000;    // hold the lock this long to unlock
+    constexpr juce::uint32 armedCueMs = 2000;      // a set-list tap stays armed this long (audit S2)
+    constexpr juce::uint32 tunerHoldMs = 500;      // hold Tuner this long to open it (audit S3: a brush can't mute the show)
     constexpr int handleSize = 14;                 // layout editor: resize grip, px
     constexpr float warningCpu = 0.8f;             // the health widget warns above this load
 
@@ -247,6 +249,7 @@ public:
     }
 
     StageWidget spec;
+    bool held = false;   // an outlined Next / Panic button while pressed
 
     void update (const StageSnapshot& snapshot)
     {
@@ -300,8 +303,20 @@ public:
             }
         }
 
-        for (auto* pedal : pedals)
-            kit::GearPlaceholder::paintPedalShadow (g, pedal->getBounds().toFloat());
+        for (auto& stomp : stompTiles)
+        {
+            const auto radius = (float) size::stompTileRadius * stomp.scale;
+            const auto edge = stomp.on ? size::stompOnBorder : size::stompOffBorder;
+            paint::verticalGradient (g, stomp.tile, stomp.on ? colour::stompOnTop : colour::stompOffTop,
+                                     stomp.on ? colour::stompOnBot : colour::stompOffBot, radius);
+            g.setColour (paint::c (stomp.on ? colour::stompOnEdge : colour::stompOffEdge));
+            g.drawRoundedRectangle (stomp.tile.reduced (edge * 0.5f), radius, edge);
+            g.setGradientFill (juce::ColourGradient::vertical (paint::c (colour::stompFootTop), stomp.foot.getY(),
+                                                               paint::c (colour::stompFootBot), stomp.foot.getBottom()));
+            g.fillEllipse (stomp.foot);
+            g.setColour (paint::c (colour::stompFootEdge));
+            g.drawEllipse (stomp.foot.reduced (0.5f), 1.0f);
+        }
 
         for (auto& row : rowFills)
         {
@@ -309,12 +324,20 @@ public:
             g.fillRoundedRectangle (row, (float) size::rowRadius);
         }
 
+        for (auto& row : armedRows)
+        {
+            g.setColour (paint::c (colour::armedRowFill));
+            g.fillRoundedRectangle (row, (float) size::rowRadius);
+            g.setColour (paint::c (colour::amber));
+            g.drawRoundedRectangle (row.reduced (size::armedRowBorder * 0.5f), (float) size::rowRadius, size::armedRowBorder);
+        }
+
         for (auto& mark : marks)
             drawIcon (g, mark.icon, mark.box, paint::c (mark.colour));
 
         for (auto& run : runs)
         {
-            g.setColour (paint::c (run.colour));
+            g.setColour (paint::c (inkAtRest (run.colour)));
             g.setFont (run.font);
             g.drawSingleLineText (run.text, juce::roundToInt (run.x), juce::roundToInt (run.baseline), run.justification);
         }
@@ -322,10 +345,34 @@ public:
         paintTag (g);
     }
 
+    /** "At rest" Outline (Next / Panic button) and not lit: dark, with a coloured outline. */
+    bool isOutlinedAtRest() const noexcept
+    {
+        const auto canOutline = spec.type == StageWidgetType::nextButton || spec.type == StageWidgetType::panicButton;
+        return canOutline && spec.outlineAtRest && ! held && content.state != State::active;   // pressed, it lights fully
+    }
+
+    /** Text colours at rest: Panic's words in its danger red and its sub line grey. */
+    juce::uint32 inkAtRest (juce::uint32 ink) const noexcept
+    {
+        if (! isOutlinedAtRest() || spec.type != StageWidgetType::panicButton)
+            return ink;
+
+        if (ink == colour::textStrong) return colour::danger;
+        if (ink == colour::panicSub)   return colour::textTertiary;
+        return ink;
+    }
+
     void mouseDown (const juce::MouseEvent& e) override
     {
         if (spec.type == StageWidgetType::lockButton && owner.locked)
             owner.beginUnlockPress();
+
+        if ((spec.type == StageWidgetType::nextButton || spec.type == StageWidgetType::panicButton) && ! e.mods.isPopupMenu() && spec.outlineAtRest)
+        {
+            held = true;   // an outlined button lights fully while pressed
+            repaint();
+        }
 
         // Panic always works, even locked: it's the emergency stop.
         if (spec.type == StageWidgetType::panicButton && ! e.mods.isPopupMenu())
@@ -343,7 +390,13 @@ public:
         if (type == StageWidgetType::nextButton)           owner.session.next();
         else if (type == StageWidgetType::previousButton)  owner.session.previous();
         else if (type == StageWidgetType::lockButton)      owner.setLocked (true);
-        else if (type == StageWidgetType::tuner)           owner.engine.setTunerOpen (! owner.engine.isTunerOpen());
+        else if (type == StageWidgetType::tuner)
+        {
+            if (owner.engine.isTunerOpen())
+                owner.engine.setTunerOpen (false);   // a tap closes it
+            else
+                owner.beginTunerHold();              // a hold opens it (audit S3)
+        }
         else if (type == StageWidgetType::setList || type == StageWidgetType::stomps)
         {
             for (auto& [area, number] : hits)
@@ -352,7 +405,7 @@ public:
                     continue;
 
                 if (type == StageWidgetType::setList)
-                    owner.session.goToCue (number);
+                    owner.tapCue (number);   // a first tap arms it, a second goes (audit S2)
                 else if (auto* chain = owner.engine.getChain())
                     chain->toggleStomp (number);
 
@@ -365,6 +418,15 @@ public:
     {
         if (spec.type == StageWidgetType::lockButton)
             owner.endUnlockPress();
+
+        if (spec.type == StageWidgetType::tuner)
+            owner.endTunerHold();
+
+        if (held)
+        {
+            held = false;
+            repaint();
+        }
     }
 
 private:
@@ -375,6 +437,7 @@ private:
         int index = -1;            // cue index; -1 for a heading
         juce::String number, name, patch;
         bool current = false, played = false;
+        bool armed = false;        // tapped once: "Tap again to go to 6" (audit S2)
         bool operator== (const Row&) const = default;
     };
 
@@ -636,7 +699,7 @@ private:
                 all.push_back ({ -1, {}, r.item->name.toUpperCase(), {}, false, false });
             else if (r.cueIndex >= 0)
                 all.push_back ({ r.cueIndex, r.item->number, r.item->name, patchNameFor (show, *r.item),
-                                 r.cueIndex == index, r.cueIndex < index });
+                                 r.cueIndex == index, r.cueIndex < index, r.cueIndex == owner.armedCue });
         }
 
         if (all.empty())
@@ -722,6 +785,8 @@ private:
         bars.clear();
         hits.clear();
         rowFills.clear();
+        armedRows.clear();
+        stompTiles.clear();
 
         const auto W = (float) getWidth(), H = (float) getHeight();
         const auto s = scale(), k = rowScale();
@@ -823,7 +888,7 @@ private:
                 const auto subFont = fitted (type::healthSub, content.sub, k, width);
                 const auto mainFont = fitted (type::healthMain, content.main, k, width, bottom - lineOf (subFont) - tagBottom());
                 const auto alert = content.state == State::alert;
-                addRun (content.sub, subFont, alert ? colour::lostWidgetSub : content.state == State::warning ? colour::amber : colour::healthy,
+                addRun (content.sub, subFont, alert ? colour::lostWidgetSub : content.state == State::warning ? colour::amber : colour::textTertiary,
                         left, bottom - subFont.getDescent());
                 addRun (content.main, mainFont, alert ? colour::textStrong : colour::text,
                         left, bottom - lineOf (subFont) - mainFont.getDescent());
@@ -950,8 +1015,42 @@ private:
         }
     }
 
+    /** On the live Stage (BStage, 19 Nov) there are no name tags: Patch, Next cue
+        and Cue note carry a heading instead ("PATCH", "NEXT", the bar mark or
+        "NOTE"). The tags stay in the layout editor, where they name the widgets. */
+    juce::String headingFor() const
+    {
+        switch (spec.type)
+        {
+            case StageWidgetType::patchName: return "PATCH";
+            case StageWidgetType::nextCue:   return "NEXT";
+            case StageWidgetType::cueNote:   return content.sub.isNotEmpty() ? content.sub.toUpperCase() : juce::String ("NOTE");
+            default:                         return {};
+        }
+    }
+
     void layOutTag()
     {
+        if (! owner.isEditingLayout())
+        {
+            tagLines.clear();
+            heading = headingFor();
+            const auto s = scale();
+
+            if (heading.isEmpty())
+            {
+                tagBox = { 1.0f, 1.0f, 0.0f, 0.0f };   // content starts under the border
+                return;
+            }
+
+            headingFont = fontFor (type::widgetHeading, pxOf (type::widgetHeading, s));
+            tagBox = { 1.0f + (float) size::widgetTextX * s, 1.0f + (float) size::widgetHeadingY * s,
+                       juce::jmax (0.0f, (float) getWidth() - 2.0f - 2.0f * (float) size::widgetTextX * s), lineOf (headingFont) };
+            return;
+        }
+
+        heading.clear();
+
         // The widget type's name at (6, 6) inside the border; two lines in a narrow widget.
         const auto c = chromeScale();
         const auto f = fontFor (type::widgetTag, type::widgetTag.px * c);
@@ -986,7 +1085,7 @@ private:
         auto bottom = H - b - (float) size::cueNoteBottom * s;
         const auto barFont = fitted (type::cueBar, content.sub, k, width);
 
-        if (content.sub.isNotEmpty())
+        if (content.sub.isNotEmpty() && heading.isEmpty())   // on the live Stage the bar mark is the heading
         {
             addRun (content.sub, barFont, colour::textTertiary, left, bottom - barFont.getDescent());
             bottom -= lineOf (barFont) + (float) size::cueNoteGap * k;
@@ -1062,17 +1161,23 @@ private:
             if (row.current)
                 rowFills.push_back (r);
 
+            if (row.armed)
+                armedRows.push_back (r);
+
+            // Armed: the patch column says what a second tap does.
+            const auto patch = row.armed ? "Tap again to go to " + row.number : row.patch;
             auto inner = r.reduced (padX, 0.0f);
             const auto numberX = inner.getX();
             inner.removeFromLeft ((float) (size::stageListNumberW + size::stageListCellGap) * k);
-            const auto patchW = juce::jmin (textWidth (patchFont, row.patch), inner.getWidth() * 0.45f);
+            const auto patchW = juce::jmin (textWidth (patchFont, patch), inner.getWidth() * (row.armed ? 0.6f : 0.45f));
             const auto nameW = inner.getWidth() - patchW - (patchW > 0.0f ? (float) size::stageListCellGap * k : 0.0f);
 
             addRun (row.number, numberFont, row.current ? colour::textStrong : colour::stageNumberDim, numberX,
                     baselineIn (numberFont, y, h));
             addRun (ellipsized (nameFont, row.name, nameW), nameFont, row.played ? colour::textDim : colour::text, inner.getX(),
                     baselineIn (nameFont, y, h));
-            addRun (ellipsized (patchFont, row.patch, patchW), patchFont, row.current ? colour::selectedRowSub : colour::textMuted,
+            addRun (ellipsized (patchFont, patch, patchW), patchFont,
+                    row.armed ? colour::amber : row.current ? colour::selectedRowSub : colour::textMuted,
                     inner.getRight(), baselineIn (patchFont, y, h), juce::Justification::right);
             y += h + (float) size::stageListGap * k;
         }
@@ -1083,13 +1188,6 @@ private:
         const auto s = scale(), k = rowScale(), b = 1.0f;
         const auto count = (int) content.tiles.size();
 
-        // The pedals: as many as there are stomps, made only when that changes.
-        while (pedals.size() > count)
-            pedals.removeLast();
-
-        while (pedals.size() < count)
-            addAndMakeVisible (pedals.add (new kit::GearPlaceholder (kit::GearView::Size::stagePedal)));
-
         if (count == 0)
         {
             const auto f = fitted (type::stageEmpty, "No stomp switches in this patch", k, W - 2.0f * (float) size::stompsX * s);
@@ -1098,24 +1196,43 @@ private:
             return;
         }
 
-        // 0.7 of a 160 x 210 pedal at the reference size, 22 apart, bottom-aligned;
-        // smaller when they don't fit.
+        // Lit tiles (BStage, audit S7), 112 x 147 at the reference size, 22 apart,
+        // bottom-aligned; smaller when they don't fit. The state is a word, not only a light.
         const auto left = b + (float) size::stompsX * s, right = W - b - (float) size::stompsRight * s;
         const auto bottom = H - b - (float) size::stompsBottom * s;
         const auto gapX = (float) size::stompsGap * s;
-        auto p = size::stagePedalScale * k;
-        p = juce::jmin (p, (bottom - tagBottom() - gapX * 0.25f) / (float) size::pedalH);
-        p = juce::jmin (p, (right - left - gapX * (float) (count - 1)) / ((float) size::pedalW * (float) count));
+        auto p = k;
+        p = juce::jmin (p, (bottom - tagBottom() - gapX * 0.25f) / (float) size::stompTileH);
+        p = juce::jmin (p, (right - left - gapX * (float) (count - 1)) / ((float) size::stompTileW * (float) count));
         p = juce::jmax (0.05f, p);
-        const auto w = (float) size::pedalW * p, h = (float) size::pedalH * p;
+        const auto w = (float) size::stompTileW * p, h = (float) size::stompTileH * p;
 
         for (int i = 0; i < count; ++i)
         {
+            const auto& tile = content.tiles[(size_t) i];
             const juce::Rectangle<float> r (left + (float) i * (w + gapX), bottom - h, w, h);
-            pedals[i]->setBlock (content.tiles[(size_t) i].info);
-            pedals[i]->setTitle ("Stomp " + juce::String (content.tiles[(size_t) i].number) + middot() + content.tiles[(size_t) i].info.name);
-            pedals[i]->setBounds (r.toNearestInt());
-            hits.push_back ({ r, content.tiles[(size_t) i].number });
+            StompTile st;
+            st.tile = r;
+            st.on = tile.on;
+            st.scale = p;
+            st.foot = juce::Rectangle<float> ((float) size::stompFootW * p, (float) size::stompFootH * p)
+                          .withCentre ({ r.getCentreX(), r.getY() + ((float) size::stompFootTop + (float) size::stompFootH * 0.5f) * p });
+            stompTiles.push_back (st);
+
+            const auto textW = w - 8.0f * p;
+            const auto name = tile.info.name.toUpperCase();
+            const auto nameFont = fitted (type::stompName, name, p, textW);
+            const auto stateFont = fontFor (type::stompState, pxOf (type::stompState, p));
+            const auto labelFont = fontFor (type::stompLabel, pxOf (type::stompLabel, p));
+            const auto line = [&] (const juce::String& text, const juce::Font& f, juce::uint32 ink, int top)
+            {
+                const auto y = r.getY() + (float) top * p;
+                addRun (ellipsized (f, text, textW), f, ink, r.getCentreX(), baselineIn (f, y, lineOf (f)), juce::Justification::horizontallyCentred);
+            };
+            line (name, nameFont, colour::textTertiary, size::stompNameTop);
+            line (tile.on ? "ON" : "OFF", stateFont, tile.on ? colour::textStrong : colour::textDim, size::stompStateTop);
+            line ("Stomp " + juce::String (tile.number), labelFont, colour::textTertiary, size::stompLabelTop);
+            hits.push_back ({ r, tile.number });
         }
     }
 
@@ -1308,6 +1425,16 @@ private:
         const auto alert = type == StageWidgetType::panicButton || (type == StageWidgetType::health && content.state == State::alert);
         auto border = colour::widgetBorder;
 
+        if (isOutlinedAtRest())
+        {
+            // At rest, outlined: the widget's own dark fill and a 2 px border in its colour.
+            g.setColour (paint::c (colour::widget));
+            g.fillRoundedRectangle (r, radius);
+            g.setColour (paint::c (type == StageWidgetType::panicButton ? colour::panicBorder : colour::accent));
+            g.drawRoundedRectangle (r.reduced (1.0f), radius - 1.0f, (float) size::stageOutlineAtRest);
+            return;
+        }
+
         if (alert || type == StageWidgetType::nextButton)
         {
             paint::verticalGradient (g, r, alert ? colour::panicTop : colour::primaryTop, alert ? colour::panicBot : colour::primaryBot, radius);
@@ -1344,7 +1471,13 @@ private:
 
     void paintTag (juce::Graphics& g) const
     {
-        if (tagBox.isEmpty())
+        if (heading.isNotEmpty())
+        {
+            paint::text (g, heading, tagBox, type::widgetHeading, colour::widgetTitle, juce::Justification::topLeft);
+            return;
+        }
+
+        if (tagBox.isEmpty() || tagLines.isEmpty())
             return;
 
         g.setColour (paint::c (colour::widgetTagFill));
@@ -1370,13 +1503,16 @@ private:
     std::vector<Run> runs;
     std::vector<Mark> marks;
     std::vector<Bar> bars;
-    std::vector<juce::Rectangle<float>> rowFills;
+    std::vector<juce::Rectangle<float>> rowFills, armedRows;
     std::vector<std::pair<juce::Rectangle<float>, int>> hits;   // set list rows (cue index), pedals (stomp number)
     juce::StringArray tagLines;
+    juce::String heading;     // the live Stage's heading (no tag there)
+    juce::Font headingFont { juce::FontOptions() };
     juce::Rectangle<float> tagBox;
     juce::Font tagFont { juce::FontOptions() };
 
-    juce::OwnedArray<kit::GearPlaceholder> pedals;
+    struct StompTile { juce::Rectangle<float> tile, foot; bool on = false; float scale = 1.0f; };
+    std::vector<StompTile> stompTiles;   // the Stomp switches widget's lit tiles
     juce::OwnedArray<kit::MuteButton> mutes;   // the Outputs widget's Mute / MUTED
     std::unique_ptr<TunerDisplay> tuner;
 };
@@ -1610,6 +1746,31 @@ public:
         changeSelected ([value] (auto& w, size_t i) { w[i].textScale = value; });
     }
 
+    /** Next button and Panic button: "At rest" Outline, or Full colour (decided 19 Nov). */
+    void setSelectedOutlineAtRest (bool outline)
+    {
+        changeSelected ([outline] (auto& w, size_t i) { w[i].outlineAtRest = outline; });
+    }
+
+    static bool hasAtRest (StageWidgetType type) noexcept
+    {
+        return type == StageWidgetType::nextButton || type == StageWidgetType::panicButton;
+    }
+
+    /** The "At rest" words (approved by Adrian, 19 Nov). */
+    static const juce::StringArray& atRestNames()
+    {
+        static const juce::StringArray names { "Full colour", "Outline" };
+        return names;
+    }
+
+    static const juce::StringArray& atRestTips()
+    {
+        static const juce::StringArray tips { "Filled with its colour all the time",
+                                              "Dark with a coloured outline until it's pressed, so the cue and any warning stand out in a dark room" };
+        return tips;
+    }
+
     void mouseDown (const juce::MouseEvent& e) override
     {
         select (widgetAt (e.getPosition()));
@@ -1801,6 +1962,17 @@ private:
         juce::PopupMenu menu;
         menu.addSectionHeader (describe (widgets[(size_t) index].type));
         menu.addSubMenu ("Text size", sizes);
+
+        if (hasAtRest (widgets[(size_t) index].type))
+        {
+            juce::PopupMenu atRest;
+
+            for (int i = 0; i < atRestNames().size(); ++i)
+                atRest.addItem (atRestNames()[i], true, widgets[(size_t) index].outlineAtRest == (i == 1),
+                                [safe, outline = i == 1] { if (safe != nullptr) safe->setSelectedOutlineAtRest (outline); });
+
+            menu.addSubMenu ("At rest", atRest);
+        }
 
         if (widgets[(size_t) index].type == StageWidgetType::text)
             menu.addItem (juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")), [safe, index] { if (safe != nullptr) safe->editText (index); });
@@ -2074,6 +2246,19 @@ public:
                 editor->setSelectedTextScale (Editor::textSizes()[(size_t) index].second);
         };
 
+        atRest.setSegments (Editor::atRestNames());
+        atRest.setTitle ("At rest");
+
+        for (int i = 0; i < atRest.getNumSegments(); ++i)
+            atRest.getSegmentButton (i)->setTooltip (Editor::atRestTips()[i]);
+
+        atRest.onClick = [this] (int index)
+        {
+            if (auto* editor = editorOf())
+                editor->setSelectedOutlineAtRest (index == 1);
+        };
+        addChildComponent (atRest);
+
         editTextButton.onClick = [this] { if (auto* editor = editorOf()) editor->editText (editor->getSelected()); };
         duplicateButton.onClick = [this] { if (auto* editor = editorOf()) editor->duplicateSelected(); };
         frontButton.onClick = [this] { if (auto* editor = editorOf()) editor->bringSelectedToFront(); };
@@ -2088,6 +2273,11 @@ public:
 
         for (int i = 0; i < sizes.getNumSegments(); ++i)
             noFocus (*sizes.getSegmentButton (i));
+
+        noFocus (atRest);
+
+        for (int i = 0; i < atRest.getNumSegments(); ++i)
+            noFocus (*atRest.getSegmentButton (i));
 
         notes = { "Widgets snap to the 24 " + juce::String (juce::CharPointer_UTF8 ("\xc3\x97")) + " 16 grid and scale with the window, "
                   "so one layout works on a laptop and on a big monitor.",
@@ -2106,7 +2296,20 @@ public:
         const auto isText = w.type == StageWidgetType::text;
         editTextButton.setButtonText (isText ? juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")) : juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6 (Text widget only)")));
         editTextButton.setEnabled (isText);
+
+        // "At rest", for Next button and Panic button only.
+        const auto showAtRest = Editor::hasAtRest (w.type);
+        atRest.setSelected (w.outlineAtRest ? 1 : 0);
+
+        if (showAtRest != atRest.isVisible())
+        {
+            atRest.setVisible (showAtRest);
+            resized();
+            repaint();
+        }
     }
+
+    kit::SegmentedControl& getAtRest() noexcept { return atRest; }
 
     void resized() override
     {
@@ -2116,6 +2319,17 @@ public:
         r.removeFromTop (size::layoutLabelGap);
         sizes.setBounds (r.removeFromTop (size::buttonHeight + 2));
         r.removeFromTop (size::layoutButtonGap);
+
+        if (atRest.isVisible())
+        {
+            atRestLabel = r.removeFromTop (juce::roundToInt (lineOf (font (type::label)))).toFloat();
+            r.removeFromTop (size::layoutLabelGap);
+            atRest.setBounds (r.removeFromTop (size::buttonHeight + 2));
+            r.removeFromTop (size::layoutButtonGap);
+            atRestNote = r.removeFromTop (2 * juce::roundToInt (lineOf (font (type::layoutNote)))).toFloat();
+            r.removeFromTop (size::layoutButtonGap);
+        }
+
         editTextButton.setBounds (r.removeFromTop (buttonH));
         r.removeFromTop (size::layoutButtonGap - size::buttonDrop);
         auto row = r.removeFromTop (buttonH);
@@ -2131,6 +2345,15 @@ public:
     void paint (juce::Graphics& g) override
     {
         paint::text (g, "Text size", labelBox, type::label, colour::textTertiary);
+
+        if (atRest.isVisible())
+        {
+            paint::text (g, "At rest", atRestLabel, type::label, colour::textTertiary);
+            g.setColour (paint::c (colour::textTertiary));
+            g.setFont (font (type::layoutNote));
+            g.drawFittedText ("Outline keeps the stage dark until you press it. Pressed, it always lights fully.", atRestNote.toNearestInt(),
+                              juce::Justification::topLeft, 2, 1.0f);
+        }
 
         // The notes, under a line, at the bottom.
         g.setColour (paint::c (colour::paneHeaderLine));
@@ -2151,7 +2374,8 @@ public:
 
 private:
     std::function<Editor*()> editorOf;
-    kit::SegmentedControl sizes;
+    kit::SegmentedControl sizes, atRest;
+    juce::Rectangle<float> atRestLabel, atRestNote;
     juce::TextButton editTextButton { juce::String (juce::CharPointer_UTF8 ("Edit text\xe2\x80\xa6")) }, duplicateButton { "Duplicate" }, frontButton { "Bring to front" },
                      removeButton { "Remove" };
     juce::StringArray notes;
@@ -2210,8 +2434,25 @@ StageView::StageView (AudioEngine& e, ShowSession& s) : engine (e), session (s)
             endUnlockPress();
     };
 
-    tunerButton.setTooltip ("Tuner (T)");
-    tunerButton.onClick = [this] { engine.setTunerOpen (! engine.isTunerOpen()); };
+    // Tuner: hold to open (a brush mustn't mute the show), a tap closes it (audit S3).
+    tunerButton.setTooltip ("Tuner: hold to open, tap to close (T)");
+    tunerButton.onStateChange = [this]
+    {
+        if (tunerButton.isDown())
+            beginTunerHold();
+        else
+            endTunerHold();
+    };
+    tunerButton.onClick = [this]
+    {
+        if (tunerOpenedByHold)
+            tunerOpenedByHold = false;   // the release after the hold that opened it
+        else if (engine.isTunerOpen())
+            engine.setTunerOpen (false);
+    };
+
+    for (auto* b : std::initializer_list<juce::TextButton*> { &tunerButton, &muteButton })
+        b->getProperties().set ("encoreStageToolbar", true);
 
     setVariant (muteButton, Variant::muted);
     muteButton.onClick = [this] { engine.setMuted (! engine.isMuted()); };
@@ -2410,8 +2651,9 @@ juce::Point<int> StageView::nextFreeCell() const
 void StageView::addWidgetAtFreeCell (StageWidgetType type)
 {
     // The first place, row by row, where the whole widget fits on free cells;
-    // with none, the first free cell (as before).
+    // with none, nothing is added (decided 19 Nov: never on top of another).
     auto added = clampToGrid (newWidget (type, nextFreeCell()));
+    bool placed = false;
     const auto fits = [this] (const StageWidget& c)
     {
         return std::none_of (current.widgets.begin(), current.widgets.end(), [&c] (const StageWidget& o)
@@ -2430,10 +2672,14 @@ void StageView::addWidgetAtFreeCell (StageWidgetType type)
             {
                 added = c;
                 found = 1;
+                placed = true;
                 break;
             }
         }
     }
+
+    if (! placed)
+        return;
 
     auto list = current.widgets;
     list.push_back (added);
@@ -2471,6 +2717,7 @@ const juce::Component* StageView::getLayoutDropBox() const noexcept { return edi
 juce::String StageView::getLayoutDropText() const { return editor != nullptr ? editor->getDropBox().getLabel() : juce::String(); }
 bool StageView::isLayoutDropRefused() const noexcept { return editor != nullptr && editor->getDropBox().isRefused(); }
 int StageView::getSelectedLayoutWidget() const noexcept { return editor != nullptr ? editor->getSelected() : -1; }
+kit::SegmentedControl* StageView::getLayoutAtRest() const noexcept { return layoutInspector != nullptr ? &layoutInspector->getAtRest() : nullptr; }
 
 float StageView::getShownWidgetAlpha (int index) const noexcept
 {
@@ -2539,6 +2786,20 @@ void StageView::update (const StageSnapshot& snapshot)
     {
         unlockPressStart = 0;
         setLocked (false);
+    }
+
+    if (armedCue >= 0 && juce::Time::getMillisecondCounter() - armedAt >= armedCueMs)
+        armedCue = -1;   // a tap that wasn't followed: back to normal
+
+    if (tunerPressStart != 0 && juce::Time::getMillisecondCounter() - tunerPressStart >= tunerHoldMs)
+    {
+        tunerPressStart = 0;
+
+        if (! engine.isTunerOpen() && ! locked)
+        {
+            engine.setTunerOpen (true);
+            tunerOpenedByHold = true;
+        }
     }
 
     refreshStrips (snapshot);
@@ -2697,7 +2958,47 @@ void StageView::setLocked (bool shouldLock)
     resized();
 }
 
+void StageView::HoldButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
+{
+    getLookAndFeel().drawButtonBackground (g, *this, findColour (getToggleState() ? buttonOnColourId : buttonColourId), highlighted, down);
+
+    // "Tuner" over "hold", centred together.
+    const auto mainFont = font (type::stageToolbarButton), subFont = font (type::stageToolbarSub);
+    const auto w = (float) getWidth();
+    const auto y = ((float) getHeight() - lineOf (mainFont) - lineOf (subFont)) * 0.5f;
+    const auto alpha = isEnabled() ? 1.0f : state::disabledAlpha;
+    g.setColour (paint::c (getToggleState() ? colour::textStrong : colour::text).withMultipliedAlpha (alpha));
+    g.setFont (mainFont);
+    g.drawText (getButtonText(), juce::Rectangle<float> (0.0f, y, w, lineOf (mainFont)), juce::Justification::centred, false);
+    g.setColour (paint::c (colour::textTertiary).withMultipliedAlpha (alpha));
+    g.setFont (subFont);
+    g.drawText (subText, juce::Rectangle<float> (0.0f, y + lineOf (mainFont), w, lineOf (subFont)), juce::Justification::centred, false);
+}
+
 void StageView::beginUnlockPress()  { if (locked) unlockPressStart = juce::jmax (1u, juce::Time::getMillisecondCounter()); }
+void StageView::tapCue (int index)
+{
+    // The cue playing: nothing to do. Another: the first tap arms it for 2 s, a second tap goes.
+    if (index == armedCue && juce::Time::getMillisecondCounter() - armedAt < armedCueMs)
+    {
+        armedCue = -1;
+        session.goToCue (index);
+        return;
+    }
+
+    if (index == session.getCurrentCue())
+    {
+        armedCue = -1;
+        return;
+    }
+
+    armedCue = index;
+    armedAt = juce::Time::getMillisecondCounter();
+}
+
+void StageView::beginTunerHold()    { if (! engine.isTunerOpen()) tunerPressStart = juce::jmax (1u, juce::Time::getMillisecondCounter()); }
+void StageView::endTunerHold()      { tunerPressStart = 0; }
+bool StageView::isTunerHoldPending() const noexcept { return tunerPressStart != 0; }
 void StageView::endUnlockPress()    { unlockPressStart = 0; }
 
 juce::String StageView::unlockProgressText() const
@@ -2982,8 +3283,8 @@ void StageView::layoutToolbar()
         return juce::roundToInt (textWidth (font (type::button), b.getButtonText())) + 2 * size::stageButtonPadX + 2;
     };
 
-    fromRight (muteButton, juce::jmax (size::stageMuteMinW, padded (muteButton)), buttonH, buttonY);
-    fromRight (tunerButton, padded (tunerButton), buttonH, buttonY);
+    fromRight (muteButton, juce::jmax (size::stageToolbarButtonW, padded (muteButton)), buttonH, buttonY);
+    fromRight (tunerButton, size::stageToolbarButtonW, buttonH, buttonY);
 
     const auto lockShown = locked || ! layoutHas (StageWidgetType::lockButton);
     lockButton.setVisible (lockShown);

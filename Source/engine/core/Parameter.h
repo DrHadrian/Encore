@@ -16,6 +16,11 @@ namespace encore
     and later expression pedals can set it from any thread at any time. The
     audio thread never jumps to a new value: it ramps there over a few
     milliseconds, which is what keeps fast knob sweeps free of zipper noise.
+
+    A parameter can instead be a choice (a filter shape, a Quality setting):
+    stepped values 0..n-1, each with a name, saved by index. A choice never
+    ramps: it jumps to the new step, and the block that owns it crossfades its
+    sound from the old setting to the new one (dsp::Crossfade, 10 ms).
 */
 class Parameter
 {
@@ -30,6 +35,13 @@ public:
         int decimals = 1;
         double rampSeconds = 0.03;
         std::function<juce::String (float)> textFunction {};   // optional: the value as text (e.g. a plugin's own); message thread
+
+        /** Named steps. Non-empty makes this a choice: the range becomes
+            0..n-1 in steps of 1, the value is the index, and it never ramps. */
+        juce::StringArray choices {};
+
+        /** A choice parameter: values 0..names.size()-1, saved by index. */
+        static Spec choice (juce::String id, juce::String name, juce::StringArray names, int defaultIndex = 0);
     };
 
     explicit Parameter (Spec specToUse);
@@ -41,6 +53,12 @@ public:
 
     const Spec& getSpec() const noexcept { return spec; }
     juce::String toText (float v) const;
+
+    bool isChoice() const noexcept       { return ! spec.choices.isEmpty(); }
+    int getNumChoices() const noexcept   { return spec.choices.size(); }
+
+    /** The current step of a choice (0 for a parameter that isn't one). */
+    int getChoiceIndex() const noexcept  { return isChoice() ? juce::roundToInt (getValue()) : 0; }
 
     //== Audio side ============================================================
     /** Set the ramp length. Call only while this parameter's block isn't processing. */
@@ -58,6 +76,8 @@ public:
     void snapToTarget() noexcept { smoother.setCurrentAndTargetValue (getValue()); }
 
 private:
+    static Spec sanitised (Spec);
+
     const Spec spec;
     std::atomic<float> value;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoother;

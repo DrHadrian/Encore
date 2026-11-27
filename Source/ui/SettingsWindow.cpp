@@ -69,9 +69,10 @@ SettingsWindow::SettingsWindow (juce::AudioDeviceManager& dm, const system::Tuni
     frame.onTabChange = [this] (int index) { showTab ((Tab) index); };
     frame.setContent (body.get());
 
-    // Changes apply immediately: both buttons close.
-    frame.addFooterButton ("Cancel").onClick = close;
+    // Changes apply immediately, so only Done (audit F18: a Cancel that undid nothing pretended).
     frame.addFooterButton ("Done", Variant::primary).onClick = close;
+    frame.setFooterKeys (juce::String (juce::CharPointer_UTF8 ("Tab / Shift+Tab move between controls \xc2\xb7 arrow keys inside lists \xc2\xb7 "
+                                                               "Space / Enter press \xc2\xb7 Esc closes")));
     frame.onClose = std::move (close);
 
     overlay = std::make_unique<kit::DialogOverlay> (frame, juce::Rectangle<int> (size::settingsW + 2, size::settingsH + 2));

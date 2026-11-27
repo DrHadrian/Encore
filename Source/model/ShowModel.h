@@ -186,13 +186,22 @@ struct RunItem
 
 enum class ShowTemplate { band, musical, worship, solo };
 
+/** Whether a block type is a new native module, one an older Encore doesn't
+    know: a show that uses one is saved as schema 5, so an older Encore refuses
+    it ("made by a newer Encore") instead of playing it without that block.
+    Defined with the block registry (session/PatchBuilder.cpp: BlockType::newModule),
+    so the model needs no list of its own. Any thread. */
+bool isNewModuleBlockType (const juce::String& blockType);
+
 struct ShowModel
 {
     // 2: plugin blocks (milestone 10). 3: routing (milestone 11): patch inputs,
-    // sends, split paths. 4: amps built in the amp builder (design v3.2). A show
-    // is saved with the oldest version that can hold it, so older Encore
+    // sends, split paths. 4: amps built in the amp builder (design v3.2).
+    // 5: blocks of a new native module (an FX Unit an older Encore doesn't
+    // know and would skip: BlockType::newModule, decision 0062). A show is
+    // saved with the oldest version that can hold it, so older Encore
     // versions keep opening shows that don't need more.
-    static constexpr int currentSchemaVersion = 4;
+    static constexpr int currentSchemaVersion = 5;
 
     juce::String id;
     juce::String name;
@@ -221,8 +230,15 @@ struct ShowModel
     /** Whether any patch (library or a cue's own) uses routing. */
     bool usesRouting() const;
 
+    /** Whether any patch (library or a cue's own) has a block of a new native
+        module (isNewModuleBlockType). */
+    bool usesNewModules() const;
+
     /** The schema version this show needs: the oldest that can hold it. */
-    int requiredSchemaVersion() const { return usesAmps() ? 4 : usesRouting() ? 3 : usesPlugins() ? 2 : 1; }
+    int requiredSchemaVersion() const
+    {
+        return usesNewModules() ? 5 : usesAmps() ? 4 : usesRouting() ? 3 : usesPlugins() ? 2 : 1;
+    }
 
     /** Every input and output name the show's patches use (in order, once each,
         ignoring case), e.g. to find the ones this computer doesn't have. */
