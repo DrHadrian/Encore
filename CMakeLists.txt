@@ -698,6 +698,25 @@ if(ENCORE_BUILD_TESTS)
                      --block engineProbe --report "${encore_render_dir}/sweep-null.txt")
     set_tests_properties(EncoreRender.sweep PROPERTIES FIXTURES_SETUP encore_render_sweep)
     set_tests_properties(EncoreRender.probe EncoreRender.null PROPERTIES FIXTURES_REQUIRED encore_render_sweep)
+
+    # The Pedal EQ (decision 0063): every factory preset, and a full boost
+    # that works the 9 V clip, on generated plucks, for listening (CI uploads them).
+    add_test(NAME EncoreRender.plucks
+             COMMAND EncoreRender --make-plucks "${encore_render_dir}/plucks.wav")
+    set_tests_properties(EncoreRender.plucks PROPERTIES FIXTURES_SETUP encore_render_plucks)
+    foreach(preset flat midPush scoop cleanBoost bright thicken)
+        add_test(NAME EncoreRender.pedalEq.${preset}
+                 COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                         --out "${encore_render_dir}/pedalEq-${preset}.wav" --block pedalEq --preset ${preset}
+                         --report "${encore_render_dir}/pedalEq-${preset}.txt")
+        set_tests_properties(EncoreRender.pedalEq.${preset} PROPERTIES FIXTURES_REQUIRED encore_render_plucks)
+    endforeach()
+    add_test(NAME EncoreRender.pedalEq.fullBoost
+             COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                     --out "${encore_render_dir}/pedalEq-fullBoost.wav" --block pedalEq --preset cleanBoost
+                     --set g100=15 --set g200=15 --set g400=15 --set g800=15 --set g1k6=15 --set g3k2=15 --set g6k4=15
+                     --set level=-12 --report "${encore_render_dir}/pedalEq-fullBoost.txt")
+    set_tests_properties(EncoreRender.pedalEq.fullBoost PROPERTIES FIXTURES_REQUIRED encore_render_plucks)
 endif()
 
 if(MSVC)

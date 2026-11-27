@@ -86,4 +86,12 @@ bool writeWav (const juce::File& file, const juce::AudioBuffer<float>& buffer, d
 /** A log sweep from 20 Hz to 20 kHz at -6 dBFS, mono: test material. */
 juce::AudioBuffer<float> makeSweep (double sampleRate, double seconds);
 
+/** Generated guitar-like plucks, mono, deterministic: test material for
+    listening (CI renders it; no recordings in the repo). An open low E, an
+    A, then a palm-muted chug, a high D and a loud strummed-like accent,
+    each a fundamental and falling harmonics with a 2 ms rise and an
+    exponential decay, over a noise floor about 70 dB down. Scaled so the
+    accent peaks at -1 dBFS; the other notes peak 5-9 dB lower. */
+juce::AudioBuffer<float> makePlucks (double sampleRate);
+
 } // namespace encore::render

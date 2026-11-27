@@ -20,6 +20,7 @@ namespace
   EncoreRender --in IN.wav --out OUT.wav --block TYPE [--preset ID] [--settings S.json] [--set id=value ...]
   EncoreRender --in IN.wav --out OUT.wav --show SHOW --patch NAME-OR-NUMBER
   EncoreRender --make-sweep OUT.wav [--seconds 5] [--rate 48000]
+  EncoreRender --make-plucks OUT.wav [--rate 48000]   (generated guitar-like notes)
 
   --block TYPE     a block type id (hidden ones too), e.g. engineProbe, eq, gate
   --preset ID      a factory preset of the block (first; settings go on top)
@@ -115,6 +116,20 @@ int main (int argc, char* argv[])
             return fail (error);
 
         std::cout << "Wrote a " << seconds << " s log sweep (20 Hz - 20 kHz, -6 dBFS) at " << rate << " Hz to " << sweepOut << "\n";
+        return 0;
+    }
+
+    if (const auto plucksOut = value ("--make-plucks"); plucksOut.isNotEmpty())
+    {
+        const auto rate = value ("--rate").isNotEmpty() ? value ("--rate").getDoubleValue() : 48000.0;
+
+        if (rate < 8000.0)
+            return fail ("--rate must be at least 8000");
+
+        if (! encore::render::writeWav (file (plucksOut), encore::render::makePlucks (rate), rate, error))
+            return fail (error);
+
+        std::cout << "Wrote generated plucks (6.5 s) at " << rate << " Hz to " << plucksOut << "\n";
         return 0;
     }
 

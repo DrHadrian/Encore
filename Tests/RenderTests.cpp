@@ -155,6 +155,12 @@ public:
                 expect (equal (back->buffer, sweep));
             }
 
+            const auto plucks = render::makePlucks (48000.0);
+            expectEquals (plucks.getNumSamples(), (int) (6.5 * 48000.0));
+            expect (equal (plucks, render::makePlucks (48000.0)), "deterministic");
+            expectWithinAbsoluteError (toDb (plucks.getMagnitude (0, 0, plucks.getNumSamples())), -1.0f, 1.0f, "the accent peaks near -1 dBFS");
+            expectLessThan (plucks.getMagnitude (0, 0, 4000), 0.001f, "the noise floor before the first note");
+
             expect (! render::readAudioFile (dir.getChildFile ("missing.wav"), error).has_value());
             expect (error.contains ("missing.wav"));
             dir.deleteRecursively();

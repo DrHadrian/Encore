@@ -384,4 +384,60 @@ juce::AudioBuffer<float> makeSweep (double sampleRate, double seconds)
     return b;
 }
 
+juce::AudioBuffer<float> makePlucks (double sampleRate)
+{
+    struct Note { double start, fundamental; float peak; double decayMs; int harmonics; };
+    const Note notes[] = {
+        { 0.10, 82.41, 0.50f, 2500.0, 8 },   // low E, open
+        { 1.30, 110.0, 0.45f, 2000.0, 8 },   // A
+        { 2.40, 82.41, 0.40f, 120.0, 3 },    // palm-muted chugs
+        { 2.65, 82.41, 0.40f, 120.0, 3 },
+        { 2.90, 82.41, 0.40f, 120.0, 3 },
+        { 3.30, 293.7, 0.35f, 1500.0, 6 },   // high D
+        { 4.40, 98.0,  0.89f, 1800.0, 10 },  // a hard accent (G), near full scale
+    };
+
+    const auto length = (int) (6.5 * sampleRate);
+    juce::AudioBuffer<float> b (1, length);
+    juce::Random random (42);
+
+    for (int i = 0; i < length; ++i)   // the noise floor, -70 dBFS peak
+        b.setSample (0, i, 0.000316f * (random.nextFloat() * 2.0f - 1.0f));
+
+    for (const auto& n : notes)
+    {
+        const auto onset = (int) (n.start * sampleRate);
+        const auto rise = juce::jmax (1, (int) (0.002 * sampleRate));
+        const auto decay = std::pow (10.0, -60.0 / 20.0 / (n.decayMs * 0.001 * sampleRate));
+        auto norm = 0.0;
+
+        for (int h = 1; h <= n.harmonics; ++h)
+            norm += 1.0 / h;
+
+        auto env = 0.0;
+
+        for (int i = onset; i < length; ++i)
+        {
+            const auto k = i - onset;
+            env = k < rise ? (double) (k + 1) / rise : env * decay;
+
+            if (env < 1.0e-5 && k > rise)
+                break;
+
+            auto tone = 0.0;
+
+            for (int h = 1; h <= n.harmonics; ++h)
+                tone += std::sin (juce::MathConstants<double>::twoPi * n.fundamental * h * k / sampleRate) / h;
+
+            b.addSample (0, i, (float) (n.peak * env * tone / norm));
+        }
+    }
+
+    // The harmonics never peak together: scale so the accent reaches -1 dBFS.
+    if (const auto top = b.getMagnitude (0, 0, length); top > 0.0f)
+        b.applyGain (juce::Decibels::decibelsToGain (-1.0f) / top);
+
+    return b;
+}
+
 } // namespace encore::render
