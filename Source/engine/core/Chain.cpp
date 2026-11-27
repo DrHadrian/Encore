@@ -4,6 +4,8 @@
 #include "engine/core/Chain.h"
 #include "engine/blocks/SplitBlocks.h"
 
+#include "engine/core/LinkBus.h"
+
 #include <cmath>
 
 namespace encore
@@ -155,6 +157,7 @@ void Chain::prepare (const ProcessSpec& spec)
     }
 
     resolveKeys();
+    resolveLinks();
 
     if (snapshotValues == nullptr)
         saveSnapshot();
@@ -257,6 +260,32 @@ void Chain::resolveKeys()
     }
 }
 
+void Chain::resolveLinks()
+{
+    for (int i = 0; i < (int) blocks.size(); ++i)
+    {
+        auto& block = *blocks[(size_t) i];
+        const auto wanted = block.getRef ("linkTo");
+
+        if (wanted.isEmpty())
+        {
+            block.setLinkLeader (nullptr, {});
+            continue;
+        }
+
+        const auto leader = indexOfModelId (wanted);
+
+        if (leader < 0)
+            block.setLinkLeader (nullptr, "Link: that gate isn't in this patch");
+        else if (blocks[(size_t) leader]->getLinkBus() == nullptr)
+            block.setLinkLeader (nullptr, "Link: that block isn't a gate");
+        else if (! isEarlier (leader, i))
+            block.setLinkLeader (nullptr, "Link: that gate isn't before this one");
+        else
+            block.setLinkLeader (blocks[(size_t) leader]->getLinkBus(), {});
+    }
+}
+
 void Chain::clearTaps (int from, int to) noexcept
 {
     if (! anyTaps)
@@ -266,6 +295,8 @@ void Chain::clearTaps (int from, int to) noexcept
         if (taps[(size_t) i] != nullptr)
             taps[(size_t) i]->clear();
 }
+
+static_assert (LinkBus::maxDelaySamples == Chain::maxAlignmentSamples);
 
 int Chain::sumLatency (int from, int to) const noexcept
 {
@@ -386,8 +417,9 @@ int Chain::process (float* const* channels, int numSamples, const ChainInputs& i
 }
 
 int Chain::processRange (int from, int to, float* const* channels, int numChannels, int numSamples,
-                         const ProcessContext& context) noexcept
+                         ProcessContext& context) noexcept
 {
+    // context.latencyIn: the latency so far; each block adds its own.
     for (int i = from; i < to; ++i)
     {
         const auto wanted = channelsOut[(size_t) i];
@@ -405,7 +437,9 @@ int Chain::processRange (int from, int to, float* const* channels, int numChanne
         }
 
         numChannels = wanted;
-        blocks[(size_t) i]->process (channels, numChannels, numSamples, context);
+        auto& block = *blocks[(size_t) i];
+        block.process (channels, numChannels, numSamples, context);
+        context.latencyIn += juce::jmax (0, block.getLatencySamples());
 
         // A tap: a later block is keyed from this one's output (B2).
         if (anyTaps && taps[(size_t) i] != nullptr)
@@ -434,6 +468,7 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples, 
     context.inputs = inputs.inputs;
     context.numInputs = inputs.numInputs;
     context.tunerOpen = inputs.tunerOpen;
+    context.callback = ++callbackCount;
 
     auto first = juce::jlimit (0, numMain, firstBlock);
 
@@ -450,6 +485,7 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples, 
         clearTaps (0, first);
 
     int numChannels = channelsIn[(size_t) first];
+    context.latencyIn = sumLatency (0, first);   // what the skipped blocks would have added
 
     if (numChannels > 1)
         juce::FloatVectorOperations::copy (channels[1], channels[0], numSamples);
@@ -465,8 +501,12 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples, 
     for (int ch = 0; ch < numChannels; ++ch)
         juce::FloatVectorOperations::copy (b[ch], channels[ch], numSamples);
 
-    // ...path A runs in place, path B in its own buffers (or sleeps while off).
+    // ...path A runs in place, path B in its own buffers (or sleeps while off),
+    // both starting from the latency at the split.
+    const auto atSplit = context.latencyIn;
     const auto aChannels = processRange (splitAt + 1, mergeAt, channels, numChannels, numSamples, context);
+    const auto afterA = context.latencyIn;
+    context.latencyIn = atSplit;
 
     pathBFade.setTargetValue (blocks[(size_t) splitAt]->isEnabled() ? 1.0f : 0.0f);
     int bChannels = numChannels;
@@ -505,6 +545,8 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples, 
 
     merge->mix (channels, aChannels, b, bChannels, channels, numSamples, pathBGain.data());
 
+    // After the merge both paths are lined up with the longer one.
+    context.latencyIn = atSplit + juce::jmax (afterA - atSplit, sumLatency (numMain, (int) blocks.size()));
     return processRange (mergeAt + 1, numMain, channels, 2, numSamples, context);
 }
 

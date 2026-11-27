@@ -16,6 +16,8 @@
 namespace encore
 {
 
+struct LinkBus;
+
 struct ProcessSpec
 {
     double sampleRate = 0.0;
@@ -43,6 +45,14 @@ struct ProcessContext
 
     /** The tuner is open (B2: noise learning freezes while tuning). */
     bool tunerOpen = false;
+
+    /** Which chain callback this is (counts from 1; 0 = outside a chain), so a
+        linked follower can tell its leader ran in this one (B2). */
+    std::uint64_t callback = 0;
+
+    /** The chain's latency at this block's input, in samples: what blocks
+        before it added (B2: a follower lines its leader's decisions up). */
+    int latencyIn = 0;
 
     /** An input by slot, or null. */
     const float* input (int slot) const noexcept
@@ -151,6 +161,17 @@ public:
         computer). AudioEngine::applyPatchRouting sets it when the chain is
         built and whenever the routing changes. Any thread. */
     virtual void setKeyInputSlot (int slot) noexcept { juce::ignoreUnused (slot); }
+
+    /** A block that can lead a link (a gate) shares its decision here. */
+    virtual const LinkBus* getLinkBus() const noexcept { return nullptr; }
+
+    /** The chain resolved this block's ref "linkTo" (Chain::prepare): the
+        leader's bus (null when it didn't resolve), and why not ("" when it
+        did or wasn't asked for). */
+    virtual void setLinkLeader (const LinkBus* leader, const juce::String& problem)
+    {
+        juce::ignoreUnused (leader, problem);
+    }
 
     //== Files (message thread) ================================================
     /** Non-null if this block loads a file. */

@@ -186,10 +186,11 @@ private:
     int sumLatency (int from, int to) const noexcept;
 
     int processRange (int from, int to, float* const* channels, int numChannels, int numSamples,
-                      const ProcessContext& context) noexcept;
+                      ProcessContext& context) noexcept;
 
     /** Off the audio thread: resolves keyBlock refs into taps (B2). */
     void resolveKeys();
+    void resolveLinks();
     void clearTaps (int from, int to) noexcept;
 
     enum class Region { beforeSplit, pathA, pathB, afterMerge };
@@ -210,6 +211,7 @@ private:
     juce::AudioBuffer<float> chainInput;   // copy of the dry input, for keyed blocks
     std::vector<std::unique_ptr<juce::AudioBuffer<float>>> taps;   // per block: its output, for a block keyed from it (B2)
     bool anyTaps = false;
+    std::uint64_t callbackCount = 0;
     std::atomic<TailMode> tailMode { TailMode::tailsOnly };
     std::atomic<float> fadeIn { (float) defaultFadeInSeconds }, ringOut { (float) defaultRingOutSeconds };
     int firstTailBlock = -1;
