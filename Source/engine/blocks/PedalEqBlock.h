@@ -1,0 +1,64 @@
+// Encore — live guitar rig host
+// Copyright (C) 2026 the Encore contributors. Licensed under the GNU AGPLv3 (see LICENSE.md).
+
+#pragma once
+
+#include "engine/core/Block.h"
+
+#include <array>
+
+namespace encore
+{
+
+/** The Pedal EQ "G7": a 7-band graphic EQ pedal, the first FX Unit (native
+    module; its DSP is the Encore Engine's). Spec: claude/EQ-PLAN.md §3;
+    decision 0063.
+
+    Signal: Input (Pad / Normal / Boost) -> character capture (a NAM capture
+    of a pedal's buffer, optional) -> seven bells at 100 Hz .. 6.4 kHz ->
+    the 9 V soft clip (oversampled by Quality) -> Level.
+
+    It keeps the channels it gets (mono in, mono out; stereo in, stereo out)
+    and has no tail. Hidden from the Add block menu until its UI is done and
+    the rig test has passed; a show that uses it is schema 5.
+
+    Threads: as every block (Block): constructor and prepareBlock on the
+    message thread, processBlock and resetBlock on the audio thread, no
+    allocation or locks there.
+*/
+class PedalEqBlock final : public Block
+{
+public:
+    static constexpr auto typeId = "pedalEq";
+
+    static constexpr int numBands = 7;
+    static constexpr std::array<double, numBands> bandFrequencies { 100.0, 200.0, 400.0, 800.0, 1600.0, 3200.0, 6400.0 };
+    static constexpr std::array<const char*, numBands> bandIds { "g100", "g200", "g400", "g800", "g1k6", "g3k2", "g6k4" };
+    static constexpr float sliderRangeDb = 15.0f;
+
+    // Choices (their order is saved in shows: never reorder).
+    enum class QMode { classic = 0, wide = 1 };
+    enum class Input { pad = 0, normal = 1, boost = 2 };
+    enum class CaptureLevel { asCaptured = 0, levelMatched = 1 };
+    enum class RealClip { off = 0, on = 1 };
+
+    PedalEqBlock();
+
+private:
+    void prepareBlock (const ProcessSpec&) override;
+    void processBlock (float* const* channels, int numChannels, int numSamples,
+                       const ProcessContext&) noexcept override;
+    void resetBlock() noexcept override;
+
+    std::array<Parameter*, numBands> addBands();
+
+    std::array<Parameter*, numBands> bands;   // first, so the sliders lead the parameter list
+    Parameter& level;
+    Parameter& qMode;
+    Parameter& input;
+    Parameter& quality;
+    Parameter& captureLevel;
+    Parameter& realClip;
+};
+
+} // namespace encore

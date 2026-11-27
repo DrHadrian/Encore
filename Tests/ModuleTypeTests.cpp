@@ -7,6 +7,7 @@
 #include "TestSignals.h"
 
 #include "engine/blocks/EngineProbeBlock.h"
+#include "engine/blocks/PedalEqBlock.h"
 #include "model/ShowJson.h"
 #include "session/PatchBuilder.h"
 
@@ -112,9 +113,10 @@ public:
         beginTest ("Only types marked as new modules count");
         {
             expect (isNewModuleBlockType (EngineProbeBlock::typeId));
+            expect (isNewModuleBlockType (PedalEqBlock::typeId));
 
             for (const auto& t : getBlockTypes())
-                if (t.id != EngineProbeBlock::typeId)
+                if (t.id != EngineProbeBlock::typeId && t.id != PedalEqBlock::typeId)
                     expect (! isNewModuleBlockType (t.id), t.id);
 
             expect (! isNewModuleBlockType ("noSuchType"));
@@ -168,7 +170,56 @@ public:
     }
 };
 
+class PedalEqRegistrationTests final : public juce::UnitTest
+{
+public:
+    PedalEqRegistrationTests() : juce::UnitTest ("Pedal EQ registration", "Encore") {}
+
+    void runTest() override
+    {
+        beginTest ("The Pedal EQ is hidden and a new module");
+        {
+            const auto* type = HiddenBlockTypeTests::findType (getBlockTypes(), PedalEqBlock::typeId);
+            expect (type != nullptr && type->hidden && type->newModule);
+            expect (HiddenBlockTypeTests::findType (getMenuBlockTypes(), PedalEqBlock::typeId) == nullptr);
+
+            auto block = createBlock (PedalEqBlock::typeId);
+            expect (block != nullptr && block->getTypeId() == PedalEqBlock::typeId);
+        }
+
+        beginTest ("A show with a Pedal EQ saves as schema 5, loads back and plays");
+        {
+            auto show = makeDefaultShow ("G7");
+            BlockModel g7;
+            g7.id = "g7-1";
+            g7.type = PedalEqBlock::typeId;
+            g7.params["g800"] = 6.0f;
+            g7.params["input"] = 2.0f;
+            show.patches[0].mainLane().blocks.insert (show.patches[0].mainLane().blocks.begin(), g7);
+
+            const auto text = json::toJson (show);
+            expect (text.contains ("\"schemaVersion\": 5"));
+
+            juce::String error;
+            const auto loaded = json::fromJson (text, error);
+            expect (loaded.has_value(), error);
+
+            if (! loaded)
+                return;
+
+            juce::StringArray problems;
+            auto chain = buildChain (loaded->patches[0], ShowFolder(), spec, problems);
+            expect (problems.isEmpty(), problems.joinIntoString ("; "));
+            const auto& first = chain->getBlocks().front();
+            expect (first->getTypeId() == PedalEqBlock::typeId);
+            expectEquals (first->findParameter ("g800")->getValue(), 6.0f);
+            expectEquals (first->findParameter ("input")->getChoiceIndex(), 2);
+        }
+    }
+};
+
 static HiddenBlockTypeTests hiddenBlockTypeTests;
+static PedalEqRegistrationTests pedalEqRegistrationTests;
 static NewModuleSchemaTests newModuleSchemaTests;
 
 } // namespace encore::test

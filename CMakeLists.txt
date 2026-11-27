@@ -163,6 +163,8 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/blocks/DelayBlock.h
     Source/engine/blocks/EngineProbeBlock.cpp
     Source/engine/blocks/EngineProbeBlock.h
+    Source/engine/blocks/PedalEqBlock.cpp
+    Source/engine/blocks/PedalEqBlock.h
     Source/engine/blocks/EqBlock.cpp
     Source/engine/blocks/EqBlock.h
     Source/engine/blocks/NamAmpBlock.cpp
@@ -585,6 +587,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/ModuleBaseTests.cpp
         Tests/ModuleDspTests.cpp
         Tests/ModuleTypeTests.cpp
+        Tests/PedalEqTests.cpp
         Tests/RenderTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
