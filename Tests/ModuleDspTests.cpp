@@ -401,6 +401,56 @@ public:
             expectEquals (dsp::responseDb ({}, 1000.0, sampleRate), 0.0);
         }
 
+        beginTest ("A glide lands exactly on its design; a section can glide in from and out to nothing");
+        {
+            const auto bell = dsp::FilterBandDesign::make (band (S::bell, 800.0, 9.0, 1.5), sampleRate);
+            const auto none = dsp::FilterBandDesign::make (band (S::bell, 800.0, 0.0, 1.5), sampleRate);
+
+            // Glided over 16 samples, then held: the same as set at once, after the glide.
+            dsp::FilterBand<1> glided, direct;
+            glided.setDesign (none);
+            glided.glideTo (bell, 16);
+            expect (glided.isGliding());
+            direct.setDesign (bell);
+            auto a = noise (0.5f, 4096, 12), b = a;
+            float* ca[1] = { a.data() };
+            float* cb[1] = { b.data() };
+            glided.process (ca, 1, 4096);
+            direct.process (cb, 1, 4096);
+            expect (! glided.isGliding());
+
+            auto worst = 0.0f;
+
+            for (size_t i = 2048; i < a.size(); ++i)
+                worst = std::max (worst, std::abs (a[i] - b[i]));
+
+            expectLessThan (worst, 1.0e-6f, "settles to the same filter");
+
+            // Gliding out to nothing: afterwards it is bit-exact passthrough again.
+            glided.glideTo (none, 16);
+            std::vector<float> skip (64, 0.1f);
+            float* cs[1] = { skip.data() };
+            glided.process (cs, 1, 64);
+            const auto input = noise (0.5f, 1024, 13);
+            auto output = input;
+            float* co[1] = { output.data() };
+            glided.process (co, 1, 1024);
+            expect (output == input);
+
+            // No allocation while gliding.
+            const auto before = realtimeAllocationCount();
+            {
+                const rt::ScopedRealtimeSection realtime;
+
+                for (int i = 0; i < 64; ++i)
+                {
+                    glided.glideTo (dsp::FilterBandDesign::make (band (S::bell, 800.0, (i % 2) ? 9.0 : 0.0, 1.5), sampleRate), 16);
+                    glided.process (co, 1, 16);
+                }
+            }
+            expectEquals (realtimeAllocationCount() - before, 0);
+        }
+
         beginTest ("A band at 0 dB changes nothing (bit-exact)");
         {
             dsp::FilterBand<1> filter;

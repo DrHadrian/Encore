@@ -4,6 +4,8 @@
 #pragma once
 
 #include "engine/core/Block.h"
+#include "engine/dsp/Crossfade.h"
+#include "engine/dsp/FilterBand.h"
 
 #include <array>
 
@@ -42,6 +44,23 @@ public:
     enum class CaptureLevel { asCaptured = 0, levelMatched = 1 };
     enum class RealClip { off = 0, on = 1 };
 
+    // Classic Q is proportional (EQ-PLAN §3.1, like an analog gyrator graphic
+    // EQ): about 1.3 octaves (Q 1.07) near 0 dB, narrowing linearly to about
+    // 0.5 octave (Q 2.87) at +/-15 dB. Wide is a constant Q of 1.07.
+    static constexpr double qAtZero = 1.07, qAtFullScale = 2.87;
+    static constexpr int updateInterval = 16;   // samples between redesigns while a slider moves
+
+    /** The band's Q for a gain, in each Q mode. Any thread. */
+    static double qFor (QMode mode, double gainDb) noexcept;
+
+    /** Band b's design at a gain, in a Q mode: what the audio plays, and what
+        a curve on screen draws (dsp::responseDb of all seven). Any thread. */
+    static dsp::FilterBandDesign designFor (int band, double gainDb, QMode mode, double sampleRate) noexcept;
+
+    /** The seven designs as the parameters are set now (their targets), for a
+        curve. Message thread (or any: it only reads the parameters). */
+    std::array<dsp::FilterBandDesign, numBands> getBandDesigns (double sampleRate) const noexcept;
+
     PedalEqBlock();
 
 private:
@@ -59,6 +78,15 @@ private:
     Parameter& quality;
     Parameter& captureLevel;
     Parameter& realClip;
+
+    // Audio thread.
+    void processBands (float* const* channels, int numChannels, int numSamples) noexcept;
+
+    double sampleRate = 48000.0;
+    std::array<dsp::FilterBand<maxChannels>, numBands> filters, oldFilters;
+    std::array<double, numBands> appliedGains {};
+    QMode appliedQ = QMode::classic;
+    dsp::Crossfade qFade;
 };
 
 } // namespace encore
