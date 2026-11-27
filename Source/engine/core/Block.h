@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "engine/core/FactoryPresets.h"
 #include "engine/core/Parameter.h"
 
 namespace encore
@@ -100,6 +101,14 @@ public:
     /** True for blocks whose sound rings on after the input stops (delay,
         reverb). Patch switching lets these ring out ("spill-over"). */
     virtual bool hasTail() const noexcept { return false; }
+
+    //== Factory presets (FactoryPresets.h; any thread) ========================
+    /** The block's compiled-in factory presets (none for most). */
+    virtual std::span<const FactoryPreset> getFactoryPresets() const noexcept { return {}; }
+
+    /** Whether a preset sets this parameter (default: every parameter). A
+        block leaves out its setup settings (e.g. a Quality switch). */
+    virtual bool isPresetParameter (const Parameter&) const noexcept { return true; }
 
     //== Files (message thread) ================================================
     /** Non-null if this block loads a file. */

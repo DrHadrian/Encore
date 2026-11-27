@@ -169,6 +169,7 @@ juce::Array<juce::File> ShowFolder::listBackups() const
 juce::String ShowFolder::subfolderFor (const juce::String& blockType)
 {
     if (blockType == "nam") return "models";
+    if (blockType == "pedalEq") return "models";   // its character capture: a NAM file too
     if (blockType == "cab") return "irs";
     return "files";
 }

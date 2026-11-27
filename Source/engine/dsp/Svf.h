@@ -29,18 +29,37 @@ namespace encore::dsp
 */
 struct SvfCoefficients
 {
+    double g = 0.0, k = 2.0;               // integrator gain tan(pi fc/fs) and damping 1/Q
     double a1 = 1.0, a2 = 0.0, a3 = 0.0;   // derived from g and k
     double m0 = 1.0, m1 = 0.0, m2 = 0.0;   // output mix (defaults: pass through)
 
     static SvfCoefficients fromGainAndDamping (double g, double k, double m0, double m1, double m2) noexcept
     {
         SvfCoefficients c;
-        c.a1 = 1.0 / (1.0 + g * (g + k));
-        c.a2 = g * c.a1;
-        c.a3 = g * c.a2;
+        c.g = g;
+        c.k = k;
         c.m0 = m0;
         c.m1 = m1;
         c.m2 = m2;
+        c.update();
+        return c;
+    }
+
+    /** Recomputes a1..a3 from g and k (after changing them, e.g. in a glide). */
+    void update() noexcept
+    {
+        a1 = 1.0 / (1.0 + g * (g + k));
+        a2 = g * a1;
+        a3 = g * a2;
+    }
+
+    /** The same filter with the output mix of a pass-through: what a section
+        that isn't there sounds like, with this section's g and k. */
+    SvfCoefficients asPassThrough() const noexcept
+    {
+        auto c = *this;
+        c.m0 = 1.0;
+        c.m1 = c.m2 = 0.0;
         return c;
     }
 

@@ -65,9 +65,14 @@ double responseDb (std::span<const FilterBandDesign> bands, double frequency, do
 
 /** Plays a FilterBandDesign on TPT state-variable filters, in double.
 
-    setDesign() may be called on the audio thread at any time, e.g. every
-    16 samples while a value moves: the filters keep their state, so a fast
-    sweep stays smooth and stable. Audio thread: no allocation, no locks.
+    setDesign() may be called on the audio thread at any time: the filters
+    keep their state, so a change stays stable. For a value that moves
+    (a slider, a pedal), glideTo() goes further: it reaches the new design
+    over the next numSamples by moving each section's natural parameters
+    (g, k and the output mix) a little every sample, so redesigning every 16
+    samples sounds like redesigning every sample (no zipper noise). A section
+    that appears or goes away glides from or to a pass-through. Audio thread:
+    no allocation, no locks.
 */
 template <int MaxChannels = 2>
 class FilterBand
@@ -76,10 +81,52 @@ public:
     void setDesign (const FilterBandDesign& newDesign) noexcept
     {
         design = newDesign;
+        glideRemaining = 0;
+        activeSections = design.numSections;
 
         for (int s = 0; s < design.numSections; ++s)
             coefficients[(size_t) s] = SvfCoefficients::fromDesign (design.sections[(size_t) s]);
     }
+
+    /** Moves to newDesign over the next numSamples processed (see above). */
+    void glideTo (const FilterBandDesign& newDesign, int numSamples) noexcept
+    {
+        if (numSamples <= 1)
+        {
+            setDesign (newDesign);
+            return;
+        }
+
+        const auto from = activeSections;
+        const auto to = newDesign.numSections;
+        const auto sections = std::max (from, to);
+        std::array<SvfCoefficients, (size_t) FilterBandDesign::maxSections> targets {};
+
+        for (int s = 0; s < sections; ++s)
+        {
+            const auto i = (size_t) s;
+            targets[i] = s < to ? SvfCoefficients::fromDesign (newDesign.sections[i]) : coefficients[i].asPassThrough();
+
+            if (s >= from)
+            {
+                // A section that wasn't playing starts as a silent pass-through.
+                coefficients[i] = targets[i].asPassThrough();
+                filters[i].reset();
+            }
+
+            const auto n = (double) numSamples;
+            steps[i] = { (targets[i].g - coefficients[i].g) / n, (targets[i].k - coefficients[i].k) / n,
+                         (targets[i].m0 - coefficients[i].m0) / n, (targets[i].m1 - coefficients[i].m1) / n,
+                         (targets[i].m2 - coefficients[i].m2) / n };
+        }
+
+        design = newDesign;
+        finalCoefficients = targets;
+        activeSections = sections;
+        glideRemaining = numSamples;
+    }
+
+    bool isGliding() const noexcept { return glideRemaining > 0; }
 
     const FilterBandDesign& getDesign() const noexcept { return design; }
 
@@ -89,29 +136,79 @@ public:
             f.reset();
     }
 
+    /** One sample of one channel. While gliding, call advanceGlide() once per
+        sample (process() does this for you). */
     float processSample (float x, int channel) noexcept
     {
         auto y = (double) x;
 
-        for (int s = 0; s < design.numSections; ++s)
+        for (int s = 0; s < activeSections; ++s)
             y = filters[(size_t) s].tick (y, channel, coefficients[(size_t) s]);
 
         return (float) y;
     }
 
+    void advanceGlide() noexcept
+    {
+        if (glideRemaining <= 0)
+            return;
+
+        if (--glideRemaining == 0)
+        {
+            // Land exactly on the design, and drop sections that went away.
+            for (int s = 0; s < activeSections; ++s)
+                coefficients[(size_t) s] = finalCoefficients[(size_t) s];
+
+            activeSections = design.numSections;
+            return;
+        }
+
+        for (int s = 0; s < activeSections; ++s)
+        {
+            auto& c = coefficients[(size_t) s];
+            const auto& d = steps[(size_t) s];
+            c.g += d[0];
+            c.k += d[1];
+            c.m0 += d[2];
+            c.m1 += d[3];
+            c.m2 += d[4];
+            c.update();
+        }
+    }
+
     void process (float* const* channels, int numChannels, int numSamples) noexcept
     {
-        if (design.numSections == 0)
+        if (activeSections == 0)
             return;   // bit-exact passthrough
 
-        for (int ch = 0; ch < numChannels; ++ch)
-            for (int i = 0; i < numSamples; ++i)
+        if (glideRemaining <= 0)
+        {
+            for (int ch = 0; ch < numChannels; ++ch)
+                for (int i = 0; i < numSamples; ++i)
+                    channels[ch][i] = processSample (channels[ch][i], ch);
+
+            return;
+        }
+
+        // Gliding: every channel shares each sample's coefficients.
+        for (int i = 0; i < numSamples; ++i)
+        {
+            for (int ch = 0; ch < numChannels; ++ch)
                 channels[ch][i] = processSample (channels[ch][i], ch);
+
+            advanceGlide();
+
+            if (activeSections == 0)
+                return;   // glided to nothing: the rest passes bit-exact
+        }
     }
 
 private:
     FilterBandDesign design;
-    std::array<SvfCoefficients, (size_t) FilterBandDesign::maxSections> coefficients {};
+    int activeSections = 0;
+    std::array<SvfCoefficients, (size_t) FilterBandDesign::maxSections> coefficients {}, finalCoefficients {};
+    std::array<std::array<double, 5>, (size_t) FilterBandDesign::maxSections> steps {};
+    int glideRemaining = 0;
     std::array<Svf<MaxChannels>, (size_t) FilterBandDesign::maxSections> filters {};
 };
 

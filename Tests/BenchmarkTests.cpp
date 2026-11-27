@@ -29,6 +29,12 @@ public:
     static constexpr int buffer = 64;
     static constexpr double seconds = 5.0;
 
+    // The Pedal EQ's plan target: every slider at +/-10 (so the clip is in the
+    // path), Classic Q, Live quality; <= 0.5 % at 48 kHz / 64 (Proposed).
+    static constexpr const char* pedalEqTargetCase =
+        R"({ "g100": 10, "g200": -10, "g400": 10, "g800": -10, "g1k6": 10, "g3k2": -10, "g6k4": 10, "quality": "Live" })";
+    static constexpr double pedalEqTargetPercent = 0.5;
+
     struct Line
     {
         juce::String name;
@@ -87,10 +93,17 @@ public:
             { "engineProbe: drive, Live (2x)",              "engineProbe", R"({ "drive": 12, "quality": "Live" })", false },
             { "engineProbe: drive, High (4x)",              "engineProbe", R"({ "drive": 12, "quality": "High" })", false },
             { "engineProbe: drive, Max (8x)",               "engineProbe", R"({ "drive": 12, "quality": "Max" })", false },
+            { "pedalEq: flat (bit-exact)",                  "pedalEq",     "{}", false },
+            { "pedalEq: +/-10, Classic, Live (clip in)",    "pedalEq",     pedalEqTargetCase, false },
+            { "pedalEq: +/-10, Classic, High",              "pedalEq",     R"({ "g100": 10, "g200": -10, "g400": 10, "g800": -10, "g1k6": 10, "g3k2": -10, "g6k4": 10, "quality": "High" })", false },
+            { "pedalEq: +/-10, Classic, Max",               "pedalEq",     R"({ "g100": 10, "g200": -10, "g400": 10, "g800": -10, "g1k6": 10, "g3k2": -10, "g6k4": 10, "quality": "Max" })", false },
+            { "pedalEq: +/-10, Live, stereo",               "pedalEq",     pedalEqTargetCase, true },
             { "eq (today's EQ, for comparison)",            "eq",          R"({ "bass": 3, "mid": -3, "treble": 2 })", false },
             { "gate (today's gate, for comparison)",        "gate",        "{}", false },
             { "delay (today's delay, for comparison)",      "delay",       "{}", false },
         };
+
+        juce::String targets;
 
         for (const auto& c : cases)
         {
@@ -98,7 +111,15 @@ public:
             expect (r.ok, r.error);
 
             if (r.ok && ! r.cpu.empty())
+            {
                 lines.push_back ({ juce::String ("block ") + c.label, r.cpu[0].averageMicros, r.cpu[0].worstMicros });
+
+                // The plan's target (EQ-PLAN, Proposed): the Pedal EQ <= 0.5 % at Live.
+                if (c.settings == pedalEqTargetCase && ! c.stereo)
+                    targets << "Target: pedalEq +/-10, Classic, Live <= " << juce::String (pedalEqTargetPercent, 1) << " % of the buffer: "
+                            << juce::String (r.cpu[0].averagePercent, 2) << " % average, "
+                            << (r.cpu[0].averagePercent <= pedalEqTargetPercent ? "within the target" : "OVER THE TARGET") << "\n";
+            }
         }
 
         //== The shared DSP pieces on their own ================================
@@ -168,6 +189,8 @@ public:
 
         for (const auto& line : lines)
             report << format (line) << "\n";
+
+        report << targets;
 
         logMessage (report);
 

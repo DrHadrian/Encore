@@ -30,9 +30,13 @@ namespace encore::dsp
     A change that arrives during a fade waits until the fade has finished
     (at most 10 ms): the check above sees it on the next block.
 
-    The blend is linear (equal amplitude): both paths carry the same input
-    through similar filters, so they are correlated and a linear fade keeps
-    the level constant.
+    The blend is equal-amplitude (the two weights always sum to 1): both
+    paths carry the same input through similar filters, so they are
+    correlated and this keeps the level constant. Its shape is a smoothstep
+    (3t^2 - 2t^3) rather than a straight line: no corners at the start and
+    end, so a fade between paths that differ a little in time (a stage that
+    adds a few samples of latency coming in) doesn't spray sidebands across
+    the spectrum (measured: -58 dB with a straight line, see PedalEqTests).
 
     Threads: prepare() off the audio thread (it allocates). Everything else
     on the audio thread: no allocation, no locks.
@@ -72,7 +76,7 @@ public:
     }
 
     /** Blends the old path into newOut in place: newOut = old + (new - old) * g,
-        with g rising linearly from 0 to 1 over the fade. Past the end of the
+        with g rising smoothly from 0 to 1 over the fade. Past the end of the
         fade the new path passes unchanged. */
     void mix (float* const* newOut, int numChannels, int numSamples) noexcept
     {
@@ -86,7 +90,8 @@ public:
 
             for (int i = 0; i < numSamples && p < totalSamples; ++i, ++p)
             {
-                const auto g = (float) (p + 1) / (float) totalSamples;
+                const auto t = (float) (p + 1) / (float) totalSamples;
+                const auto g = t * t * (3.0f - 2.0f * t);
                 out[i] = old[i] + (out[i] - old[i]) * g;
             }
         }

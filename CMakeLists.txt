@@ -163,6 +163,8 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/blocks/DelayBlock.h
     Source/engine/blocks/EngineProbeBlock.cpp
     Source/engine/blocks/EngineProbeBlock.h
+    Source/engine/blocks/PedalEqBlock.cpp
+    Source/engine/blocks/PedalEqBlock.h
     Source/engine/blocks/EqBlock.cpp
     Source/engine/blocks/EqBlock.h
     Source/engine/blocks/NamAmpBlock.cpp
@@ -180,6 +182,8 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/core/Chain.cpp
     Source/engine/core/Chain.h
     Source/engine/core/LockFreeFifo.h
+    Source/engine/core/FactoryPresets.cpp
+    Source/engine/core/FactoryPresets.h
     Source/engine/core/MessageThread.cpp
     Source/engine/core/MessageThread.h
     Source/engine/core/OutputStrip.cpp
@@ -208,6 +212,7 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/dsp/SafetyLimiter.cpp
     Source/engine/dsp/SafetyLimiter.h
     Source/engine/dsp/StreamResampler.cpp
+    Source/engine/dsp/SoftClip.h
     Source/engine/dsp/StreamResampler.h
     Source/engine/dsp/Svf.h
     Source/engine/nam/NamModel.cpp
@@ -585,6 +590,8 @@ if(ENCORE_BUILD_TESTS)
         Tests/ModuleBaseTests.cpp
         Tests/ModuleDspTests.cpp
         Tests/ModuleTypeTests.cpp
+        Tests/PedalEqCaptureTests.cpp
+        Tests/PedalEqTests.cpp
         Tests/RenderTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
@@ -691,6 +698,25 @@ if(ENCORE_BUILD_TESTS)
                      --block engineProbe --report "${encore_render_dir}/sweep-null.txt")
     set_tests_properties(EncoreRender.sweep PROPERTIES FIXTURES_SETUP encore_render_sweep)
     set_tests_properties(EncoreRender.probe EncoreRender.null PROPERTIES FIXTURES_REQUIRED encore_render_sweep)
+
+    # The Pedal EQ (decision 0063): every factory preset, and a full boost
+    # that works the 9 V clip, on generated plucks, for listening (CI uploads them).
+    add_test(NAME EncoreRender.plucks
+             COMMAND EncoreRender --make-plucks "${encore_render_dir}/plucks.wav")
+    set_tests_properties(EncoreRender.plucks PROPERTIES FIXTURES_SETUP encore_render_plucks)
+    foreach(preset flat midPush scoop cleanBoost bright thicken)
+        add_test(NAME EncoreRender.pedalEq.${preset}
+                 COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                         --out "${encore_render_dir}/pedalEq-${preset}.wav" --block pedalEq --preset ${preset}
+                         --report "${encore_render_dir}/pedalEq-${preset}.txt")
+        set_tests_properties(EncoreRender.pedalEq.${preset} PROPERTIES FIXTURES_REQUIRED encore_render_plucks)
+    endforeach()
+    add_test(NAME EncoreRender.pedalEq.fullBoost
+             COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                     --out "${encore_render_dir}/pedalEq-fullBoost.wav" --block pedalEq --preset cleanBoost
+                     --set g100=15 --set g200=15 --set g400=15 --set g800=15 --set g1k6=15 --set g3k2=15 --set g6k4=15
+                     --set level=-12 --report "${encore_render_dir}/pedalEq-fullBoost.txt")
+    set_tests_properties(EncoreRender.pedalEq.fullBoost PROPERTIES FIXTURES_REQUIRED encore_render_plucks)
 endif()
 
 if(MSVC)

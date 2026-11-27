@@ -150,7 +150,9 @@ jobs:
       - name: EncoreRender report (synthetic sweep) and CPU benchmark
         if: matrix.config == 'Release'
         shell: bash
-        run: cat build/render/sweep-probe.txt build/render/sweep-null.txt build/benchmark.txt
+        run: |
+          for f in build/render/*.txt; do echo "== $f"; cat "$f"; done
+          cat build/benchmark.txt
 
       - name: Upload the renders and the benchmark
         if: matrix.config == 'Release'

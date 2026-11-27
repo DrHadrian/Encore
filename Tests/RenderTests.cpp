@@ -7,6 +7,7 @@
 #include "TestSignals.h"
 
 #include "engine/blocks/EngineProbeBlock.h"
+#include "engine/blocks/PedalEqBlock.h"
 #include "session/OfflineRender.h"
 
 namespace encore::test
@@ -95,6 +96,26 @@ public:
             expect (r.report().startsWith ("Render failed"));
         }
 
+        beginTest ("A factory preset by id, with settings on top; an unknown preset is refused");
+        {
+            const auto input = toBuffer (sine (800.0, 0.05f, 48000));
+            const auto boosted = render::renderBlock (input, sampleRate, PedalEqBlock::typeId, {}, 64, "cleanBoost");
+            expect (boosted.ok, boosted.error);
+            expectWithinAbsoluteError (toDb (boosted.peakOut) - toDb (boosted.peakIn), 12.0f, 0.05f, "Boost +6, Level +6");
+
+            const auto onTop = render::renderBlock (input, sampleRate, PedalEqBlock::typeId, json (R"({ "level": 0 })"), 64, "cleanBoost");
+            expectWithinAbsoluteError (toDb (onTop.peakOut) - toDb (onTop.peakIn), 6.0f, 0.05f, "settings go on top");
+
+            const auto flat = render::renderBlock (input, sampleRate, PedalEqBlock::typeId, {}, 64, "flat");
+            expect (flat.ok && equal (flat.output, input));
+
+            const auto unknown = render::renderBlock (input, sampleRate, PedalEqBlock::typeId, {}, 64, "wah");
+            expect (! unknown.ok && unknown.error.contains ("wah") && unknown.error.contains ("midPush"), unknown.error);
+
+            const auto none = render::renderBlock (input, sampleRate, EngineProbeBlock::typeId, {}, 64, "flat");
+            expect (! none.ok && none.error.contains ("none"), none.error);
+        }
+
         beginTest ("The report has levels, latency and CPU");
         {
             const auto input = toBuffer (sine (440.0, 0.5f, 48000));
@@ -133,6 +154,12 @@ public:
                 expectEquals (back->sampleRate, 96000.0);
                 expect (equal (back->buffer, sweep));
             }
+
+            const auto plucks = render::makePlucks (48000.0);
+            expectEquals (plucks.getNumSamples(), (int) (6.5 * 48000.0));
+            expect (equal (plucks, render::makePlucks (48000.0)), "deterministic");
+            expectWithinAbsoluteError (toDb (plucks.getMagnitude (0, 0, plucks.getNumSamples())), -1.0f, 1.0f, "the accent peaks near -1 dBFS");
+            expectLessThan (plucks.getMagnitude (0, 0, 4000), 0.001f, "the noise floor before the first note");
 
             expect (! render::readAudioFile (dir.getChildFile ("missing.wav"), error).has_value());
             expect (error.contains ("missing.wav"));

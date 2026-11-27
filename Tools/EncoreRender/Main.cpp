@@ -17,11 +17,13 @@ namespace
 {
     const char* usage = R"(EncoreRender: a WAV through an Encore block or patch, offline.
 
-  EncoreRender --in IN.wav --out OUT.wav --block TYPE [--settings S.json] [--set id=value ...]
+  EncoreRender --in IN.wav --out OUT.wav --block TYPE [--preset ID] [--settings S.json] [--set id=value ...]
   EncoreRender --in IN.wav --out OUT.wav --show SHOW --patch NAME-OR-NUMBER
   EncoreRender --make-sweep OUT.wav [--seconds 5] [--rate 48000]
+  EncoreRender --make-plucks OUT.wav [--rate 48000]   (generated guitar-like notes)
 
   --block TYPE     a block type id (hidden ones too), e.g. engineProbe, eq, gate
+  --preset ID      a factory preset of the block (first; settings go on top)
   --settings FILE  JSON: { "parameter id": value }; a choice may be given by name
   --set id=value   one setting (may repeat; after --settings)
   --show SHOW      a show folder or .encore file; --patch picks a patch (1 = first)
@@ -60,6 +62,9 @@ Writes a 32-bit float WAV and prints a report: peak, RMS, latency, CPU per block
 
                     s << "\n";
                 }
+
+                if (! block->getFactoryPresets().empty())
+                    s << "    presets: " << encore::presets::listIds (*block) << "\n";
             }
         }
 
@@ -114,6 +119,20 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (const auto plucksOut = value ("--make-plucks"); plucksOut.isNotEmpty())
+    {
+        const auto rate = value ("--rate").isNotEmpty() ? value ("--rate").getDoubleValue() : 48000.0;
+
+        if (rate < 8000.0)
+            return fail ("--rate must be at least 8000");
+
+        if (! encore::render::writeWav (file (plucksOut), encore::render::makePlucks (rate), rate, error))
+            return fail (error);
+
+        std::cout << "Wrote generated plucks (6.5 s) at " << rate << " Hz to " << plucksOut << "\n";
+        return 0;
+    }
+
     const auto inPath = value ("--in"), outPath = value ("--out");
 
     if (inPath.isEmpty() || outPath.isEmpty())
@@ -159,7 +178,7 @@ int main (int argc, char* argv[])
             settings.getDynamicObject()->setProperty (assignment.upToFirstOccurrenceOf ("=", false, false).trim(), parsedValue);
         }
 
-        result = encore::render::renderBlock (input->buffer, input->sampleRate, type, settings, bufferSize);
+        result = encore::render::renderBlock (input->buffer, input->sampleRate, type, settings, bufferSize, value ("--preset"));
     }
     else if (const auto showPath = value ("--show"); showPath.isNotEmpty())
     {

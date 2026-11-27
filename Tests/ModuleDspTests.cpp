@@ -11,6 +11,7 @@
 #include "engine/dsp/Detector.h"
 #include "engine/dsp/FilterBand.h"
 #include "engine/dsp/Oversampler.h"
+#include "engine/dsp/SoftClip.h"
 
 #include <complex>
 
@@ -399,6 +400,56 @@ public:
                                                + designs[2].magnitudeDb (f, sampleRate), 1.0e-9);
 
             expectEquals (dsp::responseDb ({}, 1000.0, sampleRate), 0.0);
+        }
+
+        beginTest ("A glide lands exactly on its design; a section can glide in from and out to nothing");
+        {
+            const auto bell = dsp::FilterBandDesign::make (band (S::bell, 800.0, 9.0, 1.5), sampleRate);
+            const auto none = dsp::FilterBandDesign::make (band (S::bell, 800.0, 0.0, 1.5), sampleRate);
+
+            // Glided over 16 samples, then held: the same as set at once, after the glide.
+            dsp::FilterBand<1> glided, direct;
+            glided.setDesign (none);
+            glided.glideTo (bell, 16);
+            expect (glided.isGliding());
+            direct.setDesign (bell);
+            auto a = noise (0.5f, 4096, 12), b = a;
+            float* ca[1] = { a.data() };
+            float* cb[1] = { b.data() };
+            glided.process (ca, 1, 4096);
+            direct.process (cb, 1, 4096);
+            expect (! glided.isGliding());
+
+            auto worst = 0.0f;
+
+            for (size_t i = 2048; i < a.size(); ++i)
+                worst = std::max (worst, std::abs (a[i] - b[i]));
+
+            expectLessThan (worst, 1.0e-6f, "settles to the same filter");
+
+            // Gliding out to nothing: afterwards it is bit-exact passthrough again.
+            glided.glideTo (none, 16);
+            std::vector<float> skip (64, 0.1f);
+            float* cs[1] = { skip.data() };
+            glided.process (cs, 1, 64);
+            const auto input = noise (0.5f, 1024, 13);
+            auto output = input;
+            float* co[1] = { output.data() };
+            glided.process (co, 1, 1024);
+            expect (output == input);
+
+            // No allocation while gliding.
+            const auto before = realtimeAllocationCount();
+            {
+                const rt::ScopedRealtimeSection realtime;
+
+                for (int i = 0; i < 64; ++i)
+                {
+                    glided.glideTo (dsp::FilterBandDesign::make (band (S::bell, 800.0, (i % 2) ? 9.0 : 0.0, 1.5), sampleRate), 16);
+                    glided.process (co, 1, 16);
+                }
+            }
+            expectEquals (realtimeAllocationCount() - before, 0);
         }
 
         beginTest ("A band at 0 dB changes nothing (bit-exact)");
@@ -889,7 +940,83 @@ public:
     }
 };
 
+class SoftClipTests final : public juce::UnitTest
+{
+public:
+    SoftClipTests() : juce::UnitTest ("Module soft clip", "Encore") {}
+
+    void runTest() override
+    {
+        const dsp::SoftClip clip;
+
+        beginTest ("Exactly linear up to -6 dBFS");
+        {
+            const auto limit = (float) clip.getLinearLimit();
+            expectWithinAbsoluteError (toDb (limit), -6.0f, 1.0e-4f);
+
+            for (int i = -1000; i <= 1000; ++i)
+            {
+                const auto x = limit * (float) i / 1000.0f;
+                expect (juce::exactlyEqual (clip.process (x), x));
+            }
+        }
+
+        beginTest ("Smooth: slope 1 at the knee, then bending; monotonic; under the rails");
+        {
+            const auto limit = clip.getLinearLimit();
+            const auto slope = [&clip] (double x) { const auto h = 1.0e-4; return ((double) clip.process ((float) (x + h)) - clip.process ((float) (x - h))) / (2.0 * h); };
+            expectWithinAbsoluteError (slope (limit + 1.0e-3), 1.0, 1.0e-3);
+            expectWithinAbsoluteError (slope (-limit - 1.0e-3), 1.0, 1.0e-3);
+
+            auto previous = -100.0f;
+
+            for (int i = -2000; i <= 2000; ++i)
+            {
+                const auto y = clip.process ((float) i / 100.0f);   // -20 .. +20 (+26 dBFS)
+                expect (y >= previous);
+                previous = y;
+            }
+
+            expectLessThan ((double) clip.process (1000.0f), clip.getPositiveRail() + 1.0e-6);
+            expectGreaterThan ((double) clip.process (-1000.0f), -clip.getNegativeRail() - 1.0e-6);
+        }
+
+        beginTest ("The curve: -1 dB at +6 dBFS (positive) and +5 dBFS (negative); -4.3 dB at +12 dBFS");
+        {
+            const auto at = [] (double db) { return std::pow (10.0, db / 20.0); };
+            expectWithinAbsoluteError (clip.gainDbAt (at (6.0)), -1.0, 1.0e-6);
+            expectWithinAbsoluteError (clip.gainDbAt (-at (5.0)), -1.0, 1.0e-6);
+            expectWithinAbsoluteError (clip.gainDbAt (at (0.0)), -0.08, 0.02);
+            expectWithinAbsoluteError (clip.gainDbAt (at (12.0)), -4.3, 0.1);
+            expectLessThan (clip.gainDbAt (-at (6.0)), -1.0, "the negative side bends a little sooner");
+        }
+
+        beginTest ("Asymmetric: driven hard it adds even harmonics; linear it adds none");
+        {
+            const auto harmonic2 = [&clip] (float amplitude)
+            {
+                std::complex<double> h1, h2;
+                const int n = 4800;
+
+                for (int i = 0; i < n; ++i)
+                {
+                    const auto phase = 2.0 * juce::MathConstants<double>::pi * 10.0 * i / n;   // 10 whole cycles
+                    const auto y = (double) clip.process (amplitude * (float) std::sin (phase));
+                    h1 += y * std::polar (1.0, -phase);
+                    h2 += y * std::polar (1.0, -2.0 * phase);
+                }
+
+                return 20.0 * std::log10 (std::abs (h2) / std::abs (h1) + 1.0e-30);
+            };
+
+            expectLessThan (harmonic2 (0.4f), -200.0);
+            expectGreaterThan (harmonic2 (4.0f), -40.0);
+        }
+    }
+};
+
 static FilterTests filterTests;
+static SoftClipTests softClipTests;
 static OversamplerTests oversamplerTests;
 static DetectorTests detectorTests;
 static TestSignalTests testSignalTests;
