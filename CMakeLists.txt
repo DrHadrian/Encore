@@ -191,6 +191,7 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/midi/MidiRouter.h
     Source/engine/dsp/Biquad.h
     Source/engine/dsp/Crossfade.h
+    Source/engine/dsp/Detector.h
     Source/engine/dsp/FilterBand.cpp
     Source/engine/dsp/FilterBand.h
     Source/engine/dsp/FilterDesign.cpp

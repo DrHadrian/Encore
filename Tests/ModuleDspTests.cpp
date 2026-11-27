@@ -8,6 +8,7 @@
 #include "TestSignals.h"
 
 #include "engine/core/Realtime.h"
+#include "engine/dsp/Detector.h"
 #include "engine/dsp/FilterBand.h"
 
 #include <complex>
@@ -412,6 +413,256 @@ public:
     }
 };
 
+class DetectorTests final : public juce::UnitTest
+{
+public:
+    DetectorTests() : juce::UnitTest ("Module detectors", "Encore") {}
+
+    struct GateRun
+    {
+        std::vector<float> gains;
+        int opens = 0, closes = 0;
+        int firstFullyOpen = -1;
+    };
+
+    static GateRun runGate (const std::vector<float>& signal, dsp::DetectorMode mode, double detectorMs,
+                            const dsp::GateEnvelopeSettings& settings, bool startOpen, double rate = sampleRate,
+                            int countFrom = 0)
+    {
+        dsp::LevelDetector detector;
+        detector.prepare (rate);
+        detector.setMode (mode);
+        detector.setTimeMs (detectorMs);
+
+        dsp::GateEnvelope gate;
+        gate.prepare (rate);
+        gate.setSettings (settings);
+        gate.reset (startOpen);
+
+        GateRun run;
+        auto wasOpen = gate.isOpen();
+
+        for (size_t i = 0; i < signal.size(); ++i)
+        {
+            const auto g = gate.process (detector.process (signal[i]));
+            run.gains.push_back (g);
+
+            if (gate.isOpen() != wasOpen && (int) i >= countFrom)
+                (gate.isOpen() ? run.opens : run.closes)++;
+
+            wasOpen = gate.isOpen();
+
+            if (run.firstFullyOpen < 0 && g >= 1.0f)
+                run.firstFullyOpen = (int) i;
+        }
+
+        return run;
+    }
+
+    void runTest() override
+    {
+        beginTest ("Peak reads a sine's peak; RMS reads it 3 dB lower, within 0.2 dB");
+        {
+            for (auto rate : rates)
+            {
+                for (auto amplitudeDb : { -40.0f, -12.0f, 0.0f })
+                {
+                    const auto amplitude = juce::Decibels::decibelsToGain (amplitudeDb);
+                    std::vector<float> tone ((size_t) rate);
+
+                    for (size_t i = 0; i < tone.size(); ++i)
+                        tone[i] = amplitude * (float) std::sin (twoPi * 440.0 * (double) i / rate);
+
+                    dsp::LevelDetector peakDetector, rmsDetector;
+                    peakDetector.prepare (rate);
+                    rmsDetector.prepare (rate);
+                    rmsDetector.setMode (dsp::DetectorMode::rms);
+                    rmsDetector.setTimeMs (50.0);
+
+                    float peakMax = 0.0f, rmsLast = 0.0f;
+
+                    for (auto x : tone)
+                    {
+                        peakMax = std::max (peakMax, peakDetector.process (x));
+                        rmsLast = rmsDetector.process (x);
+                    }
+
+                    expectWithinAbsoluteError (toDb (peakMax), amplitudeDb, 0.01f);
+                    expectWithinAbsoluteError (toDb (rmsLast), amplitudeDb - 3.0103f, 0.2f);
+                }
+            }
+        }
+
+        beginTest ("RMS follows loudness: within 1 dB once settled, and after a 12 dB step");
+        {
+            dsp::LevelDetector detector;
+            detector.prepare (sampleRate);
+            detector.setMode (dsp::DetectorMode::rms);
+            detector.setTimeMs (50.0);
+
+            // Noise, 12 dB louder after one second.
+            auto signal = whiteNoise (0.25f, 96000, 4);
+
+            for (size_t i = 48000; i < signal.size(); ++i)
+                signal[i] *= 4.0f;
+
+            std::vector<float> level;
+
+            for (auto x : signal)
+                level.push_back (detector.process (x));
+
+            const auto quiet = rms (signal, 24000, 48000);
+            const auto loud = rms (signal, 72000, 96000);
+
+            // Settled readings track the true RMS within 1 dB (noise ripple included).
+            auto worst = 0.0f;
+
+            for (int i = 30000; i < 48000; i += 480)
+                worst = std::max (worst, std::abs (toDb (level[(size_t) i]) - toDb (quiet)));
+
+            for (int i = 78000; i < 96000; i += 480)
+                worst = std::max (worst, std::abs (toDb (level[(size_t) i]) - toDb (loud)));
+
+            expectLessThan (worst, 1.0f);
+
+            // Five time constants (250 ms) after the step it reads the new level within 1 dB.
+            expectWithinAbsoluteError (toDb (level[48000 + 12000]), toDb (loud), 1.0f);
+        }
+
+        beginTest ("A pluck opens the gate within the attack, at every rate");
+        {
+            for (auto rate : rates)
+            {
+                for (auto attackMs : { 0.05f, 0.5f, 5.0f, 50.0f })
+                {
+                    const auto note = pluck ((int) rate, (int) (0.1 * rate), 0.5f, 2000.0, -70.0f, 110.0, 6, 2, rate);
+
+                    dsp::GateEnvelopeSettings settings;
+                    settings.thresholdDb = -50.0f;
+                    settings.attackMs = attackMs;
+
+                    const auto run = runGate (note.signal, dsp::DetectorMode::peak, 10.0, settings, false, rate);
+                    expect (run.firstFullyOpen > note.onset, "closed on the noise floor before the note");
+
+                    // The first sample at or above the threshold.
+                    auto crossing = -1;
+
+                    for (size_t i = 0; i < note.signal.size() && crossing < 0; ++i)
+                        if (toDb (std::abs (note.signal[i])) >= settings.thresholdDb)
+                            crossing = (int) i;
+
+                    const auto attackSamples = (int) std::ceil (attackMs * 0.001 * rate);
+                    expectLessOrEqual (run.firstFullyOpen - crossing, attackSamples,
+                                       juce::String (attackMs) + " ms at " + juce::String (rate));
+                    expectEquals (run.gains[(size_t) note.onset - 1], 0.0f, "fully closed before (range -90 dB = silence)");
+                }
+            }
+        }
+
+        beginTest ("Hysteresis: a slowly decaying sine closes exactly once, no chatter");
+        {
+            // 0 dBFS falling 20 dB per second through -40 dB, with a little noise riding on it.
+            auto signal = decayingSine (196.0, 1.0f, 20.0, (int) (4.0 * sampleRate));
+            const auto hiss = noise (juce::Decibels::decibelsToGain (-50.0f), (int) signal.size(), 9);
+
+            for (size_t i = 0; i < signal.size(); ++i)
+                signal[i] += hiss[i];
+
+            dsp::GateEnvelopeSettings settings;
+            settings.thresholdDb = -40.0f;
+            settings.hysteresisDb = 6.0f;
+            settings.holdMs = 0.0f;
+            const auto afterStart = (int) (0.1 * sampleRate);   // the sine starts at zero: ignore the first 100 ms
+
+            for (auto mode : { dsp::DetectorMode::peak, dsp::DetectorMode::rms })
+            {
+                const auto run = runGate (signal, mode, 10.0, settings, true, sampleRate, afterStart);
+                expectEquals (run.closes, 1, "closes once");
+                expectEquals (run.opens, 0, "never reopens");
+            }
+
+            // Without hysteresis and with a fast detector the same note chatters:
+            // the test can see what hysteresis prevents.
+            settings.hysteresisDb = 0.0f;
+            const auto chatter = runGate (signal, dsp::DetectorMode::peak, 1.0, settings, true, sampleRate, afterStart);
+            expectGreaterThan (chatter.closes, 1);
+        }
+
+        beginTest ("Hold keeps it open; release reaches the range in the release time, linearly in dB");
+        {
+            dsp::GateEnvelopeSettings settings;
+            settings.thresholdDb = -40.0f;
+            settings.hysteresisDb = 0.0f;
+            settings.holdMs = 20.0f;
+            settings.releaseMs = 100.0f;
+            settings.rangeDb = -30.0f;
+
+            dsp::GateEnvelope gate;
+            gate.prepare (sampleRate);
+            gate.setSettings (settings);
+            gate.reset (true);
+
+            // The level drops to silence at sample 0.
+            std::vector<float> gains;
+
+            for (int i = 0; i < 9600; ++i)
+                gains.push_back (gate.process (0.0f));
+
+            const auto holdSamples = 960;
+            expectEquals (gains[(size_t) holdSamples - 1], 1.0f, "still open through the hold");
+            expect (gains[(size_t) holdSamples + 1] < 1.0f, "then releases");
+
+            const auto releaseEnd = holdSamples + 1 + 4800;
+            expectWithinAbsoluteError (toDb (gains[(size_t) releaseEnd - 1]), -30.0f, 0.1f);
+            expectWithinAbsoluteError (toDb (gains[(size_t) holdSamples + 1 + 2400]), -15.0f, 0.1f, "half way in dB at half time");
+            expectEquals (gains.back(), juce::Decibels::decibelsToGain (-30.0f), "settles at the range");
+        }
+
+        beginTest ("A palm-mute opens and closes; the noise floor alone never opens it");
+        {
+            const auto mute = palmMute (48000, 4800, 0.5f, -70.0f, 5);
+            dsp::GateEnvelopeSettings settings;
+            settings.thresholdDb = -55.0f;
+
+            const auto run = runGate (mute.signal, dsp::DetectorMode::peak, 10.0, settings, false);
+            expectEquals (run.opens, 1);
+            expectEquals (run.closes, 1);
+
+            const auto floorOnly = runGate (noise (juce::Decibels::decibelsToGain (-70.0f), 48000, 6),
+                                            dsp::DetectorMode::peak, 10.0, settings, false);
+            expectEquals (floorOnly.opens, 0);
+        }
+
+        beginTest ("No allocation, no NaN at extreme settings");
+        {
+            dsp::LevelDetector detector;
+            dsp::GateEnvelope gate;
+            detector.prepare (sampleRate);
+            gate.prepare (sampleRate);
+            auto allFinite = true;
+
+            const auto before = realtimeAllocationCount();
+            {
+                const rt::ScopedRealtimeSection realtime;
+
+                for (auto attack : { 0.0f, 0.05f, 1.0e6f })
+                    for (auto release : { 0.0f, 5.0f, 1.0e6f })
+                        for (auto range : { -1000.0f, -90.0f, 0.0f, 20.0f })
+                            for (auto time : { 0.0, 1.0, 1.0e9 })
+                            {
+                                detector.setTimeMs (time);
+                                gate.setSettings ({ -60.0f, 100.0f, range, attack, 1.0e6f, release });
+
+                                for (int i = 0; i < 256; ++i)
+                                    allFinite = allFinite && std::isfinite (gate.process (detector.process (i % 32 == 0 ? 1.0f : 0.0f)));
+                            }
+            }
+            expectEquals (realtimeAllocationCount() - before, 0);
+            expect (allFinite);
+        }
+    }
+};
+
 class TestSignalTests final : public juce::UnitTest
 {
 public:
@@ -468,6 +719,7 @@ public:
 };
 
 static FilterTests filterTests;
+static DetectorTests detectorTests;
 static TestSignalTests testSignalTests;
 
 } // namespace encore::test
