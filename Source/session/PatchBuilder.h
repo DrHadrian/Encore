@@ -4,6 +4,7 @@
 #pragma once
 
 #include "engine/core/Chain.h"
+#include "engine/blocks/StudioEqBlock.h"
 #include "model/ShowFolder.h"
 
 #include <functional>
@@ -91,5 +92,21 @@ bool addGatePair (PatchModel& patch, const std::function<juce::String()>& newId)
     stays at the defaults (today's fixed values). Written for U2's switch-over;
     nothing calls it yet. A block of any other type comes back unchanged. */
 BlockModel convertOldGate (const BlockModel& gate);
+
+//== Studio EQ (B3) ============================================================
+/** Adding a band to a Studio EQ's model (EQ-PLAN §2.8): it takes the lowest
+    free slot, in use with these settings. Returns the slot (0-based), or -1
+    and `error` ("All 24 bands are in use"). Message thread. */
+int addEqBand (BlockModel& eq, const StudioEqBlock::BandSettings& band, juce::String& error);
+
+/** Removing a band frees its slot: its parameters go back to their defaults
+    and every expression assignment on them goes (and their scene marks once
+    scenes exist), in the same edit. Returns how many assignments went.
+    Message thread. */
+int removeEqBand (BlockModel& eq, int slot);
+
+/** Sets a live Studio EQ's slot from the model (the edit above, heard at
+    once: the band glides in or out). Message thread. */
+void applyEqSlot (const BlockModel& eq, Block& block, int slot);
 
 } // namespace encore

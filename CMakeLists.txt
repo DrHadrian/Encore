@@ -251,6 +251,7 @@ target_sources(EncoreEngine PRIVATE
     Source/session/OfflineRender.h
     Source/session/PatchBuilder.cpp
     Source/session/PatchGates.cpp
+    Source/session/PatchEq.cpp
     Source/session/PluginCatalog.cpp
     Source/session/PluginCatalog.h
     Source/session/PreShowCheck.cpp
@@ -603,6 +604,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/ModuleDspTests.cpp
         Tests/EqShapeTests.cpp
         Tests/StudioEqTests.cpp
+        Tests/StudioEqModelTests.cpp
         Tests/ModuleTypeTests.cpp
         Tests/PedalEqCaptureTests.cpp
         Tests/PedalEqTests.cpp
