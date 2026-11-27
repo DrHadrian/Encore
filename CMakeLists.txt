@@ -170,6 +170,7 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/blocks/PedalGateBlock.cpp
     Source/engine/blocks/PedalGateBlock.h
     Source/engine/blocks/StudioGateBlock.cpp
+    Source/engine/blocks/StudioEqBlock.cpp
     Source/engine/blocks/StudioGateBlock.h
     Source/engine/blocks/EqBlock.cpp
     Source/engine/blocks/EqBlock.h
@@ -250,6 +251,8 @@ target_sources(EncoreEngine PRIVATE
     Source/session/OfflineRender.h
     Source/session/PatchBuilder.cpp
     Source/session/PatchGates.cpp
+    Source/session/PatchEq.cpp
+    Source/session/PatchCompare.cpp
     Source/session/PluginCatalog.cpp
     Source/session/PluginCatalog.h
     Source/session/PreShowCheck.cpp
@@ -600,6 +603,10 @@ if(ENCORE_BUILD_TESTS)
         Tests/MidiTests.cpp
         Tests/ModuleBaseTests.cpp
         Tests/ModuleDspTests.cpp
+        Tests/EqShapeTests.cpp
+        Tests/StudioEqTests.cpp
+        Tests/StudioEqModelTests.cpp
+        Tests/StudioEqSessionTests.cpp
         Tests/ModuleTypeTests.cpp
         Tests/PedalEqCaptureTests.cpp
         Tests/PedalEqTests.cpp
@@ -773,6 +780,34 @@ if(ENCORE_BUILD_TESTS)
                          --report "${encore_render_dir}/studioGate-${preset}.txt")
         set_tests_properties(EncoreRender.studioGate.${preset} PROPERTIES FIXTURES_REQUIRED encore_render_gatetest)
     endforeach()
+    # The Studio EQ (B3): every preset, 24 bands at extremes, a band swept as
+    # a pedal would, and Curve and Smart auto gain, on the generated plucks.
+    foreach(preset flat tightenLows cutMud presence sitInMix)
+        add_test(NAME EncoreRender.studioEq.${preset}
+                 COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                         --out "${encore_render_dir}/studioEq-${preset}.wav" --block studioEq --preset ${preset}
+                         --report "${encore_render_dir}/studioEq-${preset}.txt")
+        set_tests_properties(EncoreRender.studioEq.${preset} PROPERTIES FIXTURES_REQUIRED encore_render_plucks)
+    endforeach()
+    add_test(NAME EncoreRender.studioEq.extreme24
+             COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                     --out "${encore_render_dir}/studioEq-extreme24.wav" --block studioEq
+                     --settings "${CMAKE_CURRENT_SOURCE_DIR}/Tests/renders/studioEq-24-extreme.json"
+                     --report "${encore_render_dir}/studioEq-extreme24.txt")
+    add_test(NAME EncoreRender.studioEq.sweep
+             COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                     --out "${encore_render_dir}/studioEq-sweep.wav" --block studioEq --preset presence
+                     --set b01Gain=9 --set b01Q=2 --sweep b01Freq=150:9000
+                     --report "${encore_render_dir}/studioEq-sweep.txt")
+    foreach(mode Curve Smart)
+        add_test(NAME EncoreRender.studioEq.auto${mode}
+                 COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                         --out "${encore_render_dir}/studioEq-auto${mode}.wav" --block studioEq --preset sitInMix
+                         --set b03Gain=8 --set autoGain=${mode}
+                         --report "${encore_render_dir}/studioEq-auto${mode}.txt")
+        set_tests_properties(EncoreRender.studioEq.auto${mode} PROPERTIES FIXTURES_REQUIRED encore_render_plucks)
+    endforeach()
+    set_tests_properties(EncoreRender.studioEq.extreme24 EncoreRender.studioEq.sweep PROPERTIES FIXTURES_REQUIRED encore_render_plucks)
     foreach(patch "Gate pair" "Ducking delay" "Smart X4")
         string(REPLACE " " "-" patch_file "${patch}")
         add_test(NAME EncoreRender.show.${patch_file}

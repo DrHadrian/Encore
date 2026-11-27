@@ -40,6 +40,11 @@ public:
             0..n-1 in steps of 1, the value is the index, and it never ramps. */
         juce::StringArray choices {};
 
+        /** Whether it can go on an expression pedal. Scenes may still mark it.
+            False for settings that aren't a sound to sweep (B3: a Studio EQ
+            band's "in use", its placement and mode, the phase mode...). */
+        bool expressionAllowed = true;
+
         /** A choice parameter: values 0..names.size()-1, saved by index. */
         static Spec choice (juce::String id, juce::String name, juce::StringArray names, int defaultIndex = 0);
     };

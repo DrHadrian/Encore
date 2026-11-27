@@ -19,6 +19,7 @@ namespace
     const char* usage = R"(EncoreRender: a WAV through an Encore block or patch, offline.
 
   EncoreRender --in IN.wav --out OUT.wav --block TYPE [--preset ID] [--settings S.json] [--set id=value ...] [--ref name=value ...]
+               [--sweep id=from:to]
   EncoreRender --in IN.wav --out OUT.wav --show SHOW --patch NAME-OR-NUMBER [--ref blockId.name=value ...]
   EncoreRender --make-sweep OUT.wav [--seconds 5] [--rate 48000]
   EncoreRender --make-plucks OUT.wav [--rate 48000]   (generated guitar-like notes)
@@ -34,6 +35,8 @@ namespace
                    --ref duck.keyBlock=dry); alone, a block has nothing before it,
                    so a keyBlock or linkTo falls back and the report says so
   --noise-db DB    --make-gate-test: the noise floor's peak (default -60 dBFS)
+  --sweep id=a:b   moves one parameter linearly from a to b across the render, as an
+                   expression pedal would (e.g. --sweep b01Freq=200:8000)
   --show SHOW      a show folder or .encore file; --patch picks a patch (1 = first)
   --buffer N       buffer size in samples (default 64)
   --report FILE    also write the report to FILE
@@ -227,7 +230,21 @@ int main (int argc, char* argv[])
             refs[args[i + 1].upToFirstOccurrenceOf ("=", false, false).trim()] = args[i + 1].fromFirstOccurrenceOf ("=", false, false).trim();
         }
 
-        result = encore::render::renderBlock (input->buffer, input->sampleRate, type, settings, bufferSize, value ("--preset"), refs);
+        std::optional<encore::render::Sweep> sweep;
+
+        if (const auto text = value ("--sweep"); text.isNotEmpty())
+        {
+            const auto range = text.fromFirstOccurrenceOf ("=", false, false);
+
+            if (! text.contains ("=") || ! range.contains (":"))
+                return fail ("--sweep needs id=from:to, got \"" + text + "\"");
+
+            sweep = encore::render::Sweep { text.upToFirstOccurrenceOf ("=", false, false).trim(),
+                                            range.upToFirstOccurrenceOf (":", false, false).getFloatValue(),
+                                            range.fromFirstOccurrenceOf (":", false, false).getFloatValue() };
+        }
+
+        result = encore::render::renderBlock (input->buffer, input->sampleRate, type, settings, bufferSize, value ("--preset"), refs, sweep);
     }
     else if (const auto showPath = value ("--show"); showPath.isNotEmpty())
     {

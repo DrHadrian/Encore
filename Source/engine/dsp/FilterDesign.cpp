@@ -206,6 +206,51 @@ BiquadDesign design::matchedHighShelf (double sampleRate, double frequency, doub
     return r;
 }
 
+BiquadDesign design::matchedFirstOrderLowShelf (double sampleRate, double frequency, double gainDb) noexcept
+{
+    // (s + G wp) / (s + wp) for a boost, wp = wc / sqrt(G), so the half-gain
+    // point is wc; a cut is the boost's reciprocal. A first-order section has
+    // three numbers, so it can match three points exactly: DC (G^2), the
+    // half-gain point (G) and Nyquist (the prototype's value there). With
+    // phi0 = cos^2(w/2), phi1 = sin^2(w/2), |p0 + p1 z^-1|^2 = (p0+p1)^2 phi0
+    // + (p0-p1)^2 phi1; matching gives ((1+a1)/(1-a1))^2 = phi1 (Pc - Pn) /
+    // (phi0 (P0 - Pc)), then the numerator from DC and Nyquist.
+    frequency = clampFrequency (frequency, sampleRate);
+    const auto gain = gainFromDb (std::abs (gainDb));
+
+    if (gain <= 1.0 + 1.0e-12)
+        return {};
+
+    const auto wc = 2.0 * pi * frequency / sampleRate;
+    const auto wp = wc / std::sqrt (gain);
+    const auto p0 = gain * gain, pc = gain;
+    const auto pn = (pi * pi + gain * gain * wp * wp) / (pi * pi + wp * wp);
+
+    const auto s = std::sin (wc * 0.5);
+    const auto phi1 = s * s, phi0 = 1.0 - phi1;
+    const auto ratio = std::sqrt (std::max (1.0e-30, phi1 * (pc - pn) / (phi0 * (p0 - pc))));
+    const auto a1 = std::clamp ((ratio - 1.0) / (ratio + 1.0), -0.999999, 0.999999);
+
+    BiquadDesign boost;
+    const auto sum = std::sqrt (p0) * (1.0 + a1);         // b0 + b1
+    const auto alternating = std::sqrt (pn) * (1.0 - a1); // b0 - b1
+    boost.b0 = 0.5 * (sum + alternating);
+    boost.b1 = 0.5 * (sum - alternating);
+    boost.a1 = a1;
+    return gainDb >= 0.0 ? boost : reciprocal (boost);
+}
+
+BiquadDesign design::matchedFirstOrderHighShelf (double sampleRate, double frequency, double gainDb) noexcept
+{
+    // G / low shelf (G), as the second-order ones.
+    const auto gain = gainFromDb (gainDb);
+    auto r = reciprocal (matchedFirstOrderLowShelf (sampleRate, frequency, gainDb));
+    r.b0 *= gain;
+    r.b1 *= gain;
+    r.b2 *= gain;
+    return r;
+}
+
 BiquadDesign design::lowPass (double sampleRate, double frequency, double q) noexcept
 {
     return bilinear (sampleRate, frequency, clampQ (q), 0.0, 0.0, 1.0);
@@ -252,6 +297,17 @@ BiquadDesign design::firstOrderHighPass (double sampleRate, double frequency) no
     return r;
 }
 
+BiquadDesign design::firstOrderAllPass (double sampleRate, double frequency) noexcept
+{
+    const auto g = std::tan (pi * clampFrequency (frequency, sampleRate) / sampleRate);
+    const auto c = (g - 1.0) / (g + 1.0);
+    BiquadDesign r;
+    r.b0 = c;
+    r.b1 = 1.0;
+    r.a1 = c;
+    return r;
+}
+
 double design::butterworthQ (int order, int index) noexcept
 {
     // The poles of an order-n Butterworth lie evenly on the unit circle; pair m
@@ -280,6 +336,19 @@ double analog::highShelfDb (double frequency, double centre, double q, double ga
     const auto gain = gainFromDb (std::abs (gainDb));
     const auto db = 20.0 * std::log10 (gain) - dbFromPower (lowShelfPower (frequency / centre, q, gain));
     return gainDb >= 0.0 ? db : -db;
+}
+
+double analog::butterworthLowShelfDb (double frequency, double centre, int order, double gainDb) noexcept
+{
+    const auto gain = gainFromDb (std::abs (gainDb));
+    const auto x2n = std::pow (frequency / centre, 2.0 * order) * gain;   // (f / f0)^2N, f0 = centre G^(-1/2N)
+    const auto db = dbFromPower ((gain * gain + x2n) / (1.0 + x2n));
+    return gainDb >= 0.0 ? db : -db;
+}
+
+double analog::butterworthHighShelfDb (double frequency, double centre, int order, double gainDb) noexcept
+{
+    return gainDb - butterworthLowShelfDb (frequency, centre, order, gainDb);
 }
 
 double analog::butterworthLowPassDb (double frequency, double corner, int order) noexcept

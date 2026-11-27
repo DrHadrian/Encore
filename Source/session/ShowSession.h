@@ -115,6 +115,21 @@ public:
         amp, in one edit. False, and nothing changes, if the patch has no amp. */
     bool addGatePair();
 
+    /** A Studio EQ's bands (B3, EQ-PLAN §2.8), one edit each, heard at once
+        (no rebuild unless an expression assignment goes). Adding takes the
+        lowest free slot: returns it (0-based), or -1 and the reason ("All 24
+        bands are in use"). Removing frees the slot and drops the assignments
+        on it. blockIndex as removeBlock's. */
+    int addEqBand (int blockIndex, const StudioEqBlock::BandSettings& band, juce::String& error);
+    void removeEqBand (int blockIndex, int slot);
+
+    /** A / B on an FX Unit (MODULES-PLAN §3.1): switch which set plays, or
+        copy one onto the other. One edit each, heard at once. False for a
+        block that isn't an FX Unit. Edit only (the buttons are U-stages'). */
+    bool switchAB (int blockIndex);
+    bool copyAB (int blockIndex, bool aToB);
+    bool isBPlaying (int blockIndex) const;
+
     /** Block indices below are the chain's: the main lane, then path B.
         Removing the split or the merge removes the split (path A's blocks
         stay, path B's go). A move stays within the block's lane and never

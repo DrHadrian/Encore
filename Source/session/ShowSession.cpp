@@ -882,6 +882,106 @@ bool ShowSession::addGatePair()
     return true;
 }
 
+int ShowSession::addEqBand (int blockIndex, const StudioEqBlock::BandSettings& band, juce::String& error)
+{
+    captureAll();
+    auto* patch = findPatchForKey (activePatchId);
+    auto* block = patch != nullptr ? patch->blockAt (blockIndex) : nullptr;
+
+    if (block == nullptr || block->type != StudioEqBlock::typeId)
+    {
+        error = "That block isn't a Studio EQ";
+        return -1;
+    }
+
+    const auto slot = encore::addEqBand (*block, band, error);
+
+    if (slot < 0)
+        return -1;
+
+    // Heard at once: the playing chain's block takes the slot (it glides in).
+    if (const auto it = chains.find (activePatchId); it != chains.end()
+        && juce::isPositiveAndBelow (blockIndex, (int) it->second->getBlocks().size()))
+        applyEqSlot (*block, *it->second->getBlocks()[(size_t) blockIndex], slot);
+
+    changed (true);
+    return slot;
+}
+
+void ShowSession::removeEqBand (int blockIndex, int slot)
+{
+    captureAll();
+    auto* patch = findPatchForKey (activePatchId);
+    auto* block = patch != nullptr ? patch->blockAt (blockIndex) : nullptr;
+
+    if (block == nullptr || block->type != StudioEqBlock::typeId)
+        return;
+
+    const auto droppedAssignments = encore::removeEqBand (*block, slot);
+
+    if (const auto it = chains.find (activePatchId); it != chains.end()
+        && juce::isPositiveAndBelow (blockIndex, (int) it->second->getBlocks().size()))
+        applyEqSlot (*block, *it->second->getBlocks()[(size_t) blockIndex], slot);
+
+    changed (true);
+
+    // The chain's expression targets come from the model: rebuild to drop them.
+    if (droppedAssignments > 0)
+        rebuildPatch (activePatchId);
+}
+
+namespace
+{
+    /** An A/B edit on the active patch's block: the model, then the live block. */
+    template <typename Edit>
+    bool editCompare (ShowSession& session, PatchModel* patch, Chain* chain, int blockIndex, Edit&& edit)
+    {
+        auto* block = patch != nullptr ? patch->blockAt (blockIndex) : nullptr;
+
+        if (block == nullptr || ! edit (*block))
+            return false;
+
+        if (chain != nullptr && juce::isPositiveAndBelow (blockIndex, (int) chain->getBlocks().size()))
+            applyParameters (*block, *chain->getBlocks()[(size_t) blockIndex]);
+
+        juce::ignoreUnused (session);
+        return true;
+    }
+}
+
+bool ShowSession::switchAB (int blockIndex)
+{
+    captureAll();
+    const auto it = chains.find (activePatchId);
+    const auto done = editCompare (*this, findPatchForKey (activePatchId), it != chains.end() ? it->second : nullptr, blockIndex,
+                                   [] (BlockModel& b) { return switchCompare (b); });
+
+    if (done)
+        changed (true);
+
+    return done;
+}
+
+bool ShowSession::copyAB (int blockIndex, bool aToB)
+{
+    captureAll();
+    const auto it = chains.find (activePatchId);
+    const auto done = editCompare (*this, findPatchForKey (activePatchId), it != chains.end() ? it->second : nullptr, blockIndex,
+                                   [aToB] (BlockModel& b) { return copyCompare (b, aToB); });
+
+    if (done)
+        changed (true);
+
+    return done;
+}
+
+bool ShowSession::isBPlaying (int blockIndex) const
+{
+    const auto* patch = getPatch (activePatchId);
+    const auto* block = patch != nullptr ? patch->blockAt (blockIndex) : nullptr;
+    return block != nullptr && block->compare.bPlaying;
+}
+
 void ShowSession::removeBlock (int index)
 {
     captureAll();
@@ -1158,6 +1258,10 @@ void ShowSession::setExpression (int blockIndex, const juce::String& paramId, in
             && juce::isPositiveAndBelow (blockIndex, (int) it->second->getBlocks().size()))
             if (auto* p = it->second->getBlocks()[(size_t) blockIndex]->findParameter (paramId))
             {
+                // Not a sound to sweep (a Studio EQ band's "in use", the phase mode...).
+                if (! p->getSpec().expressionAllowed)
+                    return;
+
                 assignment.min = p->getSpec().range.start;
                 assignment.max = p->getSpec().range.end;
             }
