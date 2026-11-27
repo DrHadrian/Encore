@@ -177,7 +177,7 @@ bool applySettings (Block& block, const juce::var& settings, juce::String& error
 //==============================================================================
 Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, const juce::String& typeId,
                     const juce::var& settings, int blockSize, const juce::String& presetId,
-                    const std::map<juce::String, juce::String>& refs)
+                    const std::map<juce::String, juce::String>& refs, const std::optional<Sweep>& sweep)
 {
     Result r;
     r.sampleRate = sampleRate;
@@ -213,6 +213,21 @@ Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, co
         return r;
 
     block->setRefs (refs);
+
+    Parameter* swept = nullptr;
+
+    if (sweep.has_value())
+    {
+        swept = block->findParameter (sweep->parameterId);
+
+        if (swept == nullptr)
+        {
+            r.error = "\"" + typeId + "\" has no parameter \"" + sweep->parameterId + "\" to sweep";
+            return r;
+        }
+
+        swept->setValue (sweep->from);
+    }
 
     // Alone, a block has no earlier block to key from or link to (B2): those
     // refs fall back, and the notes say why.
@@ -261,6 +276,9 @@ Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, co
 
         for (int ch = 0; ch < inChannels; ++ch)
             work.copyFrom (ch, 0, input, ch, start, length);
+
+        if (swept != nullptr)
+            swept->setValue (sweep->from + (sweep->to - sweep->from) * (float) start / (float) juce::jmax (1, input.getNumSamples()));
 
         // The guitar, as the chain would give it: the input's first channel.
         ProcessContext context;

@@ -68,9 +68,17 @@ bool applySettings (Block& block, const juce::var& settings, juce::String& error
     a block has no earlier block or interface input, so those fall back and
     the notes say why; in a patch (renderPatch) they resolve. The guitar
     (ProcessContext::chainInput) is the input's first channel. */
+/** One parameter moved linearly across the render, as an expression pedal
+    would (B3): from `from` at the start to `to` at the end, set every buffer. */
+struct Sweep
+{
+    juce::String parameterId;
+    float from = 0.0f, to = 0.0f;
+};
+
 Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, const juce::String& typeId,
                     const juce::var& settings, int blockSize = 64, const juce::String& presetId = {},
-                    const std::map<juce::String, juce::String>& refs = {});
+                    const std::map<juce::String, juce::String>& refs = {}, const std::optional<Sweep>& sweep = {});
 
 /** Renders `input` (its first channel: the guitar) through a patch's whole chain. */
 Result renderPatch (const juce::AudioBuffer<float>& input, double sampleRate, const PatchModel& patch,
