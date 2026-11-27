@@ -64,6 +64,8 @@ StudioEqBlock::StudioEqBlock()
       cpuTight      (addParameter (choice ("cpuTight", "When CPU is tight", { "Keep the sound", "Make it lighter" }, 0, false))),
       displayRange  (addParameter (choice ("range", "Display range", { "3 dB", "6 dB", "12 dB", "30 dB" }, 2, false)))
 {
+    slots.resize ((size_t) numSlots);
+
     for (int s = 0; s < numSlots; ++s)
     {
         auto& p = slots[(size_t) s].p;

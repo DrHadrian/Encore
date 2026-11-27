@@ -181,7 +181,10 @@ private:
     void processOutput (float* const* channels, int numChannels, int numSamples, bool tunerOpen) noexcept;
     void processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
 
-    std::array<Slot, numSlots> slots;
+    // On the heap, made once in the constructor (each slot holds two filter
+    // bands: the 24 together are about 100 KB, too much for an object that
+    // tests and tools put on the stack). Never resized.
+    std::vector<Slot> slots;
     Parameter& phase;
     Parameter& linearQuality;
     Parameter& character;
