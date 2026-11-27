@@ -115,6 +115,58 @@ public:
             }
         }
 
+        beginTest ("The Gate pair in one edit; refused without an amp; the learned floor survives the rebuild");
+        {
+            auto show = makeDefaultShow ("Pair");   // Amp -> Cab -> Gate -> EQ
+            auto& blocks = show.patches[0].mainLane().blocks;
+            blocks.push_back (gateModel ("smart", StudioGateBlock::typeId));
+            blocks.back().params["mode"] = (float) StudioGateBlock::Mode::smart;
+
+            ShowSession session (engine);
+            expect (session.openShow (writeShow (temp.getChildFile ("Pair.encore"), show)).wasOk());
+            pumpUntil (engine, [&] { return ! session.isBuilding(); });
+
+            auto* chain = engine.getChain();
+            expect (chain != nullptr);
+
+            if (chain != nullptr)
+                if (auto* smart = dynamic_cast<GateBlock*> (chain->getBlocks()[(size_t) chain->indexOfModelId ("smart")].get()))
+                    smart->setLearnedFloorDb (-58.0f);   // as if it had learned it
+
+            expect (session.addGatePair());
+            pumpUntil (engine, [&] { return ! session.isBuilding(); });
+            playOneBlock (engine);
+
+            const auto* patch = session.getPatch (session.getActivePatchId());
+            expect (patch != nullptr);
+
+            if (patch != nullptr)
+            {
+                const auto& after = patch->mainLane().blocks;
+                expectEquals (after[0].type, juce::String (PedalGateBlock::typeId));
+                expectEquals (after[1].type, juce::String ("nam"));
+                expectEquals (after[2].type, juce::String (PedalGateBlock::typeId));
+                expectEquals (after[2].refs.at ("linkTo"), after[0].id);
+
+                if (auto* rebuilt = engine.getChain())
+                {
+                    auto* follower = dynamic_cast<GateBlock*> (rebuilt->getBlocks()[(size_t) rebuilt->indexOfModelId (after[2].id)].get());
+                    expect (follower != nullptr && follower->getLinkState() == GateBlock::LinkState::following);
+                    auto* smart = dynamic_cast<GateBlock*> (rebuilt->getBlocks()[(size_t) rebuilt->indexOfModelId ("smart")].get());
+                    expect (smart != nullptr && std::abs (smart->getLearnedFloorDb() - -58.0f) < 0.5f, "kept across the edit");
+                }
+            }
+
+            // Without an amp: refused, the patch unchanged.
+            while (session.getPatch (session.getActivePatchId())->mainLane().blocks.size() > 1)
+                session.removeBlock (0);
+
+            pumpUntil (engine, [&] { return ! session.isBuilding(); });
+            const auto before = session.getPatch (session.getActivePatchId())->mainLane().blocks.size();
+            expect (! session.addGatePair());
+            expectEquals (session.getPatch (session.getActivePatchId())->mainLane().blocks.size(), before);
+        }
+
         temp.deleteRecursively();
     }
 };

@@ -482,6 +482,10 @@ void ShowSession::rebuildPatch (const juce::String& key)
                                     && self->chains[key] == self->player.getActiveChain();
             const auto wantedNow = key == self->activePatchId;
 
+            // A Smart gate keeps what it learned across the edit (GATE-PLAN 23).
+            if (const auto it = self->chains.find (key); it != self->chains.end() && it->second != nullptr)
+                carryLearnedState (*it->second, **holder);
+
             self->problems.addArray (buildProblems);
             self->installChain (key, std::move (*holder));
             self->publishRunningOrder();
@@ -863,6 +867,19 @@ void ShowSession::addPluginBlock (const PluginRef& plugin, int index, int lane)
             rebuildPatch (activePatchId);
         }
     }
+}
+
+bool ShowSession::addGatePair()
+{
+    captureAll();
+    auto* patch = findPatchForKey (activePatchId);
+
+    if (patch == nullptr || ! encore::addGatePair (*patch, [] { return newId(); }))
+        return false;
+
+    changed (true);
+    rebuildPatch (activePatchId);
+    return true;
 }
 
 void ShowSession::removeBlock (int index)

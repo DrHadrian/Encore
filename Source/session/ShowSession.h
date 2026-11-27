@@ -111,6 +111,10 @@ public:
     void addBlock (const juce::String& typeId, int index, int lane = 0);
     void addPluginBlock (const PluginRef& plugin, int index, int lane = 0);
 
+    /** The Gate pair (GATE-PLAN 21): two linked Pedal Gates around the first
+        amp, in one edit. False, and nothing changes, if the patch has no amp. */
+    bool addGatePair();
+
     /** Block indices below are the chain's: the main lane, then path B.
         Removing the split or the merge removes the split (path A's blocks
         stay, path B's go). A move stays within the block's lane and never
