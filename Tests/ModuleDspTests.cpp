@@ -37,10 +37,10 @@ namespace
             band.process (channels, 1, length);
         }
 
-        double db (double frequency, double sampleRate) const
+        double db (double frequency, double rate) const
         {
             std::complex<double> sum;
-            const auto w = twoPi * frequency / sampleRate;
+            const auto w = twoPi * frequency / rate;
             const auto step = std::polar (1.0, -w);
             std::complex<double> z (1.0, 0.0);
 
@@ -72,11 +72,11 @@ namespace
         return { shape, frequency, gainDb, q, slope };
     }
 
-    juce::String describe (const dsp::FilterSettings& s, double sampleRate)
+    juce::String describe (const dsp::FilterSettings& s, double rate)
     {
         return "shape " + juce::String ((int) s.shape) + ", " + juce::String (s.frequency) + " Hz, "
                + juce::String (s.gainDb) + " dB, Q " + juce::String (s.q) + ", "
-               + juce::String (s.slopeDbPerOctave) + " dB/oct at " + juce::String (sampleRate) + " Hz";
+               + juce::String (s.slopeDbPerOctave) + " dB/oct at " + juce::String (rate) + " Hz";
     }
 }
 

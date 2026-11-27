@@ -5,6 +5,8 @@
 // the same engine code the app plays (native modules, decision 0062). For
 // listening, comparing and measuring; also run in CI on a synthetic sweep.
 
+#include <juce_events/juce_events.h>
+
 #include "model/ShowFolder.h"
 #include "session/OfflineRender.h"
 #include "session/PatchBuilder.h"
