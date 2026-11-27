@@ -1010,8 +1010,10 @@ and keeps playing old shows until U2 switches it over.
   duckReverb, softCleanup, swellCleanup. Stereo and Look-ahead are the setup,
   not part of a preset; refs never are.
 - **Shared gate DSP** (`dsp/`): `GateEnvelope` gains the expander
-  ((T − L)(r − 1) dB, at most |Range|), the ducker and a decision made
-  elsewhere (for a follower); `LookAhead` (a delay whose time changes
+  ((T − L)(r − 1) dB, at most |Range|; its open flag, for the OPEN light and
+  a follower, keeps the gate's hysteresis and hold so it doesn't flicker on
+  noise at the threshold), the ducker and a decision made elsewhere (for a
+  follower); `LookAhead` (a delay whose time changes
   crossfade, on `FadingDelay`); `AdaptiveGate`, the "Smart" logic both use:
   the floor learns from 500 ms stretches of steady noise with no pick attack,
   6 dB/s at most, −96 to −40 dBFS, from −70; it freezes below −85 dBFS and
@@ -1068,4 +1070,6 @@ and keeps playing old shows until U2 switches it over.
   and `--make-gate-show` (the pair around an amp, a ducking delay, a Smart X4).
 - **CPU** at 48 kHz / 64 (GATE-PLAN §7): the S2 against ≤ 0.2 %, the X4 with
   its key filter and 1 ms look-ahead against ≤ 0.4 %; the CI benchmark
-  reports both.
+  reports both. The benchmark now runs on its own (`EncoreTests.benchmark`,
+  RUN_SERIAL): beside the soak, the screens and the renders it measured the
+  machine's load.
