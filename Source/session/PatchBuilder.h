@@ -123,4 +123,16 @@ int removeEqBand (BlockModel& eq, int slot);
     once: the band glides in or out). Message thread. */
 void applyEqSlot (const BlockModel& eq, Block& block, int slot);
 
+/** Today's EQ ("eq") as a Studio EQ (EQ-PLAN §5), written for U3's
+    switch-over; nothing calls it yet. Into slots 01, 02 ... in this order:
+    lowCut above 20.5 Hz -> a Low cut, 12 dB/oct; bass -> a Low shelf at
+    120 Hz, 12 dB/oct, Q 0.7071 (RBJ's S = 1); mid -> a Bell at midFreq,
+    midQ; treble -> a High shelf at 3.5 kHz, likewise; highCut below
+    19.9 kHz -> a High cut, 12 dB/oct. A gain counts when it's more than
+    0.05 dB from 0 (as today's EQ decides what plays), or when it's on an
+    expression pedal (so the pedal keeps working from its off value). On/off,
+    the stomp and the id stay; expression moves to the bands' ids. A block of
+    any other type comes back unchanged. */
+BlockModel convertOldEq (const BlockModel& eq);
+
 } // namespace encore
