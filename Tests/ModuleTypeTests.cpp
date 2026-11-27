@@ -120,9 +120,10 @@ public:
             expect (isNewModuleBlockType (PedalGateBlock::typeId));
 
             expect (isNewModuleBlockType (StudioGateBlock::typeId));
+            expect (isNewModuleBlockType (StudioEqBlock::typeId));
 
             const juce::StringArray newModules { EngineProbeBlock::typeId, PedalEqBlock::typeId, PedalGateBlock::typeId,
-                                                 StudioGateBlock::typeId };
+                                                 StudioGateBlock::typeId, StudioEqBlock::typeId };
 
             for (const auto& t : getBlockTypes())
                 if (! newModules.contains (t.id))

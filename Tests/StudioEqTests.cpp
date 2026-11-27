@@ -676,11 +676,14 @@ public:
                 moved.push_back ({ eq.findParameter (Eq::slotId (s, "Freq")), eq.findParameter (Eq::slotId (s, "Gain")),
                                    eq.findParameter (Eq::slotId (s, "Shape")), eq.findParameter (Eq::slotId (s, "On")) });
 
+            // Everything set up before the realtime section (a std::function
+            // or a moved vector may allocate, in a Debug build especially).
+            auto out = x;
             const auto before = realtimeAllocationCount();
-            std::vector<float> out;
             {
                 const rt::ScopedRealtimeSection realtime;
-                out = play (eq, std::move (x), blockSize, [&] (int at)
+
+                for (int at = 0; at < (int) out.size(); at += blockSize)
                 {
                     if (at % 2048 == 0)
                     {
@@ -694,7 +697,10 @@ public:
                             moved[k][3]->setValue ((float) (flips % 2));
                         }
                     }
-                });
+
+                    float* ch[] = { out.data() + at };
+                    eq.process (ch, 1, juce::jmin (blockSize, (int) out.size() - at), {});
+                }
             }
             expectEquals (realtimeAllocationCount() - before, 0);
             expect (std::all_of (out.begin(), out.end(), [] (float v) { return std::isfinite (v); }), "no NaN or infinity");
