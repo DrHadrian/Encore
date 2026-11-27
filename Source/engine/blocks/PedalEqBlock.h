@@ -104,6 +104,12 @@ public:
     static constexpr double captureFadeSeconds = 0.03;
     static constexpr float captureMatchLevelDb = -18.0f;
 
+    /** The signal "Level-matched" is measured with: noise tilted towards
+        guitar-like content, at -18 dBFS RMS, deterministic. A capture is
+        matched so this comes out as loud as it goes in (a nonlinear capture
+        matches exactly only at this level). Any thread except the audio thread. */
+    static std::vector<float> captureMatchSignal (double sampleRate, double seconds = 0.5);
+
     /** Loads a capture (both sides, prepared and measured). Background or
         message thread, never the audio thread: it parses, allocates and
         prewarms. Null with the reason if it can't. */

@@ -130,6 +130,29 @@ void PedalEqBlock::Capture::prepare (const ProcessSpec& spec)
             side->prepare (spec);
 }
 
+std::vector<float> PedalEqBlock::captureMatchSignal (double sampleRate, double seconds)
+{
+    std::vector<float> noise ((size_t) juce::jmax (1, (int) (seconds * sampleRate)));
+    juce::Random random (0x9e7);
+    auto lowpass = 0.0f;
+    auto sum = 0.0;
+
+    for (auto& x : noise)
+    {
+        lowpass += 0.25f * ((random.nextFloat() * 2.0f - 1.0f) - lowpass);   // a gentle tilt towards guitar-like content
+        x = lowpass;
+        sum += (double) x * x;
+    }
+
+    const auto rms = std::sqrt (sum / (double) noise.size());
+    const auto scale = (float) (juce::Decibels::decibelsToGain ((double) captureMatchLevelDb) / juce::jmax (1.0e-9, rms));
+
+    for (auto& x : noise)
+        x *= scale;
+
+    return noise;
+}
+
 std::unique_ptr<PedalEqBlock::Capture> PedalEqBlock::loadCapture (const juce::File& file, const ProcessSpec& spec, juce::String& error)
 {
     auto capture = std::make_unique<Capture>();
@@ -144,20 +167,13 @@ std::unique_ptr<PedalEqBlock::Capture> PedalEqBlock::loadCapture (const juce::Fi
             return nullptr;
     }
 
-    // Level match: pink-ish noise at -18 dBFS RMS through one side, then
-    // that side is reset so it starts clean.
+    // Level match: the match signal through one side, then that side is
+    // reset so it starts clean.
     const auto rate = spec.sampleRate > 0.0 ? spec.sampleRate : 48000.0;
     const auto block = juce::jmax (1, spec.maxBlockSize);
-    const auto length = (int) (0.5 * rate);
-    std::vector<float> noise ((size_t) length), out ((size_t) length);
-    juce::Random random (0x9e7);
-    auto lowpass = 0.0f;
-
-    for (auto& x : noise)
-    {
-        lowpass += 0.25f * ((random.nextFloat() * 2.0f - 1.0f) - lowpass);   // a gentle tilt towards guitar-like content
-        x = lowpass;
-    }
+    auto noise = captureMatchSignal (rate);
+    const auto length = (int) noise.size();
+    std::vector<float> out ((size_t) length);
 
     const auto rmsOf = [] (const std::vector<float>& v, size_t from)
     {
@@ -168,12 +184,6 @@ std::unique_ptr<PedalEqBlock::Capture> PedalEqBlock::loadCapture (const juce::Fi
 
         return std::sqrt (sum / (double) juce::jmax ((size_t) 1, v.size() - from));
     };
-
-    const auto target = juce::Decibels::decibelsToGain ((double) captureMatchLevelDb);
-    const auto scale = (float) (target / juce::jmax (1.0e-9, rmsOf (noise, 0)));
-
-    for (auto& x : noise)
-        x *= scale;
 
     for (int start = 0; start < length; start += block)
     {
@@ -305,6 +315,9 @@ void PedalEqBlock::resetBlock() noexcept
     qFade.reset();
     inputGain.setCurrentAndTargetValue (inputGainFor ((Input) input.getChoiceIndex()));
     captureFade.reset();
+    captureGain.setCurrentAndTargetValue (captureLevel.getChoiceIndex() == (int) CaptureLevel::levelMatched
+                                              && currentCapture != nullptr && ! currentCapture->isEmpty()
+                                              ? currentCapture->matchGain : 1.0f);
 
     oversampler.reset();
     dcBlocker.reset();

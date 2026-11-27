@@ -113,9 +113,12 @@ public:
             expect (r != right, "the right side runs its own copy");
         }
 
-        beginTest ("Level-matched: as loud out as in; switching moves the gain over 10 ms");
+        beginTest ("Level-matched: the match signal comes out as loud as it goes in");
         {
-            const auto input = pinkNoise (0.25f, 48000, 3);
+            // A real capture is nonlinear (CI's example is an amp), so the match
+            // holds exactly at the level and spectrum it was measured with.
+            auto input = PedalEqBlock::captureMatchSignal (sampleRate, 1.0);
+            expectWithinAbsoluteError (toDb (rms (input, 0, (int) input.size())), PedalEqBlock::captureMatchLevelDb, 0.01f);
             const auto inRms = toDb (rms (input, 24000, 48000));
 
             PedalEqBlock eq;
@@ -124,7 +127,7 @@ public:
             eq.installCaptureBeforePlaying (load());
             eq.reset();
             const auto matched = playMono (eq, input);
-            expectWithinAbsoluteError (toDb (rms (matched, 24000, 48000)), inRms, 2.0f);
+            expectWithinAbsoluteError (toDb (rms (matched, 24000, 48000)), inRms, 0.5f);
         }
 
         beginTest ("Swap and unload: no allocation on the audio thread; freed on the message thread");
