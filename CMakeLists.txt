@@ -210,6 +210,7 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/dsp/SafetyLimiter.cpp
     Source/engine/dsp/SafetyLimiter.h
     Source/engine/dsp/StreamResampler.cpp
+    Source/engine/dsp/SoftClip.h
     Source/engine/dsp/StreamResampler.h
     Source/engine/dsp/Svf.h
     Source/engine/nam/NamModel.cpp

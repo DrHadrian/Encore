@@ -9,6 +9,9 @@
 
 #include "engine/blocks/PedalEqBlock.h"
 #include "engine/core/Realtime.h"
+#include "engine/dsp/Oversampler.h"
+
+#include <juce_dsp/juce_dsp.h>
 
 #include <complex>
 
@@ -56,6 +59,77 @@ namespace
         }
 
         return 20.0 * std::log10 (std::max (std::abs (sum), 1.0e-15));
+    }
+
+    /** A sine at a level (peak dBFS) for `seconds`. */
+    std::vector<float> toneAt (double frequency, float peakDbfs, double rate, double seconds)
+    {
+        const auto n = (int) (seconds * rate);
+        const auto a = juce::Decibels::decibelsToGain (peakDbfs);
+        std::vector<float> s ((size_t) n);
+
+        for (int i = 0; i < n; ++i)
+            s[(size_t) i] = a * (float) std::sin (2.0 * juce::MathConstants<double>::pi * frequency * i / rate);
+
+        return s;
+    }
+
+    /** Blackman-Harris windowed copy of the second half (settled). */
+    std::vector<float> settledWindow (const std::vector<float>& x)
+    {
+        std::vector<float> w (x.begin() + (long) x.size() / 2, x.end());
+
+        for (size_t i = 0; i < w.size(); ++i)
+        {
+            const auto t = 2.0 * juce::MathConstants<double>::pi * (double) i / (double) (w.size() - 1);
+            w[i] *= (float) (0.35875 - 0.48829 * std::cos (t) + 0.14128 * std::cos (2.0 * t) - 0.01168 * std::cos (3.0 * t));
+        }
+
+        return w;
+    }
+
+    /** Total harmonic distortion (harmonics 2..10 against the fundamental), dB. */
+    double thdDb (const std::vector<float>& x, double fundamental, double rate)
+    {
+        const auto w = settledWindow (x);
+        const auto power = [&] (double f) { return std::pow (10.0, dftDb (w, f, rate) / 10.0); };
+        auto harmonics = 0.0;
+
+        for (int h = 2; h <= 10 && h * fundamental < 0.45 * rate; ++h)
+            harmonics += power (h * fundamental);
+
+        return 10.0 * std::log10 (std::max (harmonics, 1.0e-30) / power (fundamental));
+    }
+
+    /** Aliasing of a block: a 0 dBFS sine exactly on FFT bin `bin` (of 32768
+        at 48 kHz) through it; the power in every bin that isn't a harmonic,
+        relative to the total (dB). */
+    double aliasingDb (Block& block, int bin, float amplitude = 1.0f)
+    {
+        constexpr int order = 15, size = 1 << order;
+        const auto frequency = bin * sampleRate / size;
+        std::vector<float> x ((size_t) size * 2);
+
+        for (size_t i = 0; i < x.size(); ++i)
+            x[i] = amplitude * (float) std::sin (2.0 * juce::MathConstants<double>::pi * frequency * (double) i / sampleRate);
+
+        const auto out = play (block, x);
+        std::vector<float> fft ((size_t) size * 2, 0.0f);
+        std::copy (out.begin() + size, out.end(), fft.begin());
+        juce::dsp::FFT (order).performFrequencyOnlyForwardTransform (fft.data());
+
+        double total = 0.0, harmonics = 0.0;
+
+        for (int b = 1; b < size / 2; ++b)
+        {
+            const auto p = (double) fft[(size_t) b] * fft[(size_t) b];
+            total += p;
+
+            if (b % bin == 0 || b <= 2)   // harmonics (and DC leakage from the asymmetry)
+                harmonics += p;
+        }
+
+        return 10.0 * std::log10 (std::max (total - harmonics, 1.0e-30) / total);
     }
 
     void setBands (Block& block, std::initializer_list<float> gains)
@@ -142,8 +216,14 @@ public:
                     setBands (eq, { 12.0f, -9.0f, 6.0f, -15.0f, 15.0f, -3.0f, 8.0f });
                     eq.findParameter ("qMode")->setValue (wide ? 1.0f : 0.0f);
 
-                    auto impulse = test::impulse (1 << 16);
-                    const auto response = play (eq, impulse, rate);
+                    // A small impulse: the bands' boosts stay below the soft clip's knee
+                    // (the clip is in the path, since sliders are up: linear there).
+                    constexpr float size = 0.01f;
+                    auto impulse = test::impulse ((int) (1.5 * rate), 0, size);   // long enough for the DC blocker's tail
+                    auto response = play (eq, impulse, rate);
+
+                    for (auto& v : response)
+                        v /= size;
                     const auto designs = eq.getBandDesigns (rate);
                     auto worst = 0.0;
 
@@ -231,8 +311,8 @@ public:
                 const auto n = (int) (0.2 * rate);
                 std::vector<float> tone ((size_t) n);
 
-                for (int i = 0; i < n; ++i)
-                    tone[(size_t) i] = 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 1000.0 * i / rate);
+                for (int i = 0; i < n; ++i)   // quiet enough that +15 dB stays below the clip's knee
+                    tone[(size_t) i] = 0.02f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 1000.0 * i / rate);
 
                 PedalEqBlock eq;
                 auto* slider = eq.findParameter ("g800");
@@ -340,6 +420,170 @@ public:
                 maxStep = std::max (maxStep, std::abs (out[i] - out[i - 1]));
 
             expectLessThan (maxStep, maxToneStep * 2.2f, "a hard switch would jump");
+        }
+
+        beginTest ("The soft clip: THD below -80 dB at -12 dBFS with Boost");
+        {
+            for (auto rate : rates)
+            {
+                PedalEqBlock eq;
+                eq.findParameter ("input")->setValue (2.0f);   // Boost: the clip is in the path
+                const auto out = play (eq, toneAt (1000.0, -12.0f, rate, 1.0), rate);
+                expect (eq.isClipInPath());
+                expectLessThan (thdDb (out, 1000.0, rate), -80.0, juce::String (rate));
+                expect (! eq.isHot());
+            }
+        }
+
+        beginTest ("The soft clip compresses gently above the knee (the stated curve)");
+        {
+            // Internal peak level (after Input Boost) -> gain change of the peak.
+            // The curve (dsp::SoftClip): 0 below -6 dBFS, about -0.1 dB at 0 dBFS,
+            // -1 dB at +6 dBFS, -4.3 dB at +12 dBFS.
+            struct Point { float inputDbfs; double expectedDb; double tolerance; };
+
+            for (const auto& p : { Point { -12.0f, 0.0, 0.02 }, Point { -6.0f, -0.09, 0.05 },
+                                   Point { 0.0f, -1.0, 0.15 }, Point { 6.0f, -4.3, 0.3 } })
+            {
+                PedalEqBlock eq;
+                eq.findParameter ("input")->setValue (2.0f);
+                const auto in = toneAt (200.0, p.inputDbfs, sampleRate, 0.5);
+                const auto out = play (eq, in, sampleRate);
+                const auto change = (double) (toDb (peak (out, (int) out.size() / 2, (int) out.size()))
+                                              - (p.inputDbfs + 6.0f));
+                expectWithinAbsoluteError (change, p.expectedDb, p.tolerance, juce::String (p.inputDbfs) + " dBFS in");
+            }
+        }
+
+        beginTest ("Aliasing of the clip falls with Quality");
+        {
+            // Slammed: Boost, every slider at +15 and a +24 dBFS 2.5 kHz tone,
+            // so the clip works hard. (Driven only gently, its smooth curve
+            // aliases below the measurement floor at every factor.)
+            const auto aliasing = [] (int qualityIndex)
+            {
+                PedalEqBlock eq;
+                eq.findParameter ("input")->setValue (2.0f);
+                setBands (eq, { 15.0f, 15.0f, 15.0f, 15.0f, 15.0f, 15.0f, 15.0f });
+                eq.findParameter ("quality")->setValue ((float) qualityIndex);
+                return aliasingDb (eq, 1707, juce::Decibels::decibelsToGain (24.0f));   // 2.5 kHz, on a bin
+            };
+
+            const auto live = aliasing (0), high = aliasing (1), max = aliasing (2);
+            logMessage ("Pedal EQ clip aliasing (dB below the signal): Live " + juce::String (live, 1)
+                        + ", High " + juce::String (high, 1) + ", Max " + juce::String (max, 1));
+            expectLessThan (high, live - 3.0);
+            expectLessThan (max, high - 3.0);
+        }
+
+        beginTest ("HOT: on while the clip takes off more than 1 dB, off 300 ms after");
+        {
+            PedalEqBlock eq;
+            eq.findParameter ("input")->setValue (2.0f);
+            eq.prepare ({ sampleRate, 64 });
+            eq.reset();
+
+            const auto loud = toneAt (200.0, 3.0f, sampleRate, 0.2);    // +9 dBFS inside: works the clip
+            const auto quiet = toneAt (200.0, -20.0f, sampleRate, 0.6);
+            std::vector<bool> hotness;
+
+            for (const auto* signal : { &loud, &quiet })
+            {
+                auto copy = *signal;
+
+                for (int start = 0; start + 64 <= (int) copy.size(); start += 64)
+                {
+                    float* channels[1] = { copy.data() + start };
+                    eq.process (channels, 1, 64, {});
+                    hotness.push_back (eq.isHot());
+                }
+            }
+
+            const auto buffersPerSecond = sampleRate / 64.0;
+            const auto loudBuffers = (int) (0.2 * buffersPerSecond);
+            expect (hotness[(size_t) loudBuffers / 2], "hot while it clips");
+            expect (hotness[(size_t) (loudBuffers + 0.25 * buffersPerSecond)], "still hot 250 ms after");
+            expect (! hotness[(size_t) (loudBuffers + 0.32 * buffersPerSecond)], "off 320 ms after");
+            expect (! hotness.back());
+
+            // Quiet with Boost never lights it.
+            PedalEqBlock calm;
+            calm.findParameter ("input")->setValue (2.0f);
+            play (calm, toneAt (200.0, -20.0f, sampleRate, 0.5));
+            expect (! calm.isHot());
+        }
+
+        beginTest ("Latency: the oversampling's while the clip is in the path, 0 otherwise; the change crossfades");
+        {
+            for (int q = 0; q < 3; ++q)
+            {
+                dsp::Oversampler reference;
+                reference.setQuality ((dsp::Quality) q);
+                reference.prepare (1, 64, sampleRate);
+
+                PedalEqBlock eq;
+                eq.findParameter ("quality")->setValue ((float) q);
+                auto* in = eq.findParameter ("input");
+                const auto tone = toneAt (220.0, -20.0f, sampleRate, 0.6);
+                std::vector<int> latencies;
+                const auto out = play (eq, tone, sampleRate, 64, [&] (int start)
+                {
+                    if (start == 9600) in->setValue (2.0f);    // Boost: the clip comes in
+                    if (start == 19200) in->setValue (1.0f);   // Normal: it goes out again
+                    latencies.push_back (eq.getLatencySamples());
+                });
+
+                expectEquals (latencies[100], 0, "flat: no clip, no latency");
+                expectEquals (latencies[250], reference.getLatencySamples(), "Boost: the oversampling's latency");
+                expectGreaterThan (reference.getLatencySamples(), 0);
+                expectEquals (latencies.back(), 0, "back to Normal: 0 again");
+
+                // No jump where the clip comes in or goes out.
+                auto maxStep = 0.0f, maxToneStep = 0.0f;
+
+                for (size_t i = 1; i < out.size(); ++i)
+                {
+                    maxStep = std::max (maxStep, std::abs (out[i] - out[i - 1]));
+                    maxToneStep = std::max (maxToneStep, std::abs (tone[i] - tone[i - 1]));
+                }
+
+                expectLessThan (maxStep, maxToneStep * 2.2f);
+            }
+        }
+
+        beginTest ("Real pedal clipping: Off lets a hot input through untouched when flat; On clips it");
+        {
+            const auto hotInput = toneAt (200.0, 6.0f, sampleRate, 0.5);   // +6 dBFS from a boost before it
+
+            PedalEqBlock off;
+            expect (play (off, hotInput) == hotInput, "Off, flat: bit-exact, even this hot");
+            expectEquals (off.getLatencySamples(), 0);
+
+            PedalEqBlock on;
+            on.findParameter ("realClip")->setValue (1.0f);
+            const auto out = play (on, hotInput);
+            expect (on.isClipInPath());
+            expectGreaterThan (on.getLatencySamples(), 0);
+            expectWithinAbsoluteError ((double) toDb (peak (out, (int) out.size() / 2, (int) out.size())), 6.0 - 1.0, 0.15,
+                                       "clipped like a 9 V pedal: -1 dB at +6 dBFS");
+            expect (on.isHot());
+        }
+
+        beginTest ("Order: Input before the clip, Level after it");
+        {
+            const auto driven = [] (float inputSetting, float levelDb)
+            {
+                PedalEqBlock eq;
+                eq.findParameter ("input")->setValue (inputSetting);
+                eq.findParameter ("g800")->setValue (15.0f);
+                eq.findParameter ("level")->setValue (levelDb);
+                return thdDb (play (eq, toneAt (800.0, -6.0f, sampleRate, 1.0)), 800.0, sampleRate);
+            };
+
+            const auto normal = driven (1.0f, 0.0f);
+            expectWithinAbsoluteError (driven (1.0f, -15.0f), normal, 0.5, "Level after the clip: same distortion, just quieter");
+            expectLessThan (driven (0.0f, 0.0f), normal - 6.0, "Pad before the clip: less distortion");
+            expectGreaterThan (driven (2.0f, 0.0f), normal + 3.0, "Boost before the clip: more");
         }
 
         beginTest ("No allocation while playing, moving sliders and switching Q");

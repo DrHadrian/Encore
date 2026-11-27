@@ -11,6 +11,7 @@
 #include "engine/dsp/Detector.h"
 #include "engine/dsp/FilterBand.h"
 #include "engine/dsp/Oversampler.h"
+#include "engine/dsp/SoftClip.h"
 
 #include <complex>
 
@@ -939,7 +940,83 @@ public:
     }
 };
 
+class SoftClipTests final : public juce::UnitTest
+{
+public:
+    SoftClipTests() : juce::UnitTest ("Module soft clip", "Encore") {}
+
+    void runTest() override
+    {
+        const dsp::SoftClip clip;
+
+        beginTest ("Exactly linear up to -6 dBFS");
+        {
+            const auto limit = (float) clip.getLinearLimit();
+            expectWithinAbsoluteError (toDb (limit), -6.0f, 1.0e-4f);
+
+            for (int i = -1000; i <= 1000; ++i)
+            {
+                const auto x = limit * (float) i / 1000.0f;
+                expect (juce::exactlyEqual (clip.process (x), x));
+            }
+        }
+
+        beginTest ("Smooth: slope 1 at the knee, then bending; monotonic; under the rails");
+        {
+            const auto limit = clip.getLinearLimit();
+            const auto slope = [&clip] (double x) { const auto h = 1.0e-4; return ((double) clip.process ((float) (x + h)) - clip.process ((float) (x - h))) / (2.0 * h); };
+            expectWithinAbsoluteError (slope (limit + 1.0e-3), 1.0, 1.0e-3);
+            expectWithinAbsoluteError (slope (-limit - 1.0e-3), 1.0, 1.0e-3);
+
+            auto previous = -100.0f;
+
+            for (int i = -2000; i <= 2000; ++i)
+            {
+                const auto y = clip.process ((float) i / 100.0f);   // -20 .. +20 (+26 dBFS)
+                expect (y >= previous);
+                previous = y;
+            }
+
+            expectLessThan ((double) clip.process (1000.0f), clip.getPositiveRail() + 1.0e-6);
+            expectGreaterThan ((double) clip.process (-1000.0f), -clip.getNegativeRail() - 1.0e-6);
+        }
+
+        beginTest ("The curve: -1 dB at +6 dBFS (positive) and +5 dBFS (negative); -4.3 dB at +12 dBFS");
+        {
+            const auto at = [] (double db) { return std::pow (10.0, db / 20.0); };
+            expectWithinAbsoluteError (clip.gainDbAt (at (6.0)), -1.0, 1.0e-6);
+            expectWithinAbsoluteError (clip.gainDbAt (-at (5.0)), -1.0, 1.0e-6);
+            expectWithinAbsoluteError (clip.gainDbAt (at (0.0)), -0.08, 0.02);
+            expectWithinAbsoluteError (clip.gainDbAt (at (12.0)), -4.3, 0.1);
+            expectLessThan (clip.gainDbAt (-at (6.0)), -1.0, "the negative side bends a little sooner");
+        }
+
+        beginTest ("Asymmetric: driven hard it adds even harmonics; linear it adds none");
+        {
+            const auto harmonic2 = [&clip] (float amplitude)
+            {
+                std::complex<double> h1, h2;
+                const int n = 4800;
+
+                for (int i = 0; i < n; ++i)
+                {
+                    const auto phase = 2.0 * juce::MathConstants<double>::pi * 10.0 * i / n;   // 10 whole cycles
+                    const auto y = (double) clip.process (amplitude * (float) std::sin (phase));
+                    h1 += y * std::polar (1.0, -phase);
+                    h2 += y * std::polar (1.0, -2.0 * phase);
+                }
+
+                return 20.0 * std::log10 (std::abs (h2) / std::abs (h1) + 1.0e-30);
+            };
+
+            expectLessThan (harmonic2 (0.4f), -200.0);
+            expectGreaterThan (harmonic2 (4.0f), -40.0);
+        }
+    }
+};
+
 static FilterTests filterTests;
+static SoftClipTests softClipTests;
 static OversamplerTests oversamplerTests;
 static DetectorTests detectorTests;
 static TestSignalTests testSignalTests;

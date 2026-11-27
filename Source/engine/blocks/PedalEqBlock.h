@@ -6,6 +6,10 @@
 #include "engine/core/Block.h"
 #include "engine/dsp/Crossfade.h"
 #include "engine/dsp/FilterBand.h"
+#include "engine/dsp/Oversampler.h"
+#include "engine/dsp/SoftClip.h"
+
+#include <atomic>
 
 #include <array>
 
@@ -66,7 +70,23 @@ public:
         curve. Message thread (or any: it only reads the parameters). */
     std::array<dsp::FilterBandDesign, numBands> getBandDesigns (double sampleRate) const noexcept;
 
+    static constexpr double hotHoldSeconds = 0.3;    // HOT stays on this long after the clip worked (Proposed)
+    static constexpr double hotThresholdDb = -1.0;   // "worked" = more than 1 dB of gain reduction
+    static constexpr double dcBlockerHz = 1.0;       // after the (asymmetric) clip: 0.01 dB at 20 Hz
+    static constexpr int clipWarmupSamples = 128;    // history run through the clip stage before it comes in
+    static constexpr double clipFadeSeconds = 0.03;  // in/out of the path: a latency change, so a longer fade
+
     PedalEqBlock();
+
+    /** The 9 V clip took off more than 1 dB within the last 300 ms: the UI
+        shows HOT next to Level (U1). Any thread. */
+    bool isHot() const noexcept { return hot.load (std::memory_order_relaxed); }
+
+    /** Whether the clip stage is in the signal path now. Any thread. */
+    bool isClipInPath() const noexcept { return clipInPath.load (std::memory_order_relaxed); }
+
+    /** The clip stage's oversampling latency while it is in the path, else 0. Any thread. */
+    int getLatencySamples() const noexcept override;
 
 private:
     void prepareBlock (const ProcessSpec&) override;
@@ -88,10 +108,35 @@ private:
     void processInput (float* const* channels, int numChannels, int numSamples) noexcept;
     void processBands (float* const* channels, int numChannels, int numSamples) noexcept;
     void processLevel (float* const* channels, int numChannels, int numSamples) noexcept;
+    void processClip (float* const* channels, int numChannels, int numSamples) noexcept;
+    void runClip (float* const* channels, int numChannels, int numSamples) noexcept;
+    void rememberClipInput (const float* const* channels, int numChannels, int numSamples) noexcept;
+    void warmUpClip (int numChannels) noexcept;
+    bool clipNeeded() const noexcept;
 
     // The Input switch moves its gain over 10 ms: for a gain, the same as a
     // crossfade between the two settings, at no extra cost.
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> inputGain;
+
+    // The 9 V clip stage: oversampled soft clip, then a DC blocker. Only in
+    // the path when it can work (or Real pedal clipping is on); going in or
+    // out crossfades 10 ms.
+    const dsp::SoftClip softClip;
+    dsp::Oversampler oversampler;
+    dsp::FilterBand<maxChannels> dcBlocker;
+    dsp::Crossfade clipFade;
+    bool clipWasInPath = false;
+    std::atomic<bool> clipInPath { false };
+
+    // The last samples that reached the clip stage while it was out of the
+    // path: run through it just before it comes in, so its filters start
+    // settled instead of from silence (which would click as it fades in).
+    juce::AudioBuffer<float> clipHistory, clipWarmup;
+    int maxBlock = 0;
+
+    bool clipWorkedThisBlock = false;
+    int hotSamplesLeft = 0, hotHoldSamples = 0;
+    std::atomic<bool> hot { false };
 
     double sampleRate = 48000.0;
     std::array<dsp::FilterBand<maxChannels>, numBands> filters, oldFilters;

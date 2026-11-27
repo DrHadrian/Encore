@@ -85,12 +85,27 @@ std::array<dsp::FilterBandDesign, PedalEqBlock::numBands> PedalEqBlock::getBandD
     return designs;
 }
 
+int PedalEqBlock::getLatencySamples() const noexcept
+{
+    return isClipInPath() ? oversampler.getLatencySamples() : 0;
+}
+
 //==============================================================================
 void PedalEqBlock::prepareBlock (const ProcessSpec& spec)
 {
     sampleRate = spec.sampleRate;
     qFade.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate);
     inputGain.reset (spec.sampleRate, dsp::Crossfade::defaultSeconds);
+
+    oversampler.setQuality ((dsp::Quality) quality.getChoiceIndex());
+    oversampler.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate);
+    clipFade.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate, clipFadeSeconds);
+    dcBlocker.setDesign (dsp::FilterBandDesign::make ({ dsp::FilterShape::lowCut, dcBlockerHz, 0.0, 0.7071, 6 }, spec.sampleRate));
+    hotHoldSamples = juce::roundToInt (hotHoldSeconds * spec.sampleRate);
+
+    maxBlock = spec.maxBlockSize;
+    clipHistory.setSize (maxChannels, clipWarmupSamples);
+    clipWarmup.setSize (maxChannels, clipWarmupSamples);
 }
 
 void PedalEqBlock::resetBlock() noexcept
@@ -106,6 +121,146 @@ void PedalEqBlock::resetBlock() noexcept
 
     qFade.reset();
     inputGain.setCurrentAndTargetValue (inputGainFor ((Input) input.getChoiceIndex()));
+
+    oversampler.reset();
+    dcBlocker.reset();
+    clipFade.reset();
+    clipHistory.clear();
+    clipInPath.store (clipNeeded(), std::memory_order_relaxed);
+    hotSamplesLeft = 0;
+    hot.store (false, std::memory_order_relaxed);
+}
+
+bool PedalEqBlock::clipNeeded() const noexcept
+{
+    // Real pedal clipping: always in the path, so a hot input clips too.
+    if (realClip.getChoiceIndex() == (int) RealClip::on)
+        return true;
+
+    // Otherwise only when the settings can push the signal into the knee:
+    // Input Boost, or a slider above 0 dB (now, or where it is heading).
+    if (inputGain.getTargetValue() > 1.0f || inputGain.getCurrentValue() > 1.0f)
+        return true;
+
+    for (size_t b = 0; b < (size_t) numBands; ++b)
+        if (appliedGains[b] > 0.0 || bands[b]->getValue() > 0.0f)
+            return true;
+
+    return false;
+}
+
+void PedalEqBlock::runClip (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    const auto positiveHot = (float) softClip.getPositiveOneDbPoint();
+    const auto negativeHot = -(float) softClip.getNegativeOneDbPoint();
+
+    oversampler.process (channels, numChannels, numSamples, [this, positiveHot, negativeHot]
+                         (float* const* up, int n, int length, double, int) noexcept
+    {
+        auto worked = false;
+
+        for (int ch = 0; ch < n; ++ch)
+        {
+            auto* x = up[ch];
+
+            for (int i = 0; i < length; ++i)
+            {
+                worked = worked || x[i] > positiveHot || x[i] < negativeHot;
+                x[i] = softClip.process (x[i]);
+            }
+        }
+
+        clipWorkedThisBlock = clipWorkedThisBlock || worked;
+    });
+
+    dcBlocker.process (channels, numChannels, numSamples);
+}
+
+void PedalEqBlock::rememberClipInput (const float* const* channels, int numChannels, int numSamples) noexcept
+{
+    const auto keep = clipHistory.getNumSamples();
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        auto* h = clipHistory.getWritePointer (ch);
+
+        if (numSamples >= keep)
+        {
+            std::copy (channels[ch] + numSamples - keep, channels[ch] + numSamples, h);
+        }
+        else
+        {
+            std::copy (h + numSamples, h + keep, h);
+            std::copy (channels[ch], channels[ch] + numSamples, h + keep - numSamples);
+        }
+    }
+}
+
+void PedalEqBlock::warmUpClip (int numChannels) noexcept
+{
+    oversampler.reset();
+    dcBlocker.reset();
+
+    const auto worked = clipWorkedThisBlock;   // the history doesn't count for HOT
+
+    for (int start = 0; start < clipWarmupSamples; start += maxBlock)
+    {
+        const auto length = juce::jmin (maxBlock, clipWarmupSamples - start);
+        float* chunk[maxChannels] {};
+
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            clipWarmup.copyFrom (ch, 0, clipHistory, ch, start, length);
+            chunk[ch] = clipWarmup.getWritePointer (ch);
+        }
+
+        runClip (chunk, numChannels, length);
+    }
+
+    clipWorkedThisBlock = worked;
+}
+
+void PedalEqBlock::processClip (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    oversampler.setQuality ((dsp::Quality) juce::roundToInt (quality.skip (numSamples)));
+    realClip.skip (numSamples);
+
+    const auto want = clipNeeded();
+    const auto active = isClipInPath();
+
+    clipWorkedThisBlock = false;
+
+    if (want != active && ! clipFade.isActive())
+    {
+        if (want)
+            warmUpClip (numChannels);   // comes in settled, from the recent signal
+
+        clipWasInPath = active;
+        clipInPath.store (want, std::memory_order_relaxed);   // the latency report follows
+        clipFade.start();
+    }
+
+    const auto fading = clipFade.isActive();
+
+    if (! isClipInPath() && ! fading)
+        rememberClipInput (channels, numChannels, numSamples);
+
+    if (fading)
+    {
+        clipFade.copyInput (channels, numChannels, numSamples);
+
+        if (clipWasInPath)
+            runClip (clipFade.oldChannels(), numChannels, numSamples);
+    }
+
+    if (isClipInPath())
+        runClip (channels, numChannels, numSamples);
+
+    if (fading)
+        clipFade.mix (channels, numChannels, numSamples);
+
+    hotSamplesLeft = clipWorkedThisBlock ? hotHoldSamples : juce::jmax (0, hotSamplesLeft - numSamples);
+    hot.store (hotSamplesLeft > 0, std::memory_order_relaxed);
 }
 
 void PedalEqBlock::processInput (float* const* channels, int numChannels, int numSamples) noexcept
@@ -220,6 +375,7 @@ void PedalEqBlock::processBlock (float* const* channels, int numChannels, int nu
     // EQ-PLAN §3.1: Input -> character capture -> 7 bands -> soft clip -> Level.
     processInput (channels, numChannels, numSamples);
     processBands (channels, numChannels, numSamples);
+    processClip (channels, numChannels, numSamples);
     processLevel (channels, numChannels, numSamples);
 }
 
