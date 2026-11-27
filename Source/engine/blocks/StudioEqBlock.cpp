@@ -534,9 +534,46 @@ void StudioEqBlock::processBands (float* const* channels, int numChannels, int n
 }
 
 //==============================================================================
+namespace
+{
+    // Factory presets (EQ-PLAN §4, values Proposed, tuned by ear on the rig;
+    // ids stable once merged). The bands go into slots 01, 02 ... A preset is
+    // the whole sound: every other preset parameter goes to its default, so
+    // slots it doesn't use are freed. "Tame fizz" and "Pick attack" need
+    // dynamic bands and come with B4.
+    constexpr float lowCut = (float) StudioEqBlock::Shape::lowCut, highCut = (float) StudioEqBlock::Shape::highCut;
+    constexpr float lowShelf = (float) StudioEqBlock::Shape::lowShelf, bell = (float) StudioEqBlock::Shape::bell;
+    constexpr float slope12 = 1.0f, slope18 = 2.0f, slope24 = 3.0f;
+
+    constexpr PresetValue tightenLows[] {
+        { "b01Used", 1.0f }, { "b01Shape", lowCut }, { "b01Freq", 90.0f }, { "b01Slope", slope24 },
+        { "b02Used", 1.0f }, { "b02Shape", lowShelf }, { "b02Freq", 150.0f }, { "b02Gain", -2.0f }, { "b02Q", 0.7071f },
+    };
+    constexpr PresetValue cutMud[] {
+        { "b01Used", 1.0f }, { "b01Shape", bell }, { "b01Freq", 300.0f }, { "b01Gain", -3.0f }, { "b01Q", 1.2f },
+    };
+    constexpr PresetValue presence[] {
+        { "b01Used", 1.0f }, { "b01Shape", bell }, { "b01Freq", 3000.0f }, { "b01Gain", 2.5f }, { "b01Q", 0.9f },
+    };
+    constexpr PresetValue sitInMix[] {
+        { "b01Used", 1.0f }, { "b01Shape", lowCut }, { "b01Freq", 100.0f }, { "b01Slope", slope18 },
+        { "b02Used", 1.0f }, { "b02Shape", bell }, { "b02Freq", 250.0f }, { "b02Gain", -2.0f },
+        { "b03Used", 1.0f }, { "b03Shape", bell }, { "b03Freq", 2500.0f }, { "b03Gain", 2.0f },
+        { "b04Used", 1.0f }, { "b04Shape", highCut }, { "b04Freq", 9000.0f }, { "b04Slope", slope12 },
+    };
+
+    constexpr FactoryPreset studioEqPresets[] {
+        { "flat", "Flat", {} },
+        { "tightenLows", "Tighten the low end", tightenLows },
+        { "cutMud", "Cut the mud", cutMud },
+        { "presence", "Presence", presence },
+        { "sitInMix", "Sit in the mix", sitInMix },
+    };
+}
+
 std::span<const FactoryPreset> StudioEqBlock::getFactoryPresets() const noexcept
 {
-    return {};
+    return studioEqPresets;
 }
 
 bool StudioEqBlock::isPresetParameter (const Parameter& parameter) const noexcept

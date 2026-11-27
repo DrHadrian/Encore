@@ -8,6 +8,7 @@
 #include "TestSignals.h"
 
 #include "engine/blocks/StudioEqBlock.h"
+#include "engine/core/FactoryPresets.h"
 #include "engine/core/Realtime.h"
 #include "engine/dsp/Loudness.h"
 
@@ -585,6 +586,77 @@ public:
 
             play (eq, loud, blockSize, {}, nullptr, tuning);
             expectWithinAbsoluteError (eq.getAutoGainDb(), held, 1.0e-6f, "frozen while the tuner is open");
+        }
+
+        beginTest ("Factory presets: each loads its bands into slots 01, 02 ...; Flat is passthrough; the setup isn't part of one");
+        {
+            struct Expected { const char* id; std::vector<Eq::BandSettings> bands; };
+            const auto band = [] (Eq::Shape shape, double f, double gain, double q, int slope)
+            {
+                Eq::BandSettings b;
+                b.used = true;
+                b.shape = shape;
+                b.frequency = f;
+                b.gainDb = gain;
+                b.q = q;
+                b.slope = slope;
+                return b;
+            };
+
+            const Expected expected[] {
+                { "flat", {} },
+                { "tightenLows", { band (Eq::Shape::lowCut, 90.0, 0.0, 1.0, 3), band (Eq::Shape::lowShelf, 150.0, -2.0, 0.7071, 1) } },
+                { "cutMud", { band (Eq::Shape::bell, 300.0, -3.0, 1.2, 1) } },
+                { "presence", { band (Eq::Shape::bell, 3000.0, 2.5, 0.9, 1) } },
+                { "sitInMix", { band (Eq::Shape::lowCut, 100.0, 0.0, 1.0, 2), band (Eq::Shape::bell, 250.0, -2.0, 1.0, 1),
+                                band (Eq::Shape::bell, 2500.0, 2.0, 1.0, 1), band (Eq::Shape::highCut, 9000.0, 0.0, 1.0, 1) } },
+            };
+
+            Eq ids;
+            expectEquals (presets::listIds (ids), juce::String ("flat, tightenLows, cutMud, presence, sitInMix"));
+
+            for (const auto& e : expected)
+            {
+                Eq eq;
+
+                // Something to clear first: a stray band, a setting, the setup.
+                addBand (eq, 9, Eq::Shape::notch, 777.0f, 0.0f);
+                set (eq, "gainScale", 50.0f);
+                set (eq, "width", 150.0f);
+                set (eq, "pan", -30.0f);
+
+                presets::apply (eq, *presets::find (eq, e.id));
+                expectEquals (eq.getNumBandsInUse(), (int) e.bands.size(), e.id);
+                expectEquals (eq.findParameter ("gainScale")->getValue(), 100.0f, "a preset parameter: to its default");
+                expectEquals (eq.findParameter ("width")->getValue(), 150.0f, "the setup stays");
+                expectEquals (eq.findParameter ("pan")->getValue(), -30.0f);
+
+                std::vector<dsp::FilterBandDesign> listed;
+
+                for (size_t i = 0; i < e.bands.size(); ++i)
+                {
+                    const auto got = eq.getBand ((int) i);
+                    expect (got.used && got.shape == e.bands[i].shape, e.id);
+                    listed.push_back (dsp::FilterBandDesign::make (Eq::filterSettingsFor (e.bands[i], 100.0), sampleRate));
+                }
+
+                const auto designs = eq.getBandDesigns (sampleRate);
+
+                for (auto f : { 40.0, 120.0, 300.0, 1000.0, 3000.0, 9000.0, 15000.0 })
+                    expectWithinAbsoluteError (dsp::responseDb (designs, f, sampleRate), dsp::responseDb (listed, f, sampleRate), 1.0e-4, e.id);
+
+                if (juce::String (e.id) == "flat")
+                {
+                    // With the setup neutral again, Flat is passthrough.
+                    set (eq, "width", 100.0f);
+                    set (eq, "pan", 0.0f);
+                    start (eq);
+                    const auto x = noise (0.4f, 4800, 41);
+                    auto right = noise (0.4f, 4800, 42);
+                    const auto rightIn = right;
+                    expect (play (eq, x, blockSize, {}, &right) == x && right == rightIn, "Flat is bit-exact");
+                }
+            }
         }
 
         beginTest ("24 bands at extreme settings, moving: stable, no NaN, no allocation");
