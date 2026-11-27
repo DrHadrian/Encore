@@ -19,6 +19,34 @@ int GateBlock::getLatencySamples() const noexcept
     return hasLookAhead() ? getLookAheadFromParameters() : 0;
 }
 
+void GateBlock::setKeyTap (const float* const* tapChannels, int numTapChannels, const juce::String& problem)
+{
+    keyTap = tapChannels;
+    keyTapChannels = tapChannels != nullptr ? juce::jlimit (1, 2, numTapChannels) : 0;
+    keyTapProblem = problem;
+    keyBlockNamed = tapChannels != nullptr || problem.isNotEmpty();
+}
+
+void GateBlock::setKeyInputSlot (int slot) noexcept
+{
+    keyInputSlot.store (slot, std::memory_order_relaxed);
+    keyInputNamed.store (true, std::memory_order_relaxed);
+}
+
+juce::String GateBlock::getKeyInfo() const
+{
+    switch (getKeyState())
+    {
+        case KeyState::inUse:          return {};
+        case KeyState::inputNotHere:   return "Key: " + getRef ("keyInput") + " isn't on this computer";
+        case KeyState::noInputPicked:  return "Key: no input picked, so it listens to its own input";
+        case KeyState::blockNotUsable: return keyTapProblem.isNotEmpty() ? keyTapProblem : juce::String ("Key: that block isn't before this gate");
+        case KeyState::noBlockPicked:  return "Key: no block picked, so it listens to its own input";
+    }
+
+    return {};
+}
+
 void GateBlock::setLearnedFloorDb (float db) noexcept
 {
     for (auto* engine : { &current, &old })
@@ -258,14 +286,51 @@ void GateBlock::processBlock (float* const* channels, int numChannels, int numSa
     }
 
     // The key, copied before the look-ahead delays the channels in place.
+    // One that can't be reached falls back to the gate's own input.
     const float* key[2] = { channels[0], channels[numChannels > 1 ? 1 : 0] };
     auto keyChannels = numChannels;
+    auto keyState = KeyState::inUse;
 
-    if (setup.key == GateKey::guitar && context.chainInput != nullptr)
+    switch (setup.key)
     {
-        key[0] = key[1] = context.chainInput;
-        keyChannels = 1;
+        case GateKey::input:
+            break;
+
+        case GateKey::guitar:
+            if (context.chainInput != nullptr)
+            {
+                key[0] = key[1] = context.chainInput;
+                keyChannels = 1;
+            }
+            break;
+
+        case GateKey::audioInput:
+            if (const auto* in = context.input (keyInputSlot.load (std::memory_order_relaxed)))
+            {
+                key[0] = key[1] = in;
+                keyChannels = 1;
+            }
+            else
+            {
+                keyState = keyInputNamed.load (std::memory_order_relaxed) ? KeyState::inputNotHere : KeyState::noInputPicked;
+            }
+            break;
+
+        case GateKey::block:
+            if (keyTap != nullptr)
+            {
+                key[0] = keyTap[0];
+                key[1] = keyTap[keyTapChannels > 1 ? 1 : 0];
+                keyChannels = keyTapChannels;
+            }
+            else
+            {
+                keyState = keyBlockNamed ? KeyState::blockNotUsable : KeyState::noBlockPicked;
+            }
+            break;
     }
+
+    keyStateNow.store ((int) keyState, std::memory_order_relaxed);
 
     for (int c = 0; c < keyChannels; ++c)
         keyCopy.copyFrom (c, 0, key[c], numSamples);
@@ -279,7 +344,7 @@ void GateBlock::processBlock (float* const* channels, int numChannels, int numSa
     }
 
     // The gains: per sample, from the key.
-    const auto tunerOpen = false;
+    const auto tunerOpen = context.tunerOpen;
     float* g[2] = { gains.getWritePointer (0), gains.getWritePointer (1) };
     float* f[2] = { filteredKey.getWritePointer (0), filteredKey.getWritePointer (1) };
     current.run (keys, keyChannels, numSamples, numChannels, g, f, tunerOpen);

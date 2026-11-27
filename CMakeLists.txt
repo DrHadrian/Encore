@@ -601,6 +601,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/PedalEqCaptureTests.cpp
         Tests/PedalEqTests.cpp
         Tests/PedalGateTests.cpp
+        Tests/GateKeyTests.cpp
         Tests/RenderTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp

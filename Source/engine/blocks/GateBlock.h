@@ -110,6 +110,27 @@ public:
     /** The look-ahead's samples while it's on (the X4), else 0. */
     int getLatencySamples() const noexcept override;
 
+    /** Where the key comes from right now: as asked, or fell back to the
+        gate's own input, and why (B2 step 4). Any thread. */
+    enum class KeyState
+    {
+        inUse,            // the key it's set to (its own input, the guitar, an input, a block)
+        inputNotHere,     // Audio input: the named input isn't on this computer
+        noInputPicked,    // Audio input, but no input named yet
+        blockNotUsable,   // Block: the block is missing, or not before this gate
+        noBlockPicked     // Block, but no block picked yet (a ducking preset, until U2)
+    };
+
+    KeyState getKeyState() const noexcept { return (KeyState) keyStateNow.load (std::memory_order_relaxed); }
+
+    /** One line for the block's info when the key fell back ("" when it
+        didn't): "Key: Input 3 isn't on this computer". Message thread. */
+    juce::String getKeyInfo() const;
+
+    //== Keys (Block; message thread / any thread) =============================
+    void setKeyTap (const float* const* tapChannels, int numTapChannels, const juce::String& problem) override;
+    void setKeyInputSlot (int slot) noexcept override;
+
     //== Message thread, before the block plays ================================
     /** Starts Smart learning from a floor learned before (a rebuilt patch,
         B2 step 7). */
@@ -174,6 +195,14 @@ private:
     juce::AudioBuffer<float> keyCopy, filteredKey, gains, oldGains;
     float listenMix = 0.0f, listenStep = 1.0f;
     std::atomic<bool> keyListen { false };
+
+    const float* const* keyTap = nullptr;   // set before playing (Chain::prepare)
+    int keyTapChannels = 0;
+    juce::String keyTapProblem;             // message thread
+    bool keyBlockNamed = false;             // a keyBlock ref was given (set before playing)
+    std::atomic<int> keyInputSlot { -1 };
+    std::atomic<bool> keyInputNamed { false };
+    std::atomic<int> keyStateNow { (int) KeyState::inUse };
 
     std::atomic<bool> openNow { true }, frozenNow { false };
     std::atomic<float> reductionNow { 0.0f }, floorNow { dsp::AdaptiveGate::initialFloorDb };
