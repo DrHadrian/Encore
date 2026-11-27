@@ -252,6 +252,7 @@ target_sources(EncoreEngine PRIVATE
     Source/session/PatchBuilder.cpp
     Source/session/PatchGates.cpp
     Source/session/PatchEq.cpp
+    Source/session/PatchCompare.cpp
     Source/session/PluginCatalog.cpp
     Source/session/PluginCatalog.h
     Source/session/PreShowCheck.cpp

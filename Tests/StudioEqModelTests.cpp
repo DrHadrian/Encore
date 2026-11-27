@@ -7,6 +7,7 @@
 #include "TestSignals.h"
 
 #include "engine/blocks/StudioEqBlock.h"
+#include "model/ShowJson.h"
 #include "session/PatchBuilder.h"
 
 namespace encore::test
@@ -109,6 +110,89 @@ public:
             applyEqSlot (eq, live, slot);
             expectEquals (live.getNumBandsInUse(), 0);
             expectEquals (live.getBand (slot).gainDb, 0.0);
+        }
+
+        beginTest ("A / B: switch plays the other set (B starts as a copy of A); copy either way; only parameter values");
+        {
+            auto eq = emptyEq();
+            juce::String error;
+            addEqBand (eq, bell (400.0, 3.0), error);
+            eq.expression["b01Gain"] = { 1, -30.0f, 30.0f };
+            eq.enabled = false;
+            const auto a = eq.params;
+
+            expect (! eq.compare.isUsed(), "never used: nothing extra");
+            expect (switchCompare (eq));
+            expect (eq.compare.bPlaying && eq.params == a, "B is a copy of A at first");
+
+            eq.params["b01Gain"] = -5.0f;   // an edit to B
+            expect (switchCompare (eq));
+            expect (! eq.compare.bPlaying);
+            expectEquals (eq.params.at ("b01Gain"), 3.0f, "A again");
+            expectEquals (eq.compare.other.at ("b01Gain"), -5.0f, "B kept");
+            expect (eq.expression.count ("b01Gain") == 1 && ! eq.enabled, "on/off and expression never move");
+
+            expect (copyCompare (eq, true));   // A to B
+            expectEquals (eq.compare.other.at ("b01Gain"), 3.0f);
+            eq.compare.other["b01Freq"] = 900.0f;
+            expect (copyCompare (eq, false));  // B to A: A is playing, so params change
+            expectEquals (eq.params.at ("b01Freq"), 900.0f);
+
+            // Heard at once on a live block.
+            Eq live;
+            applyParameters (eq, live);
+            expectEquals (live.getBand (0).frequency, 900.0);
+        }
+
+        beginTest ("A / B on a Pedal EQ, the same way");
+        {
+            BlockModel g7;
+            g7.id = "g7";
+            g7.type = "pedalEq";
+            g7.params["g800"] = 6.0f;
+            expect (switchCompare (g7));
+            g7.params["g800"] = -4.0f;
+            expect (switchCompare (g7));
+            expectEquals (g7.params.at ("g800"), 6.0f);
+            expect (copyCompare (g7, true));
+            expectEquals (g7.compare.other.at ("g800"), 6.0f);
+        }
+
+        beginTest ("A / B is saved (schema 5) and read back; on a block that isn't an FX Unit it's ignored");
+        {
+            auto show = makeDefaultShow ("AB");
+            auto eq = emptyEq();
+            juce::String error;
+            addEqBand (eq, bell (400.0, 3.0), error);
+            switchCompare (eq);
+            eq.params["b01Gain"] = 7.0f;
+            show.patches[0].mainLane().blocks.push_back (eq);
+
+            const auto text = json::toJson (show);
+            expect (text.contains ("\"compare\""));
+            const auto back = json::fromJson (text, error);
+            expect (back.has_value(), error);
+
+            if (back)
+            {
+                const auto& b = back->patches[0].mainLane().blocks.back();
+                expect (b.compare.bPlaying);
+                expectEquals (b.params.at ("b01Gain"), 7.0f);
+                expectEquals (b.compare.other.at ("b01Gain"), 3.0f);
+                expect (b == eq, "the round trip keeps everything");
+            }
+
+            // A show without A/B writes no compare at all.
+            expect (! json::toJson (makeDefaultShow ("Plain")).contains ("\"compare\""));
+
+            // Today's EQ (not converted) with A/B data in its file: ignored, and refused as an edit.
+            auto old = makeDefaultShow ("Old");
+            auto& oldEq = old.patches[0].mainLane().blocks[3];   // Amp -> Cab -> Gate -> EQ
+            expectEquals (oldEq.type, juce::String ("eq"));
+            oldEq.compare.other["bass"] = 6.0f;
+            const auto oldBack = json::fromJson (json::toJson (old), error);
+            expect (oldBack.has_value() && ! oldBack->patches[0].mainLane().blocks[3].compare.isUsed());
+            expect (! switchCompare (oldEq) && ! copyCompare (oldEq, true));
         }
     }
 };

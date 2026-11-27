@@ -93,6 +93,20 @@ bool addGatePair (PatchModel& patch, const std::function<juce::String()>& newId)
     nothing calls it yet. A block of any other type comes back unchanged. */
 BlockModel convertOldGate (const BlockModel& gate);
 
+//== A / B (B3, MODULES-PLAN §3.1; every FX Unit) ==============================
+/** Switches which set plays. The first switch makes B a copy of A. Only
+    parameter values move. False (nothing changes) for a block that isn't an
+    FX Unit. Message thread; one edit. */
+bool switchCompare (BlockModel& block);
+
+/** Copies A to B, or B to A. False for a block that isn't an FX Unit.
+    Message thread; one edit. */
+bool copyCompare (BlockModel& block, bool aToB);
+
+/** Sets a live block's parameters from the model's (what A/B and presets
+    change): heard at once, ramped as any change. Message thread. */
+void applyParameters (const BlockModel& model, Block& block);
+
 //== Studio EQ (B3) ============================================================
 /** Adding a band to a Studio EQ's model (EQ-PLAN §2.8): it takes the lowest
     free slot, in use with these settings. Returns the slot (0-based), or -1
