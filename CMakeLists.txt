@@ -605,6 +605,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/EqShapeTests.cpp
         Tests/StudioEqTests.cpp
         Tests/StudioEqModelTests.cpp
+        Tests/StudioEqSessionTests.cpp
         Tests/ModuleTypeTests.cpp
         Tests/PedalEqCaptureTests.cpp
         Tests/PedalEqTests.cpp
