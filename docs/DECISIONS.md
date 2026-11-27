@@ -1073,3 +1073,74 @@ and keeps playing old shows until U2 switches it over.
   reports both. The benchmark now runs on its own (`EncoreTests.benchmark`,
   RUN_SERIAL): beside the soak, the screens and the renders it measured the
   machine's load.
+
+## 0067 — Studio EQ core engine: 24 slots, shapes and slopes, output tools, auto gain, A/B data
+
+Stage B3 of the native modules (EQ-PLAN §2): the core of the **Studio EQ
+"Q24"** (`studioEq`), an FX Unit, **hidden** and a new module (schema 5),
+with no UI until U3. **Today's EQ (`eq`) is unchanged** and keeps playing old
+shows until U3 switches it over. Dynamics, sidechain, placement, character and
+Quality are B4; linear phase and spectral bands B5; Natural phase R1.
+
+- **A slope on every shape, as in Pro-Q** (Adrian, 27 Nov): the number is the
+  filter's order × 6 dB/oct (a 12 dB/oct band pass is second order, so each
+  skirt falls 6 dB/oct). Shelves: 6 = first order, matched at DC, the
+  half-gain point and Nyquist; 12 = the B0 shelf, Q shapes the corner;
+  18–96 = Butterworth shelves made of matched second-order shelves at the same
+  frequency (decramped, Q has no effect). A new **tilt shelf** (the high shelf
+  less half its gain). A **bell has no slope** (Adrian, 27 Nov). Notch and band
+  pass cascade a section per pole pair (the band pass keeps the −3 dB width Q
+  sets); all pass turns −90° per 6 dB/oct. Brickwall plays as 96 until B5.
+  Measured against the prototypes (dsp README): within 0.03 dB for a corner up
+  to fs/48 (6 dB/oct 0.11), 0.15 dB up to fs/10 at ±12 dB, 2.35 dB at worst
+  (a steep shelf at ±30 dB set above ~8 kHz at 44.1/48 kHz).
+- **24 slots, 373 parameters, ids final**: per slot `bNNUsed`, `On`, `Shape`,
+  `Freq`, `Gain`, `Q`, `Slope` and B4's `Place`, `Mode`, `Range`, `Thresh`
+  (−61 = Auto), `Attack`, `Release`, `Side`, `SideFilter`; block-wide `phase`,
+  `linearQuality`, `character`, `drive`, `quality`, `output`, `pan`, `width`,
+  `autoGain`, `gainScale`, `invert`, `cpuTight`, `range`. Later stages' are
+  saved now and play nothing yet. A parameter can be kept off expression
+  pedals (`Parameter::Spec::expressionAllowed`, a shared addition): a band's
+  in use, placement, mode and sidechain, the phase mode, Quality, the CPU
+  setting, the display range.
+- **The bands** play in slot order, in series, in double. A free slot, a band
+  that's off or one that changes nothing costs nothing and passes bit-exact.
+  On, off, in or out of use glides to or from flat (10 ms); a Shape or Slope
+  change crossfades that band alone. Moving values redesign every 16 samples
+  with `glideTo`; **Freq and Q ramp in log steps**, as a knob turns (the
+  shared parameter ramp is linear, which jumped octaves per chunk near 10 Hz).
+  Measured zipper noise −75 dB or lower (−43 without the glide).
+- **Bands come and go as model edits** (`addEqBand`, `removeEqBand`; `ShowSession`):
+  the lowest free slot, "All 24 bands are in use"; removing a band resets its
+  slot and drops its expression assignments in the same edit. Heard at once,
+  no rebuild (only a dropped assignment rebuilds). The code has no undo yet;
+  the undo round trip is tested when it lands.
+- **Output tools**, in order bands → auto gain → output → pan / width (stereo
+  only) → invert. Pan and width do nothing on mono (Adrian, 27 Nov: greyed in
+  U3). **Auto gain is Off · Curve · Smart** (Claude; Adrian asked for a smart
+  and a normal one): Curve keeps pink noise from 80 Hz to 8 kHz at the same
+  RMS, computed from the designs at 48 points, only while a band moves; Smart
+  starts there and corrects by K-weighted loudness (BS.1770, a new shared
+  `dsp/Loudness.h`) in minus out over 3 s, only while someone is playing and
+  the tuner is closed, at most 1 dB/s, within ±6 dB of Curve. On very
+  bass-heavy material a big treble move can need more than 6 dB from Curve;
+  Smart then stops at the limit (values Proposed, tuned on the rig in U3).
+- **Factory presets** (static ones): flat, tightenLows, cutMud, presence,
+  sitInMix; Tame fizz and Pick attack wait for dynamic bands (B4). A preset is
+  the whole sound; the setup (pan, width, invert, display range, Quality, CPU
+  setting, phase) isn't part of one.
+- **A / B, for every FX Unit** (MODULES-PLAN §3.1): `BlockModel::Compare`, the
+  other set of parameter values and which one plays, saved only once used,
+  read only for FX Units. Switch (B starts as a copy of A) and copy either
+  way, one edit each, heard at once; a capture keeps it.
+- **Today's EQ as a Studio EQ** (`convertOldEq`), written and tested, not
+  switched on: the five sections into slots 01, 02 … (the shelves at RBJ's
+  S = 1, Q 0.7071), on/off, stomp and pedals kept, a band also for a control at
+  its off value that's on a pedal. Within 0.21 dB of today's EQ at everyday
+  settings, 0.67 dB at worst (every knob at an extreme: today's bilinear bell
+  is cramped at 5 kHz at 44.1 kHz, the Studio EQ's follows the analog curve).
+- **Show size:** 8 Studio EQs add about 100 KiB with every value written and
+  parse in a few ms: kept as is (writing only what differs from the default
+  is an option for later).
+- **CPU** at 48 kHz / 64: 8 static bands, stereo, against the 1 % target; the
+  CI benchmark reports it with Smart's share and 24 bands.
