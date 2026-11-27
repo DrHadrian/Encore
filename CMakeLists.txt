@@ -686,7 +686,13 @@ if(ENCORE_BUILD_TESTS)
     list(JOIN encore_slow_tests "|" encore_all_slow)
     add_test(NAME EncoreTests.engine COMMAND EncoreTests)
     set_tests_properties(EncoreTests.engine PROPERTIES ENVIRONMENT
-        "ENCORE_TEST_SKIP=${encore_all_slow};ENCORE_BENCHMARK_REPORT=${CMAKE_CURRENT_BINARY_DIR}/benchmark.txt")
+        "ENCORE_TEST_SKIP=${encore_all_slow}|Module CPU benchmark")
+
+    # The CPU benchmark alone (RUN_SERIAL): beside the soak, the screens and
+    # the renders its numbers measured the machine's load, not the blocks.
+    add_test(NAME EncoreTests.benchmark COMMAND EncoreTests)
+    set_tests_properties(EncoreTests.benchmark PROPERTIES RUN_SERIAL TRUE ENVIRONMENT
+        "ENCORE_TEST_ONLY=Module CPU benchmark;ENCORE_BENCHMARK_REPORT=${CMAKE_CURRENT_BINARY_DIR}/benchmark.txt")
 
     # --------------------------------------------------------------------------
     # EncoreRender: a WAV through one block or a whole patch, offline, from the
