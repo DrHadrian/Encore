@@ -154,8 +154,117 @@ void Chain::prepare (const ProcessSpec& spec)
         firstTailBlock = firstTailBlock < 0 ? from : juce::jmin (firstTailBlock, from);
     }
 
+    resolveKeys();
+
     if (snapshotValues == nullptr)
         saveSnapshot();
+}
+
+Chain::Region Chain::regionOf (int index) const noexcept
+{
+    if (splitAt < 0)
+        return Region::beforeSplit;
+
+    if (index >= numMain)
+        return Region::pathB;
+
+    if (index <= splitAt)
+        return Region::beforeSplit;
+
+    return index < mergeAt ? Region::pathA : Region::afterMerge;
+}
+
+bool Chain::isEarlier (int earlier, int later) const noexcept
+{
+    const auto count = (int) blocks.size();
+
+    if (! juce::isPositiveAndBelow (earlier, count) || ! juce::isPositiveAndBelow (later, count) || earlier == later)
+        return false;
+
+    const auto a = regionOf (earlier), b = regionOf (later);
+
+    switch (b)
+    {
+        case Region::beforeSplit: return a == Region::beforeSplit && earlier < later;
+        case Region::pathA:       return a == Region::beforeSplit || (a == Region::pathA && earlier < later);
+        case Region::pathB:       return a == Region::beforeSplit || (a == Region::pathB && earlier < later);
+        case Region::afterMerge:  return a != Region::afterMerge || earlier < later;
+    }
+
+    return false;
+}
+
+int Chain::indexOfModelId (const juce::String& modelId) const noexcept
+{
+    if (modelId.isEmpty())
+        return -1;
+
+    for (int i = 0; i < (int) blocks.size(); ++i)
+        if (blocks[(size_t) i]->getModelId() == modelId)
+            return i;
+
+    return -1;
+}
+
+void Chain::resolveKeys()
+{
+    taps.clear();
+    taps.resize (blocks.size());
+    anyTaps = false;
+
+    for (int i = 0; i < (int) blocks.size(); ++i)
+    {
+        auto& block = *blocks[(size_t) i];
+        const auto wanted = block.getRef ("keyBlock");
+
+        if (wanted.isEmpty())
+        {
+            block.setKeyTap (nullptr, 0, {});
+            continue;
+        }
+
+        const auto source = indexOfModelId (wanted);
+
+        if (source < 0)
+        {
+            block.setKeyTap (nullptr, 0, "Key: that block isn't in this patch");
+            continue;
+        }
+
+        if (! isEarlier (source, i))
+        {
+            block.setKeyTap (nullptr, 0, "Key: that block isn't before this gate");
+            continue;
+        }
+
+        auto& tap = taps[(size_t) source];
+
+        if (tap == nullptr)
+            tap = std::make_unique<juce::AudioBuffer<float>> (Block::maxChannels, juce::jmax (1, preparedSpec.maxBlockSize));
+
+        tap->clear();
+        anyTaps = true;
+    }
+
+    // Now that every tap exists, hand them out (their data doesn't move again).
+    for (int i = 0; i < (int) blocks.size(); ++i)
+    {
+        auto& block = *blocks[(size_t) i];
+        const auto source = indexOfModelId (block.getRef ("keyBlock"));
+
+        if (source >= 0 && isEarlier (source, i) && taps[(size_t) source] != nullptr)
+            block.setKeyTap (taps[(size_t) source]->getArrayOfReadPointers(), channelsOut[(size_t) source], {});
+    }
+}
+
+void Chain::clearTaps (int from, int to) noexcept
+{
+    if (! anyTaps)
+        return;
+
+    for (int i = juce::jmax (0, from); i < juce::jmin (to, (int) taps.size()); ++i)
+        if (taps[(size_t) i] != nullptr)
+            taps[(size_t) i]->clear();
 }
 
 int Chain::sumLatency (int from, int to) const noexcept
@@ -271,9 +380,9 @@ void Chain::collectGarbage()
         b->collectGarbage();
 }
 
-int Chain::process (float* const* channels, int numSamples) noexcept
+int Chain::process (float* const* channels, int numSamples, const ChainInputs& inputs) noexcept
 {
-    return processFrom (0, channels, numSamples);
+    return processFrom (0, channels, numSamples, inputs);
 }
 
 int Chain::processRange (int from, int to, float* const* channels, int numChannels, int numSamples,
@@ -297,12 +406,21 @@ int Chain::processRange (int from, int to, float* const* channels, int numChanne
 
         numChannels = wanted;
         blocks[(size_t) i]->process (channels, numChannels, numSamples, context);
+
+        // A tap: a later block is keyed from this one's output (B2).
+        if (anyTaps && taps[(size_t) i] != nullptr)
+        {
+            auto& tap = *taps[(size_t) i];
+
+            for (int ch = 0; ch < Block::maxChannels; ++ch)
+                tap.copyFrom (ch, 0, channels[juce::jmin (ch, numChannels - 1)], numSamples);
+        }
     }
 
     return numChannels;
 }
 
-int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) noexcept
+int Chain::processFrom (int firstBlock, float* const* channels, int numSamples, const ChainInputs& inputs) noexcept
 {
     jassert (numSamples <= chainInput.getNumSamples());
 
@@ -311,7 +429,11 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) 
 
     // Keep the dry guitar for blocks that listen to it (e.g. a gate after the amp).
     chainInput.copyFrom (0, 0, channels[0], numSamples);
-    const ProcessContext context { chainInput.getReadPointer (0) };
+    ProcessContext context;
+    context.chainInput = chainInput.getReadPointer (0);
+    context.inputs = inputs.inputs;
+    context.numInputs = inputs.numInputs;
+    context.tunerOpen = inputs.tunerOpen;
 
     auto first = juce::jlimit (0, numMain, firstBlock);
 
@@ -322,7 +444,11 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) 
         return channelsOut[(size_t) numMain - 1];
 
     // Starting part-way (tails only): the signal there is what the skipped
-    // blocks would have passed on, i.e. silence on every channel.
+    // blocks would have passed on, i.e. silence on every channel; so are
+    // their taps.
+    if (first > 0)
+        clearTaps (0, first);
+
     int numChannels = channelsIn[(size_t) first];
 
     if (numChannels > 1)
@@ -354,6 +480,7 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) 
                 blocks[i]->reset();
 
             alignB.reset();
+            clearTaps (numMain, (int) blocks.size());   // asleep: it passes on nothing
             pathBAsleep = true;
         }
 

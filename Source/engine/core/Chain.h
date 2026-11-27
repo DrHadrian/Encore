@@ -17,6 +17,15 @@ namespace encore
 
 class MergeBlock;
 
+/** What the player hands a chain beyond its own input (B2): the interface's
+    inputs and the tuner, passed on to every block in ProcessContext. */
+struct ChainInputs
+{
+    const float* const* inputs = nullptr;   // by input slot; null entries: absent
+    int numInputs = 0;
+    bool tunerOpen = false;
+};
+
 /** An ordered list of blocks that processes a buffer in place.
 
     Built and prepared off the audio thread, then handed to the audio thread
@@ -73,6 +82,21 @@ public:
     static constexpr double alignmentFadeSeconds = 0.03;
 
     const std::vector<std::unique_ptr<Block>>& getBlocks() const noexcept { return blocks; }
+
+    /** Whether block `earlier` comes before block `later` in the signal path
+        (B2: what a gate may key from or link to; decision 10). Known once
+        prepared. In a split, path B doesn't count path A as before it (nor
+        A path B): they run side by side, not one after the other. */
+    bool isEarlier (int earlier, int later) const noexcept;
+
+    /** The block (by its index) with this saved id, or -1. */
+    int indexOfModelId (const juce::String& modelId) const noexcept;
+
+    /** Whether block i's output is copied for a block keyed from it. */
+    bool isTap (int index) const noexcept
+    {
+        return juce::isPositiveAndBelow (index, (int) taps.size()) && taps[(size_t) index] != nullptr;
+    }
     Block* findBlock (const juce::String& typeId) const noexcept;
 
     /** Off the audio thread, while this chain isn't playing. */
@@ -85,7 +109,7 @@ public:
     /** Audio thread. numSamples <= spec.maxBlockSize. The signal comes in mono
         in channels[0]; channels must hold Block::maxChannels buffers. Returns
         how many channels the result has (1, or 2 after a stereo block). */
-    int process (float* const* channels, int numSamples) noexcept;
+    int process (float* const* channels, int numSamples, const ChainInputs& inputs = {}) noexcept;
     void reset() noexcept;
 
     /** Channels at the end of the chain (1 or 2), known once prepared. */
@@ -130,7 +154,7 @@ public:
     /** Audio thread: process starting at a given block (earlier blocks are
         skipped: used to run only the tails of a patch that was switched away).
         Returns the channels of the result, as process(). */
-    int processFrom (int firstBlock, float* const* channels, int numSamples) noexcept;
+    int processFrom (int firstBlock, float* const* channels, int numSamples, const ChainInputs& inputs = {}) noexcept;
 
     /** Message thread: remember every parameter and on/off state as "saved". */
     void saveSnapshot();
@@ -164,6 +188,13 @@ private:
     int processRange (int from, int to, float* const* channels, int numChannels, int numSamples,
                       const ProcessContext& context) noexcept;
 
+    /** Off the audio thread: resolves keyBlock refs into taps (B2). */
+    void resolveKeys();
+    void clearTaps (int from, int to) noexcept;
+
+    enum class Region { beforeSplit, pathA, pathB, afterMerge };
+    Region regionOf (int index) const noexcept;
+
     std::vector<std::unique_ptr<Block>> blocks;
     int numMain = 0;                       // blocks [0, numMain) are the main lane, the rest path B
     int splitAt = -1, mergeAt = -1;
@@ -177,6 +208,8 @@ private:
     bool pathBAsleep = false;
     ProcessSpec preparedSpec;
     juce::AudioBuffer<float> chainInput;   // copy of the dry input, for keyed blocks
+    std::vector<std::unique_ptr<juce::AudioBuffer<float>>> taps;   // per block: its output, for a block keyed from it (B2)
+    bool anyTaps = false;
     std::atomic<TailMode> tailMode { TailMode::tailsOnly };
     std::atomic<float> fadeIn { (float) defaultFadeInSeconds }, ringOut { (float) defaultRingOutSeconds };
     int firstTailBlock = -1;

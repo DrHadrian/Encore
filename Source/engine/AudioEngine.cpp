@@ -180,6 +180,12 @@ void AudioEngine::applyPatchRouting (Chain& chain, const juce::String& inputName
 {
     chain.setInputSlot (getInputSlot (inputName));
 
+    // A block keyed from another input (B2): that input's slot, or -1 when
+    // this computer doesn't have it (the block keys from its own input).
+    for (const auto& block : chain.getBlocks())
+        if (const auto keyName = block->getRef ("keyInput"); keyName.isNotEmpty())
+            block->setKeyInputSlot (routingConfig.findInput (keyName) != nullptr ? getInputSlot (keyName) : -1);
+
     for (size_t s = 0; s < outputSlotNames.size(); ++s)
     {
         const auto& name = outputSlotNames[s];
@@ -417,6 +423,7 @@ void AudioEngine::renderChunk (const float* const* inputs, int numInputs, float*
 {
     const auto& table = *routingTable;
     PatchPlayer::Io io;
+    io.tunerOpen = tuner.isActive();   // gates freeze their noise learning while tuning (B2)
 
     // This computer's inputs, from the interface's channels (a channel that
     // isn't there gives silence).

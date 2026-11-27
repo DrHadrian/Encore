@@ -34,6 +34,21 @@ struct ProcessContext
     /** The chain's input (the dry guitar) for this block of samples, mono.
         Lets e.g. a gate after the amp listen to the clean signal. May be null. */
     const float* chainInput = nullptr;
+
+    /** The interface's inputs this callback, by the engine's input slot
+        (B2: a gate keyed from another input). numInputs entries; a null
+        entry is an input that isn't there. May be null. */
+    const float* const* inputs = nullptr;
+    int numInputs = 0;
+
+    /** The tuner is open (B2: noise learning freezes while tuning). */
+    bool tunerOpen = false;
+
+    /** An input by slot, or null. */
+    const float* input (int slot) const noexcept
+    {
+        return inputs != nullptr && slot >= 0 && slot < numInputs ? inputs[slot] : nullptr;
+    }
 };
 
 /** A block that loads a file (NAM model, cab IR...) shows a "Load" button for it. */
@@ -121,6 +136,21 @@ public:
     /** Whether a preset sets this parameter (default: every parameter). A
         block leaves out its setup settings (e.g. a Quality switch). */
     virtual bool isPresetParameter (const Parameter&) const noexcept { return true; }
+
+    //== Keys (B2; message thread, while the chain isn't playing) ==============
+    /** The chain resolved this block's ref "keyBlock" (Chain::prepare): the
+        tap with the earlier block's output (numTapChannels channels, valid
+        while this chain lives; null when it didn't resolve), and why not
+        ("" when it did or wasn't asked for). Most blocks ignore it. */
+    virtual void setKeyTap (const float* const* tapChannels, int numTapChannels, const juce::String& problem)
+    {
+        juce::ignoreUnused (tapChannels, numTapChannels, problem);
+    }
+
+    /** The engine's input slot for the ref "keyInput" (-1: not on this
+        computer). AudioEngine::applyPatchRouting sets it when the chain is
+        built and whenever the routing changes. Any thread. */
+    virtual void setKeyInputSlot (int slot) noexcept { juce::ignoreUnused (slot); }
 
     //== Files (message thread) ================================================
     /** Non-null if this block loads a file. */
