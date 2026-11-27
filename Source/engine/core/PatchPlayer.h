@@ -100,6 +100,13 @@ public:
     int getBadOutputCount() const noexcept { return badOutputs.load (std::memory_order_relaxed); }
     int getBadInputCount() const noexcept  { return badInputs.load (std::memory_order_relaxed); }
 
+    /** Counts from zero again (Reset counters; any thread). */
+    void resetBadCounts() noexcept
+    {
+        badOutputs.store (0, std::memory_order_relaxed);
+        badInputs.store (0, std::memory_order_relaxed);
+    }
+
     static bool isFinite (const float* samples, int numSamples) noexcept;
 
     static constexpr double sendRampSeconds = 0.02;

@@ -985,25 +985,98 @@ void MainComponent::refreshHealthStatus()
     healthStatus.setStatus (healthProblems, healthDetail);
 
     if (healthDialog != nullptr)
-        healthDialog->setLines (healthDetailLines());
+        healthDialog->setReport (healthReport());
 }
 
-std::vector<HealthDetailsDialog::Line> MainComponent::healthDetailLines()
+HealthReport MainComponent::healthReport()
 {
-    // Today's lines: CPU and counters, latency, the device; then what to check, and plain info.
-    std::vector<HealthDetailsDialog::Line> lines;
+    HealthReport r;
+    r.toCheck = healthProblems;
 
-    for (auto* label : { &healthLine, &latencyLine, &deviceLine })
-        if (label->getText().isNotEmpty())
-            lines.push_back ({ label->getText(), label->getTooltip(), false });
+    const auto cpu = juce::String (juce::roundToInt (engine.getCpuLoad() * 100.0)) + "%";
+    r.summary = "CPU " + cpu;
 
-    for (const auto& p : healthProblems)
-        lines.push_back ({ p, p, true });
+    if (roundTripMs > 0.0)
+        r.summary << sep() << juce::String (roundTripMs, 1) << " ms round trip";
 
-    if (systemText.isNotEmpty() && ! systemProblem)
-        lines.push_back ({ systemText, systemText, false });
+    // Audio: the counts since the last reset.
+    const auto dropouts = driverDropouts();
+    const auto& player = engine.getPlayer();
+    r.audio = { { "CPU", cpu },
+                { "Overruns", juce::String (engine.getOverrunCount()) },
+                { "Driver dropouts", dropouts >= 0 ? juce::String (dropouts) : juce::String ("-") },
+                { "Bad audio caught", juce::String (player.getBadOutputCount() + player.getBadInputCount()) },
+                { "Limiter", limiterText },
+                { "Clips", juce::String (engine.getClipCount()) } };
 
-    return lines;
+    if (const auto bytes = system::getProcessMemoryBytes(); bytes > 0)
+        r.audio.push_back ({ "Memory", juce::String ((int) (bytes / (1024 * 1024))) + " MB of "
+                                           + juce::String (juce::SystemStats::getMemorySizeInMegabytes() / 1024) + " GB" });
+    else
+        r.audio.push_back ({ "Memory", "-" });
+
+    if (const auto ringing = engine.getPlayer().getNumRinging(); ringing > 0)
+        r.audio.push_back ({ "Ringing out", juce::String (ringing) });
+
+    // Device.
+    auto* device = deviceManager.getCurrentAudioDevice();
+
+    if (deviceLost)
+    {
+        r.device = { { "Interface", "Reconnecting to " + lastGoodSetup.outputDeviceName + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6")), true },
+                     { "Rate", "-" }, { "Buffer", "-" }, { "Latency", "-" } };
+    }
+    else if (device == nullptr || ! device->isOpen() || device->getCurrentSampleRate() <= 0.0)
+    {
+        r.device = { { "Interface", "No audio device open" }, { "Rate", "-" }, { "Buffer", "-" }, { "Latency", "-" } };
+    }
+    else
+    {
+        const auto rate = device->getCurrentSampleRate();
+        const auto buffer = device->getCurrentBufferSizeSamples();
+        const auto in = device->getInputLatencyInSamples();
+        const auto out = device->getOutputLatencyInSamples();
+        auto* chain = engine.getChain();
+        const auto chainLatency = chain != nullptr ? chain->getLatencySamples() : 0;
+        const auto ms = [rate] (int samples) { return juce::String (1000.0 * samples / rate, 1); };
+        auto latency = "in " + ms (in) + " + out " + ms (out);
+
+        if (chainLatency > 0)
+            latency << " + chain " << ms (chainLatency);
+
+        latency << " = " << ms (in + out + chainLatency) << " ms";
+        r.device = { { "Interface", device->getName() + sep() + device->getTypeName() },
+                     { "Rate", juce::String (rate / 1000.0, 1) + " kHz" },
+                     { "Buffer", juce::String (buffer) + " samples (" + formatMs (buffer, rate) + ")" },
+                     { "Latency", latency } };
+    }
+
+    for (const auto& check : systemChecks)
+        r.computer.push_back ({ check.text, check.fine });
+
+    return r;
+}
+
+void MainComponent::resetCounters()
+{
+    engine.resetCounters();
+    const auto now = driverDropouts();
+    dropoutsAtReset += juce::jmax (0, now);   // driverDropouts() counts from the last reset
+}
+
+int MainComponent::driverDropouts()
+{
+    auto* device = deviceManager.getCurrentAudioDevice();
+
+    if (device == nullptr || device->getXRunCount() < 0)
+        return -1;
+
+    const auto count = device->getXRunCount();
+
+    if (count < dropoutsAtReset)
+        dropoutsAtReset = 0;   // a new device, counting from zero again
+
+    return count - dropoutsAtReset;
 }
 
 void MainComponent::openHealthDetails()
@@ -1012,7 +1085,7 @@ void MainComponent::openHealthDetails()
         return;
 
     healthDialog = std::make_unique<HealthDetailsDialog> (
-        [this] { engine.resetCounters(); },
+        [this] { resetCounters(); },
         [this]
         {
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
@@ -1021,7 +1094,7 @@ void MainComponent::openHealthDetails()
                     safe->closeHealthDetails();
             });
         });
-    healthDialog->setLines (healthDetailLines());
+    healthDialog->setReport (healthReport());
 
     auto& overlay = healthDialog->getOverlay();
     addAndMakeVisible (overlay);
@@ -1228,7 +1301,7 @@ void MainComponent::applyFix (const PreShowCheckResult& result)
         case Fix::midiSettings:   openMidiSettings(); break;
         case Fix::pluginSettings: openSettings (SettingsWindow::Tab::plugins); break;
         case Fix::save:           session->save(); reportProblems(); break;
-        case Fix::resetCounters:  engine.resetCounters(); break;
+        case Fix::resetCounters:  resetCounters(); break;
         case Fix::unmute:         engine.setMuted (false); break;
         case Fix::none:           break;
     }
@@ -1826,7 +1899,7 @@ void MainComponent::openSettings (SettingsWindow::Tab tab)
     if (settingsWindow == nullptr)
     {
         settingsWindow = std::make_unique<SettingsWindow> (
-            deviceManager, tuning, [this] { engine.resetCounters(); },
+            deviceManager, tuning, [this] { resetCounters(); },
             engine.getMidiRouter(), settings, *session, *plugins,
             [this] { applyMidiBindings(); }, [this] { applyMidiOutput(); },
             [this]
@@ -1914,6 +1987,13 @@ void MainComponent::refreshSystemStatus()
     parts.add (tuning.highPriority ? "high priority" : "normal priority (couldn't raise)");
     parts.add (tuning.powerThrottlingDisabled ? "power throttling off" : "power throttling ON (couldn't disable)");
     parts.add (system::isAudioThreadProAudio() ? "Pro Audio audio thread" : "audio thread not yet registered");
+
+    // The System health window's Computer group: the same facts, one per line.
+    const auto battery = system::getPowerSource() == system::PowerSource::battery;
+    systemChecks = { { battery ? "On battery: plug in for shows" : "Mains power", ! battery },
+                     { tuning.highPriority ? "High priority" : "Normal priority (couldn't raise)", tuning.highPriority },
+                     { tuning.powerThrottlingDisabled ? "Power throttling off" : "Power throttling ON (couldn't disable)", tuning.powerThrottlingDisabled },
+                     { system::isAudioThreadProAudio() ? "Pro Audio audio thread" : "Audio thread not yet registered", system::isAudioThreadProAudio() } };
 
     auto text = "Windows: " + parts.joinIntoString (", ");
     auto problem = ! tuning.highPriority || ! tuning.powerThrottlingDisabled;
@@ -2239,15 +2319,11 @@ void MainComponent::timerCallback()
     health << "CPU " << juce::roundToInt (engine.getCpuLoad() * 100.0) << " %"
            << "   |   overruns " << engine.getOverrunCount();
 
-    if (auto* device = deviceManager.getCurrentAudioDevice())
-    {
-        const auto driverXruns = device->getXRunCount();
-
-        if (driverXruns >= 0)
-            health << "   |   driver dropouts " << driverXruns;
-    }
+    if (const auto driverXruns = driverDropouts(); driverXruns >= 0)
+        health << "   |   driver dropouts " << driverXruns;
 
     const auto limiting = engine.takeLimiterReductionDb();
+    limiterText = limiting < -0.1f ? juce::String (limiting, 1) + " dB" : juce::String ("idle");
     health << "   |   limiter " << (limiting < -0.1f ? juce::String (limiting, 1) + " dB" : juce::String ("idle"));
 
     if (engine.getClipCount() > 0)
@@ -2270,7 +2346,7 @@ void MainComponent::timerCallback()
         st.cpu = juce::String (juce::roundToInt (engine.getCpuLoad() * 100.0)) + "%";
         st.overruns = juce::String (engine.getOverrunCount());
         auto* device = deviceManager.getCurrentAudioDevice();
-        st.driverDropouts = device != nullptr && device->getXRunCount() >= 0 ? juce::String (device->getXRunCount()) : juce::String ("-");
+        st.driverDropouts = driverDropouts() >= 0 ? juce::String (driverDropouts()) : juce::String ("-");
         st.limiter = limiting < -0.1f ? juce::String (limiting, 1) + " dB" : juce::String ("idle");
 
         if (const auto bytes = system::getProcessMemoryBytes(); bytes > 0)
@@ -2294,8 +2370,8 @@ void MainComponent::timerCallback()
     juce::String shortHealth;
     shortHealth << "CPU " << juce::roundToInt (engine.getCpuLoad() * 100.0) << "%" << sep() << "overruns " << engine.getOverrunCount();
 
-    if (auto* device = deviceManager.getCurrentAudioDevice(); device != nullptr && device->getXRunCount() >= 0)
-        shortHealth << sep() << "dropouts " << device->getXRunCount();
+    if (const auto driverXruns = driverDropouts(); driverXruns >= 0)
+        shortHealth << sep() << "dropouts " << driverXruns;
 
     shortHealth << sep() << "limiter " << (limiting < -0.1f ? juce::String (limiting, 1) + " dB" : juce::String ("idle"));
 
@@ -2319,7 +2395,7 @@ void MainComponent::timerCallback()
     }
     else if (healthDialog != nullptr)
     {
-        healthDialog->setLines (healthDetailLines());
+        healthDialog->setReport (healthReport());
     }
 }
 

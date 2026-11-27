@@ -71,14 +71,16 @@ public:
         {
             std::atomic<bool> started { false }, finished { false };
             std::atomic<int> later { 0 };
-            juce::WaitableEvent release (true);   // manual reset: it releases both jobs
+            juce::WaitableEvent release, never;   // both outlive the pool
 
             {
                 BackgroundJobs jobs;
 
-                // Both threads busy, then two more jobs that never start.
+                // Both threads busy, then two more jobs that never start. The second
+                // thread stays busy for 2 s, so it can't take a waiting job before
+                // the pool starts stopping (it did when both were released at once).
                 jobs.add ([&] { started = true; release.wait (-1); juce::Thread::sleep (700); finished = true; });
-                jobs.add ([&] { release.wait (-1); });
+                jobs.add ([&never] { never.wait (2000); });
                 jobs.add ([&] { ++later; });
                 jobs.add ([&] { ++later; });
 

@@ -99,32 +99,55 @@ private:
     juce::OwnedArray<kit::MixerStrip> mixerStrips;
 };
 
-/** System health in full (the health status's click, Edit only): today's
-    lines (CPU and counters, latency, device, then each thing to check, in
-    amber), and Reset counters. The owner refreshes the lines while it's
-    open. */
+/** What the System health window shows (board BHealth, v32-README A3). The
+    owner builds it from the engine and the device while the window is open. */
+struct HealthReport
+{
+    struct Row
+    {
+        juce::String label, value;
+        bool problem = false;   // the value in amber (a lost device)
+        bool operator== (const Row&) const = default;
+    };
+
+    struct Check
+    {
+        juce::String text;
+        bool fine = true;       // a green tick; else an amber warning
+        bool operator== (const Check&) const = default;
+    };
+
+    juce::StringArray toCheck;   // the health status's problems; none: "Healthy"
+    juce::String summary;        // "CPU 9% · 5.3 ms round trip"
+    std::vector<Row> audio, device;
+    std::vector<Check> computer; // empty off Windows: no Computer group
+
+    bool operator== (const HealthReport&) const = default;
+};
+
+/** System health in full (the health status's click, Edit only): a summary
+    (a badge, "N things to check" or "Healthy", CPU and round trip, Live), the
+    things to check, then Audio, Device and Computer, and Reset counters.
+    640 x 492; the body scrolls if many things need checking. */
 class HealthDetailsDialog final
 {
 public:
-    struct Line
-    {
-        juce::String text, tooltip;
-        bool problem = false;
-    };
-
     HealthDetailsDialog (std::function<void()> resetCounters, std::function<void()> close);
     ~HealthDetailsDialog();
 
-    void setLines (const std::vector<Line>&);
+    /** Shows `report`; repaints only when it changed. */
+    void setReport (const HealthReport&);
+    const HealthReport& getReport() const noexcept;
 
     juce::Component& getOverlay() noexcept { return *overlay; }
     kit::DialogFrame& getFrame() noexcept { return frame; }
 
 private:
     class Content;
+    class Body;
 
     kit::DialogFrame frame;
-    std::unique_ptr<Content> content;
+    std::unique_ptr<Body> body;
     std::unique_ptr<kit::DialogOverlay> overlay;
 };
 

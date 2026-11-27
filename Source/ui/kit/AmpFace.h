@@ -62,6 +62,11 @@ public:
         (0..1), a switch up/out when value >= 0.5, a light lit or not. */
     static void paintBody (juce::Graphics&, const AmpPreset&, const AmpPart&, float value, bool lit);
 
+    /** A printed symbol's outline (volume, treble, bass, mid, gain, reverb, power,
+        input, clean, dirty) in its 24 x 24 box, to be stroked 2 px with round
+        caps and joins; empty for an unknown name. Built once. */
+    static const juce::Path& symbolOutline (const juce::String& icon);
+
     /** A knob style's picture alone (no shadow, no pointer; a chickenhead at its middle frame), in r: the builder's Knob choice. */
     static void paintKnobPicture (juce::Graphics&, const juce::String& style, juce::Rectangle<float> r);
 

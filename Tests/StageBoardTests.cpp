@@ -106,6 +106,87 @@ public:
                 renderSnapshot (view, "stage@2x", 2.0f);
             }
 
+            beginTest ("Stage at the BStage sizes (v32-stage, v32-stage-outline): S2 tap again, S3 hold for the Tuner, S7 lit stomps");
+            {
+                // The live Stage has no name tags; Patch, Next cue and Cue note carry headings.
+                expect (! view.isEditingLayout());
+
+                // S2: a tap on another song arms it; a tap on the playing one does nothing.
+                view.tapCue (2);
+                expectEquals (view.getArmedCue(), -1, "the cue playing: nothing to arm");
+                view.tapCue (5);   // "6 Acoustic Set"
+                expectEquals (view.getArmedCue(), 5, "a first tap arms it");
+                expectEquals (session.getCurrentCue(), 2, "and doesn't go");
+
+                for (int i = 0; i < 3; ++i)
+                    view.update (boardSnapshot());
+
+                renderSnapshot (view, "v32-stage");
+                renderSnapshot (view, "v32-stage@2x", 2.0f);
+
+                // Next and Panic at "Outline".
+                {
+                    auto widgets = view.getShownWidgets();
+
+                    for (auto& w : widgets)
+                        if (w.type == StageWidgetType::nextButton || w.type == StageWidgetType::panicButton)
+                            w.outlineAtRest = true;
+
+                    session.setLayoutWidgets (session.getShow().stage.defaultLayoutId, widgets);
+                    settle (engine, session);
+
+                    for (int i = 0; i < 3; ++i)
+                        view.update (boardSnapshot());
+
+                    renderSnapshot (view, "v32-stage-outline");
+                    renderSnapshot (view, "v32-stage-outline@2x", 2.0f);
+
+                    for (auto& w : widgets)
+                        w.outlineAtRest = false;
+
+                    session.setLayoutWidgets (session.getShow().stage.defaultLayoutId, widgets);
+                    settle (engine, session);
+                }
+
+                // The second tap (within 2 s) goes; the armed row clears. (Armed again first:
+                // the snapshots above take about the 2 s in Debug, so the first tap may have lapsed.)
+                view.tapCue (session.getCurrentCue());   // a tap on the playing cue clears any armed one
+                expectEquals (view.getArmedCue(), -1);
+                view.tapCue (5);
+                expectEquals (view.getArmedCue(), 5);
+                view.tapCue (5);
+                expectEquals (view.getArmedCue(), -1, "the second tap clears the armed row");
+                settle (engine, session);   // going to a cue builds its patch first
+                expectEquals (session.getCurrentCue(), 5, "a second tap goes");
+
+                // An armed tap that isn't followed lapses after 2 s.
+                view.tapCue (3);
+                expectEquals (view.getArmedCue(), 3);
+                juce::Thread::sleep (2100);
+                view.update (boardSnapshot());
+                expectEquals (view.getArmedCue(), -1, "back to normal after 2 s");
+
+                // S3: Tuner opens only when held, and a tap closes it.
+                expect (! engine.isTunerOpen());
+                view.beginTunerHold();
+                view.endTunerHold();
+                view.update (boardSnapshot());
+                expect (! engine.isTunerOpen(), "a brush doesn't open the tuner");
+                view.beginTunerHold();
+                juce::Thread::sleep (550);
+                view.update (boardSnapshot());
+                expect (engine.isTunerOpen(), "held 0.5 s: it opens");
+                view.endTunerHold();
+                engine.setTunerOpen (false);
+                view.update (boardSnapshot());
+
+                session.goToCue (2);
+                settle (engine, session);
+
+                for (int i = 0; i < 3; ++i)
+                    view.update (boardSnapshot());
+            }
+
             beginTest ("Stage: the interface lost (stage-interface-lost.png)");
             {
                 auto lost = boardSnapshot();
@@ -247,6 +328,62 @@ public:
 
             expect (hasContent (renderSnapshot (view, "layout-editor")));
             renderSnapshot (view, "layout-editor@2x", 2.0f);
+
+            // "At rest" for Next button and Panic button (decided 19 Nov): Full colour (default) | Outline,
+            // in the inspector and the right-click menu, stored per widget with the show.
+            {
+                const auto& shown = view.getShownWidgets();
+                const auto indexOf = [&shown] (StageWidgetType t)
+                {
+                    for (size_t i = 0; i < shown.size(); ++i)
+                        if (shown[i].type == t)
+                            return (int) i;
+                    return -1;
+                };
+                const auto next = indexOf (StageWidgetType::nextButton);
+                expect (next >= 0, "the board's layout has a Next button");
+                auto* atRest = view.getLayoutAtRest();
+                expect (atRest != nullptr);
+
+                view.selectLayoutWidget (0);   // Current cue: no "At rest"
+                expect (atRest != nullptr && ! atRest->isVisible(), "only Next button and Panic button have it");
+
+                if (next >= 0 && atRest != nullptr)
+                {
+                    view.selectLayoutWidget (next);
+                    expect (atRest->isVisible());
+                    expectEquals (atRest->getSelected(), 0, "Full colour by default");
+                    expectEquals (atRest->getSegmentButton (0)->getButtonText(), juce::String ("Full colour"));
+                    expectEquals (atRest->getSegmentButton (1)->getButtonText(), juce::String ("Outline"));
+                    expectEquals (atRest->getSegmentButton (1)->getTooltip(),
+                                  juce::String ("Dark with a coloured outline until it's pressed, so the cue and any warning stand out in a dark room"));
+                    atRest->getSegmentButton (1)->onClick();
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);   // the commit is async
+                    settle (engine, session);
+                    view.update (boardSnapshot());
+                    expect (view.getShownWidgets()[(size_t) next].outlineAtRest, "stored with the widget");
+                    expectEquals (atRest->getSelected(), 1);
+                    renderSnapshot (view, "v32-layout-at-rest");
+                    renderSnapshot (view, "v32-layout-at-rest@2x", 2.0f);
+
+                    // Saved with the show: it survives the round trip; Full colour isn't written.
+                    StageSettings stage;
+                    StageLayout layout;
+                    layout.id = "x";
+                    layout.widgets = view.getShownWidgets();
+                    stage.layouts = { layout };
+                    const auto back = stageFromVar (stageToVar (stage));
+                    expect (back.layouts.size() == 1 && back.layouts[0].widgets == layout.widgets, "At rest round-trips");
+
+                    atRest->getSegmentButton (0)->onClick();
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);   // the commit is async
+                    settle (engine, session);
+                    view.update (boardSnapshot());
+                    expect (! view.getShownWidgets()[(size_t) next].outlineAtRest);
+                }
+
+                view.selectLayoutWidget (0);
+            }
 
             // Inspector off: the artboard takes the width; nothing selected: the same.
             view.setLayoutInspectorShown (false);
@@ -415,6 +552,15 @@ public:
             list->mouseUp (event (*list, list->getLocalPoint (surface, at (6.0f, 9.0f)), view.getLayoutListRow (T::tuner), true));
             settle (engine, session);
             expect (view.getShownWidgets() == before, "nothing changed");
+
+            // A click on a full stage adds nothing either (decided 19 Nov: never on top of another).
+            {
+                const auto row = view.getLayoutListRow (T::clock);
+                list->mouseDown (event (*list, row, row, false));
+                list->mouseUp (event (*list, row, row, false));
+                settle (engine, session);
+                expect (view.getShownWidgets() == before, "a click with no free place adds nothing");
+            }
 
             // Off the stage the row's picture follows the pointer, the grabbed point under it.
             {
