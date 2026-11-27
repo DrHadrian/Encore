@@ -123,6 +123,13 @@ public:
     int addEqBand (int blockIndex, const StudioEqBlock::BandSettings& band, juce::String& error);
     void removeEqBand (int blockIndex, int slot);
 
+    /** A / B on an FX Unit (MODULES-PLAN §3.1): switch which set plays, or
+        copy one onto the other. One edit each, heard at once. False for a
+        block that isn't an FX Unit. Edit only (the buttons are U-stages'). */
+    bool switchAB (int blockIndex);
+    bool copyAB (int blockIndex, bool aToB);
+    bool isBPlaying (int blockIndex) const;
+
     /** Block indices below are the chain's: the main lane, then path B.
         Removing the split or the merge removes the split (path A's blocks
         stay, path B's go). A move stays within the block's lane and never
