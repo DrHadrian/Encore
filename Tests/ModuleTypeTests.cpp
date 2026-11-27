@@ -10,6 +10,7 @@
 #include "engine/blocks/PedalEqBlock.h"
 #include "engine/blocks/PedalGateBlock.h"
 #include "engine/blocks/StudioGateBlock.h"
+#include "engine/blocks/StudioEqBlock.h"
 #include "model/ShowJson.h"
 #include "session/PatchBuilder.h"
 
@@ -418,7 +419,104 @@ public:
     }
 };
 
+class StudioEqRegistrationTests final : public juce::UnitTest
+{
+public:
+    StudioEqRegistrationTests() : juce::UnitTest ("Studio EQ registration", "Encore") {}
+
+    void runTest() override
+    {
+        beginTest ("The Studio EQ is hidden and a new module; today's EQ is unchanged");
+        {
+            const auto* type = HiddenBlockTypeTests::findType (getBlockTypes(), StudioEqBlock::typeId);
+            expect (type != nullptr && type->hidden && type->newModule);
+            const auto menu = getMenuBlockTypes();   // kept: findType points into it
+            expect (HiddenBlockTypeTests::findType (menu, StudioEqBlock::typeId) == nullptr);
+            const auto* old = HiddenBlockTypeTests::findType (menu, "eq");
+            expect (old != nullptr && ! old->newModule, "today's EQ stays in the menu");
+            expect (createBlock (StudioEqBlock::typeId)->getTypeId() == juce::String (StudioEqBlock::typeId));
+            expect (createBlock ("eq")->findParameter ("midQ") != nullptr, "and is still today's");
+        }
+
+        beginTest ("A show with a Studio EQ saves as schema 5, loads back and plays its bands");
+        {
+            auto show = makeDefaultShow ("Q24");
+            BlockModel q24;
+            q24.id = "q24-1";
+            q24.type = StudioEqBlock::typeId;
+            q24.params["b03Used"] = 1.0f;
+            q24.params["b03Shape"] = (float) StudioEqBlock::Shape::tiltShelf;
+            q24.params["b03Gain"] = 4.0f;
+            q24.params["b03Slope"] = 4.0f;
+            q24.params["autoGain"] = (float) StudioEqBlock::AutoGain::smart;
+            show.patches[0].mainLane().blocks.insert (show.patches[0].mainLane().blocks.begin(), q24);
+
+            const auto text = json::toJson (show);
+            expect (text.contains ("\"schemaVersion\": 5"));
+            juce::String error;
+            const auto loaded = json::fromJson (text, error);
+            expect (loaded.has_value(), error);
+
+            if (! loaded)
+                return;
+
+            juce::StringArray problems;
+            auto chain = buildChain (loaded->patches[0], ShowFolder(), spec, problems);
+            expect (problems.isEmpty(), problems.joinIntoString ("; "));
+            auto* eq = dynamic_cast<StudioEqBlock*> (chain->getBlocks().front().get());
+            expect (eq != nullptr);
+
+            if (eq != nullptr)
+            {
+                expectEquals (eq->getNumBandsInUse(), 1);
+                expect (eq->getBand (2).shape == StudioEqBlock::Shape::tiltShelf);
+                expectEquals (eq->findParameter ("autoGain")->getChoiceIndex(), (int) StudioEqBlock::AutoGain::smart);
+                expectEquals ((int) eq->getBandDesigns (spec.sampleRate).size(), 1);
+            }
+        }
+
+        beginTest ("Show size and load time with 8 Studio EQs (every parameter written)");
+        {
+            auto show = makeDefaultShow ("Eight");
+            auto& blocks = show.patches[0].mainLane().blocks;
+            const auto before = json::toJson (show).getNumBytesAsUTF8();
+
+            for (int i = 0; i < 8; ++i)
+            {
+                // As a captured chain writes it: every parameter's value.
+                StudioEqBlock eq;
+                BlockModel m;
+                m.id = "q" + juce::String (i);
+                m.type = StudioEqBlock::typeId;
+
+                for (const auto& p : eq.getParameters())
+                    m.params[p->getSpec().id] = p->getValue();
+
+                m.params["b01Used"] = 1.0f;
+                blocks.push_back (m);
+            }
+
+            const auto text = json::toJson (show);
+            const auto t0 = juce::Time::getMillisecondCounterHiRes();
+            juce::String error;
+            const auto loaded = json::fromJson (text, error);
+            const auto t1 = juce::Time::getMillisecondCounterHiRes();
+            juce::StringArray problems;
+            auto chain = loaded ? buildChain (loaded->patches[0], ShowFolder(), spec, problems) : nullptr;
+            const auto t2 = juce::Time::getMillisecondCounterHiRes();
+            expect (chain != nullptr);
+
+            const auto kib = (double) (text.getNumBytesAsUTF8() - before) / 1024.0;
+            logMessage ("8 Studio EQs add " + juce::String (kib, 1) + " KiB to the show (" + juce::String (kib / 8.0, 1)
+                        + " KiB each); reading it takes " + juce::String (t1 - t0, 1) + " ms, building the patch "
+                        + juce::String (t2 - t1, 1) + " ms");
+            expectLessThan (kib, 1024.0, "well under a megabyte");
+        }
+    }
+};
+
 static BlockRefsTests blockRefsTests;
 static NewModuleSchemaTests newModuleSchemaTests;
+static StudioEqRegistrationTests studioEqRegistrationTests;
 
 } // namespace encore::test

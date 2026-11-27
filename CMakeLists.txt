@@ -170,6 +170,7 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/blocks/PedalGateBlock.cpp
     Source/engine/blocks/PedalGateBlock.h
     Source/engine/blocks/StudioGateBlock.cpp
+    Source/engine/blocks/StudioEqBlock.cpp
     Source/engine/blocks/StudioGateBlock.h
     Source/engine/blocks/EqBlock.cpp
     Source/engine/blocks/EqBlock.h
@@ -601,6 +602,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/ModuleBaseTests.cpp
         Tests/ModuleDspTests.cpp
         Tests/EqShapeTests.cpp
+        Tests/StudioEqTests.cpp
         Tests/ModuleTypeTests.cpp
         Tests/PedalEqCaptureTests.cpp
         Tests/PedalEqTests.cpp
