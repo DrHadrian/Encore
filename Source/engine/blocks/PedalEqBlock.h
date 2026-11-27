@@ -88,6 +88,13 @@ public:
     /** The clip stage's oversampling latency while it is in the path, else 0. Any thread. */
     int getLatencySamples() const noexcept override;
 
+    /** Flat, Mid push, Scoop, Clean boost, Bright, Thicken (EQ-PLAN §4;
+        values Proposed, tuned by ear in U1). They set the face: the
+        sliders, Level, Q and Input; not Quality, Capture level or Real
+        pedal clipping (the pedal's setup). Any thread. */
+    std::span<const FactoryPreset> getFactoryPresets() const noexcept override;
+    bool isPresetParameter (const Parameter&) const noexcept override;
+
 private:
     void prepareBlock (const ProcessSpec&) override;
     void processBlock (float* const* channels, int numChannels, int numSamples,

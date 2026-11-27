@@ -8,6 +8,7 @@
 #include "TestSignals.h"
 
 #include "engine/blocks/PedalEqBlock.h"
+#include "engine/core/FactoryPresets.h"
 #include "engine/core/Realtime.h"
 #include "engine/dsp/Oversampler.h"
 
@@ -584,6 +585,79 @@ public:
             expectWithinAbsoluteError (driven (1.0f, -15.0f), normal, 0.5, "Level after the clip: same distortion, just quieter");
             expectLessThan (driven (0.0f, 0.0f), normal - 6.0, "Pad before the clip: less distortion");
             expectGreaterThan (driven (2.0f, 0.0f), normal + 3.0, "Boost before the clip: more");
+        }
+
+        beginTest ("Factory presets: every one loads with the stated values; Flat is passthrough");
+        {
+            PedalEqBlock eq;
+            juce::StringArray ids, names;
+
+            for (const auto& p : eq.getFactoryPresets())
+            {
+                ids.add (p.id);
+                names.add (p.name);
+
+                for (const auto& v : p.values)
+                    expect (eq.findParameter (v.parameterId) != nullptr, juce::String (p.id) + ": " + v.parameterId);
+            }
+
+            expectEquals (ids.joinIntoString (","), juce::String ("flat,midPush,scoop,cleanBoost,bright,thicken"));
+            expectEquals (names.joinIntoString (","), juce::String ("Flat,Mid push,Scoop,Clean boost,Bright,Thicken"));
+
+            const auto check = [this] (const char* id, std::map<juce::String, float> expected)
+            {
+                PedalEqBlock block;
+                const auto* preset = presets::find (block, id);
+                expect (preset != nullptr, id);
+
+                if (preset == nullptr)
+                    return;
+
+                const auto values = presets::valuesFor (block, *preset);
+                expectEquals ((int) values.size(), 10, "the sliders, Level, Q and Input");
+
+                for (const auto& [param, value] : values)
+                {
+                    const auto it = expected.find (param);
+                    const auto want = it != expected.end() ? it->second : block.findParameter (param)->getSpec().defaultValue;
+                    expectEquals (value, want, juce::String (id) + " " + param);
+                }
+            };
+
+            check ("flat", {});
+            check ("midPush", { { "g800", 6.0f }, { "g1k6", 4.0f } });
+            check ("scoop", { { "g400", -5.0f }, { "g800", -6.0f } });
+            check ("cleanBoost", { { "input", 2.0f }, { "level", 6.0f } });
+            check ("bright", { { "g3k2", 4.0f }, { "g6k4", 3.0f } });
+            check ("thicken", { { "g100", 3.0f }, { "g200", 4.0f }, { "g6k4", -3.0f } });
+
+            // Flat after another preset: back to bit-exact passthrough.
+            PedalEqBlock flat;
+            presets::apply (flat, *presets::find (flat, "scoop"));
+            presets::apply (flat, *presets::find (flat, "flat"));
+            const auto input = noise (0.5f, 4800, 11);
+            expect (play (flat, input) == input);
+        }
+
+        beginTest ("A preset sets the face, not the setup; unknown ids are refused cleanly");
+        {
+            PedalEqBlock eq;
+            eq.findParameter ("quality")->setValue (2.0f);
+            eq.findParameter ("captureLevel")->setValue (1.0f);
+            eq.findParameter ("realClip")->setValue (1.0f);
+            eq.findParameter ("g3k2")->setValue (-9.0f);
+            presets::apply (eq, *presets::find (eq, "midPush"));
+
+            expectEquals (eq.findParameter ("g800")->getValue(), 6.0f);
+            expectEquals (eq.findParameter ("g3k2")->getValue(), 0.0f, "a slider the preset doesn't list goes to 0");
+            expectEquals (eq.findParameter ("quality")->getChoiceIndex(), 2, "setup untouched");
+            expectEquals (eq.findParameter ("captureLevel")->getChoiceIndex(), 1);
+            expectEquals (eq.findParameter ("realClip")->getChoiceIndex(), 1);
+
+            expect (presets::find (eq, "nope") == nullptr);
+            expect (presets::find (eq, "") == nullptr);
+            expect (presets::find (eq, "Mid push") == nullptr, "ids, not names");
+            expectEquals (presets::listIds (eq), juce::String ("flat, midPush, scoop, cleanBoost, bright, thicken"));
         }
 
         beginTest ("No allocation while playing, moving sliders and switching Q");

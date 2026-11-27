@@ -61,9 +61,10 @@ struct Result
     with the reason, for an unknown id or a value that isn't usable. */
 bool applySettings (Block& block, const juce::var& settings, juce::String& error);
 
-/** Renders `input` through a new block of `typeId` (hidden types included). */
+/** Renders `input` through a new block of `typeId` (hidden types included).
+    A factory preset id, if given, is applied first; settings go on top. */
 Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, const juce::String& typeId,
-                    const juce::var& settings, int blockSize = 64);
+                    const juce::var& settings, int blockSize = 64, const juce::String& presetId = {});
 
 /** Renders `input` (its first channel: the guitar) through a patch's whole chain. */
 Result renderPatch (const juce::AudioBuffer<float>& input, double sampleRate, const PatchModel& patch,

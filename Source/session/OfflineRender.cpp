@@ -134,7 +134,7 @@ bool applySettings (Block& block, const juce::var& settings, juce::String& error
 
 //==============================================================================
 Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, const juce::String& typeId,
-                    const juce::var& settings, int blockSize)
+                    const juce::var& settings, int blockSize, const juce::String& presetId)
 {
     Result r;
     r.sampleRate = sampleRate;
@@ -151,6 +151,19 @@ Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, co
 
         r.error = "Unknown block type \"" + typeId + "\". Types: " + known.joinIntoString (", ");
         return r;
+    }
+
+    if (presetId.isNotEmpty())
+    {
+        const auto* preset = presets::find (*block, presetId);
+
+        if (preset == nullptr)
+        {
+            r.error = "\"" + typeId + "\" has no factory preset \"" + presetId + "\" (it has: " + presets::listIds (*block) + ")";
+            return r;
+        }
+
+        presets::apply (*block, *preset);
     }
 
     if (! applySettings (*block, settings, r.error))

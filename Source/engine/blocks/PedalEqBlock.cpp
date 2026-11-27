@@ -17,6 +17,33 @@ namespace
     {
         return { id, name, { -PedalEqBlock::sliderRangeDb, PedalEqBlock::sliderRangeDb }, 0.0f, "dB", 1 };
     }
+
+    // Factory presets (ids stable once merged; values Proposed, EQ-PLAN §4).
+    constexpr PresetValue midPush[]    { { "g800", 6.0f }, { "g1k6", 4.0f } };
+    constexpr PresetValue scoop[]      { { "g400", -5.0f }, { "g800", -6.0f } };
+    constexpr PresetValue cleanBoost[] { { "input", (float) PedalEqBlock::Input::boost }, { "level", 6.0f } };
+    constexpr PresetValue bright[]     { { "g3k2", 4.0f }, { "g6k4", 3.0f } };
+    constexpr PresetValue thicken[]    { { "g100", 3.0f }, { "g200", 4.0f }, { "g6k4", -3.0f } };
+
+    constexpr FactoryPreset factoryPresets[] {
+        { "flat",       "Flat",        {} },
+        { "midPush",    "Mid push",    midPush },
+        { "scoop",      "Scoop",       scoop },
+        { "cleanBoost", "Clean boost", cleanBoost },
+        { "bright",     "Bright",      bright },
+        { "thicken",    "Thicken",     thicken },
+    };
+}
+
+std::span<const FactoryPreset> PedalEqBlock::getFactoryPresets() const noexcept
+{
+    return factoryPresets;
+}
+
+bool PedalEqBlock::isPresetParameter (const Parameter& p) const noexcept
+{
+    // The face, not the setup.
+    return &p != &quality && &p != &captureLevel && &p != &realClip;
 }
 
 PedalEqBlock::PedalEqBlock()

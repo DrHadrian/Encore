@@ -7,6 +7,7 @@
 #include "TestSignals.h"
 
 #include "engine/blocks/EngineProbeBlock.h"
+#include "engine/blocks/PedalEqBlock.h"
 #include "session/OfflineRender.h"
 
 namespace encore::test
@@ -93,6 +94,26 @@ public:
             r = render::renderBlock (input, sampleRate, EngineProbeBlock::typeId, json ("[1, 2]"));
             expect (! r.ok);
             expect (r.report().startsWith ("Render failed"));
+        }
+
+        beginTest ("A factory preset by id, with settings on top; an unknown preset is refused");
+        {
+            const auto input = toBuffer (sine (800.0, 0.05f, 48000));
+            const auto boosted = render::renderBlock (input, sampleRate, PedalEqBlock::typeId, {}, 64, "cleanBoost");
+            expect (boosted.ok, boosted.error);
+            expectWithinAbsoluteError (toDb (boosted.peakOut) - toDb (boosted.peakIn), 12.0f, 0.05f, "Boost +6, Level +6");
+
+            const auto onTop = render::renderBlock (input, sampleRate, PedalEqBlock::typeId, json (R"({ "level": 0 })"), 64, "cleanBoost");
+            expectWithinAbsoluteError (toDb (onTop.peakOut) - toDb (onTop.peakIn), 6.0f, 0.05f, "settings go on top");
+
+            const auto flat = render::renderBlock (input, sampleRate, PedalEqBlock::typeId, {}, 64, "flat");
+            expect (flat.ok && equal (flat.output, input));
+
+            const auto unknown = render::renderBlock (input, sampleRate, PedalEqBlock::typeId, {}, 64, "wah");
+            expect (! unknown.ok && unknown.error.contains ("wah") && unknown.error.contains ("midPush"), unknown.error);
+
+            const auto none = render::renderBlock (input, sampleRate, EngineProbeBlock::typeId, {}, 64, "flat");
+            expect (! none.ok && none.error.contains ("none"), none.error);
         }
 
         beginTest ("The report has levels, latency and CPU");

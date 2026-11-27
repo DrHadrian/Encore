@@ -182,6 +182,8 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/core/Chain.cpp
     Source/engine/core/Chain.h
     Source/engine/core/LockFreeFifo.h
+    Source/engine/core/FactoryPresets.cpp
+    Source/engine/core/FactoryPresets.h
     Source/engine/core/MessageThread.cpp
     Source/engine/core/MessageThread.h
     Source/engine/core/OutputStrip.cpp

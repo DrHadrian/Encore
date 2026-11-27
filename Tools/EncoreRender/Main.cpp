@@ -17,11 +17,12 @@ namespace
 {
     const char* usage = R"(EncoreRender: a WAV through an Encore block or patch, offline.
 
-  EncoreRender --in IN.wav --out OUT.wav --block TYPE [--settings S.json] [--set id=value ...]
+  EncoreRender --in IN.wav --out OUT.wav --block TYPE [--preset ID] [--settings S.json] [--set id=value ...]
   EncoreRender --in IN.wav --out OUT.wav --show SHOW --patch NAME-OR-NUMBER
   EncoreRender --make-sweep OUT.wav [--seconds 5] [--rate 48000]
 
   --block TYPE     a block type id (hidden ones too), e.g. engineProbe, eq, gate
+  --preset ID      a factory preset of the block (first; settings go on top)
   --settings FILE  JSON: { "parameter id": value }; a choice may be given by name
   --set id=value   one setting (may repeat; after --settings)
   --show SHOW      a show folder or .encore file; --patch picks a patch (1 = first)
@@ -60,6 +61,9 @@ Writes a 32-bit float WAV and prints a report: peak, RMS, latency, CPU per block
 
                     s << "\n";
                 }
+
+                if (! block->getFactoryPresets().empty())
+                    s << "    presets: " << encore::presets::listIds (*block) << "\n";
             }
         }
 
@@ -159,7 +163,7 @@ int main (int argc, char* argv[])
             settings.getDynamicObject()->setProperty (assignment.upToFirstOccurrenceOf ("=", false, false).trim(), parsedValue);
         }
 
-        result = encore::render::renderBlock (input->buffer, input->sampleRate, type, settings, bufferSize);
+        result = encore::render::renderBlock (input->buffer, input->sampleRate, type, settings, bufferSize, value ("--preset"));
     }
     else if (const auto showPath = value ("--show"); showPath.isNotEmpty())
     {
