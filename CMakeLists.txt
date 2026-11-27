@@ -249,6 +249,7 @@ target_sources(EncoreEngine PRIVATE
     Source/session/OfflineRender.cpp
     Source/session/OfflineRender.h
     Source/session/PatchBuilder.cpp
+    Source/session/PatchGates.cpp
     Source/session/PluginCatalog.cpp
     Source/session/PluginCatalog.h
     Source/session/PreShowCheck.cpp
@@ -607,6 +608,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/StudioGateTests.cpp
         Tests/GateLinkTests.cpp
         Tests/GateSessionTests.cpp
+        Tests/GateStateTests.cpp
         Tests/RenderTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
