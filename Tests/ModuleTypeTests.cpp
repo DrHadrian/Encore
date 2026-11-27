@@ -284,7 +284,8 @@ public:
             auto block = createBlock (PedalGateBlock::typeId);
             expect (block != nullptr && block->getTypeId() == PedalGateBlock::typeId);
 
-            const auto* old = HiddenBlockTypeTests::findType (getMenuBlockTypes(), "gate");
+            const auto menu = getMenuBlockTypes();   // kept: findType points into it
+            const auto* old = HiddenBlockTypeTests::findType (menu, "gate");
             expect (old != nullptr && ! old->newModule, "the old gate stays in the menu, schema unchanged");
             auto oldBlock = createBlock ("gate");
             expect (oldBlock != nullptr && oldBlock->findParameter ("detectGuitar") != nullptr, "and is still today's");
