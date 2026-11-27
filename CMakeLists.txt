@@ -163,8 +163,14 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/blocks/DelayBlock.h
     Source/engine/blocks/EngineProbeBlock.cpp
     Source/engine/blocks/EngineProbeBlock.h
+    Source/engine/blocks/GateBlock.cpp
+    Source/engine/blocks/GateBlock.h
     Source/engine/blocks/PedalEqBlock.cpp
     Source/engine/blocks/PedalEqBlock.h
+    Source/engine/blocks/PedalGateBlock.cpp
+    Source/engine/blocks/PedalGateBlock.h
+    Source/engine/blocks/StudioGateBlock.cpp
+    Source/engine/blocks/StudioGateBlock.h
     Source/engine/blocks/EqBlock.cpp
     Source/engine/blocks/EqBlock.h
     Source/engine/blocks/NamAmpBlock.cpp
@@ -197,13 +203,16 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/core/RealtimeHandover.h
     Source/engine/midi/MidiRouter.cpp
     Source/engine/midi/MidiRouter.h
+    Source/engine/dsp/AdaptiveGate.h
     Source/engine/dsp/Biquad.h
     Source/engine/dsp/Crossfade.h
     Source/engine/dsp/Detector.h
+    Source/engine/dsp/FadingDelay.h
     Source/engine/dsp/FilterBand.cpp
     Source/engine/dsp/FilterBand.h
     Source/engine/dsp/FilterDesign.cpp
     Source/engine/dsp/FilterDesign.h
+    Source/engine/dsp/LookAhead.h
     Source/engine/dsp/OutputEq.h
     Source/engine/dsp/Oversampler.cpp
     Source/engine/dsp/Oversampler.h
@@ -240,6 +249,7 @@ target_sources(EncoreEngine PRIVATE
     Source/session/OfflineRender.cpp
     Source/session/OfflineRender.h
     Source/session/PatchBuilder.cpp
+    Source/session/PatchGates.cpp
     Source/session/PluginCatalog.cpp
     Source/session/PluginCatalog.h
     Source/session/PreShowCheck.cpp
@@ -580,6 +590,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/TouchInjection.h
         Tests/V32TargetTests.cpp
         Tests/HangWatchdog.h
+        Tests/AdaptiveGateTests.cpp
         Tests/AllocationCounter.cpp
         Tests/BenchmarkTests.cpp
         Tests/AllocationCounter.h
@@ -592,6 +603,12 @@ if(ENCORE_BUILD_TESTS)
         Tests/ModuleTypeTests.cpp
         Tests/PedalEqCaptureTests.cpp
         Tests/PedalEqTests.cpp
+        Tests/PedalGateTests.cpp
+        Tests/GateKeyTests.cpp
+        Tests/StudioGateTests.cpp
+        Tests/GateLinkTests.cpp
+        Tests/GateSessionTests.cpp
+        Tests/GateStateTests.cpp
         Tests/RenderTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
@@ -669,7 +686,13 @@ if(ENCORE_BUILD_TESTS)
     list(JOIN encore_slow_tests "|" encore_all_slow)
     add_test(NAME EncoreTests.engine COMMAND EncoreTests)
     set_tests_properties(EncoreTests.engine PROPERTIES ENVIRONMENT
-        "ENCORE_TEST_SKIP=${encore_all_slow};ENCORE_BENCHMARK_REPORT=${CMAKE_CURRENT_BINARY_DIR}/benchmark.txt")
+        "ENCORE_TEST_SKIP=${encore_all_slow}|Module CPU benchmark")
+
+    # The CPU benchmark alone (RUN_SERIAL): beside the soak, the screens and
+    # the renders its numbers measured the machine's load, not the blocks.
+    add_test(NAME EncoreTests.benchmark COMMAND EncoreTests)
+    set_tests_properties(EncoreTests.benchmark PROPERTIES RUN_SERIAL TRUE ENVIRONMENT
+        "ENCORE_TEST_ONLY=Module CPU benchmark;ENCORE_BENCHMARK_REPORT=${CMAKE_CURRENT_BINARY_DIR}/benchmark.txt")
 
     # --------------------------------------------------------------------------
     # EncoreRender: a WAV through one block or a whole patch, offline, from the
@@ -717,6 +740,49 @@ if(ENCORE_BUILD_TESTS)
                      --set g100=15 --set g200=15 --set g400=15 --set g800=15 --set g1k6=15 --set g3k2=15 --set g6k4=15
                      --set level=-12 --report "${encore_render_dir}/pedalEq-fullBoost.txt")
     set_tests_properties(EncoreRender.pedalEq.fullBoost PROPERTIES FIXTURES_REQUIRED encore_render_plucks)
+
+    # The gates (B2): every preset of both on generated notes with gaps of
+    # noise (a Smart gate learns the floor from -70), and a show with the Gate
+    # pair around the NAM example amp, a ducking delay keyed from a block, and
+    # an X4 in Smart mode. Each report's notes give what the gate learned and did.
+    add_test(NAME EncoreRender.gateTest
+             COMMAND EncoreRender --make-gate-test "${encore_render_dir}/gatetest.wav" --noise-db -60)
+    add_test(NAME EncoreRender.gateShow
+             COMMAND EncoreRender --make-gate-show "${encore_render_dir}/Gates.encore"
+                     --amp "${nam_SOURCE_DIR}/example_models/wavenet_a1_standard.nam")
+    set_tests_properties(EncoreRender.gateTest PROPERTIES FIXTURES_SETUP encore_render_gatetest)
+    set_tests_properties(EncoreRender.gateShow PROPERTIES FIXTURES_SETUP encore_render_gateshow)
+    foreach(preset default cleanHiss singleCoils highGain djentTight)
+        foreach(type pedalGate studioGate)
+            if(preset STREQUAL "default")
+                set(preset_args)
+            else()
+                set(preset_args --preset ${preset})
+            endif()
+            add_test(NAME EncoreRender.${type}.${preset}
+                     COMMAND EncoreRender --in "${encore_render_dir}/gatetest.wav"
+                             --out "${encore_render_dir}/${type}-${preset}.wav" --block ${type} ${preset_args}
+                             --report "${encore_render_dir}/${type}-${preset}.txt")
+            set_tests_properties(EncoreRender.${type}.${preset} PROPERTIES FIXTURES_REQUIRED encore_render_gatetest)
+        endforeach()
+    endforeach()
+    foreach(preset duckDelay duckReverb softCleanup swellCleanup)
+        add_test(NAME EncoreRender.studioGate.${preset}
+                 COMMAND EncoreRender --in "${encore_render_dir}/gatetest.wav"
+                         --out "${encore_render_dir}/studioGate-${preset}.wav" --block studioGate --preset ${preset}
+                         --report "${encore_render_dir}/studioGate-${preset}.txt")
+        set_tests_properties(EncoreRender.studioGate.${preset} PROPERTIES FIXTURES_REQUIRED encore_render_gatetest)
+    endforeach()
+    foreach(patch "Gate pair" "Ducking delay" "Smart X4")
+        string(REPLACE " " "-" patch_file "${patch}")
+        add_test(NAME EncoreRender.show.${patch_file}
+                 COMMAND EncoreRender --in "${encore_render_dir}/gatetest.wav"
+                         --out "${encore_render_dir}/show-${patch_file}.wav"
+                         --show "${encore_render_dir}/Gates.encore" --patch "${patch}"
+                         --report "${encore_render_dir}/show-${patch_file}.txt")
+        set_tests_properties(EncoreRender.show.${patch_file} PROPERTIES
+                             FIXTURES_REQUIRED "encore_render_gatetest;encore_render_gateshow")
+    endforeach()
 endif()
 
 if(MSVC)

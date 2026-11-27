@@ -51,8 +51,9 @@ struct Result
 
     float peakIn = 0.0f, peakOut = 0.0f, rmsIn = 0.0f, rmsOut = 0.0f;
     std::vector<CpuStats> cpu;
+    juce::StringArray notes;            // what blocks say after the render (B2: a gate's floor, key, link, opens)
 
-    /** A short text report: levels, latency, CPU per block. */
+    /** A short text report: levels, latency, CPU per block, notes. */
     juce::String report() const;
 };
 
@@ -62,9 +63,14 @@ struct Result
 bool applySettings (Block& block, const juce::var& settings, juce::String& error);
 
 /** Renders `input` through a new block of `typeId` (hidden types included).
-    A factory preset id, if given, is applied first; settings go on top. */
+    A factory preset id, if given, is applied first; settings go on top.
+    `refs` are the block's references (B2: keyInput, keyBlock, linkTo). Alone,
+    a block has no earlier block or interface input, so those fall back and
+    the notes say why; in a patch (renderPatch) they resolve. The guitar
+    (ProcessContext::chainInput) is the input's first channel. */
 Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, const juce::String& typeId,
-                    const juce::var& settings, int blockSize = 64, const juce::String& presetId = {});
+                    const juce::var& settings, int blockSize = 64, const juce::String& presetId = {},
+                    const std::map<juce::String, juce::String>& refs = {});
 
 /** Renders `input` (its first channel: the guitar) through a patch's whole chain. */
 Result renderPatch (const juce::AudioBuffer<float>& input, double sampleRate, const PatchModel& patch,
@@ -93,5 +99,20 @@ juce::AudioBuffer<float> makeSweep (double sampleRate, double seconds);
     exponential decay, over a noise floor about 70 dB down. Scaled so the
     accent peaks at -1 dBFS; the other notes peak 5-9 dB lower. */
 juce::AudioBuffer<float> makePlucks (double sampleRate);
+
+/** Test material for the gates (B2), mono, deterministic, 10 s: 1.5 s of
+    noise alone, a note ringing out, palm-muted chugs, a held chord decaying
+    slowly, with stretches of noise between them, over a noise floor of the
+    given peak (not normalised, so the floor stays there). The noise alone
+    lets a Smart gate learn the floor from -70. */
+juce::AudioBuffer<float> makeGateTest (double sampleRate, float noiseFloorDb = -60.0f);
+
+/** A show for listening to the gates (B2), with these patches:
+    - "Gate pair": the Gate pair around an amp (`ampModel`, a .nam file; an
+      amp without one passes the signal through, with a warning);
+    - "Ducking delay": a Pedal EQ (flat, the dry tap), a delay, and a Studio
+      Gate with its duckDelay preset keyed from the dry tap;
+    - "Smart X4": a Studio Gate in Smart mode with its highGain preset. */
+ShowModel makeGateShow (const juce::File& ampModel);
 
 } // namespace encore::render

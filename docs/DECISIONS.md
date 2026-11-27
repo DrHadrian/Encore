@@ -981,3 +981,95 @@ new module, so a show that uses it saves as schema 5 (0062).
   A missing file plays "DSP only" and the info says it's not on this computer.
 - **CPU:** every slider at ±10, Classic, Live, the clip in the path: within
   the plan's 0.5 % target at 48 kHz / 64 (the CI benchmark reports it).
+
+## 0066 — Gates engine: S2 and X4, key sources and taps, linking, the adaptive gate, look-ahead
+
+Stage B2 of the native modules (GATE-PLAN): the engine of the **Pedal Gate
+"S2"** (`pedalGate`) and the **Studio Gate "X4"** (`studioGate` for now).
+Both are FX Units, **hidden** and new modules (a show with either saves as
+schema 5, 0062), with no UI until U2. **Today's gate (`gate`) is unchanged**
+and keeps playing old shows until U2 switches it over.
+
+- **One gate engine** (`GateBlock`) under both: key → key filter → detector →
+  the mode's logic → gain on the block's own channels. A change of mode,
+  detector, key, stereo or link crossfades 10 ms, the new engine starting
+  where the old one stood (a closed gate never bursts open). Both start open.
+- **The S2:** Threshold (3 dB per step above the learned floor, 0 to +30 dB),
+  Decay (20 · 40^(knob/10) ms), Detect (Input / Guitar), Mode (Hard −90 dB /
+  Soft, an expander 1:2 down to −15 dB); fixed Peak 10 ms, hysteresis 6 dB,
+  hold 20 ms, attack 0.3 ms, stereo linked. Presets cleanHiss, singleCoils,
+  highGain, djentTight.
+- **The X4:** Mode Gate / Expander / Ducker / Smart; Threshold, and a separate
+  Threshold (Smart) offset so a mode change never reinterprets a value; Smart
+  curve Gate / Expander (Adrian, 27 Nov: how Smart mode plays the S2's Soft);
+  Range, Ratio, Attack, Hold, Release, Hysteresis, Detector, Detector time;
+  a key filter (12 dB/oct, the knob ends read Off); Key (Input, Guitar, an
+  interface input, an earlier block); Stereo linked or independent;
+  Look-ahead 0.5–5 ms. Defaults are today's gate's values. Presets: the S2's
+  four in Smart mode (measured the same as the S2 within 1e-6), duckDelay,
+  duckReverb, softCleanup, swellCleanup. Stereo and Look-ahead are the setup,
+  not part of a preset; refs never are.
+- **Shared gate DSP** (`dsp/`): `GateEnvelope` gains the expander
+  ((T − L)(r − 1) dB, at most |Range|; its open flag, for the OPEN light and
+  a follower, keeps the gate's hysteresis and hold so it doesn't flicker on
+  noise at the threshold), the ducker and a decision made elsewhere (for a
+  follower); `LookAhead` (a delay whose time changes
+  crossfade, on `FadingDelay`); `AdaptiveGate`, the "Smart" logic both use:
+  the floor learns from 500 ms stretches of steady noise with no pick attack,
+  6 dB/s at most, −96 to −40 dBFS, from −70; it freezes below −85 dBFS and
+  while the tuner is open (any tuner, Adrian); the release follows the note's
+  decay (0.25× to 2.5×); a reopen within 50 ms doubles the hold (to 200 ms);
+  it opens with a 0.3 ms fade. All Proposed, as named constants, tuned on the
+  rig in U2.
+- **References by name** (`BlockModel::refs`, schema 5): `keyInput` (an
+  interface input by name), `keyBlock` (an earlier block by id), `linkTo` (a
+  leader gate by id). Part of the block, never of a preset. A reference that
+  doesn't resolve never stops the patch: the gate keys from its own input (or
+  decides on its own) and its info says why.
+- **Key sources in the engine:** `ProcessContext` carries the interface's
+  inputs (from `PatchPlayer`'s copies), whether the tuner is open, the
+  callback count and the latency at the block's input; every other block
+  ignores them. A block keyed from an earlier one makes that block a **tap**:
+  the `Chain` copies its output into a buffer sized in `prepare`; a block
+  nobody keys from costs nothing. **"Earlier"** (decision 10): the main lane
+  before the split is before everything after it; each path counts only its
+  own earlier blocks (path B doesn't count path A: it runs first but is
+  parallel; Claude, Adrian left it to us); after the merge, everything before
+  it. Tails only: a skipped block's tap is silence.
+- **Linking** (GATE-PLAN §4): a follower shares its leader's level,
+  open/closed decision and threshold, and keeps its own Range and Release or
+  Decay. The leader writes a `LinkBus` sized in `prepare`; the follower reads
+  it in the same callback, delayed by any latency between them. A follower's
+  own look-ahead is ignored while it follows. Leader off, asleep or skipped:
+  its own detector with the last shared threshold ("Link: leader off"), and
+  the link back, crossfaded, when the leader runs again. Removing a block
+  drops the links and keys that pointed at it, in the same edit.
+- **Split paths follow a latency that changes while playing** (a shared
+  change): the `Chain` re-reads both paths' latency every buffer and moves its
+  alignment with a 30 ms crossfade, so a look-ahead or the Pedal EQ's clip
+  coming in keeps the paths lined up (0053).
+- **Kept per patch:** a rebuilt chain's gates start from the floor the
+  playing one learned (by block id, on the message thread). Not saved to disk:
+  a fresh show learns again within seconds.
+- **The Gate pair**, model side: an S2 before the first amp (Soft, Threshold
+  3) and one after it (Hard, Detect Guitar) linked to it, one edit; refused
+  without an amp. The menu entry is U2's.
+- **Today's gate as an X4**, written and tested, not switched on: Threshold and
+  Range copy over; Detect guitar becomes Key; **Release is converted**
+  (Adrian, 27 Nov): today's is a one-pole time constant, falling 8.7 dB per
+  release time, while the X4 falls the whole Range in its release time, so
+  the X4 gets release · |Range| / 8.7 dB (capped at 2000 ms). Measured: the
+  same gain curve within 0.2 dB above −60 dB after the first 2 ms. A new X4
+  keeps 80 ms (it closes fully in 80 ms).
+- **The display feed:** while a gate's display is on, the audio thread pushes a
+  frame about every 5 ms (input, key and output peaks, gain reduction, open)
+  into a lock-free FIFO; off, it costs nothing. U2 draws the 4 s history.
+- **EncoreRender:** both types and their presets; `--ref` for references
+  (`blockId.name=value` with `--show`); report notes with each gate's opens,
+  learned floor, key and link; `--make-gate-test` (notes with gaps of noise)
+  and `--make-gate-show` (the pair around an amp, a ducking delay, a Smart X4).
+- **CPU** at 48 kHz / 64 (GATE-PLAN §7): the S2 against ≤ 0.2 %, the X4 with
+  its key filter and 1 ms look-ahead against ≤ 0.4 %; the CI benchmark
+  reports both. The benchmark now runs on its own (`EncoreTests.benchmark`,
+  RUN_SERIAL): beside the soak, the screens and the renders it measured the
+  machine's load.

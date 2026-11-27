@@ -107,7 +107,8 @@ bool ShowModel::usesPlugins() const
 
 bool ShowModel::usesNewModules() const
 {
-    return showHasBlock (*this, [] (const BlockModel& b) { return isNewModuleBlockType (b.type); });
+    // A reference (B2) is only understood from schema 5 on, too.
+    return showHasBlock (*this, [] (const BlockModel& b) { return isNewModuleBlockType (b.type) || ! b.refs.empty(); });
 }
 
 //==============================================================================

@@ -8,6 +8,8 @@
 
 #include "engine/blocks/EngineProbeBlock.h"
 #include "engine/blocks/PedalEqBlock.h"
+#include "engine/blocks/PedalGateBlock.h"
+#include "engine/blocks/StudioGateBlock.h"
 #include "model/ShowJson.h"
 #include "session/PatchBuilder.h"
 
@@ -114,9 +116,15 @@ public:
         {
             expect (isNewModuleBlockType (EngineProbeBlock::typeId));
             expect (isNewModuleBlockType (PedalEqBlock::typeId));
+            expect (isNewModuleBlockType (PedalGateBlock::typeId));
+
+            expect (isNewModuleBlockType (StudioGateBlock::typeId));
+
+            const juce::StringArray newModules { EngineProbeBlock::typeId, PedalEqBlock::typeId, PedalGateBlock::typeId,
+                                                 StudioGateBlock::typeId };
 
             for (const auto& t : getBlockTypes())
-                if (t.id != EngineProbeBlock::typeId && t.id != PedalEqBlock::typeId)
+                if (! newModules.contains (t.id))
                     expect (! isNewModuleBlockType (t.id), t.id);
 
             expect (! isNewModuleBlockType ("noSuchType"));
@@ -259,6 +267,158 @@ public:
 
 static HiddenBlockTypeTests hiddenBlockTypeTests;
 static PedalEqRegistrationTests pedalEqRegistrationTests;
+
+class GateRegistrationTests final : public juce::UnitTest
+{
+public:
+    GateRegistrationTests() : juce::UnitTest ("Gate registration", "Encore") {}
+
+    void runTest() override
+    {
+        beginTest ("The Pedal Gate is hidden and a new module; today's gate is unchanged");
+        {
+            const auto* type = HiddenBlockTypeTests::findType (getBlockTypes(), PedalGateBlock::typeId);
+            expect (type != nullptr && type->hidden && type->newModule);
+            expect (HiddenBlockTypeTests::findType (getMenuBlockTypes(), PedalGateBlock::typeId) == nullptr);
+
+            auto block = createBlock (PedalGateBlock::typeId);
+            expect (block != nullptr && block->getTypeId() == PedalGateBlock::typeId);
+
+            const auto menu = getMenuBlockTypes();   // kept: findType points into it
+            const auto* old = HiddenBlockTypeTests::findType (menu, "gate");
+            expect (old != nullptr && ! old->newModule, "the old gate stays in the menu, schema unchanged");
+            auto oldBlock = createBlock ("gate");
+            expect (oldBlock != nullptr && oldBlock->findParameter ("detectGuitar") != nullptr, "and is still today's");
+        }
+
+        beginTest ("The Studio Gate is hidden and a new module, under its own id while today's gate keeps \"gate\"");
+        {
+            const auto* type = HiddenBlockTypeTests::findType (getBlockTypes(), StudioGateBlock::typeId);
+            expect (type != nullptr && type->hidden && type->newModule);
+            expect (HiddenBlockTypeTests::findType (getMenuBlockTypes(), StudioGateBlock::typeId) == nullptr);
+            auto block = createBlock (StudioGateBlock::typeId);
+            expect (block != nullptr && block->getTypeId() == StudioGateBlock::typeId);
+            expect (createBlock ("gate")->getTypeId() == juce::String ("gate"));
+        }
+
+        beginTest ("A show with a Studio Gate saves as schema 5, loads back and plays");
+        {
+            auto show = makeDefaultShow ("X4");
+            BlockModel x4;
+            x4.id = "x4-1";
+            x4.type = StudioGateBlock::typeId;
+            x4.params["mode"] = 2.0f;
+            x4.params["range"] = -12.0f;
+            x4.refs["keyBlock"] = "somewhere";
+            show.patches[0].mainLane().blocks.push_back (x4);
+
+            const auto text = json::toJson (show);
+            expect (text.contains ("\"schemaVersion\": 5"));
+            juce::String error;
+            const auto loaded = json::fromJson (text, error);
+            expect (loaded.has_value(), error);
+
+            if (! loaded)
+                return;
+
+            juce::StringArray problems;
+            auto chain = buildChain (loaded->patches[0], ShowFolder(), spec, problems);
+            const auto& last = chain->getBlocks().back();
+            expect (last->getTypeId() == StudioGateBlock::typeId);
+            expectEquals (last->findParameter ("mode")->getChoiceIndex(), 2);
+            expectEquals (last->findParameter ("range")->getValue(), -12.0f);
+            expectEquals (last->getRef ("keyBlock"), juce::String ("somewhere"));
+        }
+
+        beginTest ("A show with a Pedal Gate saves as schema 5, loads back and plays");
+        {
+            auto show = makeDefaultShow ("S2");
+            BlockModel s2;
+            s2.id = "s2-1";
+            s2.type = PedalGateBlock::typeId;
+            s2.params["threshold"] = 5.0f;
+            s2.params["detect"] = 1.0f;
+            show.patches[0].mainLane().blocks.insert (show.patches[0].mainLane().blocks.begin(), s2);
+
+            const auto text = json::toJson (show);
+            expect (text.contains ("\"schemaVersion\": 5"));
+
+            juce::String error;
+            const auto loaded = json::fromJson (text, error);
+            expect (loaded.has_value(), error);
+
+            if (! loaded)
+                return;
+
+            juce::StringArray problems;
+            auto chain = buildChain (loaded->patches[0], ShowFolder(), spec, problems);
+            expect (problems.isEmpty(), problems.joinIntoString ("; "));
+            const auto& first = chain->getBlocks().front();
+            expect (first->getTypeId() == PedalGateBlock::typeId);
+            expectEquals (first->findParameter ("threshold")->getValue(), 5.0f);
+            expectEquals (first->findParameter ("detect")->getChoiceIndex(), 1);
+        }
+    }
+};
+
+static GateRegistrationTests gateRegistrationTests;
+
+class BlockRefsTests final : public juce::UnitTest
+{
+public:
+    BlockRefsTests() : juce::UnitTest ("Block references", "Encore") {}
+
+    void runTest() override
+    {
+        beginTest ("References round-trip in a schema 5 show, and through a built chain");
+        {
+            auto show = makeDefaultShow ("Refs");
+            BlockModel gate;
+            gate.id = "s2-follow";
+            gate.type = PedalGateBlock::typeId;
+            gate.refs["keyInput"] = "Mic 2";
+            gate.refs["linkTo"] = "s2-lead";
+            show.patches[0].mainLane().blocks.push_back (gate);
+
+            const auto text = json::toJson (show);
+            expect (text.contains ("\"schemaVersion\": 5"));
+            expect (text.contains ("\"refs\""));
+
+            juce::String error;
+            const auto back = json::fromJson (text, error);
+            expect (back.has_value(), error);
+
+            if (! back)
+                return;
+
+            const auto& loaded = back->patches[0].mainLane().blocks.back();
+            expect (loaded.refs == gate.refs);
+
+            juce::StringArray problems;
+            auto chain = buildChain (back->patches[0], ShowFolder(), spec, problems);
+            auto* built = chain->getBlocks().back().get();
+            expectEquals (built->getRef ("keyInput"), juce::String ("Mic 2"));
+
+            auto patch = back->patches[0];
+            captureChain (*chain, patch, ShowFolder());
+            expect (patch.mainLane().blocks.back().refs == gate.refs, "kept when the chain is written back");
+        }
+
+        beginTest ("A reference alone needs schema 5; a show without any has none");
+        {
+            auto show = makeDefaultShow ("Plain");
+            expect (! json::toJson (show).contains ("\"refs\""));
+
+            if (! show.patches[0].mainLane().blocks.empty())
+            {
+                show.patches[0].mainLane().blocks.front().refs["keyBlock"] = "x";
+                expectEquals (show.requiredSchemaVersion(), 5);
+            }
+        }
+    }
+};
+
+static BlockRefsTests blockRefsTests;
 static NewModuleSchemaTests newModuleSchemaTests;
 
 } // namespace encore::test

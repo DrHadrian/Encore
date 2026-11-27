@@ -106,7 +106,8 @@ public:
     int getOutputSlot (const juce::String& outputName) const noexcept;
 
     /** Sets a chain's input and sends from its patch: the input by name, each
-        output's send as the patch says (0 dB when it doesn't mention it).
+        output's send as the patch says (0 dB when it doesn't mention it), and
+        each keyed block's key input (Block::setKeyInputSlot, B2).
         Call when a chain is built and whenever the routing or the patch's
         sends change. */
     void applyPatchRouting (Chain& chain, const juce::String& inputName,

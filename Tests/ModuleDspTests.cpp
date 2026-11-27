@@ -10,10 +10,12 @@
 #include "engine/core/Realtime.h"
 #include "engine/dsp/Detector.h"
 #include "engine/dsp/FilterBand.h"
+#include "engine/dsp/LookAhead.h"
 #include "engine/dsp/Oversampler.h"
 #include "engine/dsp/SoftClip.h"
 
 #include <complex>
+#include <numeric>
 
 namespace encore::test
 {
@@ -707,6 +709,288 @@ public:
 
                                 for (int i = 0; i < 256; ++i)
                                     allFinite = allFinite && std::isfinite (gate.process (detector.process (i % 32 == 0 ? 1.0f : 0.0f)));
+                            }
+            }
+            expectEquals (realtimeAllocationCount() - before, 0);
+            expect (allFinite);
+        }
+
+        //== B2: the gate modes ===============================================
+        beginTest ("Expander: its open flag (the OPEN light, a follower's decision) keeps the gate's hysteresis and hold");
+        {
+            dsp::GateEnvelopeSettings settings;
+            settings.mode = dsp::GateMode::expander;
+            settings.thresholdDb = -54.0f;
+            settings.ratio = 2.0f;
+            settings.rangeDb = -15.0f;   // the S2's Soft
+
+            dsp::LevelDetector detector;
+            detector.prepare (sampleRate);
+            dsp::GateEnvelope gate;
+            gate.prepare (sampleRate);
+            gate.setSettings (settings);
+            gate.reset (true);
+
+            // Noise whose peak sits right at the threshold, then well below the close level.
+            auto changes = 0;
+            auto was = gate.isOpen();
+
+            for (auto x : noise (juce::Decibels::decibelsToGain (-54.0f), 2 * 48000, 7))
+            {
+                gate.process (detector.process (std::abs (x)));
+                changes += gate.isOpen() != was ? 1 : 0;
+                was = gate.isOpen();
+            }
+
+            logMessage ("Expander open flag on noise at the threshold: " + juce::String (changes) + " changes in 2 s");
+            expectLessOrEqual (changes, 2, "no flicker as the noise brushes the threshold");
+
+            for (auto x : noise (juce::Decibels::decibelsToGain (-75.0f), 4800, 8))
+                gate.process (detector.process (std::abs (x)));
+
+            expect (! gate.isOpen(), "closed once the level is well below");
+        }
+
+        beginTest ("Expander: the static curve at 1:1.5, 1:4 and 1:20 is the formula, capped by Range");
+        {
+            for (auto ratio : { 1.5f, 4.0f, 20.0f })
+            {
+                for (auto rangeDb : { -90.0f, -20.0f })
+                {
+                    for (auto levelDb : { -30.0f, -40.0f, -45.0f, -55.0f, -70.0f, -100.0f })
+                    {
+                        dsp::GateEnvelopeSettings settings;
+                        settings.mode = dsp::GateMode::expander;
+                        settings.thresholdDb = -40.0f;
+                        settings.ratio = ratio;
+                        settings.rangeDb = rangeDb;
+                        settings.attackMs = 1.0f;
+                        settings.releaseMs = 5.0f;
+
+                        dsp::GateEnvelope gate;
+                        gate.prepare (sampleRate);
+                        gate.setSettings (settings);
+                        gate.reset (true);
+
+                        const auto level = juce::Decibels::decibelsToGain (levelDb, -200.0f);
+                        float g = 1.0f;
+
+                        for (int i = 0; i < 4800; ++i)   // 100 ms: settled
+                            g = gate.process (level);
+
+                        const auto expected = juce::jmin ((-40.0f - levelDb) * (ratio - 1.0f), -rangeDb);
+                        const auto measured = -toDb (g);
+                        expectWithinAbsoluteError (measured, juce::jmax (0.0f, expected), 0.01f,
+                                                   "1:" + juce::String (ratio) + " at " + juce::String (levelDb) + " dB, range " + juce::String (rangeDb));
+                    }
+                }
+            }
+        }
+
+        beginTest ("Expander: attack and release move the reduction in dB, |Range| per time");
+        {
+            dsp::GateEnvelopeSettings settings;
+            settings.mode = dsp::GateMode::expander;
+            settings.thresholdDb = -40.0f;
+            settings.ratio = 20.0f;
+            settings.rangeDb = -20.0f;
+            settings.attackMs = 2.0f;
+            settings.releaseMs = 100.0f;
+
+            dsp::GateEnvelope gate;
+            gate.prepare (sampleRate);
+            gate.setSettings (settings);
+            gate.reset (true);
+
+            // Pulls down: 20 dB in 100 ms, so 10 dB after 50 ms.
+            float g = 1.0f;
+            for (int i = 0; i < 2400; ++i)
+                g = gate.process (1.0e-4f);
+            expectWithinAbsoluteError (-toDb (g), 10.0f, 0.05f);
+
+            for (int i = 0; i < 4800; ++i)
+                g = gate.process (1.0e-4f);
+            expectWithinAbsoluteError (-toDb (g), 20.0f, 0.01f);
+
+            // Lets go: 20 dB in 2 ms.
+            for (int i = 0; i < 96; ++i)
+                g = gate.process (0.1f);
+            expectWithinAbsoluteError (g, 1.0f, 1.0e-6f);
+        }
+
+        beginTest ("Ducker: turns down by Range while a key tone plays, comes back after it");
+        {
+            dsp::GateEnvelopeSettings settings;
+            settings.mode = dsp::GateMode::ducker;
+            settings.thresholdDb = -40.0f;
+            settings.rangeDb = -12.0f;
+            settings.attackMs = 5.0f;
+            settings.holdMs = 50.0f;
+            settings.releaseMs = 300.0f;
+
+            dsp::LevelDetector detector;
+            detector.prepare (sampleRate);
+            dsp::GateEnvelope gate;
+            gate.prepare (sampleRate);
+            gate.setSettings (settings);
+            gate.reset (true);
+            expectEquals (gate.getGain(), 1.0f, "starts not ducking");
+
+            const auto key = sine (440.0, 0.3f, 48000);   // 1 s of tone, then silence
+            std::vector<float> gains;
+
+            for (int i = 0; i < 96000; ++i)
+                gains.push_back (gate.process (detector.process (i < 48000 ? key[(size_t) i] : 0.0f)));
+
+            expectWithinAbsoluteError (-toDb (gains[240]), 12.0f, 0.05f, "down by Range within the attack (5 ms)");
+            expectWithinAbsoluteError (-toDb (gains[40000]), 12.0f, 1.0e-3f, "stays down while the key plays");
+
+            // The key ends at 1 s; the detector falls, the hold runs, then 12 dB in 300 ms.
+            expect (gains[48000 + 480] < 0.3f, "still down during the hold");
+            expectWithinAbsoluteError (gains[48000 + 48000 - 1], 1.0f, 1.0e-6f, "back up after the release");
+            const auto halfway = 48000 + (int) ((0.010 * 6.9 + 0.050) * sampleRate) + 7200;   // detector + hold + 150 ms
+            expect (gains[(size_t) halfway] > 0.3f && gains[(size_t) halfway] < 0.9f, "comes back gradually, not at once");
+        }
+
+        beginTest ("An outside decision gives the same gain as the envelope's own on the same signal");
+        {
+            for (auto mode : { dsp::GateMode::gate, dsp::GateMode::expander, dsp::GateMode::ducker })
+            {
+                dsp::GateEnvelopeSettings settings;
+                settings.mode = mode;
+                settings.thresholdDb = -50.0f;
+                settings.rangeDb = -30.0f;
+
+                dsp::LevelDetector detector;
+                detector.prepare (sampleRate);
+                dsp::GateEnvelope own, outside;
+
+                for (auto* g : { &own, &outside })
+                {
+                    g->prepare (sampleRate);
+                    g->setSettings (settings);
+                    g->reset (true);
+                }
+
+                auto note = palmMute (48000, 2400, 0.5f, -70.0f);
+                auto maxDifference = 0.0f;
+
+                for (auto x : note.signal)
+                {
+                    const auto level = detector.process (x);
+                    const auto a = own.process (level);
+                    const auto b = outside.processWithDecision (own.isOpen(), level);
+                    maxDifference = juce::jmax (maxDifference, std::abs (a - b));
+                }
+
+                expectEquals (maxDifference, 0.0f);
+            }
+        }
+
+        beginTest ("Look-ahead: the delay is exact; a time change doesn't click");
+        {
+            for (auto rate : rates)
+            {
+                dsp::LookAhead lookAhead;
+                lookAhead.prepare (rate);
+                expect (lookAhead.samplesFor (5.0) <= dsp::LookAhead::maxSamples);
+                lookAhead.setTimeSamplesNow (lookAhead.samplesFor (1.0));
+
+                auto in = impulse (2048, 100);
+                auto out = in;
+                float* ch[1] = { out.data() };
+                lookAhead.process (ch, 1, (int) out.size());
+
+                const auto d = lookAhead.samplesFor (1.0);
+                expectEquals (out[(size_t) (100 + d)], 1.0f, "exactly " + juce::String (d) + " samples at " + juce::String (rate));
+                expectWithinAbsoluteError (std::accumulate (out.begin(), out.end(), 0.0f), 1.0f, 1.0e-6f);
+            }
+
+            // A 1 kHz sine while the time moves from 1 ms to 5 ms: the fade's
+            // sidebands stay close to the tone (smoothstep over 30 ms).
+            const int order = 15, size = 1 << order;
+            dsp::LookAhead lookAhead;
+            lookAhead.prepare (sampleRate);
+            lookAhead.setTimeSamplesNow (lookAhead.samplesFor (1.0));
+            auto signal = sine (1000.0, 0.5f, size);
+
+            for (int offset = 0; offset < size; offset += blockSize)
+            {
+                if (offset == size / 2)
+                    lookAhead.setTimeSamples (lookAhead.samplesFor (5.0));
+
+                float* ch[1] = { signal.data() + offset };
+                lookAhead.process (ch, 1, blockSize);
+            }
+
+            expectEquals (lookAhead.getTimeSamples(), lookAhead.samplesFor (5.0));
+
+            std::vector<float> fft ((size_t) size * 2, 0.0f);
+
+            for (int i = 0; i < size; ++i)
+            {
+                const auto t = (double) i / (size - 1);
+                const auto w = 0.35875 - 0.48829 * std::cos (twoPi * t) + 0.14128 * std::cos (2 * twoPi * t) - 0.01168 * std::cos (3 * twoPi * t);
+                fft[(size_t) i] = (float) (signal[(size_t) i] * w);
+            }
+
+            juce::dsp::FFT (order).performFrequencyOnlyForwardTransform (fft.data());
+            const auto binHz = sampleRate / size;
+            double tone = 0.0, far = 0.0;
+
+            for (int b = 1; b < size / 2; ++b)
+            {
+                const auto p = (double) fft[(size_t) b] * fft[(size_t) b];
+                const auto hz = b * binHz;
+
+                if (std::abs (hz - 1000.0) < 200.0)
+                    tone += p;
+                else if (hz > 2000.0)
+                    far += p;
+            }
+
+            const auto clickDb = 10.0 * std::log10 (far / tone + 1.0e-30);
+            logMessage ("Look-ahead 1 -> 5 ms on a 1 kHz sine: energy above 2 kHz " + juce::String (clickDb, 1) + " dB");
+            expect (clickDb < -80.0, "no click");
+        }
+
+        beginTest ("Gate modes: no allocation, no NaN at extreme settings");
+        {
+            dsp::GateEnvelope gate;
+            gate.prepare (sampleRate);
+            dsp::LookAhead lookAhead;
+            lookAhead.prepare (sampleRate);
+            std::vector<float> buffer ((size_t) blockSize, 0.5f);
+            auto allFinite = true;
+
+            const auto before = realtimeAllocationCount();
+            {
+                const rt::ScopedRealtimeSection realtime;
+
+                for (auto mode : { dsp::GateMode::gate, dsp::GateMode::expander, dsp::GateMode::ducker })
+                    for (auto ratio : { 0.0f, 1.0f, 1.5f, 20.0f, 1.0e6f })
+                        for (auto range : { -1000.0f, -90.0f, 0.0f })
+                            for (auto attack : { 0.0f, 0.05f, 1.0e6f })
+                            {
+                                dsp::GateEnvelopeSettings s;
+                                s.mode = mode;
+                                s.ratio = ratio;
+                                s.rangeDb = range;
+                                s.attackMs = attack;
+                                s.releaseMs = attack;
+                                gate.setSettings (s);
+
+                                for (int i = 0; i < 256; ++i)
+                                {
+                                    const auto level = i % 64 == 0 ? 1.0f : (i % 3 == 0 ? 0.0f : 1.0e-30f);
+                                    allFinite = allFinite && std::isfinite (gate.process (level))
+                                                && std::isfinite (gate.processWithDecision (i % 2 == 0, level))
+                                                && std::isfinite (gate.getReductionDb());
+                                }
+
+                                lookAhead.setTimeSamples ((int) (ratio * 10.0f));
+                                float* ch[1] = { buffer.data() };
+                                lookAhead.process (ch, 1, blockSize);
                             }
             }
             expectEquals (realtimeAllocationCount() - before, 0);

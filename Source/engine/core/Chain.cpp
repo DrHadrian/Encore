@@ -4,6 +4,8 @@
 #include "engine/core/Chain.h"
 #include "engine/blocks/SplitBlocks.h"
 
+#include "engine/core/LinkBus.h"
+
 #include <cmath>
 
 namespace encore
@@ -107,21 +109,13 @@ void Chain::prepare (const ProcessSpec& spec)
         return channels;
     };
 
-    auto sumLatency = [this] (int from, int to)
-    {
-        int total = 0;
-
-        for (int i = from; i < to; ++i)
-            total += blocks[(size_t) i]->getLatencySamples();
-
-        return total;
-    };
-
     if (splitAt < 0)
     {
         outputChannels = run (0, numMain, 1);
         latencyA = latencyB = 0;
         alignmentLimited = false;
+        alignA.prepare (0, spec.sampleRate);
+        alignB.prepare (0, spec.sampleRate);
     }
     else
     {
@@ -133,13 +127,13 @@ void Chain::prepare (const ProcessSpec& spec)
         channelsOut[(size_t) mergeAt] = 2;
         outputChannels = run (mergeAt + 1, numMain, 2);
 
-        latencyA = sumLatency (splitAt + 1, mergeAt);
-        latencyB = sumLatency (numMain, (int) blocks.size());
-        const auto difference = std::abs (latencyB - latencyA);
-        alignmentLimited = difference > maxAlignmentSamples;
-        const auto align = juce::jmin (difference, maxAlignmentSamples);
-        alignA.prepare (latencyB > latencyA ? align : 0, spec.maxBlockSize);
-        alignB.prepare (latencyA > latencyB ? align : 0, spec.maxBlockSize);
+        // Sized for the most that can be lined up, so a latency that changes
+        // while playing only moves the delay (updateAlignment).
+        alignA.prepare (maxAlignmentSamples, spec.sampleRate, alignmentFadeSeconds);
+        alignB.prepare (maxAlignmentSamples, spec.sampleRate, alignmentFadeSeconds);
+        updateAlignment();
+        alignA.setDelayNow (alignA.getDelay());
+        alignB.setDelayNow (alignB.getDelay());
     }
 
     pathB.setSize (Block::maxChannels, spec.maxBlockSize, false, true, false);
@@ -162,51 +156,173 @@ void Chain::prepare (const ProcessSpec& spec)
         firstTailBlock = firstTailBlock < 0 ? from : juce::jmin (firstTailBlock, from);
     }
 
+    resolveKeys();
+    resolveLinks();
+
     if (snapshotValues == nullptr)
         saveSnapshot();
 }
 
-void Chain::Alignment::prepare (int samples, int maxBlockSize)
+Chain::Region Chain::regionOf (int index) const noexcept
 {
-    delay = juce::jmax (0, samples);
+    if (splitAt < 0)
+        return Region::beforeSplit;
 
-    for (auto& line : lines)
-        line.assign (delay > 0 ? (size_t) (delay + maxBlockSize + 1) : 0, 0.0f);
+    if (index >= numMain)
+        return Region::pathB;
 
-    writeIndex = 0;
+    if (index <= splitAt)
+        return Region::beforeSplit;
+
+    return index < mergeAt ? Region::pathA : Region::afterMerge;
 }
 
-void Chain::Alignment::reset() noexcept
+bool Chain::isEarlier (int earlier, int later) const noexcept
 {
-    for (auto& line : lines)
-        std::fill (line.begin(), line.end(), 0.0f);
+    const auto count = (int) blocks.size();
 
-    writeIndex = 0;
-}
+    if (! juce::isPositiveAndBelow (earlier, count) || ! juce::isPositiveAndBelow (later, count) || earlier == later)
+        return false;
 
-void Chain::Alignment::process (float* const* channels, int numChannels, int numSamples) noexcept
-{
-    if (delay <= 0)
-        return;
+    const auto a = regionOf (earlier), b = regionOf (later);
 
-    const auto size = (int) lines[0].size();
-
-    for (int i = 0; i < numSamples; ++i)
+    switch (b)
     {
-        auto readIndex = writeIndex - delay;
+        case Region::beforeSplit: return a == Region::beforeSplit && earlier < later;
+        case Region::pathA:       return a == Region::beforeSplit || (a == Region::pathA && earlier < later);
+        case Region::pathB:       return a == Region::beforeSplit || (a == Region::pathB && earlier < later);
+        case Region::afterMerge:  return a != Region::afterMerge || earlier < later;
+    }
 
-        if (readIndex < 0)
-            readIndex += size;
+    return false;
+}
 
-        for (int ch = 0; ch < numChannels; ++ch)
+int Chain::indexOfModelId (const juce::String& modelId) const noexcept
+{
+    if (modelId.isEmpty())
+        return -1;
+
+    for (int i = 0; i < (int) blocks.size(); ++i)
+        if (blocks[(size_t) i]->getModelId() == modelId)
+            return i;
+
+    return -1;
+}
+
+void Chain::resolveKeys()
+{
+    taps.clear();
+    taps.resize (blocks.size());
+    anyTaps = false;
+
+    for (int i = 0; i < (int) blocks.size(); ++i)
+    {
+        auto& block = *blocks[(size_t) i];
+        const auto wanted = block.getRef ("keyBlock");
+
+        if (wanted.isEmpty())
         {
-            auto& line = lines[(size_t) ch];
-            line[(size_t) writeIndex] = channels[ch][i];
-            channels[ch][i] = line[(size_t) readIndex];
+            block.setKeyTap (nullptr, 0, {});
+            continue;
         }
 
-        writeIndex = writeIndex + 1 < size ? writeIndex + 1 : 0;
+        const auto source = indexOfModelId (wanted);
+
+        if (source < 0)
+        {
+            block.setKeyTap (nullptr, 0, "Key: that block isn't in this patch");
+            continue;
+        }
+
+        if (! isEarlier (source, i))
+        {
+            block.setKeyTap (nullptr, 0, "Key: that block isn't before this gate");
+            continue;
+        }
+
+        auto& tap = taps[(size_t) source];
+
+        if (tap == nullptr)
+            tap = std::make_unique<juce::AudioBuffer<float>> (Block::maxChannels, juce::jmax (1, preparedSpec.maxBlockSize));
+
+        tap->clear();
+        anyTaps = true;
     }
+
+    // Now that every tap exists, hand them out (their data doesn't move again).
+    for (int i = 0; i < (int) blocks.size(); ++i)
+    {
+        auto& block = *blocks[(size_t) i];
+        const auto source = indexOfModelId (block.getRef ("keyBlock"));
+
+        if (source >= 0 && isEarlier (source, i) && taps[(size_t) source] != nullptr)
+            block.setKeyTap (taps[(size_t) source]->getArrayOfReadPointers(), channelsOut[(size_t) source], {});
+    }
+}
+
+void Chain::resolveLinks()
+{
+    for (int i = 0; i < (int) blocks.size(); ++i)
+    {
+        auto& block = *blocks[(size_t) i];
+        const auto wanted = block.getRef ("linkTo");
+
+        if (wanted.isEmpty())
+        {
+            block.setLinkLeader (nullptr, {});
+            continue;
+        }
+
+        const auto leader = indexOfModelId (wanted);
+
+        if (leader < 0)
+            block.setLinkLeader (nullptr, "Link: that gate isn't in this patch");
+        else if (blocks[(size_t) leader]->getLinkBus() == nullptr)
+            block.setLinkLeader (nullptr, "Link: that block isn't a gate");
+        else if (! isEarlier (leader, i))
+            block.setLinkLeader (nullptr, "Link: that gate isn't before this one");
+        else
+            block.setLinkLeader (blocks[(size_t) leader]->getLinkBus(), {});
+    }
+}
+
+void Chain::clearTaps (int from, int to) noexcept
+{
+    if (! anyTaps)
+        return;
+
+    for (int i = juce::jmax (0, from); i < juce::jmin (to, (int) taps.size()); ++i)
+        if (taps[(size_t) i] != nullptr)
+            taps[(size_t) i]->clear();
+}
+
+static_assert (LinkBus::maxDelaySamples == Chain::maxAlignmentSamples);
+
+int Chain::sumLatency (int from, int to) const noexcept
+{
+    int total = 0;
+
+    for (int i = from; i < to; ++i)
+        total += juce::jmax (0, blocks[(size_t) i]->getLatencySamples());
+
+    return total;
+}
+
+void Chain::updateAlignment() noexcept
+{
+    if (splitAt < 0)
+        return;
+
+    const auto a = sumLatency (splitAt + 1, mergeAt);
+    const auto b = sumLatency (numMain, (int) blocks.size());
+    const auto difference = std::abs (b - a);
+    const auto align = juce::jmin (difference, maxAlignmentSamples);
+
+    latencyA.store (a, std::memory_order_relaxed);
+    latencyB.store (b, std::memory_order_relaxed);
+    alignmentLimited.store (difference > maxAlignmentSamples, std::memory_order_relaxed);
+    alignA.setDelay (b > a ? align : 0);
+    alignB.setDelay (a > b ? align : 0);
 }
 
 void Chain::saveSnapshot()
@@ -295,14 +411,15 @@ void Chain::collectGarbage()
         b->collectGarbage();
 }
 
-int Chain::process (float* const* channels, int numSamples) noexcept
+int Chain::process (float* const* channels, int numSamples, const ChainInputs& inputs) noexcept
 {
-    return processFrom (0, channels, numSamples);
+    return processFrom (0, channels, numSamples, inputs);
 }
 
 int Chain::processRange (int from, int to, float* const* channels, int numChannels, int numSamples,
-                         const ProcessContext& context) noexcept
+                         ProcessContext& context) noexcept
 {
+    // context.latencyIn: the latency so far; each block adds its own.
     for (int i = from; i < to; ++i)
     {
         const auto wanted = channelsOut[(size_t) i];
@@ -320,13 +437,24 @@ int Chain::processRange (int from, int to, float* const* channels, int numChanne
         }
 
         numChannels = wanted;
-        blocks[(size_t) i]->process (channels, numChannels, numSamples, context);
+        auto& block = *blocks[(size_t) i];
+        block.process (channels, numChannels, numSamples, context);
+        context.latencyIn += juce::jmax (0, block.getLatencySamples());
+
+        // A tap: a later block is keyed from this one's output (B2).
+        if (anyTaps && taps[(size_t) i] != nullptr)
+        {
+            auto& tap = *taps[(size_t) i];
+
+            for (int ch = 0; ch < Block::maxChannels; ++ch)
+                tap.copyFrom (ch, 0, channels[juce::jmin (ch, numChannels - 1)], numSamples);
+        }
     }
 
     return numChannels;
 }
 
-int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) noexcept
+int Chain::processFrom (int firstBlock, float* const* channels, int numSamples, const ChainInputs& inputs) noexcept
 {
     jassert (numSamples <= chainInput.getNumSamples());
 
@@ -335,7 +463,12 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) 
 
     // Keep the dry guitar for blocks that listen to it (e.g. a gate after the amp).
     chainInput.copyFrom (0, 0, channels[0], numSamples);
-    const ProcessContext context { chainInput.getReadPointer (0) };
+    ProcessContext context;
+    context.chainInput = chainInput.getReadPointer (0);
+    context.inputs = inputs.inputs;
+    context.numInputs = inputs.numInputs;
+    context.tunerOpen = inputs.tunerOpen;
+    context.callback = ++callbackCount;
 
     auto first = juce::jlimit (0, numMain, firstBlock);
 
@@ -346,8 +479,13 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) 
         return channelsOut[(size_t) numMain - 1];
 
     // Starting part-way (tails only): the signal there is what the skipped
-    // blocks would have passed on, i.e. silence on every channel.
+    // blocks would have passed on, i.e. silence on every channel; so are
+    // their taps.
+    if (first > 0)
+        clearTaps (0, first);
+
     int numChannels = channelsIn[(size_t) first];
+    context.latencyIn = sumLatency (0, first);   // what the skipped blocks would have added
 
     if (numChannels > 1)
         juce::FloatVectorOperations::copy (channels[1], channels[0], numSamples);
@@ -363,8 +501,12 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) 
     for (int ch = 0; ch < numChannels; ++ch)
         juce::FloatVectorOperations::copy (b[ch], channels[ch], numSamples);
 
-    // ...path A runs in place, path B in its own buffers (or sleeps while off).
+    // ...path A runs in place, path B in its own buffers (or sleeps while off),
+    // both starting from the latency at the split.
+    const auto atSplit = context.latencyIn;
     const auto aChannels = processRange (splitAt + 1, mergeAt, channels, numChannels, numSamples, context);
+    const auto afterA = context.latencyIn;
+    context.latencyIn = atSplit;
 
     pathBFade.setTargetValue (blocks[(size_t) splitAt]->isEnabled() ? 1.0f : 0.0f);
     int bChannels = numChannels;
@@ -378,6 +520,7 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) 
                 blocks[i]->reset();
 
             alignB.reset();
+            clearTaps (numMain, (int) blocks.size());   // asleep: it passes on nothing
             pathBAsleep = true;
         }
 
@@ -392,7 +535,9 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) 
             pathBGain[(size_t) i] = pathBFade.getNextValue();
     }
 
-    // Line the shorter path up with the longer one.
+    // Line the shorter path up with the longer one (following any latency
+    // that changed in this buffer, crossfaded).
+    updateAlignment();
     alignA.process (channels, aChannels, numSamples);
 
     if (! pathBAsleep)
@@ -400,6 +545,8 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples) 
 
     merge->mix (channels, aChannels, b, bChannels, channels, numSamples, pathBGain.data());
 
+    // After the merge both paths are lined up with the longer one.
+    context.latencyIn = atSplit + juce::jmax (afterA - atSplit, sumLatency (numMain, (int) blocks.size()));
     return processRange (mergeAt + 1, numMain, channels, 2, numSamples, context);
 }
 
@@ -420,7 +567,10 @@ int Chain::getLatencySamples() const noexcept
         if (splitAt < 0 || i < splitAt || i > mergeAt)
             total += blocks[(size_t) i]->getLatencySamples();
 
-    return total + (splitAt >= 0 ? juce::jmax (latencyA, latencyB) : 0);
+    if (splitAt >= 0)
+        total += juce::jmax (sumLatency (splitAt + 1, mergeAt), sumLatency (numMain, (int) blocks.size()));
+
+    return total;
 }
 
 } // namespace encore

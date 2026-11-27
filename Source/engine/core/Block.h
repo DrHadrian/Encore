@@ -6,6 +6,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <atomic>
 #include <functional>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -14,6 +15,8 @@
 
 namespace encore
 {
+
+struct LinkBus;
 
 struct ProcessSpec
 {
@@ -33,6 +36,29 @@ struct ProcessContext
     /** The chain's input (the dry guitar) for this block of samples, mono.
         Lets e.g. a gate after the amp listen to the clean signal. May be null. */
     const float* chainInput = nullptr;
+
+    /** The interface's inputs this callback, by the engine's input slot
+        (B2: a gate keyed from another input). numInputs entries; a null
+        entry is an input that isn't there. May be null. */
+    const float* const* inputs = nullptr;
+    int numInputs = 0;
+
+    /** The tuner is open (B2: noise learning freezes while tuning). */
+    bool tunerOpen = false;
+
+    /** Which chain callback this is (counts from 1; 0 = outside a chain), so a
+        linked follower can tell its leader ran in this one (B2). */
+    std::uint64_t callback = 0;
+
+    /** The chain's latency at this block's input, in samples: what blocks
+        before it added (B2: a follower lines its leader's decisions up). */
+    int latencyIn = 0;
+
+    /** An input by slot, or null. */
+    const float* input (int slot) const noexcept
+    {
+        return inputs != nullptr && slot >= 0 && slot < numInputs ? inputs[slot] : nullptr;
+    }
 };
 
 /** A block that loads a file (NAM model, cab IR...) shows a "Load" button for it. */
@@ -75,6 +101,17 @@ public:
     const juce::String& getRequestedFile() const noexcept   { return requestedFile; }
     void setRequestedFile (const juce::String& path)         { requestedFile = path; }
 
+    /** The saved block's references by name (BlockModel::refs: a gate's
+        keyInput, keyBlock, linkTo). Message thread, or before the block plays. */
+    using Refs = std::map<juce::String, juce::String>;
+    const Refs& getRefs() const noexcept                     { return refs; }
+    void setRefs (Refs newRefs)                              { refs = std::move (newRefs); }
+    juce::String getRef (const juce::String& key) const
+    {
+        const auto found = refs.find (key);
+        return found != refs.end() ? found->second : juce::String();
+    }
+
     void setEnabled (bool shouldBeEnabled) noexcept { enabled.store (shouldBeEnabled, std::memory_order_relaxed); }
     bool isEnabled() const noexcept                  { return enabled.load (std::memory_order_relaxed); }
 
@@ -95,7 +132,10 @@ public:
         this many channels. Asked when the chain is prepared, never while it plays. */
     virtual int getOutputChannels (int inputChannels) const noexcept { return inputChannels; }
 
-    /** Extra delay the block adds, in samples (0 for most). */
+    /** Extra delay the block adds, in samples (0 for most). Any thread,
+        including the audio thread every buffer (the Chain follows a latency
+        that changes while playing, B2): no locks, nothing a message thread
+        may free; keep it in an atomic. */
     virtual int getLatencySamples() const noexcept { return 0; }
 
     /** True for blocks whose sound rings on after the input stops (delay,
@@ -109,6 +149,32 @@ public:
     /** Whether a preset sets this parameter (default: every parameter). A
         block leaves out its setup settings (e.g. a Quality switch). */
     virtual bool isPresetParameter (const Parameter&) const noexcept { return true; }
+
+    //== Keys (B2; message thread, while the chain isn't playing) ==============
+    /** The chain resolved this block's ref "keyBlock" (Chain::prepare): the
+        tap with the earlier block's output (numTapChannels channels, valid
+        while this chain lives; null when it didn't resolve), and why not
+        ("" when it did or wasn't asked for). Most blocks ignore it. */
+    virtual void setKeyTap (const float* const* tapChannels, int numTapChannels, const juce::String& problem)
+    {
+        juce::ignoreUnused (tapChannels, numTapChannels, problem);
+    }
+
+    /** The engine's input slot for the ref "keyInput" (-1: not on this
+        computer). AudioEngine::applyPatchRouting sets it when the chain is
+        built and whenever the routing changes. Any thread. */
+    virtual void setKeyInputSlot (int slot) noexcept { juce::ignoreUnused (slot); }
+
+    /** A block that can lead a link (a gate) shares its decision here. */
+    virtual const LinkBus* getLinkBus() const noexcept { return nullptr; }
+
+    /** The chain resolved this block's ref "linkTo" (Chain::prepare): the
+        leader's bus (null when it didn't resolve), and why not ("" when it
+        did or wasn't asked for). */
+    virtual void setLinkLeader (const LinkBus* leader, const juce::String& problem)
+    {
+        juce::ignoreUnused (leader, problem);
+    }
 
     //== Files (message thread) ================================================
     /** Non-null if this block loads a file. */
@@ -163,6 +229,7 @@ protected:
 private:
     const juce::String typeId, name;
     juce::String modelId, requestedFile;
+    Refs refs;
     std::vector<std::unique_ptr<Parameter>> parameters;
 
     std::atomic<bool> enabled { true };

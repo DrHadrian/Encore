@@ -136,7 +136,7 @@ public:
     void loadFileAsync (const juce::File& file, std::function<void (juce::String)> onDone) override;
     juce::File getLoadedFile() const override;
     juce::String getLoadedFileInfo() const override;
-    void collectGarbage() override { captures.collectGarbage(); }
+    void collectGarbage() override { captures.collectGarbage(); updateCaptureLatency(); }
 
     PedalEqBlock();
     ~PedalEqBlock() override;
@@ -159,6 +159,10 @@ public:
     bool isPresetParameter (const Parameter&) const noexcept override;
 
 private:
+    /** Message thread: the capture's latency, for getLatencySamples() on any thread. */
+    void updateCaptureLatency() noexcept;
+    std::atomic<int> captureLatency { 0 };
+
     void prepareBlock (const ProcessSpec&) override;
     void processBlock (float* const* channels, int numChannels, int numSamples,
                        const ProcessContext&) noexcept override;

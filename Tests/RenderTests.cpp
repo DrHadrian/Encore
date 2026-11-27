@@ -8,6 +8,7 @@
 
 #include "engine/blocks/EngineProbeBlock.h"
 #include "engine/blocks/PedalEqBlock.h"
+#include "engine/blocks/StudioGateBlock.h"
 #include "session/OfflineRender.h"
 
 namespace encore::test
@@ -164,6 +165,37 @@ public:
             expect (! render::readAudioFile (dir.getChildFile ("missing.wav"), error).has_value());
             expect (error.contains ("missing.wav"));
             dir.deleteRecursively();
+        }
+
+        beginTest ("Gates (B2): test material with gaps of noise; a Smart gate learns from it; refs and notes");
+        {
+            const auto test = render::makeGateTest (48000.0, -60.0f);
+            expectEquals (test.getNumSamples(), 10 * 48000);
+            expect (equal (test, render::makeGateTest (48000.0, -60.0f)), "deterministic");
+            expectWithinAbsoluteError (toDb (test.getMagnitude (0, 0, 48000)), -60.0f, 0.5f, "the noise alone, at its peak");
+
+            const auto r = render::renderBlock (test, 48000.0, "pedalGate", juce::var (new juce::DynamicObject()));
+            expect (r.ok, r.error);
+            expectEquals (r.notes.size(), 1);
+            expect (r.notes[0].contains ("learned floor -60") || r.notes[0].contains ("learned floor -59")
+                        || r.notes[0].contains ("learned floor -61"), r.notes[0]);
+            expect (r.report().contains ("Note: pedalGate"), "the notes are in the report");
+
+            // Alone, a keyBlock can't resolve: it falls back, and says so.
+            const auto keyed = render::renderBlock (test, 48000.0, "studioGate", juce::var (new juce::DynamicObject()), 64,
+                                                    "duckDelay", { { "keyBlock", "dry" } });
+            expect (keyed.ok, keyed.error);
+            expect (keyed.notes[0].contains ("listens to its own input"), keyed.notes[0]);
+
+            // The gate show: three patches, the pair linked, the ducker keyed from the dry tap.
+            const auto show = render::makeGateShow ({});
+            expectEquals ((int) show.patches.size(), 3);
+            const auto& pair = show.patches[0].mainLane().blocks;
+            expectEquals ((int) pair.size(), 3);
+            expectEquals (pair[2].refs.at ("linkTo"), pair[0].id);
+            const auto& duck = show.patches[1].mainLane().blocks;
+            expectEquals (duck.back().refs.at ("keyBlock"), juce::String ("dry"));
+            expectEquals (duck.back().params.at ("mode"), (float) StudioGateBlock::Mode::ducker);
         }
     }
 };

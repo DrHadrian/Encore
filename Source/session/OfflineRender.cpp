@@ -3,7 +3,15 @@
 
 #include "session/OfflineRender.h"
 
+#include <span>
+
+#include "engine/blocks/DelayBlock.h"
+#include "engine/blocks/GateBlock.h"
+#include "engine/blocks/NamAmpBlock.h"
+#include "engine/blocks/PedalEqBlock.h"
+#include "engine/blocks/StudioGateBlock.h"
 #include "engine/core/Chain.h"
+#include "engine/core/FactoryPresets.h"
 #include "model/ShowFolder.h"
 #include "session/PatchBuilder.h"
 
@@ -39,6 +47,40 @@ namespace
     };
 
     double now() { return juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks()); }
+
+    /** B2: what a gate did over a render, for the report's notes. */
+    struct GateWatch
+    {
+        const GateBlock* gate = nullptr;
+        juce::String name;
+        bool wasOpen = true;
+        int opens = 0;
+
+        void update() noexcept
+        {
+            const auto open = gate->isOpen();
+            opens += open && ! wasOpen ? 1 : 0;
+            wasOpen = open;
+        }
+
+        juce::String note() const
+        {
+            juce::String s;
+            s << name << ": opened " << opens << " time" << (opens == 1 ? "" : "s") << " (read per buffer), "
+              << "learned floor " << juce::String (gate->getLearnedFloorDb(), 1) << " dBFS"
+              << (gate->isLearningFrozen() ? " (frozen)" : "");
+
+            if (const auto key = gate->getKeyInfo(); key.isNotEmpty())
+                s << "; " << key;
+
+            if (const auto link = gate->getLinkInfo(); link.isNotEmpty())
+                s << "; " << link;
+            else if (gate->getLinkState() == GateBlock::LinkState::following)
+                s << "; linked (following)";
+
+            return s;
+        }
+    };
 
     void measureLevels (Result& r, const juce::AudioBuffer<float>& input)
     {
@@ -134,7 +176,8 @@ bool applySettings (Block& block, const juce::var& settings, juce::String& error
 
 //==============================================================================
 Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, const juce::String& typeId,
-                    const juce::var& settings, int blockSize, const juce::String& presetId)
+                    const juce::var& settings, int blockSize, const juce::String& presetId,
+                    const std::map<juce::String, juce::String>& refs)
 {
     Result r;
     r.sampleRate = sampleRate;
@@ -169,6 +212,22 @@ Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, co
     if (! applySettings (*block, settings, r.error))
         return r;
 
+    block->setRefs (refs);
+
+    // Alone, a block has no earlier block to key from or link to (B2): those
+    // refs fall back, and the notes say why.
+    if (! refs.empty())
+    {
+        if (refs.count ("keyBlock") > 0)
+            block->setKeyTap (nullptr, 0, "Key: a block rendered alone has no block before it, so it listens to its own input");
+
+        if (refs.count ("keyInput") > 0)
+            block->setKeyInputSlot (-1);   // no interface offline
+
+        if (refs.count ("linkTo") > 0)
+            block->setLinkLeader (nullptr, "Link: a gate rendered alone has no gate before it to follow");
+    }
+
     if (input.getNumChannels() < 1 || sampleRate <= 0.0)
     {
         r.error = "The input has no audio";
@@ -190,6 +249,10 @@ Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, co
     r.output.setSize (outChannels, input.getNumSamples());
 
     Timer timer { typeId, 0.0, 0.0, 0 };
+    std::optional<GateWatch> watch;
+
+    if (auto* gate = dynamic_cast<const GateBlock*> (block.get()))
+        watch = GateWatch { gate, typeId };
 
     for (int start = 0; start < input.getNumSamples(); start += blockSize)
     {
@@ -199,9 +262,16 @@ Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, co
         for (int ch = 0; ch < inChannels; ++ch)
             work.copyFrom (ch, 0, input, ch, start, length);
 
+        // The guitar, as the chain would give it: the input's first channel.
+        ProcessContext context;
+        context.chainInput = input.getReadPointer (0, start);
+
         const auto t0 = now();
-        block->process (work.getArrayOfWritePointers(), inChannels, length);
+        block->process (work.getArrayOfWritePointers(), inChannels, length, context);
         timer.add (now() - t0);
+
+        if (watch)
+            watch->update();
 
         for (int ch = 0; ch < outChannels; ++ch)
             r.output.copyFrom (ch, start, work, ch, 0, length);
@@ -209,6 +279,9 @@ Result renderBlock (const juce::AudioBuffer<float>& input, double sampleRate, co
 
     r.latencySamples = block->getLatencySamples();
     r.cpu.push_back (timer.stats (blockSize / sampleRate));
+
+    if (watch)
+        r.notes.add (watch->note());
     measureLevels (r, input);
     r.ok = true;
     return r;
@@ -249,8 +322,15 @@ Result renderPatch (const juce::AudioBuffer<float>& input, double sampleRate, co
     Timer total { "patch", 0.0, 0.0, 0 };
     std::vector<Timer> perBlock;
 
+    std::vector<GateWatch> gates;
+
     for (const auto& b : chain->getBlocks())
+    {
         perBlock.push_back ({ b->getTypeId() + " (" + b->getName() + ")", 0.0, 0.0, 0 });
+
+        if (auto* gate = dynamic_cast<const GateBlock*> (b.get()))
+            gates.push_back ({ gate, b->getTypeId() + " " + b->getModelId() });
+    }
 
     const auto bufferSeconds = blockSize / sampleRate;
 
@@ -267,6 +347,9 @@ Result renderPatch (const juce::AudioBuffer<float>& input, double sampleRate, co
         for (size_t i = 0; i < perBlock.size(); ++i)
             perBlock[i].add (chain->getBlocks()[i]->getCpuLoad() * bufferSeconds);
 
+        for (auto& g : gates)
+            g.update();
+
         for (int ch = 0; ch < r.output.getNumChannels(); ++ch)
             r.output.copyFrom (ch, start, work, juce::jmin (ch, channels - 1), 0, length);
     }
@@ -276,6 +359,9 @@ Result renderPatch (const juce::AudioBuffer<float>& input, double sampleRate, co
 
     for (const auto& t : perBlock)
         r.cpu.push_back (t.stats (bufferSeconds));
+
+    for (const auto& g : gates)
+        r.notes.add (g.note());
 
     measureLevels (r, input);
     r.ok = true;
@@ -300,6 +386,9 @@ juce::String Result::report() const
     for (const auto& c : cpu)
         s << "  " << c.name << ": " << juce::String (c.averageMicros, 1) << " / " << juce::String (c.worstMicros, 1) << " us, "
           << juce::String (c.averagePercent, 2) << " % / " << juce::String (c.worstPercent, 2) << " % of the buffer\n";
+
+    for (const auto& n : notes)
+        s << "Note: " << n << "\n";
 
     for (const auto& w : warnings)
         s << "Warning: " << w << "\n";
@@ -384,9 +473,58 @@ juce::AudioBuffer<float> makeSweep (double sampleRate, double seconds)
     return b;
 }
 
-juce::AudioBuffer<float> makePlucks (double sampleRate)
+namespace
 {
     struct Note { double start, fundamental; float peak; double decayMs; int harmonics; };
+
+    /** Notes over a noise floor (its peak in dBFS), mono, deterministic: each a
+        fundamental and falling harmonics with a 2 ms rise and an exponential
+        decay (decayMs to fall 60 dB). */
+    juce::AudioBuffer<float> synthesise (std::span<const Note> notes, double seconds, double sampleRate, float noiseFloorDb)
+    {
+        const auto length = (int) (seconds * sampleRate);
+        juce::AudioBuffer<float> b (1, length);
+        juce::Random random (42);
+        const auto noisePeak = juce::Decibels::decibelsToGain (noiseFloorDb, -200.0f);
+
+        for (int i = 0; i < length; ++i)
+            b.setSample (0, i, noisePeak * (random.nextFloat() * 2.0f - 1.0f));
+
+        for (const auto& n : notes)
+        {
+            const auto onset = (int) (n.start * sampleRate);
+            const auto rise = juce::jmax (1, (int) (0.002 * sampleRate));
+            const auto decay = std::pow (10.0, -60.0 / 20.0 / (n.decayMs * 0.001 * sampleRate));
+            auto norm = 0.0;
+
+            for (int h = 1; h <= n.harmonics; ++h)
+                norm += 1.0 / h;
+
+            auto env = 0.0;
+
+            for (int i = onset; i < length; ++i)
+            {
+                const auto k = i - onset;
+                env = k < rise ? (double) (k + 1) / rise : env * decay;
+
+                if (env < 1.0e-5 && k > rise)
+                    break;
+
+                auto tone = 0.0;
+
+                for (int h = 1; h <= n.harmonics; ++h)
+                    tone += std::sin (juce::MathConstants<double>::twoPi * n.fundamental * h * k / sampleRate) / h;
+
+                b.addSample (0, i, (float) (n.peak * env * tone / norm));
+            }
+        }
+
+        return b;
+    }
+}
+
+juce::AudioBuffer<float> makePlucks (double sampleRate)
+{
     const Note notes[] = {
         { 0.10, 82.41, 0.50f, 2500.0, 8 },   // low E, open
         { 1.30, 110.0, 0.45f, 2000.0, 8 },   // A
@@ -397,47 +535,90 @@ juce::AudioBuffer<float> makePlucks (double sampleRate)
         { 4.40, 98.0,  0.89f, 1800.0, 10 },  // a hard accent (G), near full scale
     };
 
-    const auto length = (int) (6.5 * sampleRate);
-    juce::AudioBuffer<float> b (1, length);
-    juce::Random random (42);
-
-    for (int i = 0; i < length; ++i)   // the noise floor, -70 dBFS peak
-        b.setSample (0, i, 0.000316f * (random.nextFloat() * 2.0f - 1.0f));
-
-    for (const auto& n : notes)
-    {
-        const auto onset = (int) (n.start * sampleRate);
-        const auto rise = juce::jmax (1, (int) (0.002 * sampleRate));
-        const auto decay = std::pow (10.0, -60.0 / 20.0 / (n.decayMs * 0.001 * sampleRate));
-        auto norm = 0.0;
-
-        for (int h = 1; h <= n.harmonics; ++h)
-            norm += 1.0 / h;
-
-        auto env = 0.0;
-
-        for (int i = onset; i < length; ++i)
-        {
-            const auto k = i - onset;
-            env = k < rise ? (double) (k + 1) / rise : env * decay;
-
-            if (env < 1.0e-5 && k > rise)
-                break;
-
-            auto tone = 0.0;
-
-            for (int h = 1; h <= n.harmonics; ++h)
-                tone += std::sin (juce::MathConstants<double>::twoPi * n.fundamental * h * k / sampleRate) / h;
-
-            b.addSample (0, i, (float) (n.peak * env * tone / norm));
-        }
-    }
+    auto b = synthesise (notes, 6.5, sampleRate, -70.0f);   // the noise floor, -70 dBFS peak
 
     // The harmonics never peak together: scale so the accent reaches -1 dBFS.
-    if (const auto top = b.getMagnitude (0, 0, length); top > 0.0f)
+    if (const auto top = b.getMagnitude (0, 0, b.getNumSamples()); top > 0.0f)
         b.applyGain (juce::Decibels::decibelsToGain (-1.0f) / top);
 
     return b;
+}
+
+juce::AudioBuffer<float> makeGateTest (double sampleRate, float noiseFloorDb)
+{
+    const Note notes[] = {
+        { 1.50, 110.0, 0.50f, 1200.0, 6 },   // a note, ringing out into the noise
+        { 3.50, 82.41, 0.45f, 120.0, 3 },    // palm-muted chugs
+        { 3.75, 82.41, 0.45f, 120.0, 3 },
+        { 4.00, 82.41, 0.45f, 120.0, 3 },
+        { 4.25, 82.41, 0.45f, 120.0, 3 },
+        { 5.50, 98.0,  0.30f, 2500.0, 8 },   // a held chord, slowly decaying
+        { 5.50, 123.5, 0.25f, 2500.0, 6 },
+        { 5.50, 146.8, 0.25f, 2500.0, 6 },
+    };
+
+    // Not normalised: the noise floor stays where it was asked for.
+    return synthesise (notes, 10.0, sampleRate, noiseFloorDb);
+}
+
+//==============================================================================
+ShowModel makeGateShow (const juce::File& ampModel)
+{
+    auto show = makeDefaultShow ("Gates");
+    show.patches.clear();
+
+    const auto fromBlock = [] (Block& block, const juce::String& id, const juce::String& presetId = {})
+    {
+        if (presetId.isNotEmpty())
+            if (const auto* preset = presets::find (block, presetId))
+                presets::apply (block, *preset);
+
+        BlockModel m;
+        m.id = id;
+        m.type = block.getTypeId();
+
+        for (const auto& p : block.getParameters())
+            m.params[p->getSpec().id] = p->getValue();
+
+        return m;
+    };
+
+    // The Gate pair around an amp.
+    auto pair = makeDefaultPatch ("Gate pair");
+    pair.mainLane().blocks.clear();
+    BlockModel amp;
+    amp.id = "amp";
+    amp.type = NamAmpBlock::typeId;
+    amp.file = ampModel.getFullPathName();
+    pair.mainLane().blocks.push_back (amp);
+    auto n = 0;
+    addGatePair (pair, [&n] { return juce::String (++n == 1 ? "gateIn" : "gateOut"); });
+    show.patches.push_back (pair);
+
+    // A ducking delay: the X4 after the delay, keyed from the dry signal before it.
+    auto duck = makeDefaultPatch ("Ducking delay");
+    auto& blocks = duck.mainLane().blocks;
+    blocks.clear();
+    PedalEqBlock dry;
+    blocks.push_back (fromBlock (dry, "dry", "flat"));
+    DelayBlock delay;
+    blocks.push_back (fromBlock (delay, "delay"));
+    blocks.back().params["time"] = 350.0f;
+    blocks.back().params["feedback"] = 45.0f;
+    blocks.back().params["mix"] = 50.0f;
+    StudioGateBlock ducker;
+    blocks.push_back (fromBlock (ducker, "duck", "duckDelay"));
+    blocks.back().refs["keyBlock"] = "dry";
+    show.patches.push_back (duck);
+
+    // A Studio Gate in Smart mode, learning from -70.
+    auto smart = makeDefaultPatch ("Smart X4");
+    smart.mainLane().blocks.clear();
+    StudioGateBlock x4;
+    smart.mainLane().blocks.push_back (fromBlock (x4, "x4", "highGain"));
+    show.patches.push_back (smart);
+
+    return show;
 }
 
 } // namespace encore::render

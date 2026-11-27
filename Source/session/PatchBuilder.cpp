@@ -7,6 +7,8 @@
 #include "engine/blocks/DelayBlock.h"
 #include "engine/blocks/EngineProbeBlock.h"
 #include "engine/blocks/PedalEqBlock.h"
+#include "engine/blocks/PedalGateBlock.h"
+#include "engine/blocks/StudioGateBlock.h"
 #include "engine/blocks/EqBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
@@ -27,6 +29,8 @@ const std::vector<BlockType>& getBlockTypes()
         { EqBlock::typeId,        "EQ" },
         { DelayBlock::typeId,     "Delay" },
         { PedalEqBlock::typeId,   "Pedal EQ", true, true },   // FX Unit, hidden until U1 and the rig test
+        { PedalGateBlock::typeId, "Pedal Gate", true, true }, // FX Unit, hidden until U2 and the rig test
+        { StudioGateBlock::typeId, "Studio Gate", true, true }, // FX Unit, hidden until U2 (then it takes over "gate")
         { EngineProbeBlock::typeId, "Engine probe", true, true },
     };
     return types;
@@ -60,6 +64,8 @@ std::unique_ptr<Block> createBlock (const juce::String& typeId)
     if (typeId == EqBlock::typeId)        return std::make_unique<EqBlock>();
     if (typeId == DelayBlock::typeId)     return std::make_unique<DelayBlock>();
     if (typeId == PedalEqBlock::typeId)   return std::make_unique<PedalEqBlock>();
+    if (typeId == PedalGateBlock::typeId) return std::make_unique<PedalGateBlock>();
+    if (typeId == StudioGateBlock::typeId) return std::make_unique<StudioGateBlock>();
     if (typeId == EngineProbeBlock::typeId) return std::make_unique<EngineProbeBlock>();
     if (typeId == SplitBlock::typeId)     return std::make_unique<SplitBlock>();
     if (typeId == MergeBlock::typeId)     return std::make_unique<MergeBlock>();
@@ -154,6 +160,7 @@ std::unique_ptr<Chain> buildChain (const PatchModel& patch, const ShowFolder& fo
         }
 
         block->setModelId (model.id);
+        block->setRefs (model.refs);
         block->setEnabled (model.enabled);
         block->setStomp (model.stomp);
 
@@ -226,6 +233,7 @@ void captureChain (const Chain& chain, PatchModel& patch, const ShowFolder& fold
         model.type = block->getTypeId();
         model.enabled = block->isEnabled();
         model.stomp = block->getStomp();
+        model.refs = block->getRefs();
 
         const auto* previous = findPrevious (model.id);
 

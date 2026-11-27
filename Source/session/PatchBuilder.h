@@ -6,6 +6,7 @@
 #include "engine/core/Chain.h"
 #include "model/ShowFolder.h"
 
+#include <functional>
 #include <memory>
 
 namespace encore
@@ -70,5 +71,25 @@ std::unique_ptr<Block> createPluginBlock (const BlockModel& model, const Process
     from. Message thread. Files inside the show folder are stored as
     show-relative paths. */
 void captureChain (const Chain& chain, PatchModel& patch, const ShowFolder& folder);
+
+//== Gates (B2) ================================================================
+/** What a patch's blocks learned while playing (a Smart gate's noise floor)
+    carries over to the chain rebuilt from an edit, block by block id
+    (GATE-PLAN 23). Message thread, before `rebuilt` plays; `playing` may be
+    playing (its learned values are atomics). */
+void carryLearnedState (const Chain& playing, Chain& rebuilt);
+
+/** The Gate pair (GATE-PLAN 21): a Pedal Gate before the patch's first amp
+    (Soft, Threshold 3) and one after it (Hard, Detect Guitar), linked to the
+    first. Both in the amp's lane; `newId` names each. False, and nothing
+    changes, if the patch has no amp. */
+bool addGatePair (PatchModel& patch, const std::function<juce::String()>& newId);
+
+/** Today's gate ("gate") as a Studio Gate (GATE-PLAN 11): Threshold and Range
+    copy over, Release is converted so it closes along the same line (today's
+    is a time constant), Detect guitar becomes Key Guitar or Input, the rest
+    stays at the defaults (today's fixed values). Written for U2's switch-over;
+    nothing calls it yet. A block of any other type comes back unchanged. */
+BlockModel convertOldGate (const BlockModel& gate);
 
 } // namespace encore

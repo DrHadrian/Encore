@@ -68,6 +68,52 @@ namespace
         std::array<std::vector<float>, 2> lines;
     };
 
+    /** Delays by a latency that can change while it plays (as the Pedal EQ's
+        clip stage or a gate's look-ahead coming in), jumping to it. */
+    class VariableLatencyBlock final : public Block
+    {
+    public:
+        static constexpr int maxLatency = 256;
+        VariableLatencyBlock() : Block ("testLatency", "Latency") {}
+
+        int getLatencySamples() const noexcept override { return latency.load(); }
+        std::atomic<int> latency { 0 };
+
+    private:
+        void prepareBlock (const ProcessSpec&) override
+        {
+            for (auto& line : lines)
+                line.assign ((size_t) maxLatency + 1, 0.0f);
+        }
+
+        void resetBlock() noexcept override
+        {
+            for (auto& line : lines)
+                std::fill (line.begin(), line.end(), 0.0f);
+        }
+
+        void processBlock (float* const* ch, int numChannels, int n, const ProcessContext&) noexcept override
+        {
+            const auto delay = latency.load();
+            const auto size = maxLatency + 1;
+
+            for (int i = 0; i < n; ++i)
+            {
+                for (int c = 0; c < numChannels; ++c)
+                {
+                    auto& line = lines[(size_t) c];
+                    line[(size_t) write] = ch[c][i];
+                    ch[c][i] = line[(size_t) ((write - delay + size) % size)];
+                }
+
+                write = (write + 1) % size;
+            }
+        }
+
+        int write = 0;
+        std::array<std::vector<float>, 2> lines;
+    };
+
     /** A mono-only block that records how many channels it was given. */
     class MonoProbe final : public Block
     {
@@ -240,6 +286,51 @@ public:
 
             auto far = makeSplit (list (std::make_unique<TestGainBlock> (1.0f, Chain::maxAlignmentSamples + 10)), {});
             expect (far->isAlignmentLimited());
+        }
+
+        beginTest ("A latency that changes while playing: the paths follow it, crossfaded (B2)");
+        {
+            auto variable = std::make_unique<VariableLatencyBlock>();
+            auto* a = variable.get();
+            auto chain = makeSplit (list (std::move (variable)), list (std::make_unique<TestGainBlock> (1.0f)));
+            expectEquals (chain->getPathLatencyDifference(), 0);
+
+            // A 1 kHz sine at 48 kHz: 24 samples is half a period, so unaligned
+            // halves cancel and aligned ones add up to the full 1.0.
+            Stereo io;
+            double phase = 0.0;
+            auto runSine = [&] (int buffers)
+            {
+                float peak = 0.0f;
+
+                for (int k = 0; k < buffers; ++k)
+                {
+                    for (int i = 0; i < blockSize; ++i, phase += 1000.0 / sampleRate)
+                        io.left[(size_t) i] = (float) std::sin (juce::MathConstants<double>::twoPi * phase);
+
+                    std::fill (io.right.begin(), io.right.end(), 0.0f);
+                    chain->process (io.channels, blockSize);
+
+                    for (auto x : io.left)
+                        peak = juce::jmax (peak, std::abs (x));
+                }
+
+                return peak;
+            };
+
+            expectWithinAbsoluteError (runSine (40), 1.0f, 1.0e-3f, "aligned at the start");
+
+            a->latency = 24;
+            const auto during = runSine (2);   // the first ~2.7 ms of the 30 ms fade
+            expect (during < 0.9f, "not lined up at once: the fade takes its time");
+            expectEquals (chain->getPathLatencyDifference(), -24, "the report follows at once");
+            expectEquals (chain->getLatencySamples(), 24);
+            expectWithinAbsoluteError (runSine (60), 1.0f, 2.0e-3f, "lined up again after the fade: no comb");
+
+            a->latency = 0;
+            runSine (60);
+            expectWithinAbsoluteError (runSine (10), 1.0f, 2.0e-3f, "and back");
+            expectEquals (chain->getPathLatencyDifference(), 0);
         }
 
         beginTest ("Channels: stereo after the merge; an amp after it gets the sum");

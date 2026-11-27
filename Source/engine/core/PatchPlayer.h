@@ -116,6 +116,7 @@ public:
     {
         std::array<const float*, (size_t) routing::maxInputs> inputs {};   // null: silence
         std::array<float*, (size_t) routing::maxOutputs> left {}, right {}; // null: no such output
+        bool tunerOpen = false;                                             // passed to every block (B2)
     };
 
     //== Audio thread ==========================================================
@@ -209,6 +210,7 @@ private:
     std::array<Slot, (size_t) maxFading> ringing;
     int cueIndex = -1;
     std::array<std::vector<float>, (size_t) routing::maxInputs> inputCopies;
+    std::array<const float*, (size_t) routing::maxInputs> keyInputs {};   // the copies, for keyed blocks (null: absent)
     std::array<bool, (size_t) routing::maxInputs> inputGiven {};
     std::array<std::vector<float>, (size_t) Block::maxChannels> slotBuffers;
     std::vector<float> silence, mixLeft, mixRight;
