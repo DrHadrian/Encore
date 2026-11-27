@@ -21,7 +21,8 @@ enum class FilterShape
     highCut,     // Butterworth, 6..96 dB/oct
     notch,
     bandPass,
-    allPass
+    allPass,
+    tiltShelf    // decramped; -gain/2 below the frequency, +gain/2 above (B3)
 };
 
 /** What a band is set to. Plain data, any thread. */
@@ -30,8 +31,8 @@ struct FilterSettings
     FilterShape shape = FilterShape::bell;
     double frequency = 1000.0;     // Hz (clamped below Nyquist)
     double gainDb = 0.0;           // bells and shelves
-    double q = 0.7071;             // bells, shelves, notch, band pass, all pass
-    int slopeDbPerOctave = 12;     // cuts: 6, 12 ... 96 (multiples of 6)
+    double q = 0.7071;             // bells, shelves at 12 dB/oct, notch, band pass, all pass
+    int slopeDbPerOctave = 12;     // 6, 12 ... 96 (multiples of 6): the filter's order x 6, as in Pro-Q; a bell ignores it
 
     bool operator== (const FilterSettings&) const = default;
 };

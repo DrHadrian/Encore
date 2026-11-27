@@ -600,6 +600,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/MidiTests.cpp
         Tests/ModuleBaseTests.cpp
         Tests/ModuleDspTests.cpp
+        Tests/EqShapeTests.cpp
         Tests/ModuleTypeTests.cpp
         Tests/PedalEqCaptureTests.cpp
         Tests/PedalEqTests.cpp

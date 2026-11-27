@@ -60,6 +60,11 @@ namespace design
     BiquadDesign matchedLowShelf (double sampleRate, double frequency, double q, double gainDb) noexcept;
     BiquadDesign matchedHighShelf (double sampleRate, double frequency, double q, double gainDb) noexcept;
 
+    /** First-order (6 dB/oct) shelves, frequency = the half-gain point: the
+        pole impulse-invariant, the numerator matched at DC and at Nyquist. */
+    BiquadDesign matchedFirstOrderLowShelf (double sampleRate, double frequency, double gainDb) noexcept;
+    BiquadDesign matchedFirstOrderHighShelf (double sampleRate, double frequency, double gainDb) noexcept;
+
     //== Bilinear (TPT) sections ===============================================
     // Prewarped at the corner, exactly what the TPT state-variable filter
     // computes natively. Used for cuts, notches, band passes and all passes.
@@ -71,6 +76,7 @@ namespace design
     BiquadDesign allPass (double sampleRate, double frequency, double q) noexcept;
     BiquadDesign firstOrderLowPass (double sampleRate, double frequency) noexcept;
     BiquadDesign firstOrderHighPass (double sampleRate, double frequency) noexcept;
+    BiquadDesign firstOrderAllPass (double sampleRate, double frequency) noexcept;   // -90 degrees at the frequency
 
     /** Q of section `index` (0-based) of a Butterworth filter of `order`
         (pairs of poles; an odd order adds one first-order section). */
@@ -84,6 +90,11 @@ namespace analog
     double bellDb (double frequency, double centre, double q, double gainDb) noexcept;
     double lowShelfDb (double frequency, double centre, double q, double gainDb) noexcept;
     double highShelfDb (double frequency, double centre, double q, double gainDb) noexcept;
+
+    /** Butterworth shelves of `order` (1 = 6 dB/oct): |H|^2 = (G^2 + x^2N) / (1 + x^2N),
+        with the half-gain point (in dB) at `centre`. */
+    double butterworthLowShelfDb (double frequency, double centre, int order, double gainDb) noexcept;
+    double butterworthHighShelfDb (double frequency, double centre, int order, double gainDb) noexcept;
 
     /** Butterworth of `order` (1 = 6 dB/oct). */
     double butterworthLowPassDb (double frequency, double corner, int order) noexcept;
