@@ -43,6 +43,18 @@ std::array<Parameter*, PedalEqBlock::numBands> PedalEqBlock::addBands()
     return made;
 }
 
+float PedalEqBlock::inputGainFor (Input setting) noexcept
+{
+    switch (setting)
+    {
+        case Input::pad:    return juce::Decibels::decibelsToGain (padDb);
+        case Input::boost:  return juce::Decibels::decibelsToGain (boostDb);
+        case Input::normal: break;
+    }
+
+    return 1.0f;
+}
+
 double PedalEqBlock::qFor (QMode mode, double gainDb) noexcept
 {
     if (mode == QMode::wide)
@@ -78,6 +90,7 @@ void PedalEqBlock::prepareBlock (const ProcessSpec& spec)
 {
     sampleRate = spec.sampleRate;
     qFade.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate);
+    inputGain.reset (spec.sampleRate, dsp::Crossfade::defaultSeconds);
 }
 
 void PedalEqBlock::resetBlock() noexcept
@@ -92,6 +105,57 @@ void PedalEqBlock::resetBlock() noexcept
     }
 
     qFade.reset();
+    inputGain.setCurrentAndTargetValue (inputGainFor ((Input) input.getChoiceIndex()));
+}
+
+void PedalEqBlock::processInput (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    inputGain.setTargetValue (inputGainFor ((Input) juce::roundToInt (input.skip (numSamples))));
+
+    if (! inputGain.isSmoothing())
+    {
+        const auto g = inputGain.getCurrentValue();
+
+        if (! juce::exactlyEqual (g, 1.0f))   // Normal touches nothing: bit-exact
+            for (int ch = 0; ch < numChannels; ++ch)
+                juce::FloatVectorOperations::multiply (channels[ch], g, numSamples);
+
+        return;
+    }
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto g = inputGain.getNextValue();
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            channels[ch][i] *= g;
+    }
+}
+
+void PedalEqBlock::processLevel (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    if (! level.isSmoothing())
+    {
+        const auto db = level.skip (numSamples);
+
+        if (! juce::exactlyEqual (db, 0.0f))   // 0 dB touches nothing: bit-exact
+        {
+            const auto g = juce::Decibels::decibelsToGain (db);
+
+            for (int ch = 0; ch < numChannels; ++ch)
+                juce::FloatVectorOperations::multiply (channels[ch], g, numSamples);
+        }
+
+        return;
+    }
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto g = juce::Decibels::decibelsToGain (level.nextValue());
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            channels[ch][i] *= g;
+    }
 }
 
 void PedalEqBlock::processBands (float* const* channels, int numChannels, int numSamples) noexcept
@@ -153,7 +217,10 @@ void PedalEqBlock::processBands (float* const* channels, int numChannels, int nu
 void PedalEqBlock::processBlock (float* const* channels, int numChannels, int numSamples,
                                  const ProcessContext&) noexcept
 {
+    // EQ-PLAN §3.1: Input -> character capture -> 7 bands -> soft clip -> Level.
+    processInput (channels, numChannels, numSamples);
     processBands (channels, numChannels, numSamples);
+    processLevel (channels, numChannels, numSamples);
 }
 
 } // namespace encore

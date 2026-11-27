@@ -50,6 +50,11 @@ public:
     static constexpr double qAtZero = 1.07, qAtFullScale = 2.87;
     static constexpr int updateInterval = 16;   // samples between redesigns while a slider moves
 
+    static constexpr float padDb = -6.0f, boostDb = 6.0f;
+
+    /** The Input switch's gain (linear). Any thread. */
+    static float inputGainFor (Input setting) noexcept;
+
     /** The band's Q for a gain, in each Q mode. Any thread. */
     static double qFor (QMode mode, double gainDb) noexcept;
 
@@ -80,7 +85,13 @@ private:
     Parameter& realClip;
 
     // Audio thread.
+    void processInput (float* const* channels, int numChannels, int numSamples) noexcept;
     void processBands (float* const* channels, int numChannels, int numSamples) noexcept;
+    void processLevel (float* const* channels, int numChannels, int numSamples) noexcept;
+
+    // The Input switch moves its gain over 10 ms: for a gain, the same as a
+    // crossfade between the two settings, at no extra cost.
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> inputGain;
 
     double sampleRate = 48000.0;
     std::array<dsp::FilterBand<maxChannels>, numBands> filters, oldFilters;

@@ -282,6 +282,66 @@ public:
             expect (std::all_of (out.begin(), out.end(), [] (float v) { return std::isfinite (v) && std::abs (v) < 50.0f; }));
         }
 
+        beginTest ("Input: Pad -6 dB and Boost +6 dB, exact; Level +/-15 dB after the bands");
+        {
+            const auto rmsDb = [] (const std::vector<float>& v) { return toDb (rms (v, (int) v.size() / 2, (int) v.size())); };
+            const auto quiet = sine (440.0, 0.05f, 9600);   // -26 dBFS: far below the soft clip
+            const auto dry = rmsDb (quiet);
+
+            struct Case { float input; float level; double expectedDb; };
+
+            for (const auto& c : { Case { 0.0f, 0.0f, -6.0 }, Case { 2.0f, 0.0f, 6.0 }, Case { 1.0f, -15.0f, -15.0 },
+                                   Case { 1.0f, 15.0f, 15.0 }, Case { 0.0f, 9.0f, 3.0 } })
+            {
+                PedalEqBlock eq;
+                eq.findParameter ("input")->setValue (c.input);
+                eq.findParameter ("level")->setValue (c.level);
+                expectWithinAbsoluteError ((double) (rmsDb (play (eq, quiet)) - dry), c.expectedDb, 0.01,
+                                           "input " + juce::String (c.input) + ", level " + juce::String (c.level));
+            }
+
+            expectWithinAbsoluteError (PedalEqBlock::inputGainFor (PedalEqBlock::Input::pad), 0.501187f, 1.0e-6f);
+            expectWithinAbsoluteError (PedalEqBlock::inputGainFor (PedalEqBlock::Input::boost), 1.995262f, 1.0e-6f);
+            expectEquals (PedalEqBlock::inputGainFor (PedalEqBlock::Input::normal), 1.0f);
+
+            // Pad with Level +6: the gains are exact sample by sample (no ramp left).
+            PedalEqBlock eq;
+            eq.findParameter ("input")->setValue (0.0f);
+            eq.findParameter ("level")->setValue (6.0f);
+            const auto input = noise (0.05f, 4800, 8);
+            const auto out = play (eq, input);
+            const auto gain = PedalEqBlock::inputGainFor (PedalEqBlock::Input::pad) * juce::Decibels::decibelsToGain (6.0f);
+            auto worst = 0.0f;
+
+            for (size_t i = 0; i < input.size(); ++i)
+                worst = std::max (worst, std::abs (out[i] - input[i] * gain));
+
+            expectLessThan (worst, 1.0e-7f);
+        }
+
+        beginTest ("Switching Input moves the gain over 10 ms: no jump");
+        {
+            PedalEqBlock eq;
+            auto* in = eq.findParameter ("input");
+            const auto tone = sine (220.0, 0.05f, 19200);
+            auto maxStep = 0.0f, maxToneStep = 0.0f;
+
+            for (size_t i = 1; i < tone.size(); ++i)
+                maxToneStep = std::max (maxToneStep, std::abs (tone[i] - tone[i - 1]));
+
+            const auto out = play (eq, tone, sampleRate, 64, [&] (int start)
+            {
+                if (start == 4800) in->setValue (2.0f);
+                if (start == 9600) in->setValue (0.0f);
+                if (start == 14400) in->setValue (1.0f);
+            });
+
+            for (size_t i = 1; i < out.size(); ++i)
+                maxStep = std::max (maxStep, std::abs (out[i] - out[i - 1]));
+
+            expectLessThan (maxStep, maxToneStep * 2.2f, "a hard switch would jump");
+        }
+
         beginTest ("No allocation while playing, moving sliders and switching Q");
         {
             PedalEqBlock eq;
@@ -293,6 +353,8 @@ public:
                 sliders[b] = eq.findParameter (PedalEqBlock::bandIds[b]);
 
             auto* q = eq.findParameter ("qMode");
+            auto* inputParameter = eq.findParameter ("input");
+            auto* levelParameter = eq.findParameter ("level");
             std::vector<float> a ((size_t) blockSize, 0.25f), b ((size_t) blockSize, -0.25f);
             float* channels[2] = { a.data(), b.data() };
 
@@ -304,6 +366,8 @@ public:
                 {
                     sliders[(size_t) (i % 7)]->setValue ((float) ((i * 7) % 31 - 15));
                     q->setValue ((float) ((i / 20) % 2));
+                    inputParameter->setValue ((float) ((i / 15) % 3));
+                    levelParameter->setValue ((float) ((i * 3) % 31 - 15));
                     eq.process (channels, 2, blockSize, {});
                 }
             }
