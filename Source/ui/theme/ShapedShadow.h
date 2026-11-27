@@ -47,9 +47,6 @@ public:
         Clear inside the owner's rounded shape. */
     static juce::Image render (juce::Point<int> ownerSize, const Look&, float scale);
 
-    /** How often shadows were painted and the last clip (diagnostics for tests). */
-    static juce::String paintsForTests();
-
     ~ShapedShadow() override;
 
 private:

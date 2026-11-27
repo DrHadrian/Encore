@@ -3,7 +3,6 @@
 
 #include "ScreenCapture.h"
 
-#include <cstdio>
 
 #if defined (_WIN32)
  #ifndef NOMINMAX
@@ -75,39 +74,7 @@ std::vector<std::uint32_t> capture (int x, int y, int width, int height, std::st
     return pixels;
 }
 
-std::string describeWindow (void* nativeWindow)
-{
-    if (nativeWindow == nullptr)
-        return "no window";
-
-    const auto hwnd = (HWND) nativeWindow;
-    RECT r {};
-    GetWindowRect (hwnd, &r);
-    char text[200];
-    std::snprintf (text, sizeof (text), "%s %ld,%ld-%ld,%ld ex %08lx style %08lx owner %p",
-                   IsWindowVisible (hwnd) ? "visible" : "hidden", r.left, r.top, r.right, r.bottom,
-                   (unsigned long) GetWindowLongPtr (hwnd, GWL_EXSTYLE), (unsigned long) GetWindowLongPtr (hwnd, GWL_STYLE),
-                   (void*) GetWindow (hwnd, GW_OWNER));
-    return text;
-}
-
-int windowsAbove (void* nativeWindow)
-{
-    if (nativeWindow == nullptr)
-        return -1;
-
-    int count = 0;
-
-    for (auto w = GetWindow ((HWND) nativeWindow, GW_HWNDPREV); w != nullptr; w = GetWindow (w, GW_HWNDPREV))
-        ++count;
-
-    return count;
-}
-
 #else
-
-int windowsAbove (void*) { return -1; }
-std::string describeWindow (void*) { return {}; }
 
 std::vector<std::uint32_t> capture (int, int, int, int, std::string& error)
 {

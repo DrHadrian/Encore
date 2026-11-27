@@ -173,21 +173,6 @@ private:
                << " bottom " << at (w / 2, h - 1 + o).toDisplayString (false)
                << " right " << at (w - 1 + o, h / 2).toDisplayString (false);
 
-        if (layer != nullptr)
-        {
-            const auto paints = theme::ShapedShadow::paintsForTests();   // before the snapshot paints it too
-            const auto snapshot = layer->createComponentSnapshot (layer->getLocalBounds(), true, 1.0f);
-            report << ", layer " << layer->getScreenBounds().toString() << (layer->isVisible() ? " visible" : " hidden")
-                   << " alpha at its bottom middle " << (int) snapshot.getPixelAt (snapshot.getWidth() / 2, snapshot.getHeight() - 50).getAlpha()
-                   << ", on screen " << paints
-                   << ", windows above: backdrop " << screen::windowsAbove (backdrop.getWindowHandle())
-                   << " menu " << screen::windowsAbove (window->getWindowHandle())
-                   << " layer " << screen::windowsAbove (layer->getWindowHandle())
-                   << ", on top: menu " << (int) window->isAlwaysOnTop() << " layer " << (int) layer->isAlwaysOnTop()
-                   << ", native menu [" << screen::describeWindow (window->getWindowHandle())
-                   << "] layer [" << screen::describeWindow (layer->getWindowHandle()) << "] menu hwnd " << juce::String::toHexString ((juce::pointer_sized_int) window->getWindowHandle());
-        }
-
         logMessage (report);
 
         // A corner is the backdrop, at most darkened by the shadow: still magenta

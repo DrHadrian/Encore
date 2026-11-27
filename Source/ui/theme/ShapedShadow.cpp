@@ -46,9 +46,6 @@ struct ShapedShadow::Layer final : juce::Component
 
     void paint (juce::Graphics& g) override
     {
-        ++paints;
-        lastPaintClip = g.getClipBounds();
-
         if (owner == nullptr)
             return;
 
@@ -64,9 +61,6 @@ struct ShapedShadow::Layer final : juce::Component
 
         g.drawImage (image, getLocalBounds().toFloat());
     }
-
-    static inline int paints = 0;
-    static inline juce::Rectangle<int> lastPaintClip;
 
     juce::Component::SafePointer<juce::Component> owner;
     Look look;
@@ -339,11 +333,6 @@ void ShapedShadow::update()
     // 600 ms later. The image is cached, so this costs a copy.
     if (auto* layerPeer = onDesktop ? layer->getPeer() : nullptr)
         layerPeer->performAnyPendingRepaintsNow();
-}
-
-juce::String ShapedShadow::paintsForTests()
-{
-    return juce::String (Layer::paints) + " paints, last clip " + Layer::lastPaintClip.toString();
 }
 
 void ShapedShadow::componentMovedOrResized (juce::Component&, bool, bool) { update(); }
