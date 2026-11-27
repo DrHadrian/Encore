@@ -116,9 +116,12 @@ struct GateEnvelopeSettings
     The other modes (B2, for the Studio Gate "X4"):
     - Expander: below the threshold each dB of level comes out ratio dB
       lower, so the reduction is (threshold - level) * (ratio - 1) dB, at
-      most |Range|. It has no open/closed state, so no hold or hysteresis.
-      Attack and release move the reduction in dB: |Range| in the attack
-      time while it lets go, |Range| in the release time while it pulls down.
+      most |Range|. Attack and release move the reduction in dB: |Range| in
+      the attack time while it lets go, |Range| in the release time while it
+      pulls down. Its gain needs no open/closed state, but isOpen() (the OPEN
+      light, and the decision a linked follower takes) uses the gate's
+      hysteresis and hold, so it doesn't flicker as the noise brushes the
+      threshold.
     - Ducker: the gate turned over. While the key is at or above the
       threshold (closing below threshold - hysteresis after the hold, as
       the gate) the gain falls to Range within the attack time, linearly in
@@ -195,21 +198,10 @@ public:
     /** One level in, the gain out (Range..1). */
     float process (float level) noexcept
     {
+        decide (level);
+
         if (settings.mode == GateMode::expander)
             return expand (level);
-
-        if (level >= openLevel)
-        {
-            isOpenNow = true;
-            holdCounter = holdSamples;
-        }
-        else if (isOpenNow && level < closeLevel)
-        {
-            if (holdCounter > 0)
-                --holdCounter;
-            else
-                isOpenNow = false;
-        }
 
         return follow (isOpenNow);
     }
@@ -218,11 +210,12 @@ public:
         or closed, and the level for the expander. Own attack, release and range. */
     float processWithDecision (bool open, float level) noexcept
     {
+        isOpenNow = open;
+        holdCounter = holdSamples;
+
         if (settings.mode == GateMode::expander)
             return expand (level);
 
-        isOpenNow = open;
-        holdCounter = holdSamples;
         return follow (open);
     }
 
@@ -237,6 +230,23 @@ public:
 
 private:
     static float dbToGain (float db) noexcept { return std::pow (10.0f, db / 20.0f); }
+
+    /** Open at the threshold; closed below threshold - hysteresis, after the hold. */
+    void decide (float level) noexcept
+    {
+        if (level >= openLevel)
+        {
+            isOpenNow = true;
+            holdCounter = holdSamples;
+        }
+        else if (isOpenNow && level < closeLevel)
+        {
+            if (holdCounter > 0)
+                --holdCounter;
+            else
+                isOpenNow = false;
+        }
+    }
 
     /** Gate and ducker: the gain follows the decision. */
     float follow (bool open) noexcept
@@ -271,8 +281,6 @@ private:
             reductionDb = std::max (target, reductionDb - attackDbStep);
         else if (target > reductionDb)
             reductionDb = std::min (target, reductionDb + releaseDbStep);
-
-        isOpenNow = levelDb >= thresholdDb;
 
         gain = reductionDb <= 0.0f ? 1.0f : dbToGain (-reductionDb);
         return gain;

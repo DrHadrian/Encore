@@ -716,6 +716,41 @@ public:
         }
 
         //== B2: the gate modes ===============================================
+        beginTest ("Expander: its open flag (the OPEN light, a follower's decision) keeps the gate's hysteresis and hold");
+        {
+            dsp::GateEnvelopeSettings settings;
+            settings.mode = dsp::GateMode::expander;
+            settings.thresholdDb = -54.0f;
+            settings.ratio = 2.0f;
+            settings.rangeDb = -15.0f;   // the S2's Soft
+
+            dsp::LevelDetector detector;
+            detector.prepare (sampleRate);
+            dsp::GateEnvelope gate;
+            gate.prepare (sampleRate);
+            gate.setSettings (settings);
+            gate.reset (true);
+
+            // Noise whose peak sits right at the threshold, then well below the close level.
+            auto changes = 0;
+            auto was = gate.isOpen();
+
+            for (auto x : noise (juce::Decibels::decibelsToGain (-54.0f), 2 * 48000, 7))
+            {
+                gate.process (detector.process (std::abs (x)));
+                changes += gate.isOpen() != was ? 1 : 0;
+                was = gate.isOpen();
+            }
+
+            logMessage ("Expander open flag on noise at the threshold: " + juce::String (changes) + " changes in 2 s");
+            expectLessOrEqual (changes, 2, "no flicker as the noise brushes the threshold");
+
+            for (auto x : noise (juce::Decibels::decibelsToGain (-75.0f), 4800, 8))
+                gate.process (detector.process (std::abs (x)));
+
+            expect (! gate.isOpen(), "closed once the level is well below");
+        }
+
         beginTest ("Expander: the static curve at 1:1.5, 1:4 and 1:20 is the formula, capped by Range");
         {
             for (auto ratio : { 1.5f, 4.0f, 20.0f })
