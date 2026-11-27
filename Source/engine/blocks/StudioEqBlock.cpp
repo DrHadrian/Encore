@@ -161,6 +161,24 @@ void StudioEqBlock::prepareBlock (const ProcessSpec& spec)
     sampleRate = spec.sampleRate;
     toggleSamples = juce::jmax (1, juce::roundToInt (toggleSeconds * sampleRate));
 
+    // The Curve value's points: log-spaced over a guitar's range.
+    for (int i = 0; i < curvePoints; ++i)
+    {
+        const auto f = curveLowHz * std::pow (curveHighHz / curveLowHz, i / (curvePoints - 1.0));
+        const auto w = 2.0 * juce::MathConstants<double>::pi * f / sampleRate;
+        pointCos[(size_t) i] = std::cos (w);
+        pointCos2[(size_t) i] = std::cos (2.0 * w);
+    }
+
+    curveIntervalSamples = juce::jmax (1, juce::roundToInt (curveIntervalSeconds * sampleRate));
+    inputLoudness.prepare (sampleRate, smartWindowSeconds);
+    bandsLoudness.prepare (sampleRate, smartWindowSeconds);
+    autoGainDb.reset (sampleRate, autoGainRampSeconds);
+    polarity.reset (sampleRate, invertFadeSeconds);
+
+    for (auto* ramp : { &outputGain, &panLeft, &panRight, &widthAmount })
+        ramp->reset (sampleRate, output.getSpec().rampSeconds);
+
     for (auto& slot : slots)
     {
         slot.fade.prepare (maxChannels, spec.maxBlockSize, sampleRate);
@@ -192,6 +210,149 @@ void StudioEqBlock::resetBlock() noexcept
     }
 
     gainScale.snapToTarget();
+
+    // The output tools at their values, the auto gain worked out afresh.
+    inputLoudness.reset();
+    bandsLoudness.reset();
+    smartCorrectionDb = 0.0;
+    lastAutoGainMode = (AutoGain) autoGain.getChoiceIndex();
+    curveDb = autoGain.getChoiceIndex() != (int) AutoGain::off ? curveNow() : 0.0;
+    curveDirty = false;
+    curveCountdown = 0;
+    const auto autoDb = autoGain.getChoiceIndex() == (int) AutoGain::off ? 0.0f : (float) curveDb;
+    autoGainDb.setCurrentAndTargetValue (autoDb);
+    autoGainNow.store (autoDb, std::memory_order_relaxed);
+    output.snapToTarget();
+    outputGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (output.getValue()));
+    panLeft.setCurrentAndTargetValue (juce::jmin (1.0f, 1.0f - pan.getValue() * 0.01f));
+    panRight.setCurrentAndTargetValue (juce::jmin (1.0f, 1.0f + pan.getValue() * 0.01f));
+    widthAmount.setCurrentAndTargetValue (width.getValue() * 0.01f);
+    polarity.setCurrentAndTargetValue (invert.getChoiceIndex() == 1 ? -1.0f : 1.0f);
+}
+
+double StudioEqBlock::curveGainDb (std::span<const dsp::FilterBandDesign> designs, double rate) noexcept
+{
+    // Pink noise has equal power per octave: the mean of |H|^2 over
+    // log-spaced points is the power ratio it sees.
+    auto sum = 0.0;
+
+    for (int i = 0; i < curvePoints; ++i)
+    {
+        const auto f = curveLowHz * std::pow (curveHighHz / curveLowHz, i / (curvePoints - 1.0));
+        sum += std::pow (10.0, dsp::responseDb (designs, f, rate) / 10.0);
+    }
+
+    return -10.0 * std::log10 (std::max (1.0e-30, sum / curvePoints));
+}
+
+double StudioEqBlock::curveNow() const noexcept
+{
+    // As curveGainDb, from the designs the bands are playing or gliding to,
+    // with |b0 + b1 z + b2 z^2|^2 = b0^2 + b1^2 + b2^2 + 2 (b0 b1 + b1 b2) cos w + 2 b0 b2 cos 2w.
+    std::array<double, curvePoints> power;
+    power.fill (1.0);
+
+    for (const auto& slot : slots)
+    {
+        const auto& design = slot.band.getDesign();
+
+        for (int s = 0; s < design.numSections; ++s)
+        {
+            const auto& d = design.sections[(size_t) s];
+            const auto n0 = d.b0 * d.b0 + d.b1 * d.b1 + d.b2 * d.b2, n1 = 2.0 * (d.b0 * d.b1 + d.b1 * d.b2), n2 = 2.0 * d.b0 * d.b2;
+            const auto m0 = 1.0 + d.a1 * d.a1 + d.a2 * d.a2, m1 = 2.0 * (d.a1 + d.a1 * d.a2), m2 = 2.0 * d.a2;
+
+            for (int i = 0; i < curvePoints; ++i)
+            {
+                const auto c1 = pointCos[(size_t) i], c2 = pointCos2[(size_t) i];
+                power[(size_t) i] *= (n0 + n1 * c1 + n2 * c2) / std::max (1.0e-30, m0 + m1 * c1 + m2 * c2);
+            }
+        }
+    }
+
+    auto sum = 0.0;
+
+    for (auto p : power)
+        sum += p;
+
+    return -10.0 * std::log10 (std::max (1.0e-30, sum / curvePoints));
+}
+
+void StudioEqBlock::processOutput (float* const* channels, int numChannels, int numSamples, bool tunerOpen) noexcept
+{
+    const auto mode = (AutoGain) autoGain.getChoiceIndex();
+
+    // Curve: recomputed every 10 ms while the bands move, else nothing.
+    if (mode != AutoGain::off)
+    {
+        curveCountdown -= numSamples;
+
+        if (curveDirty && curveCountdown <= 0)
+        {
+            curveDb = curveNow();
+            curveDirty = false;
+            curveCountdown = curveIntervalSamples;
+        }
+    }
+
+    // Smart: the bands' output measured after them (the input was measured
+    // before them); a closed bin moves the correction at most 0.1 dB.
+    if (mode == AutoGain::smart && bandsLoudness.process (channels, numChannels, numSamples))
+    {
+        const auto in = inputLoudness.getLufs(), bands = bandsLoudness.getLufs();
+
+        // Someone is playing now (the last 100 ms), not just within the window:
+        // a window that still holds the last notes must not move it in silence.
+        const auto playingNow = inputLoudness.getLastBinLufs() > smartGateLufs;
+
+        if (! tunerOpen && playingNow && in > smartGateLufs && bands > dsp::SlidingLoudness::silenceLufs)
+        {
+            const auto wanted = juce::jlimit (-smartLimitDb, smartLimitDb, in - bands - curveDb);
+            const auto step = smartRateDbPerSecond * 0.1;
+            smartCorrectionDb += juce::jlimit (-step, step, wanted - smartCorrectionDb);
+        }
+    }
+
+    const auto autoTarget = mode == AutoGain::off ? 0.0 : mode == AutoGain::curve ? curveDb : curveDb + smartCorrectionDb;
+    autoGainDb.setTargetValue ((float) autoTarget);
+    autoGainNow.store (autoGainDb.getTargetValue(), std::memory_order_relaxed);
+
+    outputGain.setTargetValue (juce::Decibels::decibelsToGain (output.getValue()));
+    panLeft.setTargetValue (juce::jmin (1.0f, 1.0f - pan.getValue() * 0.01f));    // balance: turning right lowers the left
+    panRight.setTargetValue (juce::jmin (1.0f, 1.0f + pan.getValue() * 0.01f));
+    widthAmount.setTargetValue (width.getValue() * 0.01f);
+    polarity.setTargetValue (invert.getChoiceIndex() == 1 ? -1.0f : 1.0f);
+
+    const auto gainMoving = autoGainDb.isSmoothing() || outputGain.isSmoothing() || polarity.isSmoothing();
+    const auto stereo = numChannels > 1;
+    const auto stereoMoving = stereo && (panLeft.isSmoothing() || panRight.isSmoothing() || widthAmount.isSmoothing());
+    const auto gainNow = juce::Decibels::decibelsToGain (autoGainDb.getCurrentValue()) * outputGain.getCurrentValue() * polarity.getCurrentValue();
+    const auto stereoNeutral = ! stereo || (panLeft.getCurrentValue() == 1.0f && panRight.getCurrentValue() == 1.0f
+                                            && widthAmount.getCurrentValue() == 1.0f);
+
+    if (! gainMoving && ! stereoMoving && gainNow == 1.0f && stereoNeutral)
+        return;   // nothing to do: bit-exact
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto g = gainMoving ? juce::Decibels::decibelsToGain (autoGainDb.getNextValue()) * outputGain.getNextValue() * polarity.getNextValue()
+                                  : gainNow;
+
+        if (! stereo)
+        {
+            channels[0][i] *= g;
+            continue;
+        }
+
+        // Width (mid/side), then the balance.
+        const auto w = stereoMoving ? widthAmount.getNextValue() : widthAmount.getCurrentValue();
+        const auto l = stereoMoving ? panLeft.getNextValue() : panLeft.getCurrentValue();
+        const auto r = stereoMoving ? panRight.getNextValue() : panRight.getCurrentValue();
+        const auto mid = 0.5f * (channels[0][i] + channels[1][i]);
+        const auto side = 0.5f * (channels[0][i] - channels[1][i]) * w;
+        channels[0][i] = (mid + side) * l * g;
+        channels[1][i] = (mid - side) * r * g;
+    }
 }
 
 dsp::FilterBandDesign StudioEqBlock::designNow (const Slot& slot, double scale) const noexcept
@@ -254,10 +415,38 @@ void StudioEqBlock::processSlot (Slot& slot, float* const* channels, int numChan
     slot.band.process (channels, numChannels, numSamples);
 }
 
-void StudioEqBlock::processBlock (float* const* channels, int numChannels, int numSamples, const ProcessContext&) noexcept
+void StudioEqBlock::processBlock (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept
 {
     numChannels = juce::jlimit (1, maxChannels, numChannels);
     const juce::ScopedNoDenormals noDenormals;
+    processBands (channels, numChannels, numSamples, context);
+    processOutput (channels, numChannels, numSamples, context.tunerOpen);
+}
+
+void StudioEqBlock::processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext&) noexcept
+{
+    // Smart auto gain: the EQ's input, before the bands.
+    const auto mode = (AutoGain) autoGain.getChoiceIndex();
+
+    if (mode != lastAutoGainMode)
+    {
+        // Switching mode: the Curve value afresh, Smart from it (the applied
+        // gain then ramps to the new value: a crossfade).
+        curveDirty = true;
+        curveCountdown = 0;
+
+        if (mode == AutoGain::smart)
+        {
+            smartCorrectionDb = 0.0;
+            inputLoudness.reset();
+            bandsLoudness.reset();
+        }
+
+        lastAutoGainMode = mode;
+    }
+
+    if (mode == AutoGain::smart)
+        inputLoudness.process (channels, numChannels, numSamples);
 
     // Gain scale moves every scaled band.
     const auto scaleMoving = gainScale.isSmoothing();
@@ -287,7 +476,14 @@ void StudioEqBlock::processBlock (float* const* channels, int numChannels, int n
         audible[(size_t) s] = slot.playing || slot.band.isGliding() || slot.fade.isActive();
         moving[(size_t) s] = slot.playing && (slot.valuesMoving() || (scaleMoving && isScaled (slot.shape)));
         anyMoving = anyMoving || moving[(size_t) s];
+
+        // The Curve value follows anything that changes the bands.
+        if (moving[(size_t) s] || slot.toggleRemaining > 0 || slot.fade.isActive())
+            curveDirty = true;
     }
+
+    if (scaleMoving)
+        curveDirty = true;
 
     if (! anyMoving)
     {

@@ -6,6 +6,7 @@
 #include "engine/core/Block.h"
 #include "engine/dsp/Crossfade.h"
 #include "engine/dsp/FilterBand.h"
+#include "engine/dsp/Loudness.h"
 
 #include <array>
 #include <atomic>
@@ -103,6 +104,34 @@ public:
 
     const SlotParameters& getSlotParameters (int slot) const noexcept { return slots[(size_t) slot].p; }
 
+    //== The output tools (EQ-PLAN §2.5) =========================================
+    // Order: bands (gain scale inside) -> auto gain -> output -> pan / width
+    // (stereo only) -> invert.
+
+    /** Auto gain, Curve: the gain that gives pink noise from 80 Hz to 8 kHz
+        (a guitar's range) the same RMS after the bands as before, from the
+        response at 48 log-spaced points, recomputed every 10 ms while a band
+        moves (Proposed). Any thread. */
+    static constexpr double curveLowHz = 80.0, curveHighHz = 8000.0;
+    static constexpr int curvePoints = 48;
+    static constexpr double curveIntervalSeconds = 0.01;
+    static double curveGainDb (std::span<const dsp::FilterBandDesign> designs, double sampleRate) noexcept;
+
+    /** Auto gain, Smart (Proposed, tuned on the rig in U3): starts from the
+        Curve value and corrects it by the difference in K-weighted loudness
+        (BS.1770) between the EQ's input and the bands' output over 3 s; only
+        while the input is above -45 LUFS, over the window and in the last
+        100 ms (someone playing now), and the tuner is closed; at most
+        1 dB per second, within +-6 dB of the Curve value. */
+    static constexpr double smartWindowSeconds = 3.0, smartGateLufs = -45.0;
+    static constexpr double smartRateDbPerSecond = 1.0, smartLimitDb = 6.0;
+
+    static constexpr double autoGainRampSeconds = 0.02;   // how the applied auto gain moves (and a mode switch crossfades)
+    static constexpr double invertFadeSeconds = 0.01;
+
+    /** The auto gain applied now, dB (0 when Off). Any thread. */
+    float getAutoGainDb() const noexcept { return autoGainNow.load (std::memory_order_relaxed); }
+
     static constexpr double toggleSeconds = 0.01;    // a band on, off, in or out of use glides to or from flat
     static constexpr int updateInterval = 16;        // samples between redesigns while a value moves
 
@@ -146,6 +175,12 @@ private:
     void applyChoices (Slot& slot, double gainScale) noexcept;
     void processSlot (Slot& slot, float* const* channels, int numChannels, int numSamples) noexcept;
 
+    /** Audio thread: the Curve value from the bands' current designs (cheap:
+        precomputed cosines, |H|^2 per section). */
+    double curveNow() const noexcept;
+    void processOutput (float* const* channels, int numChannels, int numSamples, bool tunerOpen) noexcept;
+    void processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
+
     std::array<Slot, numSlots> slots;
     Parameter& phase;
     Parameter& linearQuality;
@@ -163,6 +198,16 @@ private:
 
     double sampleRate = 48000.0;
     int toggleSamples = 480;
+
+    // Output tools, audio thread.
+    std::array<double, curvePoints> pointCos {}, pointCos2 {};
+    bool curveDirty = true;
+    int curveCountdown = 0, curveIntervalSamples = 480;
+    double curveDb = 0.0, smartCorrectionDb = 0.0;
+    dsp::SlidingLoudness inputLoudness, bandsLoudness;
+    juce::SmoothedValue<float> autoGainDb, outputGain, panLeft, panRight, widthAmount, polarity;
+    std::atomic<float> autoGainNow { 0.0f };
+    AutoGain lastAutoGainMode = AutoGain::off;
 };
 
 } // namespace encore

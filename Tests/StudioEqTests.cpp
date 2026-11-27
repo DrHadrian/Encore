@@ -9,6 +9,7 @@
 
 #include "engine/blocks/StudioEqBlock.h"
 #include "engine/core/Realtime.h"
+#include "engine/dsp/Loudness.h"
 
 #include <complex>
 
@@ -43,7 +44,8 @@ namespace
     /** Runs mono (or stereo: right = a copy) through the block in chunks;
         before each chunk, onChunk (its start sample). */
     std::vector<float> play (Block& b, std::vector<float> x, int chunk = blockSize,
-                             const std::function<void (int)>& onChunk = {}, std::vector<float>* right = nullptr)
+                             const std::function<void (int)>& onChunk = {}, std::vector<float>* right = nullptr,
+                             ProcessContext context = {})
     {
         for (int offset = 0; offset < (int) x.size(); offset += chunk)
         {
@@ -52,10 +54,35 @@ namespace
 
             const auto len = juce::jmin (chunk, (int) x.size() - offset);
             float* ch[2] = { x.data() + offset, right != nullptr ? right->data() + offset : nullptr };
-            b.process (ch, right != nullptr ? 2 : 1, len, {});
+            b.process (ch, right != nullptr ? 2 : 1, len, context);
         }
 
         return x;
+    }
+
+    /** Notes every second over a quiet floor: someone playing. */
+    std::vector<float> playing (int seconds, double rate = sampleRate)
+    {
+        std::vector<float> x ((size_t) (seconds * rate), 0.0f);
+
+        for (int k = 0; k < seconds; ++k)
+        {
+            const auto note = pluck ((int) rate, 0, 0.4f, 900.0, -80.0f, 82.4 * (1 + k % 3), 8, k + 1, rate);
+
+            for (size_t i = 0; i < note.signal.size(); ++i)
+                x[(size_t) k * (size_t) rate + i] += note.signal[i];
+        }
+
+        return x;
+    }
+
+    double loudnessOf (const std::vector<float>& x, double rate, int from, int to)
+    {
+        dsp::SlidingLoudness meter;
+        meter.prepare (rate, (to - from) / rate + 1.0);
+        const float* ch[] = { x.data() + from };
+        meter.process (ch, 1, to - from);
+        return meter.getLufs();
     }
 
     double dftDb (const std::vector<float>& x, double f, double rate)
@@ -274,8 +301,8 @@ public:
                     start (eq);
                     const auto out = play (eq, x, blockSize, [&] (int at)
                     {
-                        if (at == (int) (0.2 * rate)) set (eq, Eq::slotId (4, what), 0.0f);
-                        if (at == (int) (0.4 * rate)) set (eq, Eq::slotId (4, what), 1.0f);
+                        if (at == (int) (0.2 * rate) / blockSize * blockSize) set (eq, Eq::slotId (4, what), 0.0f);
+                        if (at == (int) (0.4 * rate) / blockSize * blockSize) set (eq, Eq::slotId (4, what), 1.0f);
                     });
 
                     // The 110 Hz tone's own harmonics are none; a click is broadband.
@@ -291,7 +318,7 @@ public:
         {
             const auto rate = 48000.0;
             const auto x = noise (0.3f, (int) (0.3 * rate), 9);
-            const auto change = (int) (0.1 * rate);
+            const auto change = (int) (0.1 * rate) / blockSize * blockSize;   // a chunk's start
             const auto changeIt = [&] (Eq& eq, int slot)
             {
                 return [&eq, slot, change] (int at)
@@ -389,6 +416,175 @@ public:
                                     sweep + " at " + juce::String (rate));
                 }
             }
+        }
+
+        beginTest ("K-weighting: the standard's 48 kHz coefficients, and the same curve at other rates");
+        {
+            const auto k48 = dsp::kWeighting (48000.0);
+            expectWithinAbsoluteError (k48.sections[0].b0, 1.53512485958697, 1.0e-9);
+            expectWithinAbsoluteError (k48.sections[0].b1, -2.69169618940638, 1.0e-9);
+            expectWithinAbsoluteError (k48.sections[0].a1, -1.69065929318241, 1.0e-9);
+            expectWithinAbsoluteError (k48.sections[1].a1, -1.99004745483398, 1.0e-9);
+            expectWithinAbsoluteError (k48.sections[1].a2, 0.99007225036621, 1.0e-9);
+
+            for (auto rate : allRates)
+            {
+                const auto k = dsp::kWeighting (rate);
+                expectWithinAbsoluteError (k.magnitudeDb (1000.0, rate), k48.magnitudeDb (1000.0, 48000.0), 0.05);
+                expectWithinAbsoluteError (k.magnitudeDb (10000.0, rate), k48.magnitudeDb (10000.0, 48000.0), 0.2);
+            }
+        }
+
+        beginTest ("Output +-36 dB; on a mono signal pan and width do nothing");
+        {
+            Eq eq;
+            set (eq, "output", 6.0f);
+            set (eq, "pan", 80.0f);
+            set (eq, "width", 0.0f);
+            start (eq);
+            const auto x = noise (0.1f, 4800, 23);
+            const auto out = play (eq, x);
+            expectWithinAbsoluteError (out[1000] / x[1000], juce::Decibels::decibelsToGain (6.0f), 1.0e-5f);
+        }
+
+        beginTest ("Pan (balance) and width (mid/side) on stereo; invert flips polarity with no click");
+        {
+            const auto l = noise (0.2f, 4800, 31), r = noise (0.2f, 4800, 32);
+            const auto run = [&] (float panValue, float widthValue, bool flip)
+            {
+                Eq eq;
+                set (eq, "pan", panValue);
+                set (eq, "width", widthValue);
+                set (eq, "invert", flip ? 1.0f : 0.0f);
+                start (eq);
+                auto right = r;
+                auto left = play (eq, l, blockSize, {}, &right);
+                return std::pair { left, right };
+            };
+
+            const auto [monoL, monoR] = run (0.0f, 0.0f, false);
+            expectWithinAbsoluteError (monoL[100], 0.5f * (l[100] + r[100]), 1.0e-6f, "width 0: both sides are the mid");
+            expectWithinAbsoluteError (monoR[100], 0.5f * (l[100] + r[100]), 1.0e-6f);
+
+            const auto [wideL, wideR] = run (0.0f, 200.0f, false);
+            expectWithinAbsoluteError (wideL[100] - wideR[100], 2.0f * (l[100] - r[100]), 1.0e-5f, "width 200: twice the side");
+            expectWithinAbsoluteError (wideL[100] + wideR[100], l[100] + r[100], 1.0e-5f, "the mid stays");
+
+            const auto [panL, panR] = run (100.0f, 100.0f, false);
+            expectWithinAbsoluteError (panL[100], 0.0f, 1.0e-7f, "panned right: the left is silent");
+            expectWithinAbsoluteError (panR[100], r[100], 1.0e-6f);
+
+            const auto [flipL, flipR] = run (0.0f, 100.0f, true);
+            expectWithinAbsoluteError (flipL[100], -l[100], 1.0e-6f);
+            expectWithinAbsoluteError (flipR[100], -r[100], 1.0e-6f);
+
+            // Switching it while playing crossfades through zero: no click.
+            Eq eq;
+            start (eq);
+            const auto tone = lowSine (110.0, 0.5f, 24000, sampleRate);
+            const auto out = play (eq, tone, blockSize, [&] (int at) { if (at == 75 * blockSize) set (eq, "invert", 1.0f); });
+            const auto clicks = highBandDb (out, 4000.0, sampleRate, 7200, 14400);
+            logMessage ("Invert while playing a 110 Hz tone: above 4 kHz " + juce::String (clicks, 1) + " dBFS");
+            expectLessThan (clicks, -90.0);
+            expectWithinAbsoluteError (out[20000], -tone[20000], 1.0e-6f);
+        }
+
+        beginTest ("Auto gain, Curve: a +6 dB bell over the guitar's range gives about -6 dB; a cut above 8 kHz almost nothing");
+        {
+            const auto curveFor = [&] (std::function<void (Eq&)> bands)
+            {
+                Eq eq;
+                bands (eq);
+                set (eq, "autoGain", (float) Eq::AutoGain::curve);
+                start (eq);
+                play (eq, std::vector<float> (4800, 0.0f));
+                expectWithinAbsoluteError ((double) eq.getAutoGainDb(), Eq::curveGainDb (eq.getBandDesigns (sampleRate), sampleRate), 1.0e-3,
+                                           "the audio's value = the response's");
+                return eq.getAutoGainDb();
+            };
+
+            const auto wide = curveFor ([] (Eq& eq) { addBand (eq, 0, Eq::Shape::bell, 800.0f, 6.0f, 0.025f); });
+            logMessage ("Curve: +6 dB bell, Q 0.025 at 800 Hz -> " + juce::String (wide, 2) + " dB");
+            expectWithinAbsoluteError (wide, -6.0f, 0.5f);
+
+            const auto cut = curveFor ([] (Eq& eq) { addBand (eq, 0, Eq::Shape::highCut, 10000.0f, 0.0f, 0.7071f, 3); });
+            logMessage ("Curve: a high cut at 10 kHz, 24 dB/oct -> " + juce::String (cut, 2) + " dB");
+            expectLessThan (std::abs (cut), 0.3f);
+
+            // It follows a sweep, and stops computing when nothing moves.
+            Eq eq;
+            addBand (eq, 0, Eq::Shape::bell, 1000.0f, -12.0f, 0.7f);
+            set (eq, "autoGain", (float) Eq::AutoGain::curve);
+            start (eq);
+            std::vector<float> seen;
+            play (eq, std::vector<float> ((size_t) (0.2 * sampleRate), 0.0f), blockSize, [&] (int at)
+            {
+                if (at == 8 * blockSize) set (eq, Eq::slotId (0, "Gain"), 12.0f);
+                seen.push_back (eq.getAutoGainDb());
+            });
+            logMessage ("Curve during the sweep: " + juce::String (seen.front(), 2) + " -> " + juce::String (seen.back(), 2) + " dB");
+            expect (seen.front() > 1.0f && seen.back() < -1.0f, "from + to - as the bell turns over");
+            expectWithinAbsoluteError ((double) seen.back(), Eq::curveGainDb (eq.getBandDesigns (sampleRate), sampleRate), 1.0e-3);
+        }
+
+        beginTest ("Auto gain, Smart: settles near equal loudness while playing; holds in silence and while tuning; at most 1 dB/s");
+        {
+            const auto rate = sampleRate;
+            Eq eq;
+            // Within Smart's reach on low notes (a 9 dB high shelf on them is past
+            // its +-6 dB: the Curve value, from pink noise, is then too far off).
+            addBand (eq, 0, Eq::Shape::bell, 250.0f, 6.0f);
+            addBand (eq, 1, Eq::Shape::highShelf, 3000.0f, 4.0f);
+            set (eq, "autoGain", (float) Eq::AutoGain::smart);
+            start (eq, rate);
+
+            const auto x = playing (20, rate);
+            std::vector<float> perTenth;
+            const auto out = play (eq, x, blockSize, [&] (int at)
+            {
+                if ((int) perTenth.size() <= at / (int) (0.1 * rate))   // the first chunk of each tenth of a second
+                    perTenth.push_back (eq.getAutoGainDb());
+            });
+
+            const auto curve = Eq::curveGainDb (eq.getBandDesigns (rate), rate);
+            const auto from = (int) (17.0 * rate), to = (int) (20.0 * rate);
+            const auto difference = loudnessOf (out, rate, from, to) - loudnessOf (x, rate, from, to);
+            logMessage ("Smart: Curve value " + juce::String (curve, 2) + " dB, now " + juce::String (eq.getAutoGainDb(), 2)
+                        + " dB; loudness out - in over the last 3 s " + juce::String (difference, 2) + " dB");
+            expectLessThan (std::abs (difference), 1.0, "within 1 dB of equal loudness");
+            expect (std::abs (eq.getAutoGainDb() - curve) <= Eq::smartLimitDb + 1.0e-3, "within 6 dB of the Curve value");
+
+            auto worstStep = 0.0f;
+
+            size_t worstAt = 0;
+
+            for (size_t i = 1; i < perTenth.size(); ++i)
+                if (std::abs (perTenth[i] - perTenth[i - 1]) > worstStep)
+                {
+                    worstStep = std::abs (perTenth[i] - perTenth[i - 1]);
+                    worstAt = i;
+                }
+
+            logMessage ("worst step at tenth " + juce::String ((int) worstAt) + ": " + juce::String (perTenth[worstAt - 1], 3) + " -> " + juce::String (perTenth[worstAt], 3));
+
+            logMessage ("Smart: its largest move in 0.1 s " + juce::String (worstStep, 3) + " dB");
+            expectLessOrEqual (worstStep, 0.1f + 1.0e-4f, "at most 1 dB per second");
+
+            // Silence: it holds.
+            const auto held = eq.getAutoGainDb();
+            play (eq, std::vector<float> ((size_t) (6.0 * rate), 0.0f));
+            expectWithinAbsoluteError (eq.getAutoGainDb(), held, 1.0e-6f, "no climb in silence");
+
+            // The tuner open, someone tuning loudly: it holds.
+            ProcessContext tuning;
+            tuning.tunerOpen = true;
+            auto loud = playing (6, rate);
+
+            for (auto& v : loud)
+                v *= 3.0f;
+
+            play (eq, loud, blockSize, {}, nullptr, tuning);
+            expectWithinAbsoluteError (eq.getAutoGainDb(), held, 1.0e-6f, "frozen while the tuner is open");
         }
 
         beginTest ("24 bands at extreme settings, moving: stable, no NaN, no allocation");
