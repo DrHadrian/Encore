@@ -228,6 +228,8 @@ target_sources(EncoreEngine PRIVATE
     Source/platform/SystemTuning.h
     Source/session/AmpLibrary.cpp
     Source/session/AmpLibrary.h
+    Source/session/OfflineRender.cpp
+    Source/session/OfflineRender.h
     Source/session/PatchBuilder.cpp
     Source/session/PluginCatalog.cpp
     Source/session/PluginCatalog.h
@@ -567,6 +569,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/ModuleBaseTests.cpp
         Tests/ModuleDspTests.cpp
         Tests/ModuleTypeTests.cpp
+        Tests/RenderTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
         Tests/RobustnessTests.cpp
@@ -640,6 +643,34 @@ if(ENCORE_BUILD_TESTS)
     list(JOIN encore_slow_tests "|" encore_all_slow)
     add_test(NAME EncoreTests.engine COMMAND EncoreTests)
     set_tests_properties(EncoreTests.engine PROPERTIES ENVIRONMENT "ENCORE_TEST_SKIP=${encore_all_slow}")
+
+    # --------------------------------------------------------------------------
+    # EncoreRender: a WAV through one block or a whole patch, offline, from the
+    # same engine objects (native modules, decision 0062). Built with the tests
+    # and run by ctest on a generated sweep.
+    #   EncoreRender --in IN.wav --out OUT.wav --block engineProbe --set gain=6
+    # --------------------------------------------------------------------------
+    juce_add_console_app(EncoreRender PRODUCT_NAME "EncoreRender")
+    target_sources(EncoreRender PRIVATE Tools/EncoreRender/Main.cpp)
+    target_link_libraries(EncoreRender
+        PRIVATE
+            EncoreJuce
+            EncoreEngine
+            nam_core)
+    encore_precompile_headers(EncoreRender)
+
+    set(encore_render_dir "${CMAKE_CURRENT_BINARY_DIR}/render")
+    add_test(NAME EncoreRender.sweep
+             COMMAND EncoreRender --make-sweep "${encore_render_dir}/sweep.wav" --seconds 3)
+    add_test(NAME EncoreRender.probe
+             COMMAND EncoreRender --in "${encore_render_dir}/sweep.wav" --out "${encore_render_dir}/sweep-probe.wav"
+                     --block engineProbe --set shape=Bell --set freq=800 --set gain=6 --set q=1
+                     --set drive=12 --set quality=High --report "${encore_render_dir}/sweep-probe.txt")
+    add_test(NAME EncoreRender.null
+             COMMAND EncoreRender --in "${encore_render_dir}/sweep.wav" --out "${encore_render_dir}/sweep-null.wav"
+                     --block engineProbe --report "${encore_render_dir}/sweep-null.txt")
+    set_tests_properties(EncoreRender.sweep PROPERTIES FIXTURES_SETUP encore_render_sweep)
+    set_tests_properties(EncoreRender.probe EncoreRender.null PROPERTIES FIXTURES_REQUIRED encore_render_sweep)
 endif()
 
 if(MSVC)
