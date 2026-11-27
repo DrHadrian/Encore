@@ -136,6 +136,16 @@ namespace
             set (o, "expression", expression);
         }
 
+        if (! b.refs.empty())
+        {
+            auto refs = object();
+
+            for (auto& [key, value] : b.refs)
+                set (refs, juce::Identifier (key), value);
+
+            set (o, "refs", refs);
+        }
+
         return o;
     }
 
@@ -169,6 +179,11 @@ namespace
         if (auto* params = get (o, "params").getDynamicObject())
             for (auto& p : params->getProperties())
                 b.params[p.name.toString()] = (float) (double) p.value;
+
+        if (auto* refs = get (o, "refs").getDynamicObject())
+            for (auto& r : refs->getProperties())
+                if (r.value.isString() && r.value.toString().isNotEmpty())
+                    b.refs[r.name.toString()] = r.value.toString();
 
         return b;
     }

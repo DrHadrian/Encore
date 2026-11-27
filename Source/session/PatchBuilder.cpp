@@ -157,6 +157,7 @@ std::unique_ptr<Chain> buildChain (const PatchModel& patch, const ShowFolder& fo
         }
 
         block->setModelId (model.id);
+        block->setRefs (model.refs);
         block->setEnabled (model.enabled);
         block->setStomp (model.stomp);
 
@@ -229,6 +230,7 @@ void captureChain (const Chain& chain, PatchModel& patch, const ShowFolder& fold
         model.type = block->getTypeId();
         model.enabled = block->isEnabled();
         model.stomp = block->getStomp();
+        model.refs = block->getRefs();
 
         const auto* previous = findPrevious (model.id);
 

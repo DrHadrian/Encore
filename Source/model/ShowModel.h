@@ -78,6 +78,13 @@ struct BlockModel
     juce::String state;                      // "plugin" blocks: the plugin's own settings, base64
     juce::String ampPreset;                  // "nam" blocks: the amp (ShowModel::amps) whose face it shows, by id ("" = none)
 
+    /** References by name, apart from the float params (B2): what a block
+        points at elsewhere. The gates use "keyInput" (an interface input, by
+        name, as a patch names its input), "keyBlock" (an earlier block, by
+        its id) and "linkTo" (a leader gate, by its id). Part of the block, not
+        of a preset: a preset never sets them. Saved from schema 5. */
+    std::map<juce::String, juce::String> refs;
+
     bool operator== (const BlockModel&) const = default;
 };
 

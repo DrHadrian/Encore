@@ -318,6 +318,63 @@ public:
 };
 
 static GateRegistrationTests gateRegistrationTests;
+
+class BlockRefsTests final : public juce::UnitTest
+{
+public:
+    BlockRefsTests() : juce::UnitTest ("Block references", "Encore") {}
+
+    void runTest() override
+    {
+        beginTest ("References round-trip in a schema 5 show, and through a built chain");
+        {
+            auto show = makeDefaultShow ("Refs");
+            BlockModel gate;
+            gate.id = "s2-follow";
+            gate.type = PedalGateBlock::typeId;
+            gate.refs["keyInput"] = "Mic 2";
+            gate.refs["linkTo"] = "s2-lead";
+            show.patches[0].mainLane().blocks.push_back (gate);
+
+            const auto text = json::toJson (show);
+            expect (text.contains ("\"schemaVersion\": 5"));
+            expect (text.contains ("\"refs\""));
+
+            juce::String error;
+            const auto back = json::fromJson (text, error);
+            expect (back.has_value(), error);
+
+            if (! back)
+                return;
+
+            const auto& loaded = back->patches[0].mainLane().blocks.back();
+            expect (loaded.refs == gate.refs);
+
+            juce::StringArray problems;
+            auto chain = buildChain (back->patches[0], ShowFolder(), spec, problems);
+            auto* built = chain->getBlocks().back().get();
+            expectEquals (built->getRef ("keyInput"), juce::String ("Mic 2"));
+
+            auto patch = back->patches[0];
+            captureChain (*chain, patch, ShowFolder());
+            expect (patch.mainLane().blocks.back().refs == gate.refs, "kept when the chain is written back");
+        }
+
+        beginTest ("A reference alone needs schema 5; a show without any has none");
+        {
+            auto show = makeDefaultShow ("Plain");
+            expect (! json::toJson (show).contains ("\"refs\""));
+
+            if (! show.patches[0].mainLane().blocks.empty())
+            {
+                show.patches[0].mainLane().blocks.front().refs["keyBlock"] = "x";
+                expectEquals (show.requiredSchemaVersion(), 5);
+            }
+        }
+    }
+};
+
+static BlockRefsTests blockRefsTests;
 static NewModuleSchemaTests newModuleSchemaTests;
 
 } // namespace encore::test

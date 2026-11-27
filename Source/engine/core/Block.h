@@ -6,6 +6,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <atomic>
 #include <functional>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -74,6 +75,17 @@ public:
         (e.g. a USB stick not plugged in), so saving never drops it. */
     const juce::String& getRequestedFile() const noexcept   { return requestedFile; }
     void setRequestedFile (const juce::String& path)         { requestedFile = path; }
+
+    /** The saved block's references by name (BlockModel::refs: a gate's
+        keyInput, keyBlock, linkTo). Message thread, or before the block plays. */
+    using Refs = std::map<juce::String, juce::String>;
+    const Refs& getRefs() const noexcept                     { return refs; }
+    void setRefs (Refs newRefs)                              { refs = std::move (newRefs); }
+    juce::String getRef (const juce::String& key) const
+    {
+        const auto found = refs.find (key);
+        return found != refs.end() ? found->second : juce::String();
+    }
 
     void setEnabled (bool shouldBeEnabled) noexcept { enabled.store (shouldBeEnabled, std::memory_order_relaxed); }
     bool isEnabled() const noexcept                  { return enabled.load (std::memory_order_relaxed); }
@@ -163,6 +175,7 @@ protected:
 private:
     const juce::String typeId, name;
     juce::String modelId, requestedFile;
+    Refs refs;
     std::vector<std::unique_ptr<Parameter>> parameters;
 
     std::atomic<bool> enabled { true };
