@@ -10,6 +10,7 @@
 #include "engine/core/Realtime.h"
 #include "engine/dsp/Detector.h"
 #include "engine/dsp/FilterBand.h"
+#include "engine/dsp/Oversampler.h"
 
 #include <complex>
 
@@ -718,7 +719,178 @@ public:
     }
 };
 
+class OversamplerTests final : public juce::UnitTest
+{
+public:
+    OversamplerTests() : juce::UnitTest ("Module oversampling", "Encore") {}
+
+    static constexpr int fftOrder = 15;
+    static constexpr int fftSize = 1 << fftOrder;
+
+    /** Drives a sine (2.5 kHz: bin 1707 of 32768 at 48 kHz) into tanh as hard
+        as a fuzz (x100) and returns the aliasing: the power in every bin that
+        is not a real harmonic, relative to the total, in dB. The sine sits
+        exactly on a bin, so its harmonics and their aliases land on distinct
+        bins. quality -1 = no oversampling. (A tone whose harmonics land on
+        multiples of the rate, like 3 kHz at 48 kHz, would hide its aliases.) */
+    static double aliasingDb (int qualityIndex, int bin = 1707, float driveGain = 100.0f)
+    {
+        const auto frequency = bin * sampleRate / fftSize;
+        std::vector<float> signal ((size_t) fftSize * 2);
+
+        for (size_t i = 0; i < signal.size(); ++i)
+            signal[i] = 0.5f * (float) std::sin (twoPi * frequency * (double) i / sampleRate);
+
+        const auto drive = [driveGain] (float* const* channels, int numChannels, int numSamples, double, int)
+        {
+            for (int ch = 0; ch < numChannels; ++ch)
+                for (int i = 0; i < numSamples; ++i)
+                    channels[ch][i] = std::tanh (driveGain * channels[ch][i]);
+        };
+
+        if (qualityIndex < 0)
+        {
+            float* channels[1] = { signal.data() };
+            drive (channels, 1, (int) signal.size(), sampleRate, 0);
+        }
+        else
+        {
+            dsp::Oversampler os;
+            os.setQuality ((dsp::Quality) qualityIndex);
+            os.prepare (1, blockSize, sampleRate);
+
+            for (size_t offset = 0; offset < signal.size(); offset += (size_t) blockSize)
+            {
+                float* channels[1] = { signal.data() + offset };
+                os.process (channels, 1, blockSize, drive);
+            }
+        }
+
+        // The second half, settled.
+        std::vector<float> fft ((size_t) fftSize * 2, 0.0f);
+        std::copy (signal.begin() + fftSize, signal.end(), fft.begin());
+        juce::dsp::FFT (fftOrder).performFrequencyOnlyForwardTransform (fft.data());
+
+        double total = 0.0, harmonics = 0.0;
+
+        for (int b = 1; b < fftSize / 2; ++b)
+        {
+            const auto power = (double) fft[(size_t) b] * fft[(size_t) b];
+            total += power;
+
+            if (b % bin == 0)
+                harmonics += power;
+        }
+
+        return 10.0 * std::log10 (std::max (total - harmonics, 1.0e-30) / total);
+    }
+
+    void runTest() override
+    {
+        beginTest ("A tanh stage's aliasing drops with the factor");
+        {
+            const auto none = aliasingDb (-1);
+            const auto live = aliasingDb (0);
+            const auto high = aliasingDb (1);
+            const auto max = aliasingDb (2);
+            logMessage ("Aliasing (dB below the signal): none " + juce::String (none, 1) + ", Live 2x " + juce::String (live, 1)
+                        + ", High 4x " + juce::String (high, 1) + ", Max 8x " + juce::String (max, 1));
+
+            expectLessThan (live, none - 6.0);
+            expectLessThan (high, live - 6.0);
+            expectLessThan (max, high - 6.0);
+        }
+
+        beginTest ("Factors and latency per Quality; linear content passes unchanged in level");
+        {
+            for (auto rate : rates)
+            {
+                dsp::Oversampler os;
+                os.prepare (2, blockSize, rate);
+
+                for (int q = 0; q < dsp::Oversampler::numQualities; ++q)
+                {
+                    os.setQuality ((dsp::Quality) q);
+                    auto tone = sine (1000.0 * rate / sampleRate, 0.5f, (int) rate / 2);
+                    auto seenFactor = 0;
+                    auto seenRate = 0.0;
+
+                    for (size_t offset = 0; offset + (size_t) blockSize <= tone.size(); offset += (size_t) blockSize)
+                    {
+                        float* channels[1] = { tone.data() + offset };
+                        os.process (channels, 1, blockSize, [&] (float* const*, int, int n, double upRate, int)
+                        {
+                            seenFactor = n / blockSize;
+                            seenRate = upRate;
+                        });
+                    }
+
+                    expectEquals (seenFactor, dsp::Oversampler::factorFor ((dsp::Quality) q));
+                    expectEquals (seenRate, rate * seenFactor);
+                    expectEquals (os.getFactor(), seenFactor);
+                    expect (os.getLatencySamples() >= 0 && os.getLatencySamples() < 64, juce::String (os.getLatencySamples()));
+                    expectWithinAbsoluteError (toDb (peak (tone, (int) tone.size() / 2, (int) tone.size())), toDb (0.5f), 0.1f);
+                }
+            }
+        }
+
+        beginTest ("Switching Quality allocates nothing and crossfades without a jump");
+        {
+            dsp::Oversampler os;
+            os.prepare (2, blockSize, sampleRate);
+
+            const auto input = sine (220.0, 0.5f, 48000);
+            auto maxInputStep = 0.0f;
+
+            for (size_t i = 1; i < input.size(); ++i)
+                maxInputStep = std::max (maxInputStep, std::abs (input[i] - input[i - 1]));
+
+            auto left = input, right = input;
+            const auto softClip = [] (float* const* channels, int numChannels, int numSamples, double, int)
+            {
+                for (int ch = 0; ch < numChannels; ++ch)
+                    for (int i = 0; i < numSamples; ++i)
+                        channels[ch][i] = std::tanh (channels[ch][i]);
+            };
+
+            const auto before = realtimeAllocationCount();
+            {
+                const rt::ScopedRealtimeSection realtime;
+
+                for (int b = 0; b + blockSize <= (int) input.size(); b += blockSize)
+                {
+                    if (b % (blockSize * 20) == 0)
+                        os.setQuality ((dsp::Quality) ((b / (blockSize * 20)) % 3));
+
+                    float* channels[2] = { left.data() + b, right.data() + b };
+                    os.process (channels, 2, blockSize, softClip);
+                }
+            }
+            expectEquals (realtimeAllocationCount() - before, 0);
+
+            auto maxStep = 0.0f;
+
+            for (size_t i = 1; i < left.size(); ++i)
+                maxStep = std::max (maxStep, std::abs (left[i] - left[i - 1]));
+
+            expectLessThan (maxStep, maxInputStep * 1.5f);
+            expect (left == right);
+        }
+
+        beginTest ("Not prepared: passes through, no crash");
+        {
+            dsp::Oversampler os;
+            auto signal = noise (0.5f, 256);
+            const auto original = signal;
+            float* channels[1] = { signal.data() };
+            os.process (channels, 1, 256, [] (float* const*, int, int, double, int) {});
+            expect (signal == original);
+        }
+    }
+};
+
 static FilterTests filterTests;
+static OversamplerTests oversamplerTests;
 static DetectorTests detectorTests;
 static TestSignalTests testSignalTests;
 

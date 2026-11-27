@@ -37,6 +37,8 @@ EngineProbeBlock::EngineProbeBlock()
       gain      (addParameter ({ "gain", "Gain", { -30.0f, 30.0f }, 0.0f, "dB", 1 })),
       q         (addParameter (logSpec ("q", "Q", 0.1f, 10.0f, 0.71f, {}, 2))),
       slope     (addParameter (Parameter::Spec::choice ("slope", "Slope", slopeNames(), 1))),
+      drive     (addParameter ({ "drive", "Drive", { 0.0f, 24.0f }, 0.0f, "dB", 1 })),
+      quality   (addParameter (Parameter::Spec::choice ("quality", "Quality", { "Live", "High", "Max" }, 0))),
       trim      (addParameter ({ "trim", "Trim", { -24.0f, 24.0f }, 0.0f, "dB", 1 }))
 {
 }
@@ -62,10 +64,18 @@ dsp::FilterSettings EngineProbeBlock::getFilterSettings() const noexcept
                          frequency.getValue(), gain.getValue(), q.getValue());
 }
 
+int EngineProbeBlock::getLatencySamples() const noexcept
+{
+    return driveActive.load (std::memory_order_relaxed) ? oversampler.getLatencySamples() : 0;
+}
+
 void EngineProbeBlock::prepareBlock (const ProcessSpec& spec)
 {
     sampleRate = spec.sampleRate;
     fade.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate);
+    driveFade.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate);
+    oversampler.setQuality ((dsp::Quality) quality.getChoiceIndex());
+    oversampler.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate);
 }
 
 void EngineProbeBlock::resetBlock() noexcept
@@ -76,6 +86,10 @@ void EngineProbeBlock::resetBlock() noexcept
     band.setDesign (dsp::FilterBandDesign::make (appliedSettings, sampleRate));
     band.reset();
     fade.reset();
+
+    oversampler.reset();
+    driveFade.reset();
+    driveActive.store (drive.getValue() > 0.0f, std::memory_order_relaxed);
 }
 
 void EngineProbeBlock::processBlock (float* const* channels, int numChannels, int numSamples,
@@ -134,6 +148,48 @@ void EngineProbeBlock::processBlock (float* const* channels, int numChannels, in
 
     if (fading)
         fade.mix (channels, numChannels, numSamples);
+
+    // The drive, oversampled. Off (0 dB) and on cross over with a 10 ms fade.
+    driveGain = juce::Decibels::decibelsToGain (drive.skip (numSamples));
+    oversampler.setQuality ((dsp::Quality) juce::roundToInt (quality.skip (numSamples)));
+
+    const auto wantDrive = driveGain > 1.0f;
+    const auto active = driveActive.load (std::memory_order_relaxed);
+
+    if (wantDrive != active && ! driveFade.isActive())
+    {
+        if (wantDrive)
+            oversampler.reset();
+
+        driveWasActive = active;
+        driveActive.store (wantDrive, std::memory_order_relaxed);
+        driveFade.start();
+    }
+
+    const auto saturate = [this] (float* const* up, int n, int length, double, int) noexcept
+    {
+        const auto g = driveGain;
+
+        for (int ch = 0; ch < n; ++ch)
+            for (int i = 0; i < length; ++i)
+                up[ch][i] = std::tanh (g * up[ch][i]) / g;   // unity gain for small signals
+    };
+
+    const auto driveFading = driveFade.isActive();
+
+    if (driveFading)
+    {
+        driveFade.copyInput (channels, numChannels, numSamples);
+
+        if (driveWasActive)
+            oversampler.process (driveFade.oldChannels(), numChannels, numSamples, saturate);
+    }
+
+    if (driveActive.load (std::memory_order_relaxed))
+        oversampler.process (channels, numChannels, numSamples, saturate);
+
+    if (driveFading)
+        driveFade.mix (channels, numChannels, numSamples);
 
     // Trim last. At 0 dB, and not moving, nothing is touched: bit-exact.
     if (! trim.isSmoothing() && juce::exactlyEqual (trim.currentValue(), 0.0f))

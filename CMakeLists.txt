@@ -197,6 +197,8 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/dsp/FilterDesign.cpp
     Source/engine/dsp/FilterDesign.h
     Source/engine/dsp/OutputEq.h
+    Source/engine/dsp/Oversampler.cpp
+    Source/engine/dsp/Oversampler.h
     Source/engine/dsp/PitchDetector.cpp
     Source/engine/dsp/PitchDetector.h
     Source/engine/dsp/SafetyLimiter.cpp

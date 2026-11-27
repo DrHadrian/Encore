@@ -224,6 +224,49 @@ public:
             expect (std::equal (output.begin(), output.begin() + switchAt, input.begin()), "Off is bit-exact");
         }
 
+        beginTest ("The drive oversamples, reports its latency, and switches Quality without allocating");
+        {
+            EngineProbeBlock probe;
+            probe.prepare (spec);
+            expectEquals (probe.getLatencySamples(), 0, "no drive, no latency");
+
+            auto* drive = probe.findParameter ("drive");
+            auto* quality = probe.findParameter ("quality");
+            drive->setValue (18.0f);
+
+            std::vector<float> a ((size_t) blockSize), b ((size_t) blockSize);
+            const auto tone = sine (440.0, 0.8f, blockSize * 400);
+
+            const auto before = realtimeAllocationCount();
+            {
+                const rt::ScopedRealtimeSection realtime;
+
+                for (int i = 0; i < 400; ++i)
+                {
+                    if (i % 40 == 0)
+                        quality->setValue ((float) (i / 40 % 3));
+
+                    std::copy (tone.begin() + i * blockSize, tone.begin() + (i + 1) * blockSize, a.begin());
+                    std::copy (a.begin(), a.end(), b.begin());
+                    float* channels[2] = { a.data(), b.data() };
+                    probe.process (channels, 2, blockSize, {});
+                }
+            }
+            expectEquals (realtimeAllocationCount() - before, 0);
+            expectGreaterThan (probe.getLatencySamples(), 0, "the drive's oversampling adds latency");
+            expectLessThan (peak (a, 0, blockSize), 0.8f, "tanh compresses the peaks");
+
+            drive->setValue (0.0f);
+
+            for (int i = 0; i < 60; ++i)   // the drive ramps down, then crossfades out
+            {
+                float* channels[2] = { a.data(), b.data() };
+                probe.process (channels, 2, blockSize, {});
+            }
+
+            expectEquals (probe.getLatencySamples(), 0, "drive off again: no latency");
+        }
+
         beginTest ("No allocation while playing and switching");
         {
             EngineProbeBlock probe;
