@@ -132,7 +132,10 @@ public:
         this many channels. Asked when the chain is prepared, never while it plays. */
     virtual int getOutputChannels (int inputChannels) const noexcept { return inputChannels; }
 
-    /** Extra delay the block adds, in samples (0 for most). */
+    /** Extra delay the block adds, in samples (0 for most). Any thread,
+        including the audio thread every buffer (the Chain follows a latency
+        that changes while playing, B2): no locks, nothing a message thread
+        may free; keep it in an atomic. */
     virtual int getLatencySamples() const noexcept { return 0; }
 
     /** True for blocks whose sound rings on after the input stops (delay,

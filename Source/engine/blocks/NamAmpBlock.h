@@ -36,7 +36,7 @@ public:
     void loadFileAsync (const juce::File& file, std::function<void (juce::String)> onDone) override;
     juce::File getLoadedFile() const override;
     juce::String getLoadedFileInfo() const override;
-    void collectGarbage() override { models.collectGarbage(); }
+    void collectGarbage() override { models.collectGarbage(); updateLatency(); }
     int getLatencySamples() const noexcept override;
     int getOutputChannels (int) const noexcept override { return 1; }   // an amp is mono
 
@@ -56,6 +56,13 @@ public:
     int getNumModelsInMemory() const { return models.getNumOwned(); }
 
 private:
+    /** Message thread: what getLatencySamples() reports (the latest model's),
+        kept in an atomic so the audio thread reads it without the handover's
+        lock and without touching a model the message thread may free (B2:
+        the Chain reads every block's latency each buffer). */
+    void updateLatency() noexcept;
+    std::atomic<int> latencyNow { 0 };
+
     void prepareBlock (const ProcessSpec&) override;
     void processBlock (float* const* channels, int numChannels, int numSamples,
                        const ProcessContext&) noexcept override;

@@ -118,8 +118,15 @@ std::array<dsp::FilterBandDesign, PedalEqBlock::numBands> PedalEqBlock::getBandD
 
 int PedalEqBlock::getLatencySamples() const noexcept
 {
+    // Any thread, lock-free: the capture's part is kept in an atomic (B2: the
+    // Chain reads every block's latency each buffer, on the audio thread).
+    return (isClipInPath() ? oversampler.getLatencySamples() : 0) + captureLatency.load (std::memory_order_relaxed);
+}
+
+void PedalEqBlock::updateCaptureLatency() noexcept
+{
     const auto* capture = getLatestCapture();
-    return (isClipInPath() ? oversampler.getLatencySamples() : 0) + (capture != nullptr ? capture->getLatencySamples() : 0);
+    captureLatency.store (capture != nullptr ? capture->getLatencySamples() : 0, std::memory_order_relaxed);
 }
 
 //== The character capture =====================================================
@@ -207,6 +214,7 @@ void PedalEqBlock::installCapture (std::unique_ptr<Capture> capture)
         capture->prepare (spec);
 
     captures.publish (std::move (capture));
+    updateCaptureLatency();
 }
 
 void PedalEqBlock::installCaptureBeforePlaying (std::unique_ptr<Capture> capture)
@@ -220,6 +228,7 @@ void PedalEqBlock::installCaptureBeforePlaying (std::unique_ptr<Capture> capture
     // queue here (instead of on the audio thread) is safe.
     captures.publish (std::move (capture));
     currentCapture = captures.takeNext();
+    updateCaptureLatency();
 }
 
 const PedalEqBlock::Capture* PedalEqBlock::getLatestCapture() const noexcept
@@ -290,6 +299,7 @@ void PedalEqBlock::prepareBlock (const ProcessSpec& spec)
 
     // Audio is stopped: re-prepare every capture we own (playing or waiting).
     captures.forEachOwned ([&spec] (Capture& c) { c.prepare (spec); });
+    updateCaptureLatency();
     captureFade.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate, captureFadeSeconds);
     captureGain.reset (spec.sampleRate, dsp::Crossfade::defaultSeconds);
     clipFade.prepare (maxChannels, spec.maxBlockSize, spec.sampleRate, clipFadeSeconds);

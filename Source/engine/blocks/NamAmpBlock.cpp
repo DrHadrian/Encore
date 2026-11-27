@@ -69,6 +69,7 @@ void NamAmpBlock::installModel (std::unique_ptr<NamModel> model)
         model->prepare (spec);
 
     models.publish (std::move (model));
+    updateLatency();
 }
 
 void NamAmpBlock::installBeforePlaying (std::unique_ptr<NamModel> model)
@@ -84,6 +85,7 @@ void NamAmpBlock::installBeforePlaying (std::unique_ptr<NamModel> model)
     // the queue here (instead of on the audio thread) is safe.
     models.publish (std::move (model));
     current = models.takeNext();
+    updateLatency();
 }
 
 juce::File NamAmpBlock::getLoadedFile() const
@@ -118,10 +120,13 @@ juce::String NamAmpBlock::getLoadedFileInfo() const
 
 int NamAmpBlock::getLatencySamples() const noexcept
 {
-    if (auto* m = models.getLatest())
-        return m->getLatencySamples();
+    return latencyNow.load (std::memory_order_relaxed);   // any thread, lock-free
+}
 
-    return 0;
+void NamAmpBlock::updateLatency() noexcept
+{
+    const auto* m = models.getLatest();
+    latencyNow.store (m != nullptr ? m->getLatencySamples() : 0, std::memory_order_relaxed);
 }
 
 //==============================================================================
@@ -138,6 +143,8 @@ void NamAmpBlock::prepareBlock (const ProcessSpec& spec)
         if (! (m.getSpec() == spec))
             m.prepare (spec);
     });
+
+    updateLatency();
 }
 
 void NamAmpBlock::resetBlock() noexcept
