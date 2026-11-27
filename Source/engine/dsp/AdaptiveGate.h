@@ -11,6 +11,23 @@
 namespace encore::dsp
 {
 
+/** An atomic a UI thread can read, that copies with its owner (a gate's
+    state is copied when a crossfade starts, B2). Relaxed: one value, no
+    ordering with anything else. */
+template <typename T>
+struct CopyableAtomic
+{
+    CopyableAtomic (T initial = {}) noexcept : value (initial) {}
+    CopyableAtomic (const CopyableAtomic& other) noexcept : value (other.load()) {}
+    CopyableAtomic& operator= (const CopyableAtomic& other) noexcept { store (other.load()); return *this; }
+
+    T load() const noexcept      { return value.load (std::memory_order_relaxed); }
+    void store (T v) noexcept    { value.store (v, std::memory_order_relaxed); }
+
+private:
+    std::atomic<T> value;
+};
+
 /** What the adaptive ("Smart") gate is set to: the Pedal Gate "S2"'s two
     knobs and switch, or the Studio Gate "X4"'s Smart mode (GATE-PLAN 13, 23). */
 struct AdaptiveGateSettings
@@ -50,6 +67,8 @@ struct AdaptiveGateSettings
 
     The learning runs on a decimated grid (about every 0.33 ms), so it costs
     a log10 and a few compares per step, not per sample.
+
+    Copyable (a block copies its gate to crossfade from the old setting).
 
     Threads: prepare() off the audio thread. process(), processWithDecision()
     and reset() on the audio thread: no allocation, no locks. The floor and
@@ -144,17 +163,17 @@ public:
     float getReductionDb() const noexcept { return envelope.getReductionDb(); }
 
     /** The learned noise floor and the threshold it gives, dBFS. Any thread. */
-    float getFloorDb() const noexcept     { return floorForUi.load (std::memory_order_relaxed); }
+    float getFloorDb() const noexcept     { return floorForUi.load(); }
     float getThresholdDb() const noexcept { return thresholdDb; }
 
     /** True while learning is frozen (near-silence or the tuner). Any thread. */
-    bool isFrozen() const noexcept        { return frozenForUi.load (std::memory_order_relaxed); }
+    bool isFrozen() const noexcept        { return frozenForUi.load(); }
 
     /** Starts from a floor learned before (a rebuilt patch). */
     void setFloorDb (float db) noexcept
     {
         floorDb = juce::jlimit (minFloorDb, maxFloorDb, db);
-        floorForUi.store (floorDb, std::memory_order_relaxed);
+        floorForUi.store (floorDb);
         applySettings();
     }
 
@@ -228,7 +247,7 @@ private:
 
         smoothedDb = db + (smoothedDb - db) * smoothing;
         const auto frozen = tunerOpen || db < freezeBelowDb;
-        frozenForUi.store (frozen, std::memory_order_relaxed);
+        frozenForUi.store (frozen);
 
         // The chatter guard's extra hold fades back to the base over 1 s.
         if (holdBoost > 0.0f)
@@ -266,7 +285,7 @@ private:
         if (moved != floorDb)
         {
             floorDb = moved;
-            floorForUi.store (floorDb, std::memory_order_relaxed);
+            floorForUi.store (floorDb);
             applySettings();
         }
     }
@@ -370,8 +389,8 @@ private:
     float releaseFactorNow = 1.0f;
     bool wasOpen = true;
 
-    std::atomic<float> floorForUi { initialFloorDb };
-    std::atomic<bool> frozenForUi { false };
+    CopyableAtomic<float> floorForUi { initialFloorDb };
+    CopyableAtomic<bool> frozenForUi { false };
 };
 
 } // namespace encore::dsp

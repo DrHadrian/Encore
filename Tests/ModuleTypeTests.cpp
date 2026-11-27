@@ -8,6 +8,7 @@
 
 #include "engine/blocks/EngineProbeBlock.h"
 #include "engine/blocks/PedalEqBlock.h"
+#include "engine/blocks/PedalGateBlock.h"
 #include "model/ShowJson.h"
 #include "session/PatchBuilder.h"
 
@@ -114,9 +115,12 @@ public:
         {
             expect (isNewModuleBlockType (EngineProbeBlock::typeId));
             expect (isNewModuleBlockType (PedalEqBlock::typeId));
+            expect (isNewModuleBlockType (PedalGateBlock::typeId));
+
+            const juce::StringArray newModules { EngineProbeBlock::typeId, PedalEqBlock::typeId, PedalGateBlock::typeId };
 
             for (const auto& t : getBlockTypes())
-                if (t.id != EngineProbeBlock::typeId && t.id != PedalEqBlock::typeId)
+                if (! newModules.contains (t.id))
                     expect (! isNewModuleBlockType (t.id), t.id);
 
             expect (! isNewModuleBlockType ("noSuchType"));
@@ -259,6 +263,61 @@ public:
 
 static HiddenBlockTypeTests hiddenBlockTypeTests;
 static PedalEqRegistrationTests pedalEqRegistrationTests;
+
+class GateRegistrationTests final : public juce::UnitTest
+{
+public:
+    GateRegistrationTests() : juce::UnitTest ("Gate registration", "Encore") {}
+
+    void runTest() override
+    {
+        beginTest ("The Pedal Gate is hidden and a new module; today's gate is unchanged");
+        {
+            const auto* type = HiddenBlockTypeTests::findType (getBlockTypes(), PedalGateBlock::typeId);
+            expect (type != nullptr && type->hidden && type->newModule);
+            expect (HiddenBlockTypeTests::findType (getMenuBlockTypes(), PedalGateBlock::typeId) == nullptr);
+
+            auto block = createBlock (PedalGateBlock::typeId);
+            expect (block != nullptr && block->getTypeId() == PedalGateBlock::typeId);
+
+            const auto* old = HiddenBlockTypeTests::findType (getMenuBlockTypes(), "gate");
+            expect (old != nullptr && ! old->newModule, "the old gate stays in the menu, schema unchanged");
+            auto oldBlock = createBlock ("gate");
+            expect (oldBlock != nullptr && oldBlock->findParameter ("detectGuitar") != nullptr, "and is still today's");
+        }
+
+        beginTest ("A show with a Pedal Gate saves as schema 5, loads back and plays");
+        {
+            auto show = makeDefaultShow ("S2");
+            BlockModel s2;
+            s2.id = "s2-1";
+            s2.type = PedalGateBlock::typeId;
+            s2.params["threshold"] = 5.0f;
+            s2.params["detect"] = 1.0f;
+            show.patches[0].mainLane().blocks.insert (show.patches[0].mainLane().blocks.begin(), s2);
+
+            const auto text = json::toJson (show);
+            expect (text.contains ("\"schemaVersion\": 5"));
+
+            juce::String error;
+            const auto loaded = json::fromJson (text, error);
+            expect (loaded.has_value(), error);
+
+            if (! loaded)
+                return;
+
+            juce::StringArray problems;
+            auto chain = buildChain (loaded->patches[0], ShowFolder(), spec, problems);
+            expect (problems.isEmpty(), problems.joinIntoString ("; "));
+            const auto& first = chain->getBlocks().front();
+            expect (first->getTypeId() == PedalGateBlock::typeId);
+            expectEquals (first->findParameter ("threshold")->getValue(), 5.0f);
+            expectEquals (first->findParameter ("detect")->getChoiceIndex(), 1);
+        }
+    }
+};
+
+static GateRegistrationTests gateRegistrationTests;
 static NewModuleSchemaTests newModuleSchemaTests;
 
 } // namespace encore::test

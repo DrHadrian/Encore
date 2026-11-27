@@ -7,6 +7,7 @@
 #include "engine/blocks/DelayBlock.h"
 #include "engine/blocks/EngineProbeBlock.h"
 #include "engine/blocks/PedalEqBlock.h"
+#include "engine/blocks/PedalGateBlock.h"
 #include "engine/blocks/EqBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/NoiseGateBlock.h"
@@ -27,6 +28,7 @@ const std::vector<BlockType>& getBlockTypes()
         { EqBlock::typeId,        "EQ" },
         { DelayBlock::typeId,     "Delay" },
         { PedalEqBlock::typeId,   "Pedal EQ", true, true },   // FX Unit, hidden until U1 and the rig test
+        { PedalGateBlock::typeId, "Pedal Gate", true, true }, // FX Unit, hidden until U2 and the rig test
         { EngineProbeBlock::typeId, "Engine probe", true, true },
     };
     return types;
@@ -60,6 +62,7 @@ std::unique_ptr<Block> createBlock (const juce::String& typeId)
     if (typeId == EqBlock::typeId)        return std::make_unique<EqBlock>();
     if (typeId == DelayBlock::typeId)     return std::make_unique<DelayBlock>();
     if (typeId == PedalEqBlock::typeId)   return std::make_unique<PedalEqBlock>();
+    if (typeId == PedalGateBlock::typeId) return std::make_unique<PedalGateBlock>();
     if (typeId == EngineProbeBlock::typeId) return std::make_unique<EngineProbeBlock>();
     if (typeId == SplitBlock::typeId)     return std::make_unique<SplitBlock>();
     if (typeId == MergeBlock::typeId)     return std::make_unique<MergeBlock>();
