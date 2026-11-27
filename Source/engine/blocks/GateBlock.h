@@ -5,6 +5,7 @@
 
 #include "engine/core/Block.h"
 #include "engine/core/LinkBus.h"
+#include "engine/core/LockFreeFifo.h"
 #include "engine/dsp/AdaptiveGate.h"
 #include "engine/dsp/LookAhead.h"
 #include "engine/dsp/Svf.h"
@@ -107,6 +108,26 @@ public:
         key on every channel, crossfaded in and out. */
     void setKeyListen (bool shouldListen) noexcept { keyListen.store (shouldListen, std::memory_order_relaxed); }
     bool isKeyListening() const noexcept           { return keyListen.load (std::memory_order_relaxed); }
+
+    /** The display feed (GATE-PLAN §7): while active, the audio thread pushes
+        a frame about every 5 ms; off, it costs nothing. The UI (U2) pops them
+        on its timer and draws the 4 s history. setDisplayActive: any thread;
+        popDisplayFrame: one consumer thread (the message thread). */
+    struct DisplayFrame
+    {
+        float inputDb = -200.0f;      // peak of what came in (lined up with the output)
+        float keyDb = -200.0f;        // peak of the key, as the detector hears it (filtered)
+        float outputDb = -200.0f;     // peak of what goes out
+        float reductionDb = 0.0f;     // the most gain reduction in the frame (positive dB)
+        bool open = true;             // the decision at the frame's end
+    };
+
+    static constexpr double displayFrameSeconds = 0.005;   // Proposed
+    static constexpr int displayFifoFrames = 512;          // 2.5 s of frames: the UI drains at 30 Hz
+
+    void setDisplayActive (bool shouldBeActive) noexcept { displayActive.store (shouldBeActive, std::memory_order_relaxed); }
+    bool isDisplayActive() const noexcept                { return displayActive.load (std::memory_order_relaxed); }
+    bool popDisplayFrame (DisplayFrame& frame) noexcept  { return displayFrames.pop (frame); }
 
     /** The look-ahead's samples while it's on (the X4), else 0. */
     int getLatencySamples() const noexcept override;
@@ -226,6 +247,16 @@ private:
     juce::AudioBuffer<float> keyCopy, filteredKey, gains, oldGains;
     float listenMix = 0.0f, listenStep = 1.0f;
     std::atomic<bool> keyListen { false };
+
+    /** Audio thread: frames for the display, while it's active. */
+    void feedDisplay (const float* const* channels, int numChannels, const float* const* filtered, int keyChannels,
+                      const float* const* gainsUsed, int gainChannels, int numSamples) noexcept;
+    std::atomic<bool> displayActive { false };
+    bool displayWasActive = false;
+    LockFreeFifo<DisplayFrame, displayFifoFrames> displayFrames;
+    juce::AudioBuffer<float> displayInput;   // |input| per sample, before the gain (sized in prepare)
+    int frameSamples = 240, frameCount = 0;
+    float frameIn = 0.0f, frameKey = 0.0f, frameOut = 0.0f, frameMinGain = 1.0f;
 
     const float* const* keyTap = nullptr;   // set before playing (Chain::prepare)
     int keyTapChannels = 0;

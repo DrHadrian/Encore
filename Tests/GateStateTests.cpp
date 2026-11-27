@@ -4,6 +4,7 @@
 // Native modules, stage B2 step 7 (GATE-PLAN 11, 21, 23): the learned floor
 // across a rebuild, the Gate pair, and today's gate as a Studio Gate.
 
+#include "AllocationCounter.h"
 #include "TestSignals.h"
 
 #include "engine/blocks/NamAmpBlock.h"
@@ -11,6 +12,7 @@
 #include "engine/blocks/PedalGateBlock.h"
 #include "engine/blocks/StudioGateBlock.h"
 #include "engine/core/Chain.h"
+#include "engine/core/Realtime.h"
 #include "session/PatchBuilder.h"
 
 namespace encore::test
@@ -264,6 +266,63 @@ public:
                             + juce::String (1000.0 * worstAt / sampleRate, 1) + " ms");
                 expect (worst <= 1.0f, label);
             }
+        }
+
+        beginTest ("The display feed: frames in order while it's on, none while it's off, no allocation");
+        {
+            PedalGateBlock s2;
+            s2.prepare ({ sampleRate, blockSize });
+            s2.reset();
+
+            // A level that rises 1 dB every 10 ms, from -60 dBFS.
+            const auto n = 48000;
+            std::vector<float> in ((size_t) n);
+
+            for (int i = 0; i < n; ++i)
+                in[(size_t) i] = juce::Decibels::decibelsToGain (-60.0f + (float) (i / 480)) * (i % 2 == 0 ? 1.0f : -1.0f);
+
+            std::vector<float> buffer ((size_t) blockSize);
+            const auto play = [&] (int from, int to)
+            {
+                for (int offset = from; offset < to; offset += blockSize)
+                {
+                    std::copy (in.begin() + offset, in.begin() + offset + blockSize, buffer.begin());
+                    float* ch[] = { buffer.data() };
+                    s2.process (ch, 1, blockSize, {});
+                }
+            };
+
+            play (0, 9600);   // off: nothing
+            GateBlock::DisplayFrame frame;
+            expect (! s2.popDisplayFrame (frame), "no frames while off");
+
+            s2.setDisplayActive (true);
+            const auto before = realtimeAllocationCount();
+            {
+                const rt::ScopedRealtimeSection realtime;
+                play (9600, 9600 + 48 * 64 * 5);   // 320 ms: 64 frames of 5 ms
+            }
+            expectEquals (realtimeAllocationCount() - before, 0);
+
+            int frames = 0;
+            auto last = -200.0f, worstStep = 0.0f;
+
+            while (s2.popDisplayFrame (frame))
+            {
+                if (frames > 0)
+                    worstStep = juce::jmax (worstStep, last - frame.inputDb);   // never falls
+
+                last = frame.inputDb;
+                ++frames;
+            }
+
+            expectEquals (frames, 64);
+            expect (worstStep <= 0.01f, "in order");
+            expectWithinAbsoluteError (last, -60.0f + (9600 + 48 * 64 * 5 - 1) / 480, 1.01f, "the last frame's peak");
+
+            s2.setDisplayActive (false);
+            play (9600 + 48 * 64 * 5, 48000 - blockSize);
+            expect (! s2.popDisplayFrame (frame), "none after it's switched off");
         }
     }
 };

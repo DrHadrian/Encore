@@ -86,6 +86,50 @@ void GateBlock::delayDecisions (int delay, int numSamples) noexcept
     }
 }
 
+void GateBlock::feedDisplay (const float* const* channels, int numChannels, const float* const* filtered, int keyChannels,
+                             const float* const* gainsUsed, int gainChannels, int numSamples) noexcept
+{
+    // Coming on screen: start a fresh frame.
+    if (! displayWasActive)
+    {
+        frameCount = 0;
+        frameIn = frameKey = frameOut = 0.0f;
+        frameMinGain = 1.0f;
+    }
+
+    const auto* in = displayInput.getReadPointer (0);
+    const auto toDb = [] (float x) { return x > 1.0e-10f ? 20.0f * std::log10 (x) : -200.0f; };
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        frameIn = juce::jmax (frameIn, in[i]);
+
+        for (int c = 0; c < keyChannels; ++c)
+            frameKey = juce::jmax (frameKey, std::abs (filtered[c][i]));
+
+        for (int c = 0; c < numChannels; ++c)
+            frameOut = juce::jmax (frameOut, std::abs (channels[c][i]));
+
+        for (int c = 0; c < gainChannels; ++c)
+            frameMinGain = juce::jmin (frameMinGain, gainsUsed[c][i]);
+
+        if (++frameCount >= frameSamples)
+        {
+            DisplayFrame frame;
+            frame.inputDb = toDb (frameIn);
+            frame.keyDb = toDb (frameKey);
+            frame.outputDb = toDb (frameOut);
+            frame.reductionDb = juce::jmax (0.0f, -toDb (frameMinGain));
+            frame.open = bus.open[(size_t) i] != 0;
+            displayFrames.push (frame);   // full (nobody reading): the frame is dropped
+
+            frameCount = 0;
+            frameIn = frameKey = frameOut = 0.0f;
+            frameMinGain = 1.0f;
+        }
+    }
+}
+
 void GateBlock::setKeyTap (const float* const* tapChannels, int numTapChannels, const juce::String& problem)
 {
     keyTap = tapChannels;
@@ -313,6 +357,10 @@ void GateBlock::prepareBlock (const ProcessSpec& spec)
 
     for (auto* buffer : { &keyCopy, &filteredKey, &gains, &oldGains })
         buffer->setSize (2, spec.maxBlockSize, false, true, false);
+
+    displayInput.setSize (1, spec.maxBlockSize, false, true, false);
+    frameSamples = juce::jmax (1, juce::roundToInt (displayFrameSeconds * sampleRate));
+    frameCount = 0;
 }
 
 void GateBlock::resetBlock() noexcept
@@ -486,6 +534,25 @@ void GateBlock::processBlock (float* const* channels, int numChannels, int numSa
         lookAhead.process (channels, numChannels, numSamples);
     }
 
+    // The display's input: what goes into the gain (after the look-ahead,
+    // so it lines up with the output). Only while it's on screen.
+    const auto display = displayActive.load (std::memory_order_relaxed);
+
+    if (display)
+    {
+        auto* in = displayInput.getWritePointer (0);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            auto peak = std::abs (channels[0][i]);
+
+            for (int c = 1; c < numChannels; ++c)
+                peak = juce::jmax (peak, std::abs (channels[c][i]));
+
+            in[i] = peak;
+        }
+    }
+
     // The gains: per sample, from the key.
     const auto tunerOpen = context.tunerOpen;
     float* g[2] = { gains.getWritePointer (0), gains.getWritePointer (1) };
@@ -548,6 +615,12 @@ void GateBlock::processBlock (float* const* channels, int numChannels, int numSa
             }
         }
     }
+
+    if (display)
+        feedDisplay (channels, numChannels, f, keyChannels, g,
+                     fadePosition < fadeLength || lanesUsed > 1 ? numChannels : 1, numSamples);
+
+    displayWasActive = display;
 
     // For a follower of this gate, later in this callback.
     bus.thresholdDb = current.thresholdDb();
