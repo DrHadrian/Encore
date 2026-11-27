@@ -1158,6 +1158,10 @@ void ShowSession::setExpression (int blockIndex, const juce::String& paramId, in
             && juce::isPositiveAndBelow (blockIndex, (int) it->second->getBlocks().size()))
             if (auto* p = it->second->getBlocks()[(size_t) blockIndex]->findParameter (paramId))
             {
+                // Not a sound to sweep (a Studio EQ band's "in use", the phase mode...).
+                if (! p->getSpec().expressionAllowed)
+                    return;
+
                 assignment.min = p->getSpec().range.start;
                 assignment.max = p->getSpec().range.end;
             }
