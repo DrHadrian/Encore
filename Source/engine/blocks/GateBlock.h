@@ -4,6 +4,7 @@
 #pragma once
 
 #include "engine/core/Block.h"
+#include "engine/core/LinkBus.h"
 #include "engine/dsp/AdaptiveGate.h"
 #include "engine/dsp/LookAhead.h"
 #include "engine/dsp/Svf.h"
@@ -127,7 +128,25 @@ public:
         didn't): "Key: Input 3 isn't on this computer". Message thread. */
     juce::String getKeyInfo() const;
 
-    //== Keys (Block; message thread / any thread) =============================
+    /** Linking (B2 step 6, GATE-PLAN §4): a follower shares an earlier gate's
+        detection (its level, its open/closed decision and its threshold)
+        and keeps its own Range and Release (or Decay). Any thread. */
+    enum class LinkState
+    {
+        none,        // not linked
+        following,   // its leader decides
+        leaderOff,   // the leader didn't run (off, asleep, skipped): its own detector, the last shared threshold
+        refused      // the link didn't resolve (a later gate, not a gate, missing)
+    };
+
+    LinkState getLinkState() const noexcept { return (LinkState) linkStateNow.load (std::memory_order_relaxed); }
+
+    /** "Link: leader off", or why the link was refused ("" otherwise). Message thread. */
+    juce::String getLinkInfo() const;
+
+    //== Keys and links (Block; message thread / any thread) ===================
+    const LinkBus* getLinkBus() const noexcept override { return &bus; }
+    void setLinkLeader (const LinkBus* leaderBus, const juce::String& problem) override;
     void setKeyTap (const float* const* tapChannels, int numTapChannels, const juce::String& problem) override;
     void setKeyInputSlot (int slot) noexcept override;
 
@@ -178,14 +197,26 @@ private:
         void reset() noexcept;
 
         /** Gains for numSamples from the key: gains[0] (linked) or one per
-            channel. filtered (optional) receives the filtered key. */
+            channel. filtered (optional) receives the filtered key. With a
+            shared decision (a leader's level and open flags, already lined
+            up) lane 0 follows it instead of its own detector. bus (optional)
+            receives lane 0's level and decision for a follower of this one. */
         void run (const float* const* key, int keyChannels, int numSamples, int numChannels,
-                  float* const* gains, float* const* filtered, bool tunerOpen) noexcept;
+                  float* const* gains, float* const* filtered, bool tunerOpen,
+                  const float* sharedLevel = nullptr, const std::uint8_t* sharedOpen = nullptr,
+                  LinkBus* bus = nullptr) noexcept;
+
+        float thresholdDb() const noexcept;
 
         float filter (float x, int channel) noexcept;
     };
 
     void publishState() noexcept;
+    float lastLeaderThreshold = 0.0f;
+    bool haveLeaderThreshold = false;
+
+    /** Lines the leader's decisions up with this block's input. */
+    void delayDecisions (int delay, int numSamples) noexcept;
 
     double sampleRate = 48000.0;
     Engine current, old;
@@ -203,6 +234,15 @@ private:
     std::atomic<int> keyInputSlot { -1 };
     std::atomic<bool> keyInputNamed { false };
     std::atomic<int> keyStateNow { (int) KeyState::inUse };
+
+    LinkBus bus;                            // what this gate decided, for its followers
+    const LinkBus* leader = nullptr;        // set before playing (Chain::prepare)
+    juce::String linkProblem;               // message thread
+    std::vector<float> decisionLevel, delayedLevel;   // the leader's, lined up (sized when linked)
+    std::vector<std::uint8_t> decisionOpen, delayedOpen;
+    int decisionWrite = 0;
+    bool wasFollowing = false;
+    std::atomic<int> linkStateNow { (int) LinkState::none };
 
     std::atomic<bool> openNow { true }, frozenNow { false };
     std::atomic<float> reductionNow { 0.0f }, floorNow { dsp::AdaptiveGate::initialFloorDb };

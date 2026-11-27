@@ -16,7 +16,74 @@ GateBlock::~GateBlock() = default;
 
 int GateBlock::getLatencySamples() const noexcept
 {
-    return hasLookAhead() ? getLookAheadFromParameters() : 0;
+    // A follower's own look-ahead is ignored: its leader decides (Proposed).
+    return hasLookAhead() && leader == nullptr ? getLookAheadFromParameters() : 0;
+}
+
+void GateBlock::setLinkLeader (const LinkBus* leaderBus, const juce::String& problem)
+{
+    leader = leaderBus;
+    linkProblem = problem;
+    const auto maxBlock = juce::jmax (1, getPreparedSpec().maxBlockSize);
+
+    if (leader != nullptr)
+    {
+        decisionLevel.assign ((size_t) LinkBus::maxDelaySamples + 1, 0.0f);
+        decisionOpen.assign ((size_t) LinkBus::maxDelaySamples + 1, 1);
+        delayedLevel.assign ((size_t) maxBlock, 0.0f);
+        delayedOpen.assign ((size_t) maxBlock, 1);
+    }
+    else
+    {
+        decisionLevel = {};
+        decisionOpen = {};
+        delayedLevel = {};
+        delayedOpen = {};
+    }
+
+    decisionWrite = 0;
+    haveLeaderThreshold = false;
+    wasFollowing = false;
+    linkStateNow.store ((int) (leader != nullptr ? LinkState::following
+                               : problem.isNotEmpty() ? LinkState::refused : LinkState::none),
+                        std::memory_order_relaxed);
+}
+
+juce::String GateBlock::getLinkInfo() const
+{
+    switch (getLinkState())
+    {
+        case LinkState::leaderOff: return "Link: leader off";
+        case LinkState::refused:   return linkProblem;
+        case LinkState::none:
+        case LinkState::following: break;
+    }
+
+    return {};
+}
+
+void GateBlock::delayDecisions (int delay, int numSamples) noexcept
+{
+    const auto size = (int) decisionLevel.size();
+
+    if (size == 0 || leader == nullptr)
+        return;
+
+    delay = juce::jlimit (0, size - 1, delay);
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        decisionLevel[(size_t) decisionWrite] = leader->level[(size_t) i];
+        decisionOpen[(size_t) decisionWrite] = leader->open[(size_t) i];
+        auto read = decisionWrite - delay;
+
+        if (read < 0)
+            read += size;
+
+        delayedLevel[(size_t) i] = decisionLevel[(size_t) read];
+        delayedOpen[(size_t) i] = decisionOpen[(size_t) read];
+        decisionWrite = decisionWrite + 1 < size ? decisionWrite + 1 : 0;
+    }
 }
 
 void GateBlock::setKeyTap (const float* const* tapChannels, int numTapChannels, const juce::String& problem)
@@ -173,11 +240,18 @@ float GateBlock::Engine::filter (float x, int channel) noexcept
     return (float) y;
 }
 
+float GateBlock::Engine::thresholdDb() const noexcept
+{
+    return setup.way == GateWay::smart ? lanes[0].adaptive.getThresholdDb() : setup.thresholdDb;
+}
+
 void GateBlock::Engine::run (const float* const* key, int keyChannels, int numSamples, int numChannels,
-                             float* const* gainsOut, float* const* filtered, bool tunerOpen) noexcept
+                             float* const* gainsOut, float* const* filtered, bool tunerOpen,
+                             const float* sharedLevel, const std::uint8_t* sharedOpen, LinkBus* bus) noexcept
 {
     const auto smart = setup.way == GateWay::smart;
-    const auto lanesUsed = setup.stereoLinked ? 1 : juce::jlimit (1, 2, numChannels);
+    const auto shared = sharedLevel != nullptr && sharedOpen != nullptr;
+    const auto lanesUsed = setup.stereoLinked || shared ? 1 : juce::jlimit (1, 2, numChannels);
     keyChannels = juce::jlimit (1, 2, keyChannels);
 
     for (int i = 0; i < numSamples; ++i)
@@ -191,12 +265,36 @@ void GateBlock::Engine::run (const float* const* key, int keyChannels, int numSa
             filtered[1][i] = k[1];
         }
 
+        if (shared)
+        {
+            // A follower: the leader's level and decision; its own range and release.
+            auto& lane = lanes[0];
+            const auto open = sharedOpen[i] != 0;
+            const auto level = sharedLevel[i];
+            gainsOut[0][i] = smart ? lane.adaptive.processWithDecision (open, level)
+                                   : lane.envelope.processWithDecision (open, level);
+
+            if (bus != nullptr)
+            {
+                bus->level[(size_t) i] = level;
+                bus->open[(size_t) i] = open ? 1 : 0;
+            }
+
+            continue;
+        }
+
         for (int l = 0; l < lanesUsed; ++l)
         {
             auto& lane = lanes[(size_t) l];
             const auto x = lanesUsed == 1 ? juce::jmax (std::abs (k[0]), std::abs (k[1])) : k[l];
             const auto level = lane.detector.process (x);
             gainsOut[l][i] = smart ? lane.adaptive.process (level, tunerOpen) : lane.envelope.process (level);
+
+            if (l == 0 && bus != nullptr)
+            {
+                bus->level[(size_t) i] = level;
+                bus->open[(size_t) i] = (smart ? lane.adaptive.isOpen() : lane.envelope.isOpen()) ? 1 : 0;
+            }
         }
     }
 }
@@ -211,6 +309,7 @@ void GateBlock::prepareBlock (const ProcessSpec& spec)
     fadePosition = fadeLength;
     listenStep = 1.0f / (float) juce::jmax (1, juce::roundToInt (listenFadeSeconds * sampleRate));
     lookAhead.prepare (sampleRate);
+    bus.prepare (spec.maxBlockSize);
 
     for (auto* buffer : { &keyCopy, &filteredKey, &gains, &oldGains })
         buffer->setSize (2, spec.maxBlockSize, false, true, false);
@@ -262,12 +361,44 @@ void GateBlock::processBlock (float* const* channels, int numChannels, int numSa
                               const ProcessContext& context) noexcept
 {
     numChannels = juce::jlimit (1, 2, numChannels);
-    const auto setup = readSetup (numSamples);
+    auto setup = readSetup (numSamples);
 
-    // A switch of way, detector, key or stereo: keep the old engine beside
-    // the new one for 10 ms. The new one starts where the old one stood
-    // (open or closed), so a closed gate doesn't burst open.
-    if (setup.switchesFrom (current.setup) && fadePosition >= fadeLength)
+    // Linked: the leader ran earlier in this callback, or it didn't (off,
+    // asleep, skipped): then its own detector, with the last shared threshold.
+    const auto following = leader != nullptr && context.callback != 0
+                           && leader->callback == context.callback && leader->numSamples == numSamples;
+
+    if (leader != nullptr)
+    {
+        setup.lookAheadSamples = 0;
+        linkStateNow.store ((int) (following ? LinkState::following : LinkState::leaderOff), std::memory_order_relaxed);
+    }
+
+    if (following)
+    {
+        lastLeaderThreshold = leader->thresholdDb;
+        haveLeaderThreshold = true;
+        setup.stereoLinked = true;   // one decision for every channel
+    }
+    else if (leader != nullptr && haveLeaderThreshold && setup.way != GateWay::smart)
+    {
+        setup.thresholdDb = lastLeaderThreshold;
+    }
+
+    const auto linkChanged = following != wasFollowing;
+
+    // Falling back in Smart: learning goes on from the last shared threshold.
+    if (linkChanged && ! following && haveLeaderThreshold && setup.way == GateWay::smart)
+        for (auto& lane : current.lanes)
+            lane.adaptive.setFloorDb (lastLeaderThreshold - setup.smartOffsetDb);
+
+    wasFollowing = following;
+
+    // A switch of way, detector, key or stereo, or the link coming or going:
+    // keep the old engine beside the new one for 10 ms. The new one starts
+    // where the old one stood (open or closed), so a closed gate doesn't
+    // burst open.
+    if ((setup.switchesFrom (current.setup) || linkChanged) && fadePosition >= fadeLength)
     {
         old = current;
         fadePosition = 0;
@@ -284,6 +415,18 @@ void GateBlock::processBlock (float* const* channels, int numChannels, int numSa
     {
         current.configure (setup, sampleRate);
     }
+
+    if (following)
+    {
+        if (setup.way == GateWay::smart)
+            for (auto& lane : current.lanes)
+                lane.adaptive.setSharedThresholdDb (lastLeaderThreshold);
+
+        delayDecisions (context.latencyIn - leader->latencyOut, numSamples);
+    }
+
+    const float* sharedLevel = following ? delayedLevel.data() : nullptr;
+    const std::uint8_t* sharedOpen = following ? delayedOpen.data() : nullptr;
 
     // The key, copied before the look-ahead delays the channels in place.
     // One that can't be reached falls back to the gate's own input.
@@ -347,15 +490,15 @@ void GateBlock::processBlock (float* const* channels, int numChannels, int numSa
     const auto tunerOpen = context.tunerOpen;
     float* g[2] = { gains.getWritePointer (0), gains.getWritePointer (1) };
     float* f[2] = { filteredKey.getWritePointer (0), filteredKey.getWritePointer (1) };
-    current.run (keys, keyChannels, numSamples, numChannels, g, f, tunerOpen);
+    current.run (keys, keyChannels, numSamples, numChannels, g, f, tunerOpen, sharedLevel, sharedOpen, &bus);
 
     const auto lanesUsed = setup.stereoLinked ? 1 : numChannels;
 
     if (fadePosition < fadeLength)
     {
         float* og[2] = { oldGains.getWritePointer (0), oldGains.getWritePointer (1) };
-        old.run (keys, keyChannels, numSamples, numChannels, og, nullptr, tunerOpen);
-        const auto oldLanes = old.setup.stereoLinked ? 1 : numChannels;
+        old.run (keys, keyChannels, numSamples, numChannels, og, nullptr, tunerOpen, sharedLevel, sharedOpen);
+        const auto oldLanes = old.setup.stereoLinked || sharedLevel != nullptr ? 1 : numChannels;
         const auto start = fadePosition;
 
         // The blend is per channel (linked to independent, or back, too).
@@ -405,6 +548,12 @@ void GateBlock::processBlock (float* const* channels, int numChannels, int numSa
             }
         }
     }
+
+    // For a follower of this gate, later in this callback.
+    bus.thresholdDb = current.thresholdDb();
+    bus.latencyOut = context.latencyIn + getLatencySamples();
+    bus.numSamples = numSamples;
+    bus.callback = context.callback;
 
     publishState();
 }

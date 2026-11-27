@@ -605,6 +605,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/PedalGateTests.cpp
         Tests/GateKeyTests.cpp
         Tests/StudioGateTests.cpp
+        Tests/GateLinkTests.cpp
         Tests/RenderTests.cpp
         Tests/ModelTests.cpp
         Tests/NamTests.cpp
