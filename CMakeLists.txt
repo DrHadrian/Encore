@@ -734,6 +734,49 @@ if(ENCORE_BUILD_TESTS)
                      --set g100=15 --set g200=15 --set g400=15 --set g800=15 --set g1k6=15 --set g3k2=15 --set g6k4=15
                      --set level=-12 --report "${encore_render_dir}/pedalEq-fullBoost.txt")
     set_tests_properties(EncoreRender.pedalEq.fullBoost PROPERTIES FIXTURES_REQUIRED encore_render_plucks)
+
+    # The gates (B2): every preset of both on generated notes with gaps of
+    # noise (a Smart gate learns the floor from -70), and a show with the Gate
+    # pair around the NAM example amp, a ducking delay keyed from a block, and
+    # an X4 in Smart mode. Each report's notes give what the gate learned and did.
+    add_test(NAME EncoreRender.gateTest
+             COMMAND EncoreRender --make-gate-test "${encore_render_dir}/gatetest.wav" --noise-db -60)
+    add_test(NAME EncoreRender.gateShow
+             COMMAND EncoreRender --make-gate-show "${encore_render_dir}/Gates.encore"
+                     --amp "${nam_SOURCE_DIR}/example_models/wavenet_a1_standard.nam")
+    set_tests_properties(EncoreRender.gateTest PROPERTIES FIXTURES_SETUP encore_render_gatetest)
+    set_tests_properties(EncoreRender.gateShow PROPERTIES FIXTURES_SETUP encore_render_gateshow)
+    foreach(preset default cleanHiss singleCoils highGain djentTight)
+        foreach(type pedalGate studioGate)
+            if(preset STREQUAL "default")
+                set(preset_args)
+            else()
+                set(preset_args --preset ${preset})
+            endif()
+            add_test(NAME EncoreRender.${type}.${preset}
+                     COMMAND EncoreRender --in "${encore_render_dir}/gatetest.wav"
+                             --out "${encore_render_dir}/${type}-${preset}.wav" --block ${type} ${preset_args}
+                             --report "${encore_render_dir}/${type}-${preset}.txt")
+            set_tests_properties(EncoreRender.${type}.${preset} PROPERTIES FIXTURES_REQUIRED encore_render_gatetest)
+        endforeach()
+    endforeach()
+    foreach(preset duckDelay duckReverb softCleanup swellCleanup)
+        add_test(NAME EncoreRender.studioGate.${preset}
+                 COMMAND EncoreRender --in "${encore_render_dir}/gatetest.wav"
+                         --out "${encore_render_dir}/studioGate-${preset}.wav" --block studioGate --preset ${preset}
+                         --report "${encore_render_dir}/studioGate-${preset}.txt")
+        set_tests_properties(EncoreRender.studioGate.${preset} PROPERTIES FIXTURES_REQUIRED encore_render_gatetest)
+    endforeach()
+    foreach(patch "Gate pair" "Ducking delay" "Smart X4")
+        string(REPLACE " " "-" patch_file "${patch}")
+        add_test(NAME EncoreRender.show.${patch_file}
+                 COMMAND EncoreRender --in "${encore_render_dir}/gatetest.wav"
+                         --out "${encore_render_dir}/show-${patch_file}.wav"
+                         --show "${encore_render_dir}/Gates.encore" --patch "${patch}"
+                         --report "${encore_render_dir}/show-${patch_file}.txt")
+        set_tests_properties(EncoreRender.show.${patch_file} PROPERTIES
+                             FIXTURES_REQUIRED "encore_render_gatetest;encore_render_gateshow")
+    endforeach()
 endif()
 
 if(MSVC)

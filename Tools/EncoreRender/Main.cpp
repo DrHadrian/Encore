@@ -8,6 +8,7 @@
 #include <juce_events/juce_events.h>
 
 #include "model/ShowFolder.h"
+#include "model/ShowJson.h"
 #include "session/OfflineRender.h"
 #include "session/PatchBuilder.h"
 
@@ -17,15 +18,22 @@ namespace
 {
     const char* usage = R"(EncoreRender: a WAV through an Encore block or patch, offline.
 
-  EncoreRender --in IN.wav --out OUT.wav --block TYPE [--preset ID] [--settings S.json] [--set id=value ...]
-  EncoreRender --in IN.wav --out OUT.wav --show SHOW --patch NAME-OR-NUMBER
+  EncoreRender --in IN.wav --out OUT.wav --block TYPE [--preset ID] [--settings S.json] [--set id=value ...] [--ref name=value ...]
+  EncoreRender --in IN.wav --out OUT.wav --show SHOW --patch NAME-OR-NUMBER [--ref blockId.name=value ...]
   EncoreRender --make-sweep OUT.wav [--seconds 5] [--rate 48000]
   EncoreRender --make-plucks OUT.wav [--rate 48000]   (generated guitar-like notes)
+  EncoreRender --make-gate-test OUT.wav [--rate 48000] [--noise-db -60]   (notes with gaps of noise)
+  EncoreRender --make-gate-show FOLDER.encore [--amp MODEL.nam]        (a show for the gates)
 
   --block TYPE     a block type id (hidden ones too), e.g. engineProbe, eq, gate
   --preset ID      a factory preset of the block (first; settings go on top)
   --settings FILE  JSON: { "parameter id": value }; a choice may be given by name
   --set id=value   one setting (may repeat; after --settings)
+  --ref name=value a reference (may repeat): keyBlock, keyInput, linkTo. With --show,
+                   blockId.name=value sets it on that block of the patch (e.g.
+                   --ref duck.keyBlock=dry); alone, a block has nothing before it,
+                   so a keyBlock or linkTo falls back and the report says so
+  --noise-db DB    --make-gate-test: the noise floor's peak (default -60 dBFS)
   --show SHOW      a show folder or .encore file; --patch picks a patch (1 = first)
   --buffer N       buffer size in samples (default 64)
   --report FILE    also write the report to FILE
@@ -133,6 +141,34 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (const auto testOut = value ("--make-gate-test"); testOut.isNotEmpty())
+    {
+        const auto rate = value ("--rate").isNotEmpty() ? value ("--rate").getDoubleValue() : 48000.0;
+        const auto noiseDb = value ("--noise-db").isNotEmpty() ? (float) value ("--noise-db").getDoubleValue() : -60.0f;
+
+        if (rate < 8000.0)
+            return fail ("--rate must be at least 8000");
+
+        if (! encore::render::writeWav (file (testOut), encore::render::makeGateTest (rate, noiseDb), rate, error))
+            return fail (error);
+
+        std::cout << "Wrote the gate test (10 s, noise floor " << noiseDb << " dBFS) at " << rate << " Hz to " << testOut << "\n";
+        return 0;
+    }
+
+    if (const auto showOut = value ("--make-gate-show"); showOut.isNotEmpty())
+    {
+        const auto folder = file (showOut);
+        folder.createDirectory();
+        const auto amp = value ("--amp").isNotEmpty() ? file (value ("--amp")) : juce::File();
+
+        if (! folder.getChildFile ("show.json").replaceWithText (encore::json::toJson (encore::render::makeGateShow (amp))))
+            return fail ("Couldn't write " + folder.getChildFile ("show.json").getFullPathName());
+
+        std::cout << "Wrote the gate show (patches: Gate pair, Ducking delay, Smart X4) to " << showOut << "\n";
+        return 0;
+    }
+
     const auto inPath = value ("--in"), outPath = value ("--out");
 
     if (inPath.isEmpty() || outPath.isEmpty())
@@ -178,7 +214,20 @@ int main (int argc, char* argv[])
             settings.getDynamicObject()->setProperty (assignment.upToFirstOccurrenceOf ("=", false, false).trim(), parsedValue);
         }
 
-        result = encore::render::renderBlock (input->buffer, input->sampleRate, type, settings, bufferSize, value ("--preset"));
+        std::map<juce::String, juce::String> refs;
+
+        for (int i = 0; i + 1 < args.size(); ++i)
+        {
+            if (args[i] != "--ref")
+                continue;
+
+            if (! args[i + 1].contains ("="))
+                return fail ("--ref needs name=value, got \"" + args[i + 1] + "\"");
+
+            refs[args[i + 1].upToFirstOccurrenceOf ("=", false, false).trim()] = args[i + 1].fromFirstOccurrenceOf ("=", false, false).trim();
+        }
+
+        result = encore::render::renderBlock (input->buffer, input->sampleRate, type, settings, bufferSize, value ("--preset"), refs);
     }
     else if (const auto showPath = value ("--show"); showPath.isNotEmpty())
     {
@@ -209,7 +258,34 @@ int main (int argc, char* argv[])
         if (patch == nullptr)
             return fail ("No patch \"" + which + "\" in the show");
 
-        result = encore::render::renderPatch (input->buffer, input->sampleRate, *patch, folder, bufferSize);
+        auto edited = *patch;
+
+        for (int i = 0; i + 1 < args.size(); ++i)
+        {
+            if (args[i] != "--ref")
+                continue;
+
+            const auto assignment = args[i + 1];
+            const auto target = assignment.upToFirstOccurrenceOf (".", false, false).trim();
+            const auto name = assignment.fromFirstOccurrenceOf (".", false, false).upToFirstOccurrenceOf ("=", false, false).trim();
+
+            if (! assignment.contains (".") || ! assignment.contains ("=") || name.isEmpty())
+                return fail ("With --show, --ref needs blockId.name=value, got \"" + assignment + "\"");
+
+            auto found = false;
+
+            for (int b = 0; b < edited.numBlocks(); ++b)
+                if (auto* block = edited.blockAt (b); block != nullptr && block->id == target)
+                {
+                    block->refs[name] = assignment.fromFirstOccurrenceOf ("=", false, false).trim();
+                    found = true;
+                }
+
+            if (! found)
+                return fail ("No block \"" + target + "\" in the patch");
+        }
+
+        result = encore::render::renderPatch (input->buffer, input->sampleRate, edited, folder, bufferSize);
     }
     else
     {
