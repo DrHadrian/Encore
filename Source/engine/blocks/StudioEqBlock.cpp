@@ -173,6 +173,21 @@ dsp::FilterSettings StudioEqBlock::sidechainSettingsFor (const BandSettings& ban
     return s;
 }
 
+dsp::FilterSettings StudioEqBlock::listenSettingsFor (const BandSettings& band, bool& filtered) noexcept
+{
+    // As a dynamic band's Follows filter, and the cuts by the side they act on.
+    auto b = band;
+
+    if (band.shape == Shape::lowCut)
+        b.shape = Shape::lowShelf;
+    else if (band.shape == Shape::highCut)
+        b.shape = Shape::highShelf;
+    else if (band.shape == Shape::notch || band.shape == Shape::bandPass || band.shape == Shape::allPass)
+        b.shape = Shape::bell;
+
+    return sidechainSettingsFor (b, SideFilter::follows, 0.0, 0.0, filtered);
+}
+
 StudioEqBlock::BandSettings StudioEqBlock::getBand (int slot) const noexcept
 {
     const auto& p = slots[(size_t) slot].p;
@@ -228,6 +243,10 @@ void StudioEqBlock::prepareBlock (const ProcessSpec& spec)
     }
 
     curveIntervalSamples = juce::jmax (1, juce::roundToInt (curveIntervalSeconds * sampleRate));
+
+    // Listen.
+    listenBuffer.setSize (maxChannels, juce::jmax (1, spec.maxBlockSize), false, true, false);
+    listenAmount.reset (sampleRate, listenFadeSeconds);
 
     // Dynamics: the EQ's input, the movement per chunk, per slot.
     eqInput.setSize (maxChannels, juce::jmax (1, spec.maxBlockSize), false, true, false);
@@ -305,6 +324,13 @@ void StudioEqBlock::resetBlock() noexcept
     }
 
     playingInputMs = playingDryMs = 0.0;
+
+    // Listen: whatever is asked now, at once.
+    listenSlot = listenRequest.load (std::memory_order_relaxed);
+    listenAmount.setCurrentAndTargetValue (listenSlot >= 0 ? 1.0f : 0.0f);
+    listenBand.reset();
+    listenFiltered = false;
+    listenBand.setDesign ({});
 
     // Character: in the path at once if it's on (no fade from a reset).
     characterFade.reset();
@@ -615,9 +641,15 @@ void StudioEqBlock::processBlock (float* const* channels, int numChannels, int n
             slot.place = slot.oldPlace = stereoNow ? slot.p.place->getChoiceIndex() : (int) Place::stereo;
     }
 
+    eqInputCopied = false;
+
+    if (listenSlot >= 0 || listenRequest.load (std::memory_order_relaxed) >= 0)
+        copyEqInput (channels, numChannels, numSamples);   // listen plays from the EQ's input
+
     processBands (channels, numChannels, numSamples, context);
     processCharacter (channels, numChannels, numSamples);
     processOutput (channels, numChannels, numSamples, context.tunerOpen);
+    processListen (channels, numChannels, numSamples, context);
 }
 
 void StudioEqBlock::processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept
@@ -750,6 +782,107 @@ void StudioEqBlock::processBands (float* const* channels, int numChannels, int n
         const auto k = (float) scale * 0.01f;
         liveGain[(size_t) s].store (scaled ? (slot.p.gain->currentValue() + (float) slot.moveDb) * k : 0.0f, std::memory_order_relaxed);
         liveMove[(size_t) s].store (scaled ? (float) slot.moveDb * k : 0.0f, std::memory_order_relaxed);
+    }
+}
+
+void StudioEqBlock::copyEqInput (const float* const* channels, int numChannels, int numSamples) noexcept
+{
+    if (eqInputCopied)
+        return;
+
+    for (int ch = 0; ch < numChannels; ++ch)
+        eqInput.copyFrom (ch, 0, channels[ch], numSamples);
+
+    eqInputCopied = true;
+}
+
+void StudioEqBlock::processListen (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept
+{
+    auto wanted = listenRequest.load (std::memory_order_relaxed);
+
+    if (wanted >= 0 && slots[(size_t) wanted].p.used->getChoiceIndex() != 1)
+        wanted = -1;   // a free slot plays nothing
+
+    // Another band (or none): out first, then switch, then in.
+    if (wanted != listenSlot)
+    {
+        listenAmount.setTargetValue (0.0f);
+
+        if (listenAmount.getCurrentValue() <= 0.0f)
+        {
+            listenSlot = wanted;
+            listenBand.reset();
+            listenFiltered = false;
+            listenBand.setDesign ({});
+        }
+    }
+
+    if (wanted == listenSlot)
+        listenAmount.setTargetValue (listenSlot >= 0 ? 1.0f : 0.0f);
+
+    if (listenSlot < 0 || ! eqInputCopied)
+        return;   // nothing to hear (the fade out ended)
+
+    // What the band hears: its sidechain if it's dynamic, else the EQ's input.
+    const auto& slot = slots[(size_t) listenSlot];
+    auto band = getBand (listenSlot);
+    const auto dynamic = canBeDynamic (band.shape) && playedMode ((Mode) slot.p.mode->getChoiceIndex()) == Mode::dynamic;
+    auto filtered = false;
+    const auto settings = dynamic ? sidechainSettingsFor (band, (SideFilter) slot.p.sideFilter->getChoiceIndex(),
+                                                          slot.p.sideFreq->getValue(), slot.p.sideQ->getValue(), filtered)
+                                  : listenSettingsFor (band, filtered);
+
+    if (filtered != listenFiltered || ! (settings == listenSettings))
+    {
+        listenBand.glideTo (filtered ? dsp::FilterBandDesign::make (settings, sampleRate) : dsp::FilterBandDesign {}, numSamples);
+        listenSettings = settings;
+        listenFiltered = filtered;
+    }
+
+    // The source on each channel: the dry guitar, or the input as the band's
+    // placement hears it (Stereo: each channel its own).
+    const auto* dry = context.chainInput;
+    const auto fromDry = dynamic && slot.p.side->getChoiceIndex() == (int) Side::dryGuitar && dry != nullptr;
+    const auto place = numChannels > 1 && dynamic ? (Place) slot.place : Place::stereo;
+    const auto* in0 = eqInput.getReadPointer (0);
+    const auto* in1 = eqInput.getReadPointer (juce::jmin (1, numChannels - 1));
+    auto* out0 = listenBuffer.getWritePointer (0);
+    auto* out1 = listenBuffer.getWritePointer (1);
+    auto perChannel = false;
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        if (fromDry)
+            out0[i] = dry[i];
+        else if (place == Place::left)
+            out0[i] = in0[i];
+        else if (place == Place::right)
+            out0[i] = in1[i];
+        else if (place == Place::mid)
+            out0[i] = 0.5f * (in0[i] + in1[i]);
+        else if (place == Place::side)
+            out0[i] = 0.5f * (in0[i] - in1[i]);
+        else
+        {
+            out0[i] = in0[i];
+            out1[i] = in1[i];
+            perChannel = numChannels > 1;
+        }
+    }
+
+    float* listen[maxChannels] = { out0, out1 };
+    listenBand.process (listen, perChannel ? 2 : 1, numSamples);
+
+    if (numChannels > 1 && ! perChannel)
+        listenBuffer.copyFrom (1, 0, listenBuffer, 0, 0, numSamples);   // every channel
+
+    // Replace the output, crossfaded.
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto a = listenAmount.getNextValue();
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            channels[ch][i] += (listenBuffer.getSample (ch, i) - channels[ch][i]) * a;
     }
 }
 
@@ -966,8 +1099,7 @@ void StudioEqBlock::detectDynamics (const float* const* channels, int numChannel
         return;
 
     // The EQ's input (This band's sidechain: the bands haven't played yet).
-    for (int ch = 0; ch < numChannels; ++ch)
-        eqInput.copyFrom (ch, 0, channels[ch], numSamples);
+    copyEqInput (channels, numChannels, numSamples);
 
     // Someone is playing, per chunk, on the input and on the dry guitar: Auto
     // learns only then (and with the tuner closed).

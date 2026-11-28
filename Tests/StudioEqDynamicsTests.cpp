@@ -10,6 +10,8 @@
 #include "engine/blocks/StudioEqBlock.h"
 #include "engine/core/Realtime.h"
 
+#include <complex>
+
 namespace encore::test
 {
 
@@ -500,6 +502,117 @@ public:
 
             // From the dry guitar (mono) every placement hears the guitar.
             expectWithinAbsoluteError (movement (Eq::Place::side, tone, Eq::Side::dryGuitar), -8.0, 0.01);
+        }
+
+        beginTest ("Band listen: the band's range, in and out with no click; a free slot plays nothing; nothing saved");
+        {
+            const auto twoTones = [] (int n)
+            {
+                auto x = sine (200.0, 0.2f, n);
+                const auto high = sine (3000.0, 0.2f, n);
+
+                for (size_t i = 0; i < x.size(); ++i)
+                    x[i] += high[i];
+
+                return x;
+            };
+
+            Eq eq;
+            setSlot (eq, 0, "Used", 1.0f);
+            setSlot (eq, 0, "Freq", 200.0f);
+            setSlot (eq, 0, "Q", 2.0f);
+            start (eq);
+
+            std::vector<float> values;
+
+            for (const auto& p : eq.getParameters())
+                values.push_back (p->getValue());
+
+            const auto x = twoTones (48000);
+            const auto y = play (eq, x, blockSize, nullptr, [&] (int end)
+            {
+                if (end == 9600)  eq.setListen (0);
+                if (end == 28800) eq.clearListen();
+            });
+
+            // While listening: 3 kHz is gone (Q 2 band pass at 200 Hz), 200 Hz stays.
+            std::vector<float> listening (y.begin() + 14400, y.begin() + 28800);
+            const auto toneDb = [&] (const std::vector<float>& v, double f)
+            {
+                std::complex<double> sum;
+
+                for (size_t i = 0; i < v.size(); ++i)
+                    sum += (double) v[i] * std::polar (1.0, -2.0 * juce::MathConstants<double>::pi * f * (double) i / sampleRate);
+
+                return 20.0 * std::log10 (2.0 * std::abs (sum) / (double) v.size());
+            };
+
+            const auto low = toneDb (listening, 200.0), high = toneDb (listening, 3000.0);
+            logMessage ("Listening to a 200 Hz band (Q 2): 200 Hz at " + juce::String (low, 1) + " dB, 3 kHz at " + juce::String (high, 1) + " dB");
+            expectWithinAbsoluteError (low, 20.0 * std::log10 (0.2), 0.3);
+            expectLessThan (high, low - 25.0);
+
+            // After: the EQ plays again, bit-exact (the bell is at 0 dB).
+            expect (std::equal (y.begin() + 33600, y.end(), x.begin() + 33600), "back to the EQ");
+            const auto click = highBandDb (y, 8000.0, 4800, 48000);
+            logMessage ("Listen in and out: energy above 8 kHz " + juce::String (click, 1) + " dB");
+            expectLessThan (click, -60.0, "no click");
+
+            // Nothing saved: no parameter moved, none is a listen setting.
+            for (size_t i = 0; i < values.size(); ++i)
+                expectEquals (eq.getParameters()[i]->getValue(), values[i]);
+
+            for (const auto& p : eq.getParameters())
+                expect (! p->getSpec().id.containsIgnoreCase ("listen"));
+
+            // A free slot plays nothing: the EQ as it is.
+            Eq other;
+            setSlot (other, 0, "Used", 1.0f);
+            setSlot (other, 0, "Gain", 6.0f);
+            start (other);
+            other.setListen (5);
+            const auto z = play (other, x);
+            Eq plain;
+            setSlot (plain, 0, "Used", 1.0f);
+            setSlot (plain, 0, "Gain", 6.0f);
+            start (plain);
+            expect (z == play (plain, x));
+        }
+
+        beginTest ("Band listen on a dynamic band plays its sidechain, as its detector hears it");
+        {
+            Eq eq;
+            addDynamic (eq, 0, Eq::Shape::bell, 1000.0f, -6.0f, -30.0f);
+            setSlot (eq, 0, "Side", (float) Eq::Side::dryGuitar);
+            setSlot (eq, 0, "SideFilter", (float) Eq::SideFilter::own);
+            setSlot (eq, 0, "SideFreq", 5000.0f);
+            setSlot (eq, 0, "SideQ", 2.0f);
+            start (eq);
+            eq.setListen (0);
+
+            const auto x = sine (1000.0, 0.3f, 24000);   // what the EQ plays
+            auto dry = sine (5000.0, 0.2f, 24000);       // the guitar: 5 kHz and 300 Hz
+            const auto low = sine (300.0, 0.2f, 24000);
+
+            for (size_t i = 0; i < dry.size(); ++i)
+                dry[i] += low[i];
+
+            const auto y = play (eq, x, blockSize, dry.data());
+            std::vector<float> settled (y.begin() + 4800, y.end());
+
+            const auto toneDb = [&] (double f)
+            {
+                std::complex<double> sum;
+
+                for (size_t i = 0; i < settled.size(); ++i)
+                    sum += (double) settled[i] * std::polar (1.0, -2.0 * juce::MathConstants<double>::pi * f * (double) i / sampleRate);
+
+                return 20.0 * std::log10 (std::max (2.0 * std::abs (sum) / (double) settled.size(), 1.0e-12));
+            };
+
+            expectWithinAbsoluteError (toneDb (5000.0), 20.0 * std::log10 (0.2), 0.3, "the Own band pass's centre");
+            expectLessThan (toneDb (300.0), toneDb (5000.0) - 30.0, "300 Hz filtered out");
+            expectLessThan (toneDb (1000.0), -100.0, "not the EQ's input");
         }
 
         beginTest ("24 dynamic bands moving, stereo: no allocation, no NaN");

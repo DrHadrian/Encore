@@ -231,6 +231,24 @@ public:
         Any thread (taken up at the next buffer). */
     void backToFull() noexcept { backToFullRequested.store (true, std::memory_order_relaxed); }
 
+    //== Band listen (EQ-PLAN §2.1; B4 engine side; Edit only, not saved) =======
+    // While a band is listened to, the output is the EQ's input through a
+    // band pass at that band's frequency and Q (shelves and cuts: the side
+    // they act on, a 12 dB/oct low or high pass; a Tilt: everything), on
+    // every channel. A dynamic band plays its sidechain as its detector hears
+    // it (its source and filter, Own or Follows), so the sidechain can be set
+    // by ear. In and out (and from one band to another) crossfade 20 ms.
+    static constexpr double listenFadeSeconds = 0.02;
+
+    /** Listen to slot (0-based); clearListen() stops. Any thread (atomics,
+        taken up at the next buffer). A slot that isn't in use plays nothing. */
+    void setListen (int slot) noexcept  { listenRequest.store (juce::isPositiveAndBelow (slot, numSlots) ? slot : -1, std::memory_order_relaxed); }
+    void clearListen() noexcept         { listenRequest.store (-1, std::memory_order_relaxed); }
+    int getListen() const noexcept      { return listenRequest.load (std::memory_order_relaxed); }
+
+    /** The listen filter of a static band (no sections = unfiltered). Any thread. */
+    static dsp::FilterSettings listenSettingsFor (const BandSettings& band, bool& filtered) noexcept;
+
     static constexpr double toggleSeconds = 0.01;    // a band on, off, in or out of use glides to or from flat
     static constexpr int updateInterval = 16;        // samples between redesigns while a value moves
 
@@ -326,6 +344,10 @@ private:
     void warmUpCharacter (CharacterPath& path, int numChannels) noexcept;
     dsp::Quality qualityNow() const noexcept;
 
+    /** Band listen: replaces the output, crossfaded. Audio thread. */
+    void processListen (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
+    void copyEqInput (const float* const* channels, int numChannels, int numSamples) noexcept;
+
     /** When CPU is tight: takes a step if one is due. Audio thread. */
     void followCpu (bool cpuIsTight, int numSamples) noexcept;
     void processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
@@ -370,6 +392,16 @@ private:
     juce::AudioBuffer<float> characterHistory, characterWarmup;
     int maxBlock = 512;
     std::atomic<int> characterLatency { -1 };     // -1: not in the path
+
+    // Band listen: the request (any thread), what plays (audio thread).
+    std::atomic<int> listenRequest { -1 };
+    int listenSlot = -1;
+    dsp::FilterBand<maxChannels> listenBand;
+    dsp::FilterSettings listenSettings {};
+    bool listenFiltered = false;
+    juce::SmoothedValue<float> listenAmount;
+    juce::AudioBuffer<float> listenBuffer;
+    bool eqInputCopied = false;                    // this buffer
 
     // When CPU is tight: written on the audio thread; Back to full is a request.
     std::atomic<int> lighterSteps { 0 };
