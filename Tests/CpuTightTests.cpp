@@ -120,11 +120,11 @@ public:
             expectEquals (keep.getLatencySamples(), latency);
 
             // Clean (Quality plays no part), or Warm already at Live, in Zero
-            // latency; Spectral changes nothing until B5's spectral bands.
+            // latency with no spectral band.
             Eq clean;
             setUp (clean, Eq::CpuTight::makeItLighter, Eq::Character::clean, Eq::Quality::max);
             set (clean, "b01Used", 1.0f);
-            set (clean, "b01Mode", (float) Eq::Mode::spectral);
+            set (clean, "b01Mode", (float) Eq::Mode::dynamic);
             run (clean, 3.0, true);
             expect (! clean.isLighter(), "Clean: nothing to lighten");
 

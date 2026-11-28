@@ -616,6 +616,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/CpuTightTests.cpp
         Tests/LinearPhaseFilterTests.cpp
         Tests/StudioEqLinearTests.cpp
+        Tests/StudioEqSpectralTests.cpp
         Tests/StudioEqModelTests.cpp
         Tests/StudioEqSessionTests.cpp
         Tests/ModuleTypeTests.cpp

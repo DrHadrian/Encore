@@ -175,7 +175,36 @@ public:
 
     /** Mode as it plays: Spectral as Dynamic until B5 (B5 swaps its own path
         in here, the parameters stay as they are). */
-    static Mode playedMode (Mode mode) noexcept { return mode == Mode::spectral ? Mode::dynamic : mode; }
+    static Mode playedMode (Mode mode) noexcept { return mode; }
+
+    //== Spectral bands, the sub-band method (EQ-PLAN §2.2; B5, Proposed) =======
+    // A Spectral band (Bell, shelves, Tilt) with spectralMethod Sub-bands is
+    // its static band plus up to 16 narrow dynamic bells across its range,
+    // each detecting only its own narrow range (a band pass of the same width)
+    // and moving only while that is over the threshold, with the band's Range,
+    // Threshold (Auto: the band's own learned level), Attack and Release.
+    // Density sets the spacing: 1/3 octave at 0 %, 1/6 at 50 %, 1/12 at 100 %
+    // (the bells as wide as their spacing); a band wider than 16 of them
+    // spreads its 16 out. Tilt adds +3 dB/oct to each one's level, relative to
+    // the band's frequency. Range: a Bell's bandwidth, a low shelf from 4
+    // octaves below its corner to half an octave above, a high shelf the
+    // mirror, a Tilt 4 octaves either side. Sidechain as a dynamic band's;
+    // with Own, the sub-bands hear the sidechain through the Own band pass.
+    // Zero latency; in Linear phase their movement goes into the kernel.
+    static constexpr int maxSubBands = 16;
+    static constexpr double subBandSpacingAt0 = 1.0 / 3.0;   // octaves; halves every 50 % of Density
+    static constexpr double spectralTiltDbPerOctave = 3.0;
+    static constexpr double subBandFloorShare = 0.01;   // an unmixed level never drops below 1 % of what was heard (-20 dB)
+
+    /** The mode a band plays: Mode as set; on a shape without a gain Static;
+        Spectral as Dynamic once When CPU is tight has taken that step. */
+    Mode modeOf (int slot) const noexcept;
+
+    /** For tests and U3: how many sub-bands a spectral band has now, and one's
+        frequency and movement (dB, gain scale applied). Audio thread values. */
+    int getNumSubBands (int slot) const noexcept;
+    double getSubBandFrequency (int slot, int subBand) const noexcept;
+    float getSubBandGainDb (int slot, int subBand) const noexcept;
 
     /** The sidechain filter of a band (no sections = unfiltered). Any thread. */
     static dsp::FilterSettings sidechainSettingsFor (const BandSettings& band, SideFilter filter, double ownFrequency,
@@ -243,7 +272,7 @@ public:
     // nothing. Each step crossfades as its setting does and reports its latency.
     static constexpr double lighterWaitSeconds = 1.0;
     enum LighterStep { spectralAsDynamic = 1, linearAsZeroLatency = 2, qualityLive = 4 };
-    static constexpr bool spectralBandsBuilt = false;   // B5 step 4 turns it on
+    static constexpr bool spectralBandsBuilt = true;
 
     /** The steps taken (LighterStep bits; 0 = at full), for U3's "Lighter: CPU
         was tight". Any thread. */
@@ -309,6 +338,7 @@ private:
         double moveDb = 0.0;                          // the movement now (dB, before gain scale)
         double designedMoveDb = 0.0;                  // ... as the band was last designed with
         bool dynamic = false;                         // dynamics run this buffer
+        bool spectral = false, subMoveChanged = false; // B5: the sub-bands run this buffer, and move
         bool moveChanged = false;                     // the movement changes within this buffer
 
         bool valuesMoving() const noexcept { return freqRamp.isSmoothing() || qRamp.isSmoothing() || p.gain->isSmoothing(); }
@@ -330,6 +360,39 @@ private:
     void detectSlot (Slot& slot, int index, const float* const* source, int numSource, int numSamples,
                      const std::uint8_t* playing, bool tunerOpen) noexcept;
     float* movesOf (int slot) noexcept { return moves.data() + (size_t) slot * (size_t) maxChunks; }
+
+    /** B5: a spectral band's sub-bands. Audio thread. */
+    struct SubBand
+    {
+        dsp::FilterBand<maxChannels> detector, band;
+        std::array<double, maxChannels> ms {};
+        double frequency = 1000.0, q = 4.0, tiltDb = 0.0;
+        double moveDb = 0.0, designedMoveDb = 0.0;
+    };
+
+    struct SubBands
+    {
+        std::array<SubBand, maxSubBands> subs {};
+        int count = 0;
+        std::array<double, 5> layoutKey { -1.0 };   // shape, frequency, Q, Density, Own: the layout follows them
+
+        // A guard detector beyond each edge (hears, doesn't act), and the
+        // unmixing: each detector also hears its neighbours through its band
+        // pass's skirts, so the levels are solved for each one's own share
+        // (power: heard = leakage x own; own = unmix x heard).
+        std::array<dsp::FilterBand<maxChannels>, 2> guards;
+        std::array<std::array<double, maxChannels>, 2> guardMs {};
+        std::array<std::array<double, maxSubBands + 2>, maxSubBands + 2> unmix {};
+    };
+
+    void layOutSubBands (Slot& slot, int index) noexcept;
+    void detectSubBands (Slot& slot, int index, const float* const* source, int numSource, int numSamples,
+                         const std::uint8_t* playing, bool tunerOpen) noexcept;
+    float* subMovesOf (int slot, int subBand) noexcept
+    {
+        return subMoves.data() + ((size_t) slot * maxSubBands + (size_t) subBand) * (size_t) maxChunks;
+    }
+    dsp::FilterBandDesign subBandDesign (const SubBand& sub, double moveDb, double gainScale) const noexcept;
     static bool isScaled (int shape) noexcept;
 
     /** Picks up on/off, in/out of use, Shape and Slope. Audio thread. */
@@ -418,6 +481,8 @@ private:
     juce::AudioBuffer<float> eqInputMidSide;       // ... as M and S, for Mid and Side bands' sidechains
     bool stereoNow = false;                        // the block gets two channels: placement plays
     std::vector<float> moves;                      // per slot, the movement at the end of each chunk
+    std::vector<SubBands> subBands;                // per slot (B5; on the heap: large)
+    std::vector<float> subMoves;                   // per slot and sub-band, per chunk
     std::vector<std::uint8_t> playingInput, playingDry;   // per chunk: someone is playing (Auto learns)
     int maxChunks = 1;
     double detectorCoefficient = 0.0, playingInputMs = 0.0, playingDryMs = 0.0;
