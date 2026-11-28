@@ -6,6 +6,7 @@
 #include "engine/core/FactoryPresets.h"
 
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 namespace encore
@@ -257,6 +258,13 @@ void StudioEqBlock::prepareBlock (const ProcessSpec& spec)
 
     curveIntervalSamples = juce::jmax (1, juce::roundToInt (curveIntervalSeconds * sampleRate));
 
+    // Linear phase: two engines, so one can warm up while the other plays.
+    for (auto& engine : engines)
+        engine.prepare (sampleRate, maxChannels);
+
+    pathScratch.setSize (maxChannels, juce::jmax (1, spec.maxBlockSize), false, true, false);
+    dipSamples = juce::jmax (1, juce::roundToInt (pathDipSeconds * sampleRate));
+
     // Listen.
     listenBuffer.setSize (maxChannels, juce::jmax (1, spec.maxBlockSize), false, true, false);
     listenAmount.reset (sampleRate, listenFadeSeconds);
@@ -337,6 +345,9 @@ void StudioEqBlock::resetBlock() noexcept
     }
 
     playingInputMs = playingDryMs = 0.0;
+
+    // Linear phase: the wanted path at once (nothing is playing yet).
+    startPath (wantedPath (stereoNow ? 2 : 1), stereoNow ? 2 : 1, true);
 
     // Listen: whatever is asked now, at once.
     listenSlot = listenRequest.load (std::memory_order_relaxed);
@@ -585,6 +596,14 @@ void StudioEqBlock::applyChoices (Slot& slot, double scale) noexcept
 
 void StudioEqBlock::processSlot (Slot& slot, float* const* channels, int numChannels, int numSamples) noexcept
 {
+    if (! iirAudible)
+    {
+        // Linear phase plays: the bands' designs move on, their filters rest
+        // (warmed up again before they're heard: warmIirBands).
+        slot.fade.reset();
+        return;
+    }
+
     if (slot.fade.isActive())
     {
         slot.fade.copyInput (channels, numChannels, numSamples);
@@ -652,14 +671,19 @@ void StudioEqBlock::processBlock (float* const* channels, int numChannels, int n
 
         for (auto& slot : slots)
             slot.place = slot.oldPlace = stereoNow ? slot.p.place->getChoiceIndex() : (int) Place::stereo;
+
+        startPath (wantedPath (numChannels), numChannels, true);   // and the path, at once
     }
 
     eqInputCopied = false;
 
-    if (listenSlot >= 0 || listenRequest.load (std::memory_order_relaxed) >= 0)
-        copyEqInput (channels, numChannels, numSamples);   // listen plays from the EQ's input
+    if (const auto wanted = wantedPath (numChannels); pathState == PathState::steady && ! (wanted == activeConfig))
+        startPath (wanted, numChannels, false);
 
-    processBands (channels, numChannels, numSamples, context);
+    if (listenSlot >= 0 || listenRequest.load (std::memory_order_relaxed) >= 0 || pathState != PathState::steady)
+        copyEqInput (channels, numChannels, numSamples);   // listen and a path warming up play from the EQ's input
+
+    processPaths (channels, numChannels, numSamples, context);
     processCharacter (channels, numChannels, numSamples);
     processOutput (channels, numChannels, numSamples, context.tunerOpen);
     processListen (channels, numChannels, numSamples, context);
@@ -798,6 +822,237 @@ void StudioEqBlock::processBands (float* const* channels, int numChannels, int n
     }
 }
 
+StudioEqBlock::PathConfig StudioEqBlock::wantedPath (int numChannels) const noexcept
+{
+    PathConfig config;
+
+    if (phase.getChoiceIndex() != (int) Phase::linear || (getLighterSteps() & linearAsZeroLatency) != 0)
+        return config;   // Zero latency (and Natural, until R1)
+
+    config.linear = true;
+    config.resolution = (dsp::LinearPhaseFilter::Resolution) juce::jlimit (0, 2, linearQuality.getChoiceIndex());
+
+    if (numChannels > 1)
+    {
+        // The L/R stage for Stereo, Left and Right bands, the M/S stage for
+        // Mid and Side ones; both when both are in use.
+        auto lr = false, ms = false;
+
+        for (const auto& slot : slots)
+        {
+            if (! slot.playing)
+                continue;
+
+            if (slot.place == (int) Place::mid || slot.place == (int) Place::side)
+                ms = true;
+            else
+                lr = true;
+        }
+
+        config.stages = ms ? (lr ? dsp::LinearPhaseFilter::Stages::both : dsp::LinearPhaseFilter::Stages::ms)
+                           : dsp::LinearPhaseFilter::Stages::lr;
+    }
+
+    return config;
+}
+
+void StudioEqBlock::warmIirBands() noexcept
+{
+    // The IIR bands rested while Linear phase played: their designs are
+    // current, their filters start clean (heard only after the dip's first half).
+    for (auto& slot : slots)
+    {
+        slot.band.reset();
+        const auto design = slot.band.getDesign();
+        slot.band.setDesign (design);
+        slot.fade.reset();
+        slot.toggleRemaining = 0;
+    }
+}
+
+void StudioEqBlock::syncEngine (dsp::LinearPhaseFilter& engine, int numChannels) noexcept
+{
+    using Lp = dsp::LinearPhaseFilter;
+
+    for (int s = 0; s < numSlots; ++s)
+    {
+        const auto& slot = slots[(size_t) s];
+        auto& es = engine.getSlot (s);
+        const auto active = slot.playing;
+        auto target = Lp::Target::both;
+
+        if (numChannels > 1)
+        {
+            switch ((Place) slot.place)
+            {
+                case Place::left:  target = Lp::Target::left; break;
+                case Place::right: target = Lp::Target::right; break;
+                case Place::mid:   target = Lp::Target::mid; break;
+                case Place::side:  target = Lp::Target::side; break;
+                case Place::stereo:
+                default: break;
+            }
+        }
+
+        auto brickwall = Lp::Brickwall::none;
+
+        if (slot.slope == brickwallSlope && slot.shape == (int) Shape::lowCut)
+            brickwall = Lp::Brickwall::lowCut;
+        else if (slot.slope == brickwallSlope && slot.shape == (int) Shape::highCut)
+            brickwall = Lp::Brickwall::highCut;
+
+        const auto frequency = slot.freqRamp.getCurrentValue();
+        const auto& design = slot.band.getDesign();
+        const auto sameDesign = es.numDesigns == 1 && es.designs[0].numSections == design.numSections
+                                && std::memcmp (es.designs[0].sections.data(), design.sections.data(),
+                                                sizeof (dsp::BiquadDesign) * (size_t) design.numSections) == 0;
+        const auto changed = es.active != active
+                             || (active && (es.target != target || es.brickwall != brickwall
+                                            || (brickwall != Lp::Brickwall::none ? es.brickwallFrequency != frequency : ! sameDesign)));
+
+        if (! changed)
+            continue;
+
+        es.active = active;
+        es.target = target;
+        es.brickwall = brickwall;
+        es.brickwallFrequency = frequency;
+        es.designs[0] = design;
+        es.numDesigns = 1;
+        es.binGains = false;
+        engine.slotChanged (s);
+    }
+}
+
+void StudioEqBlock::startPath (const PathConfig& config, int numChannels, bool immediately) noexcept
+{
+    const auto prepareEngine = [&] (int index)
+    {
+        auto& engine = engines[(size_t) index];
+        engine.configure (config.resolution, config.stages, numChannels);
+        syncEngine (engine, numChannels);
+        engine.reset();
+    };
+
+    if (immediately)
+    {
+        activeEngine = config.linear ? 0 : -1;
+
+        if (config.linear)
+            prepareEngine (0);
+
+        activeConfig = targetConfig = config;
+        targetEngine = -1;
+        pathState = PathState::steady;
+        pathLatency.store (config.linear ? engines[0].getLatencySamples() : 0, std::memory_order_relaxed);
+        linearPlaying.store (config.linear, std::memory_order_relaxed);
+        pathChanging.store (false, std::memory_order_relaxed);
+        iirAudible = ! config.linear;
+        return;
+    }
+
+    // The new path warms up on a copy of the input while the old one plays.
+    targetConfig = config;
+    targetEngine = config.linear ? (activeEngine == 0 ? 1 : 0) : -1;
+
+    if (config.linear)
+        prepareEngine (targetEngine);
+    else
+        warmIirBands();
+
+    pathState = PathState::warming;
+    pathChanging.store (true, std::memory_order_relaxed);
+}
+
+void StudioEqBlock::processPaths (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept
+{
+    const auto changing = pathState == PathState::warming || pathState == PathState::dipOut;
+    float* scratch[maxChannels] = { pathScratch.getWritePointer (0), pathScratch.getWritePointer (1) };
+
+    if (changing)
+        for (int ch = 0; ch < numChannels; ++ch)
+            std::copy (eqInput.getReadPointer (ch), eqInput.getReadPointer (ch) + numSamples, scratch[ch]);
+
+    // The IIR bands: the path while they play; on the copy while they're the
+    // path coming in; otherwise their designs only (Linear phase reads them).
+    if (activeEngine < 0)
+    {
+        iirAudible = true;
+        processBands (channels, numChannels, numSamples, context);
+    }
+    else if (changing && ! targetConfig.linear)
+    {
+        iirAudible = true;
+        processBands (scratch, numChannels, numSamples, context);
+    }
+    else
+    {
+        iirAudible = false;
+        processBands (channels, numChannels, numSamples, context);
+    }
+
+    if (activeEngine >= 0)
+    {
+        syncEngine (engines[(size_t) activeEngine], numChannels);
+        engines[(size_t) activeEngine].process (channels, numChannels, numSamples);
+    }
+
+    if (changing && targetEngine >= 0)
+    {
+        syncEngine (engines[(size_t) targetEngine], numChannels);
+        engines[(size_t) targetEngine].process (scratch, numChannels, numSamples);
+    }
+
+    if (pathState == PathState::warming && (targetEngine < 0 || engines[(size_t) targetEngine].isSettled()))
+    {
+        pathState = PathState::dipOut;
+        dipRemaining = dipSamples;
+    }
+
+    if (pathState != PathState::dipOut && pathState != PathState::dipIn)
+        return;
+
+    // The dip: the old path out, then (from the copy, this buffer) the new one in.
+    auto fromScratch = false;
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        auto gain = 1.0f;
+
+        if (pathState == PathState::dipOut)
+        {
+            gain = (float) dipRemaining / (float) dipSamples;
+
+            if (--dipRemaining <= 0)
+            {
+                // Silence: the new path takes over, with its latency.
+                activeEngine = targetConfig.linear ? targetEngine : -1;
+                activeConfig = targetConfig;
+                targetEngine = -1;
+                pathLatency.store (activeEngine >= 0 ? engines[(size_t) activeEngine].getLatencySamples() : 0,
+                                   std::memory_order_relaxed);
+                linearPlaying.store (activeConfig.linear, std::memory_order_relaxed);
+                pathState = PathState::dipIn;
+                dipRemaining = dipSamples;
+                fromScratch = true;
+            }
+        }
+        else if (pathState == PathState::dipIn)
+        {
+            gain = 1.0f - (float) dipRemaining / (float) dipSamples;
+
+            if (--dipRemaining <= 0)
+            {
+                pathState = PathState::steady;
+                pathChanging.store (false, std::memory_order_relaxed);
+            }
+        }
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            channels[ch][i] = (fromScratch ? scratch[ch][i] : channels[ch][i]) * gain;
+    }
+}
+
 void StudioEqBlock::copyEqInput (const float* const* channels, int numChannels, int numSamples) noexcept
 {
     if (eqInputCopied)
@@ -931,7 +1186,7 @@ void StudioEqBlock::followCpu (bool cpuIsTight, int numSamples) noexcept
 
     if ((taken & spectralAsDynamic) == 0 && spectralBandsBuilt && spectralInUse)
         step = spectralAsDynamic;
-    else if ((taken & linearAsZeroLatency) == 0 && linearPhaseBuilt && phase.getChoiceIndex() == (int) Phase::linear)
+    else if ((taken & linearAsZeroLatency) == 0 && phase.getChoiceIndex() == (int) Phase::linear)
         step = linearAsZeroLatency;
     else if ((taken & qualityLive) == 0 && character.getChoiceIndex() != (int) Character::clean
              && quality.getChoiceIndex() != (int) Quality::live)

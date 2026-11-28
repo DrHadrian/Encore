@@ -6,6 +6,7 @@
 #include "engine/core/Block.h"
 #include "engine/dsp/Crossfade.h"
 #include "engine/dsp/FilterBand.h"
+#include "engine/dsp/LinearPhaseFilter.h"
 #include "engine/dsp/Loudness.h"
 #include "engine/dsp/Oversampler.h"
 #include "engine/dsp/Saturation.h"
@@ -209,7 +210,26 @@ public:
 
     /** The character stage's oversampling latency while it's in the path,
         else 0. Any thread (an atomic: the Chain reads it every buffer). */
-    int getLatencySamples() const noexcept override { return juce::jmax (0, characterLatency.load (std::memory_order_relaxed)); }
+    int getLatencySamples() const noexcept override
+    {
+        return pathLatency.load (std::memory_order_relaxed) + juce::jmax (0, characterLatency.load (std::memory_order_relaxed));
+    }
+
+    //== Linear phase (EQ-PLAN §2.3; B5) ========================================
+    // phase Linear plays the bands through dsp::LinearPhaseFilter at
+    // linearQuality's resolution instead of the IIR bands; dynamic bands go
+    // in with their movement, detected on the undelayed input (so they act
+    // ahead of the sound by the latency). Natural plays Zero latency until R1.
+    // A change of path (mode, resolution, or the Mid/Side stage coming or
+    // going) warms the new path up on a copy of the input, then dips: the
+    // old path out in 10 ms, the new one in over 10 ms (Adrian, 28 Nov: a
+    // latency change can't be lined up either way), and the new latency is
+    // reported at the dip's middle, so split paths follow it.
+    static constexpr double pathDipSeconds = 0.01;
+
+    /** The mode playing (Linear only while the Linear path plays). Any thread. */
+    bool isLinearPlaying() const noexcept   { return linearPlaying.load (std::memory_order_relaxed); }
+    bool isPathChanging() const noexcept    { return pathChanging.load (std::memory_order_relaxed); }
 
     //== When CPU is tight (EQ-PLAN §2.6, decision 12; B4) ======================
     // With "Make it lighter", while ProcessContext::cpuTight holds, the block
@@ -223,7 +243,7 @@ public:
     // nothing. Each step crossfades as its setting does and reports its latency.
     static constexpr double lighterWaitSeconds = 1.0;
     enum LighterStep { spectralAsDynamic = 1, linearAsZeroLatency = 2, qualityLive = 4 };
-    static constexpr bool spectralBandsBuilt = false, linearPhaseBuilt = false;   // B5 builds them: until then those steps change nothing
+    static constexpr bool spectralBandsBuilt = false;   // B5 step 4 turns it on
 
     /** The steps taken (LighterStep bits; 0 = at full), for U3's "Lighter: CPU
         was tight". Any thread. */
@@ -351,6 +371,22 @@ private:
     void processListen (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
     void copyEqInput (const float* const* channels, int numChannels, int numSamples) noexcept;
 
+    /** Linear phase: which path should play, the change between paths, and
+        the engine's slots kept in step with the bands. Audio thread. */
+    struct PathConfig
+    {
+        bool linear = false;
+        dsp::LinearPhaseFilter::Resolution resolution = dsp::LinearPhaseFilter::Resolution::medium;
+        dsp::LinearPhaseFilter::Stages stages = dsp::LinearPhaseFilter::Stages::lr;
+        bool operator== (const PathConfig&) const = default;
+    };
+
+    PathConfig wantedPath (int numChannels) const noexcept;
+    void startPath (const PathConfig& config, int numChannels, bool immediately) noexcept;
+    void syncEngine (dsp::LinearPhaseFilter& engine, int numChannels) noexcept;
+    void processPaths (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
+    void warmIirBands() noexcept;
+
     /** When CPU is tight: takes a step if one is due. Audio thread. */
     void followCpu (bool cpuIsTight, int numSamples) noexcept;
     void processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
@@ -406,6 +442,18 @@ private:
     juce::SmoothedValue<float> listenAmount;
     juce::AudioBuffer<float> listenBuffer;
     bool eqInputCopied = false;                    // this buffer
+
+    // Linear phase, audio thread; sized in prepare.
+    std::array<dsp::LinearPhaseFilter, 2> engines;
+    int activeEngine = -1, targetEngine = -1;      // -1: the IIR bands
+    PathConfig activeConfig, targetConfig;
+    enum class PathState { steady, warming, dipOut, dipIn };
+    PathState pathState = PathState::steady;
+    int dipRemaining = 0, dipSamples = 480;
+    bool iirAudible = true;
+    juce::AudioBuffer<float> pathScratch;
+    std::atomic<int> pathLatency { 0 };
+    std::atomic<bool> linearPlaying { false }, pathChanging { false };
 
     // When CPU is tight: written on the audio thread; Back to full is a request.
     std::atomic<int> lighterSteps { 0 };
