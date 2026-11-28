@@ -35,6 +35,12 @@ enum class Quality
     exactly and a split can align its paths: getLatencySamples() changes with
     the Quality.
 
+    Mono gets a set of its own (B4): JUCE's integer-latency delay line must
+    be run with exactly the channels it was prepared for (a mono block
+    through a stereo set trips its assertion in Debug builds, and that
+    assertion allocates on the audio thread). A block's channel count doesn't
+    change while it plays, so each set keeps its own state.
+
     The nonlinear stage is a callback the module passes to process():
         void (float* const* channels, int numChannels, int numSamples,
               double oversampledRate, int qualityIndex)
@@ -78,14 +84,18 @@ public:
     template <typename NonlinearStage>
     void process (float* const* channels, int numChannels, int numSamples, NonlinearStage&& stage) noexcept
     {
-        if (stages[0] == nullptr)
+        if (stages[0][0] == nullptr)
             return;   // not prepared: pass through rather than crash
 
         if (requested != current && ! fade.isActive())
         {
             previous = current;
             current = requested;
-            stages[(size_t) current]->reset();
+
+            for (auto& set : stages)
+                if (set[(size_t) current] != nullptr)
+                    set[(size_t) current]->reset();
+
             latency.store (latencies[(size_t) current], std::memory_order_relaxed);
             fade.start();
         }
@@ -108,7 +118,7 @@ private:
     template <typename NonlinearStage>
     void run (Quality q, float* const* channels, int numChannels, int numSamples, NonlinearStage& stage) noexcept
     {
-        auto& os = *stages[(size_t) q];
+        auto& os = *stages[numChannels == 1 && stages[1][0] != nullptr ? 1 : 0][(size_t) q];
         juce::dsp::AudioBlock<float> block (channels, (size_t) numChannels, (size_t) numSamples);
         auto up = os.processSamplesUp (block);
 
@@ -121,7 +131,8 @@ private:
         os.processSamplesDown (block);
     }
 
-    std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, numQualities> stages;
+    // [0]: for maxChannels, [1]: for mono (when maxChannels > 1).
+    std::array<std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, numQualities>, 2> stages;
     std::array<int, numQualities> latencies {};
     std::atomic<int> latency { 0 };
     Crossfade fade;
