@@ -1162,7 +1162,7 @@ void StudioEqBlock::processPaths (float* const* channels, int numChannels, int n
     for (auto& slot : slots)
         slot.fftChanged = false;
 
-    if (pathState == PathState::warming && (targetEngine < 0 || engines[(size_t) targetEngine].isSettled()))
+    if (pathState == PathState::warming && (targetEngine < 0 || engines[(size_t) targetEngine].isReady()))
     {
         pathState = PathState::dipOut;
         dipRemaining = dipSamples;
@@ -1338,8 +1338,9 @@ void StudioEqBlock::followCpu (bool cpuIsTight, int numSamples) noexcept
     const auto taken = getLighterSteps();
     auto spectralInUse = false;
 
-    for (const auto& slot : slots)
-        spectralInUse = spectralInUse || (slot.playing && slot.p.mode->getChoiceIndex() == (int) Mode::spectral);
+    for (int s = 0; s < numSlots; ++s)
+        spectralInUse = spectralInUse || (slots[(size_t) s].playing && canBeDynamic ((Shape) slots[(size_t) s].shape)
+                                          && slots[(size_t) s].p.mode->getChoiceIndex() == (int) Mode::spectral);
 
     auto step = 0;
 

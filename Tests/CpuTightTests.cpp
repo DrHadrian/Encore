@@ -109,6 +109,60 @@ public:
             expect (eq.isLighter());
         }
 
+        beginTest ("The B5 steps, in order: Spectral as Dynamic, Linear phase as Zero latency, Quality to Live; Back to full restores all");
+        {
+            for (auto method : { Eq::SpectralMethod::subBands, Eq::SpectralMethod::fft })
+            {
+                Eq eq;
+                set (eq, "phase", (float) Eq::Phase::linear);
+                set (eq, "b01Used", 1.0f);
+                set (eq, "b01Mode", (float) Eq::Mode::spectral);
+                set (eq, "b01Range", -6.0f);
+                set (eq, "spectralMethod", (float) method);
+                setUp (eq, Eq::CpuTight::makeItLighter, Eq::Character::warm, Eq::Quality::high);
+                run (eq, 0.2, false);
+                const auto full = eq.getLatencySamples();
+                expectGreaterThan (full, 576, "Linear Medium plus the character");
+                expect (eq.isLinearPlaying());
+
+                run (eq, 0.05, true);
+                expectEquals (eq.getLighterSteps(), (int) Eq::spectralAsDynamic, "first: Spectral as Dynamic");
+                expect (eq.modeOf (0) == Eq::Mode::dynamic);
+                run (eq, 0.5, true);
+                expectEquals (eq.getLighterSteps(), (int) Eq::spectralAsDynamic, "a second before the next step");
+                run (eq, 0.6, true);
+                expectEquals (eq.getLighterSteps(), (int) (Eq::spectralAsDynamic | Eq::linearAsZeroLatency), "then Zero latency");
+                run (eq, 0.2, false);
+                expect (! eq.isLinearPlaying());
+                const auto lighter = eq.getLatencySamples();
+                expectLessThan (lighter, 100, "the latency follows: only the character's");
+                run (eq, 1.2, true);
+                expectEquals (eq.getLighterSteps(), (int) (Eq::spectralAsDynamic | Eq::linearAsZeroLatency | Eq::qualityLive),
+                              "then Quality");
+
+                eq.backToFull();
+                run (eq, 0.5, false);
+                expect (! eq.isLighter());
+                expect (eq.modeOf (0) == Eq::Mode::spectral);
+                expect (eq.isLinearPlaying());
+                expectEquals (eq.getLatencySamples(), full, "all back");
+            }
+
+            // FFT in Zero latency: the first step takes its stage (and latency) away.
+            Eq stage;
+            set (stage, "b01Used", 1.0f);
+            set (stage, "b01Mode", (float) Eq::Mode::spectral);
+            set (stage, "b01Range", -6.0f);
+            set (stage, "spectralMethod", (float) Eq::SpectralMethod::fft);
+            setUp (stage, Eq::CpuTight::makeItLighter, Eq::Character::clean, Eq::Quality::live);
+            run (stage, 0.2, false);
+            expectEquals (stage.getLatencySamples(), 576, "the FFT stage");
+            run (stage, 0.05, true);
+            run (stage, 0.2, false);
+            expectEquals (stage.getLighterSteps(), (int) Eq::spectralAsDynamic);
+            expectEquals (stage.getLatencySamples(), 0, "no stage");
+        }
+
         beginTest ("Keep the sound never changes; with nothing to lighten the block isn't marked");
         {
             Eq keep;
