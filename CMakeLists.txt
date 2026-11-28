@@ -210,10 +210,14 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/dsp/Crossfade.h
     Source/engine/dsp/Detector.h
     Source/engine/dsp/FadingDelay.h
+    Source/engine/dsp/Fft.cpp
+    Source/engine/dsp/Fft.h
     Source/engine/dsp/FilterBand.cpp
     Source/engine/dsp/FilterBand.h
     Source/engine/dsp/FilterDesign.cpp
     Source/engine/dsp/FilterDesign.h
+    Source/engine/dsp/LinearPhaseFilter.cpp
+    Source/engine/dsp/LinearPhaseFilter.h
     Source/engine/dsp/LookAhead.h
     Source/engine/dsp/OutputEq.h
     Source/engine/dsp/Oversampler.cpp
@@ -610,6 +614,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/StudioEqDynamicsTests.cpp
         Tests/StudioEqCharacterTests.cpp
         Tests/CpuTightTests.cpp
+        Tests/LinearPhaseFilterTests.cpp
         Tests/StudioEqModelTests.cpp
         Tests/StudioEqSessionTests.cpp
         Tests/ModuleTypeTests.cpp
