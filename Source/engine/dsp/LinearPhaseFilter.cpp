@@ -139,7 +139,7 @@ void LinearPhaseFilter::configure (Resolution r, Stages st, int channelCount) no
 
     // The work per block: a frame designs two kernels and a few moving bands.
     const auto bins = n / 2 + 1;
-    const auto kernelUnits = bins + Fft::unitsFor (n) + n / 2 + p * Fft::unitsFor (2 * b);
+    const auto kernelUnits = bins + Fft::unitsFor (n) + n / 2 + (p / 2) * (Fft::unitsFor (2 * b) + b);
     budgetPerBlock = (2 * kernelUnits + 8 * bins) / frameBlocks[(size_t) r] + 1;
 }
 
@@ -291,8 +291,12 @@ void LinearPhaseFilter::process (float* const* channels, int channelCount, int n
         if (position == b)
         {
             for (int stage = first; stage <= last; ++stage)
-                for (int ch = 0; ch < nc; ++ch)
-                    processBlockOf (stage, ch, kernelFor (stage, ch));
+            {
+                if (nc == 2)
+                    processStereoBlock (stage);
+                else
+                    processBlockOf (stage, 0, kernelFor (stage, 0));
+            }
 
             if (fading)
             {
@@ -392,6 +396,108 @@ void LinearPhaseFilter::processBlockOf (int stage, int ch, int kernelIndex) noex
 
     for (int i = 0; i < b; ++i)
         c.out[(size_t) i] = blockOut[(size_t) (b + i)].real() * scale;
+}
+
+void LinearPhaseFilter::processStereoBlock (int stage) noexcept
+{
+    // Two real channels in one complex FFT: z = left + j right, split by
+    // symmetry; the two outputs come back together the same way.
+    auto& cl = channelState[(size_t) stage][0];
+    auto& cr = channelState[(size_t) stage][1];
+    const auto& kl = kernels[(size_t) kernelFor (stage, 0)];
+    const auto& kr = kernels[(size_t) kernelFor (stage, 1)];
+    const auto bins = b + 1, size = 2 * b;
+
+    for (int i = 0; i < b; ++i)
+    {
+        blockScratch[(size_t) i] = { cl.previous[(size_t) i], cr.previous[(size_t) i] };
+        blockScratch[(size_t) (b + i)] = { cl.in[(size_t) i], cr.in[(size_t) i] };
+    }
+
+    std::copy (cl.in.begin(), cl.in.begin() + b, cl.previous.begin());
+    std::copy (cr.in.begin(), cr.in.begin() + b, cr.previous.begin());
+    fft.perform (blockScratch.data(), size, false);
+    cl.head = (cl.head + 1) % p;
+    cr.head = cl.head;
+    auto* lr = cl.fdlRe.data() + cl.head * bins;
+    auto* li = cl.fdlIm.data() + cl.head * bins;
+    auto* rr = cr.fdlRe.data() + cr.head * bins;
+    auto* ri = cr.fdlIm.data() + cr.head * bins;
+
+    for (int j = 0; j < bins; ++j)
+    {
+        const auto z = blockScratch[(size_t) j];
+        const auto zc = std::conj (blockScratch[(size_t) ((size - j) % size)]);
+        lr[j] = 0.5f * (z.real() + zc.real());
+        li[j] = 0.5f * (z.imag() + zc.imag());
+        // (z - zc) / 2j
+        rr[j] = 0.5f * (z.imag() - zc.imag());
+        ri[j] = -0.5f * (z.real() - zc.real());
+    }
+
+    const auto mac = [&] (const Kernel& k, int set, const Channel& c, float* yr, float* yi)
+    {
+        std::fill (yr, yr + bins, 0.0f);
+        std::fill (yi, yi + bins, 0.0f);
+        const auto* hr = k.re[(size_t) set].data();
+        const auto* hi = k.im[(size_t) set].data();
+
+        for (int i = 0; i < p; ++i)
+        {
+            const auto slot = (c.head - i + p) % p;
+            const auto* ar = c.fdlRe.data() + slot * bins;
+            const auto* ai = c.fdlIm.data() + slot * bins;
+            const auto* br = hr + i * bins;
+            const auto* bi = hi + i * bins;
+
+            for (int j = 0; j < bins; ++j)
+            {
+                yr[j] += ar[j] * br[j] - ai[j] * bi[j];
+                yi[j] += ar[j] * bi[j] + ai[j] * br[j];
+            }
+        }
+    };
+
+    const auto combine = [&] (const float* yLr, const float* yLi, const float* yRr, const float* yRi, std::vector<Fft::Complex>& out)
+    {
+        // W = YL + j YR over the whole spectrum (YL, YR Hermitian).
+        for (int j = 0; j < bins; ++j)
+            out[(size_t) j] = { yLr[j] - yRi[j], yLi[j] + yRr[j] };
+
+        for (int j = 1; j < b; ++j)
+            out[(size_t) (size - j)] = { yLr[j] + yRi[j], -yLi[j] + yRr[j] };
+
+        fft.perform (out.data(), size, true);
+    };
+
+    float yLr[1025], yLi[1025], yRr[1025], yRi[1025];
+    mac (kl, kl.current, cl, yLr, yLi);
+    mac (kr, kr.current, cr, yRr, yRi);
+    combine (yLr, yLi, yRr, yRi, blockOut);
+    const auto scale = 1.0f / (float) size;
+
+    if (fading && (kl.old >= 0 || kr.old >= 0))
+    {
+        mac (kl, kl.old >= 0 ? kl.old : kl.current, cl, yLr, yLi);
+        mac (kr, kr.old >= 0 ? kr.old : kr.current, cr, yRr, yRi);
+        combine (yLr, yLi, yRr, yRi, blockOld);
+
+        for (int i = 0; i < b; ++i)
+        {
+            const auto ramp = std::min (1.0f, (float) (fadePosition + i + 1) / (float) fadeLength);
+            const auto y = blockOut[(size_t) (b + i)], o = blockOld[(size_t) (b + i)];
+            cl.out[(size_t) i] = (o.real() + (y.real() - o.real()) * ramp) * scale;
+            cr.out[(size_t) i] = (o.imag() + (y.imag() - o.imag()) * ramp) * scale;
+        }
+
+        return;
+    }
+
+    for (int i = 0; i < b; ++i)
+    {
+        cl.out[(size_t) i] = blockOut[(size_t) (b + i)].real() * scale;
+        cr.out[(size_t) i] = blockOut[(size_t) (b + i)].imag() * scale;
+    }
 }
 
 //==============================================================================
@@ -502,7 +608,7 @@ bool LinearPhaseFilter::designStep (int& budget) noexcept
             for (int d = 0; d < slot.numDesigns; ++d)
                 sections += slot.designs[(size_t) d].numSections;
 
-            const auto cost = 1 + sections;
+            const auto cost = 1 + sections + (slot.binGains ? 2 : 0);
             const auto count = std::max (1, budget / cost);
             const auto end = std::min (bins, designPosition + count);
             auto* power = slotPower.data() + designSlot * maxBins;
@@ -541,8 +647,8 @@ bool LinearPhaseFilter::designStep (int& budget) noexcept
                         }
                     }
 
-                    if (slot.binGains)
-                        pw *= std::pow (10.0, (double) gains[bin] / 10.0);
+                    if (slot.binGains && gains[bin] != 0.0f)
+                        pw *= (double) std::exp2 (gains[bin] * 0.33219281f);   // 10^(dB/10)
                 }
 
                 power[bin] = (float) std::clamp (pw, 1.0e-30, 1.0e30);
@@ -641,30 +747,39 @@ bool LinearPhaseFilter::designStep (int& budget) noexcept
 
         case Phase::partitions:
         {
+            // Two partitions in one complex FFT (P is even): z = h_p + j h_p+1.
             auto& k = kernels[(size_t) designKernelIndex];
             const auto set = (size_t) nextSet[(size_t) designKernelIndex];
             const auto& taps = k.taps[set];
             const auto part = designPosition;
+            const auto size = 2 * b;
 
             for (int i = 0; i < b; ++i)
             {
-                blockScratch[(size_t) i] = { taps[(size_t) (part * b + i)], 0.0f };
+                blockScratch[(size_t) i] = { taps[(size_t) (part * b + i)], taps[(size_t) ((part + 1) * b + i)] };
                 blockScratch[(size_t) (b + i)] = {};
             }
 
-            fft.perform (blockScratch.data(), 2 * b, false);
-            auto* re = k.re[set].data() + part * (b + 1);
-            auto* im = k.im[set].data() + part * (b + 1);
+            fft.perform (blockScratch.data(), size, false);
+            auto* re0 = k.re[set].data() + part * (b + 1);
+            auto* im0 = k.im[set].data() + part * (b + 1);
+            auto* re1 = re0 + (b + 1);
+            auto* im1 = im0 + (b + 1);
 
             for (int j = 0; j <= b; ++j)
             {
-                re[j] = blockScratch[(size_t) j].real();
-                im[j] = blockScratch[(size_t) j].imag();
+                const auto z = blockScratch[(size_t) j];
+                const auto zc = std::conj (blockScratch[(size_t) ((size - j) % size)]);
+                re0[j] = 0.5f * (z.real() + zc.real());
+                im0[j] = 0.5f * (z.imag() + zc.imag());
+                re1[j] = 0.5f * (z.imag() - zc.imag());
+                im1[j] = -0.5f * (z.real() - zc.real());
             }
 
-            budget -= Fft::unitsFor (2 * b);
+            budget -= Fft::unitsFor (size) + b;
+            designPosition += 2;
 
-            if (++designPosition >= p)
+            if (designPosition >= p)
             {
                 designPosition = 0;
                 ++designKernelIndex;

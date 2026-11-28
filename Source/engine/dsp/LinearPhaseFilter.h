@@ -155,6 +155,7 @@ private:
     };
 
     void processBlockOf (int stage, int ch, int kernel) noexcept;
+    void processStereoBlock (int stage) noexcept;   // both channels in one complex FFT each way
     void designTick() noexcept;
     void startFrame() noexcept;
     bool designStep (int& budget) noexcept;   // true when the frame's design is complete
