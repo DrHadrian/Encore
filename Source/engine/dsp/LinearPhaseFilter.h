@@ -121,6 +121,12 @@ public:
     int getFrameSamples() const noexcept                { return frameBlocks[(size_t) resolution] * b; }
     int getFramesDesigned() const noexcept              { return framesDesigned; }
 
+    /** The design work a block may do (units: a butterfly, or a section at a
+        bin), and the most any block has done since reset(): the work per
+        callback is bounded by construction, whatever the machine is doing. */
+    int getBudgetPerBlock() const noexcept              { return budgetPerBlock; }
+    int getMostWorkInABlock() const noexcept            { return mostWork; }
+
     /** The response of a kernel now playing (0 L, 1 R, 2 M, 3 S) at a
         frequency, dB, from its taps. Tests and diagnostics. */
     double kernelResponseDb (int kernel, double frequency) const noexcept;
@@ -187,7 +193,7 @@ private:
     int designSlot = 0, designKernelIndex = 0, designPosition = 0;
     std::vector<Fft::Complex> designBuffer;   // N
     Fft::Job inverseJob;
-    int budgetPerBlock = 0;
+    int budgetPerBlock = 0, mostWork = 0;
     std::array<int, numKernels> nextSet {};
     bool copyRight = false;
 

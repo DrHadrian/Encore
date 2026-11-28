@@ -185,6 +185,7 @@ void LinearPhaseFilter::reset() noexcept
     fading = false;
     fadePosition = 0;
     framesDesigned = 0;
+    mostWork = 0;
     dirty = 0;
 
     for (int s = 0; s < maxSlots; ++s)
@@ -396,6 +397,8 @@ void LinearPhaseFilter::designTick() noexcept
     while (budget > 0 && phase != Phase::idle && phase != Phase::waiting)
         if (designStep (budget))
             phase = Phase::waiting;
+
+    mostWork = std::max (mostWork, budgetPerBlock - budget);
 
     if (phase == Phase::waiting && ! fading)
     {

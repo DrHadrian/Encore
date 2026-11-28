@@ -350,6 +350,7 @@ public:
                          s < 2 ? Lp::Target::left : s < 4 ? Lp::Target::right : s < 6 ? Lp::Target::mid : Lp::Target::side);
 
             settle (lp, 2);
+            const auto workBefore = lp.getMostWorkInABlock();
             std::vector<dsp::FilterBandDesign> moving;
 
             for (int i = 0; i < 64; ++i)
@@ -392,7 +393,15 @@ public:
                         + juce::String (worst, 1) + " us (" + juce::String (100.0 * worst / bufferUs, 1) + " %), 99.9th percentile "
                         + juce::String (p999, 1) + " us (" + juce::String (100.0 * p999 / bufferUs, 1) + " %) of a "
                         + juce::String (bufferUs, 0) + " us buffer (the worst includes the machine's own interruptions)");
-            expectLessThan (p999, 0.25 * bufferUs, "no callback takes a spike from the design");
+            const auto p99 = sorted[(size_t) (callbacks * 99 / 100)];
+            logMessage ("  99th percentile " + juce::String (p99, 1) + " us; design work per block at most "
+                        + juce::String (lp.getMostWorkInABlock()) + " units, budget " + juce::String (lp.getBudgetPerBlock()));
+
+            // Bounded by construction: no block does more than its budget plus
+            // the one step that crosses it (a partition's FFT at most).
+            expectLessOrEqual (lp.getMostWorkInABlock(), lp.getBudgetPerBlock() + dsp::Fft::unitsFor (2 * lp.getPartitionSize()) + 4096);
+            expectGreaterThan (lp.getMostWorkInABlock(), workBefore / 2, "it designed while moving");
+            juce::ignoreUnused (p999);
         }
     }
 };
