@@ -231,6 +231,7 @@ void StudioEqBlock::prepareBlock (const ProcessSpec& spec)
 
     // Dynamics: the EQ's input, the movement per chunk, per slot.
     eqInput.setSize (maxChannels, juce::jmax (1, spec.maxBlockSize), false, true, false);
+    eqInputMidSide.setSize (maxChannels, juce::jmax (1, spec.maxBlockSize), false, true, false);
     maxChunks = juce::jmax (1, (spec.maxBlockSize + updateInterval - 1) / updateInterval);
     moves.assign ((size_t) numSlots * (size_t) maxChunks, 0.0f);
     playingInput.assign ((size_t) maxChunks, 0);
@@ -265,6 +266,7 @@ void StudioEqBlock::resetBlock() noexcept
         slot.playing = slot.p.used->getChoiceIndex() == 1 && slot.p.on->getChoiceIndex() == 1;
         slot.shape = slot.p.shape->getChoiceIndex();
         slot.slope = slot.p.slope->getChoiceIndex();
+        slot.place = slot.oldPlace = stereoNow ? slot.p.place->getChoiceIndex() : (int) Place::stereo;
         slot.toggleRemaining = 0;
         slot.fade.reset();
         slot.band.reset();
@@ -461,6 +463,7 @@ void StudioEqBlock::applyChoices (Slot& slot, double scale) noexcept
     const auto playing = slot.p.used->getChoiceIndex() == 1 && slot.p.on->getChoiceIndex() == 1;
     const auto shape = slot.p.shape->getChoiceIndex();
     const auto slope = slot.p.slope->getChoiceIndex();
+    const auto place = stereoNow ? slot.p.place->getChoiceIndex() : (int) Place::stereo;   // on mono: ignored
 
     if (playing != slot.playing)
     {
@@ -468,6 +471,7 @@ void StudioEqBlock::applyChoices (Slot& slot, double scale) noexcept
         slot.playing = playing;
         slot.shape = shape;
         slot.slope = slope;
+        slot.place = slot.oldPlace = place;
 
         if (playing)
             slot.snapValues();   // values set while it was off: start there
@@ -482,13 +486,18 @@ void StudioEqBlock::applyChoices (Slot& slot, double scale) noexcept
         return;
     }
 
-    // A Shape or Slope change: this band only crossfades from its old setting
-    // (one at a time; a change during a fade waits for it to finish).
-    if (playing && (shape != slot.shape || slope != slot.slope) && ! slot.fade.isActive())
+    if (! playing && ! slot.band.isGliding())
+        slot.place = slot.oldPlace = place;   // resting: nothing to crossfade
+
+    // A Shape, Slope or Place change: this band only crossfades from its old
+    // setting (one at a time; a change during a fade waits for it to finish).
+    if (playing && (shape != slot.shape || slope != slot.slope || place != slot.place) && ! slot.fade.isActive())
     {
         slot.oldBand = slot.band;
+        slot.oldPlace = slot.place;
         slot.shape = shape;
         slot.slope = slope;
+        slot.place = place;
         slot.band.reset();
         slot.designedMoveDb = slot.moveDb;
         slot.band.setDesign (designNow (slot, scale, slot.moveDb));
@@ -501,19 +510,71 @@ void StudioEqBlock::processSlot (Slot& slot, float* const* channels, int numChan
     if (slot.fade.isActive())
     {
         slot.fade.copyInput (channels, numChannels, numSamples);
-        slot.oldBand.process (slot.fade.oldChannels(), numChannels, numSamples);
-        slot.band.process (channels, numChannels, numSamples);
+        processPlaced (slot.oldBand, (Place) slot.oldPlace, slot.fade.oldChannels(), numChannels, numSamples);
+        processPlaced (slot.band, (Place) slot.place, channels, numChannels, numSamples);
         slot.fade.mix (channels, numChannels, numSamples);
         return;
     }
 
-    slot.band.process (channels, numChannels, numSamples);
+    processPlaced (slot.band, (Place) slot.place, channels, numChannels, numSamples);
+}
+
+void StudioEqBlock::processPlaced (dsp::FilterBand<maxChannels>& band, Place place, float* const* channels, int numChannels,
+                                   int numSamples) noexcept
+{
+    if (numChannels < 2 || place == Place::stereo)
+    {
+        band.process (channels, numChannels, numSamples);
+        return;
+    }
+
+    if (band.getDesign().numSections == 0 && ! band.isGliding())
+        return;   // changes nothing: bit-exact, no M/S round trip
+
+    if (place == Place::left || place == Place::right)
+    {
+        float* one[] = { channels[place == Place::left ? 0 : 1] };
+        band.process (one, 1, numSamples);   // the other channel isn't touched
+        return;
+    }
+
+    // Mid or Side: encode in place (left = M, right = S), filter one, decode.
+    auto* l = channels[0];
+    auto* r = channels[1];
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto m = 0.5f * (l[i] + r[i]), sd = 0.5f * (l[i] - r[i]);
+        l[i] = m;
+        r[i] = sd;
+    }
+
+    float* one[] = { place == Place::mid ? l : r };
+    band.process (one, 1, numSamples);
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto m = l[i], sd = r[i];
+        l[i] = m + sd;
+        r[i] = m - sd;
+    }
 }
 
 void StudioEqBlock::processBlock (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept
 {
     numChannels = juce::jlimit (1, maxChannels, numChannels);
     const juce::ScopedNoDenormals noDenormals;
+
+    if ((numChannels > 1) != stereoNow)
+    {
+        // The block's channels are fixed while it plays; this is its first
+        // buffer (or a new chain): placements take effect at once, no fade.
+        stereoNow = numChannels > 1;
+
+        for (auto& slot : slots)
+            slot.place = slot.oldPlace = stereoNow ? slot.p.place->getChoiceIndex() : (int) Place::stereo;
+    }
+
     processBands (channels, numChannels, numSamples, context);
     processOutput (channels, numChannels, numSamples, context.tunerOpen);
 }
@@ -709,6 +770,24 @@ void StudioEqBlock::detectDynamics (const float* const* channels, int numChannel
     const float* input[maxChannels] = { eqInput.getReadPointer (0), eqInput.getReadPointer (juce::jmin (1, numChannels - 1)) };
     playing (input, numChannels, playingInputMs, playingInput);
 
+    // Mid and Side bands hear M or S of the input.
+    auto midSide = false;
+
+    for (const auto& slot : slots)
+        midSide = midSide || (slot.dynamic && (slot.place == (int) Place::mid || slot.place == (int) Place::side));
+
+    if (midSide && numChannels > 1)
+    {
+        auto* m = eqInputMidSide.getWritePointer (0);
+        auto* sd = eqInputMidSide.getWritePointer (1);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            m[i] = 0.5f * (input[0][i] + input[1][i]);
+            sd[i] = 0.5f * (input[0][i] - input[1][i]);
+        }
+    }
+
     if (dry != nullptr)
         playing (&dry, 1, playingDryMs, playingDry);
 
@@ -719,10 +798,29 @@ void StudioEqBlock::detectDynamics (const float* const* channels, int numChannel
         if (! slot.dynamic)
             continue;
 
+        // The detector follows the placement: Stereo the louder channel, Left
+        // or Right that channel, Mid or Side M or S; the dry guitar is mono.
         if (slot.p.side->getChoiceIndex() == (int) Side::dryGuitar && dry != nullptr)
+        {
             detectSlot (slot, s, &dry, 1, numSamples, playingDry.data(), context.tunerOpen);
-        else
-            detectSlot (slot, s, input, numChannels, numSamples, playingInput.data(), context.tunerOpen);
+            continue;
+        }
+
+        const float* one[1] = { input[0] };
+
+        switch ((Place) slot.place)
+        {
+            case Place::left:  one[0] = input[0]; break;
+            case Place::right: one[0] = input[1]; break;
+            case Place::mid:   one[0] = eqInputMidSide.getReadPointer (0); break;
+            case Place::side:  one[0] = eqInputMidSide.getReadPointer (1); break;
+            case Place::stereo:
+            default:
+                detectSlot (slot, s, input, numChannels, numSamples, playingInput.data(), context.tunerOpen);
+                continue;
+        }
+
+        detectSlot (slot, s, one, 1, numSamples, playingInput.data(), context.tunerOpen);
     }
 }
 

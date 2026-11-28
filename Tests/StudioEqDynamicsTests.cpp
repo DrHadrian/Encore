@@ -353,6 +353,155 @@ public:
             expect (settled < -0.5f, "the set Gain does");
         }
 
+        beginTest ("Placement on stereo: Left, Right, Mid and Side leave the rest untouched; Stereo does both");
+        {
+            const auto left = noise (0.5f, 24000, 11), right = noise (0.5f, 24000, 12);
+
+            const auto render = [&] (Eq::Place place, std::vector<float>& l, std::vector<float>& r)
+            {
+                Eq eq;
+                setSlot (eq, 0, "Used", 1.0f);
+                setSlot (eq, 0, "Gain", 12.0f);
+                setSlot (eq, 0, "Place", (float) place);
+                start (eq);
+                l = left;
+                r = right;
+
+                for (int at = 0; at < 24000; at += blockSize)
+                {
+                    float* ch[] = { l.data() + at, r.data() + at };
+                    eq.process (ch, 2, juce::jmin (blockSize, 24000 - at), {});
+                }
+            };
+
+            const auto midSideError = [&] (const std::vector<float>& l, const std::vector<float>& r, bool mid)
+            {
+                auto worst = 0.0;
+
+                for (size_t i = 0; i < l.size(); ++i)
+                {
+                    const auto in = mid ? 0.5 * ((double) left[i] + right[i]) : 0.5 * ((double) left[i] - right[i]);
+                    const auto out = mid ? 0.5 * ((double) l[i] + r[i]) : 0.5 * ((double) l[i] - r[i]);
+                    worst = std::max (worst, std::abs (out - in));
+                }
+
+                return worst;
+            };
+
+            std::vector<float> l, r;
+            render (Eq::Place::left, l, r);
+            expect (r == right && l != left, "Left: the right channel bit-exact");
+            render (Eq::Place::right, l, r);
+            expect (l == left && r != right, "Right: the left channel bit-exact");
+            render (Eq::Place::mid, l, r);
+            expect (midSideError (l, r, false) < 1.0e-6 && midSideError (l, r, true) > 0.01, "Mid: S untouched (to float precision)");
+            render (Eq::Place::side, l, r);
+            expect (midSideError (l, r, true) < 1.0e-6 && midSideError (l, r, false) > 0.01, "Side: M untouched (to float precision)");
+            render (Eq::Place::stereo, l, r);
+            expect (l != left && r != right);
+
+            // A band that changes nothing makes no M/S round trip: bit-exact.
+            Eq flat;
+            setSlot (flat, 0, "Used", 1.0f);
+            setSlot (flat, 0, "Place", (float) Eq::Place::mid);
+            start (flat);
+            l = left;
+            r = right;
+            float* ch[] = { l.data(), r.data() };
+            flat.process (ch, 2, blockSize, {});
+            expect (std::equal (l.begin(), l.begin() + blockSize, left.begin()) && std::equal (r.begin(), r.begin() + blockSize, right.begin()));
+        }
+
+        beginTest ("Placement on mono is ignored (plays as Stereo); a Place change crossfades that band, no click");
+        {
+            const auto x = noise (0.5f, 24000, 13);
+
+            const auto mono = [&] (Eq::Place place)
+            {
+                Eq eq;
+                setSlot (eq, 0, "Used", 1.0f);
+                setSlot (eq, 0, "Gain", 9.0f);
+                setSlot (eq, 0, "Place", (float) place);
+                start (eq);
+                return play (eq, x);
+            };
+
+            const auto stereo = mono (Eq::Place::stereo);
+
+            for (auto place : { Eq::Place::left, Eq::Place::right, Eq::Place::mid, Eq::Place::side })
+                expect (mono (place) == stereo, "mono ignores Place " + juce::String ((int) place));
+
+            // Left -> Right on a low tone while playing: the change crossfades.
+            Eq eq;
+            setSlot (eq, 0, "Used", 1.0f);
+            setSlot (eq, 0, "Freq", 200.0f);
+            setSlot (eq, 0, "Gain", 12.0f);
+            setSlot (eq, 0, "Place", (float) Eq::Place::left);
+            start (eq);
+            auto l = sine (200.0, 0.2f, 24000), r = l;
+
+            for (int at = 0; at < 24000; at += blockSize)
+            {
+                if (at == 12032)
+                    setSlot (eq, 0, "Place", (float) Eq::Place::right);
+
+                float* ch[] = { l.data() + at, r.data() + at };
+                eq.process (ch, 2, juce::jmin (blockSize, 24000 - at), {});
+            }
+
+            const auto clickL = highBandDb (l, 3000.0, 4800, 24000), clickR = highBandDb (r, 3000.0, 4800, 24000);
+            logMessage ("Place Left -> Right on a 200 Hz tone: energy above 3 kHz " + juce::String (clickL, 1) + " / "
+                        + juce::String (clickR, 1) + " dB");
+            expect (clickL < -70.0 && clickR < -70.0, "no click");
+            expectWithinAbsoluteError ((double) juce::Decibels::gainToDecibels (rms (r, 20000, 24000) / rms (l, 20000, 24000)), 12.0, 0.1,
+                                       "the band moved to the right");
+        }
+
+        beginTest ("A dynamic band's detector follows its placement: Mid hears M, Side hears S");
+        {
+            const auto tone = sineRms (1000.0, -10.0, 24000);
+            auto inverted = tone;
+
+            for (auto& v : inverted)
+                v = -v;
+
+            const auto movement = [&] (Eq::Place place, const std::vector<float>& right, Eq::Side side = Eq::Side::thisBand)
+            {
+                Eq eq;
+                addDynamic (eq, 0, Eq::Shape::bell, 1000.0f, -8.0f, -30.0f);
+                setSlot (eq, 0, "Place", (float) place);
+                setSlot (eq, 0, "Side", (float) side);
+                start (eq);
+                auto l = tone, r = right;
+                const auto dry = tone;
+
+                for (int at = 0; at < 24000; at += blockSize)
+                {
+                    float* ch[] = { l.data() + at, r.data() + at };
+                    ProcessContext context;
+                    context.chainInput = dry.data() + at;
+                    eq.process (ch, 2, juce::jmin (blockSize, 24000 - at), context);
+                }
+
+                return (double) eq.getDynamicGainDb (0);
+            };
+
+            // L = R: all mid.  L = -R: all side.
+            expectWithinAbsoluteError (movement (Eq::Place::mid, tone), -8.0, 0.01);
+            expectEquals (movement (Eq::Place::side, tone), 0.0);
+            expectEquals (movement (Eq::Place::mid, inverted), 0.0);
+            expectWithinAbsoluteError (movement (Eq::Place::side, inverted), -8.0, 0.01);
+            expectWithinAbsoluteError (movement (Eq::Place::stereo, inverted), -8.0, 0.01, "Stereo: the louder channel");
+
+            // Left hears the left alone.
+            std::vector<float> silent (24000, 0.0f);
+            expectWithinAbsoluteError (movement (Eq::Place::left, silent), -8.0, 0.01);
+            expectEquals (movement (Eq::Place::right, silent), 0.0);
+
+            // From the dry guitar (mono) every placement hears the guitar.
+            expectWithinAbsoluteError (movement (Eq::Place::side, tone, Eq::Side::dryGuitar), -8.0, 0.01);
+        }
+
         beginTest ("24 dynamic bands moving, stereo: no allocation, no NaN");
         {
             Eq eq;
@@ -363,6 +512,7 @@ public:
                             s % 4 == 0 ? -61.0f : -40.0f, 0.1f, 5.0f, s % 2 ? 40.0f : 0.025f);
                 setSlot (eq, s, "Side", (float) (s % 2));
                 setSlot (eq, s, "SideFilter", (float) (s % 3 == 0));
+                setSlot (eq, s, "Place", (float) (s % 5));
             }
 
             start (eq);

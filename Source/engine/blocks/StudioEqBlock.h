@@ -205,6 +205,7 @@ private:
         dsp::Crossfade fade;
         bool playing = false;                         // in use and on, as last applied
         int shape = -1, slope = -1;                   // as last applied
+        int place = 0, oldPlace = 0;                  // Place as it plays (Stereo on a mono signal), and the old one while it crossfades
         int toggleRemaining = 0;                      // samples left of a glide to or from flat
 
         // Freq and Q ramp in log steps, as a knob turns (the parameter's own
@@ -248,6 +249,13 @@ private:
     void applyChoices (Slot& slot, double gainScale) noexcept;
     void processSlot (Slot& slot, float* const* channels, int numChannels, int numSamples) noexcept;
 
+    /** A band in its placement (EQ-PLAN §2.1): Stereo both channels, Left or
+        Right that channel alone, Mid or Side encoded to M/S around this band
+        (M = (L + R) / 2, S = (L - R) / 2), filtered, decoded. A band that
+        changes nothing touches nothing. Audio thread. */
+    static void processPlaced (dsp::FilterBand<maxChannels>& band, Place place, float* const* channels, int numChannels,
+                               int numSamples) noexcept;
+
     /** Audio thread: the Curve value from the bands' current designs (cheap:
         precomputed cosines, |H|^2 per section). */
     double curveNow() const noexcept;
@@ -277,6 +285,8 @@ private:
 
     // Dynamics, audio thread; sized in prepare.
     juce::AudioBuffer<float> eqInput;              // the EQ's input this buffer (This band's sidechain, listen)
+    juce::AudioBuffer<float> eqInputMidSide;       // ... as M and S, for Mid and Side bands' sidechains
+    bool stereoNow = false;                        // the block gets two channels: placement plays
     std::vector<float> moves;                      // per slot, the movement at the end of each chunk
     std::vector<std::uint8_t> playingInput, playingDry;   // per chunk: someone is playing (Auto learns)
     int maxChunks = 1;
