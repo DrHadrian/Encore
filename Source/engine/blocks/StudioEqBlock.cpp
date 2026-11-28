@@ -102,6 +102,19 @@ StudioEqBlock::StudioEqBlock()
                                             defaultSideFrequency, "Hz", 0));
         p.sideQ    = &addParameter (number (slotId (s, "SideQ"), label ("sidechain Q"), logRange (0.1f, 10.0f), defaultSideQ, {}, 2));
     }
+
+    // B5, after every B4 parameter: the spectral method (setup, block-wide),
+    // and per band the spectral Density and Tilt (EQ-PLAN §2.2).
+    spectralMethod = &addParameter (choice ("spectralMethod", "Spectral method", { "Sub-bands", "FFT" },
+                                            (int) SpectralMethod::subBands, false));
+
+    for (int s = 0; s < numSlots; ++s)
+    {
+        auto& p = slots[(size_t) s].p;
+        const auto label = [s] (const char* what) { return "Band " + juce::String (s + 1) + " " + what; };
+        p.density  = &addParameter (number (slotId (s, "Density"), label ("spectral density"), { 0.0f, 100.0f }, defaultDensity, "%", 0));
+        p.specTilt = &addParameter (choice (slotId (s, "SpecTilt"), label ("spectral tilt"), { "Off", "On" }, 1, false));
+    }
 }
 
 //==============================================================================
@@ -1358,7 +1371,8 @@ bool StudioEqBlock::isPresetParameter (const Parameter& parameter) const noexcep
     // The sound, not the setup (EQ-PLAN §4, Proposed): the bands, gain scale,
     // output, auto gain, character and drive are; pan, width, invert, the
     // display range, Quality, the CPU setting and the phase mode aren't.
-    for (const auto* setup : { &pan, &width, &invert, &displayRange, &quality, &cpuTight, &phase, &linearQuality })
+    for (const Parameter* setup : std::initializer_list<const Parameter*> { &pan, &width, &invert, &displayRange, &quality, &cpuTight,
+                                                                             &phase, &linearQuality, spectralMethod })
         if (&parameter == setup)
             return false;
 

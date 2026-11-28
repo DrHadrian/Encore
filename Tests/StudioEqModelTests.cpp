@@ -224,6 +224,59 @@ public:
             expect (! switchCompare (oldEq) && ! copyCompare (oldEq, true));
         }
 
+        beginTest ("Spectral method, Density and Tilt (B5): saved and read back; a B4 show without them loads the defaults");
+        {
+            auto show = makeDefaultShow ("Spectral");
+            auto eq = emptyEq();
+            juce::String error;
+            addEqBand (eq, bell (2000.0, 0.0), error);
+            expectEquals (eq.params.at ("b01Density"), 50.0f);
+            eq.params["b01Density"] = 80.0f;
+            eq.params["b01SpecTilt"] = 0.0f;
+            eq.params["spectralMethod"] = 1.0f;
+            show.patches[0].mainLane().blocks.push_back (eq);
+
+            const auto back = json::fromJson (json::toJson (show), error);
+            expect (back.has_value(), error);
+            expectEquals (show.requiredSchemaVersion(), 5);
+
+            if (back)
+            {
+                const auto& b = back->patches[0].mainLane().blocks.back();
+                expectEquals (b.params.at ("b01Density"), 80.0f);
+                expectEquals (b.params.at ("b01SpecTilt"), 0.0f);
+                expectEquals (b.params.at ("spectralMethod"), 1.0f);
+            }
+
+            auto b4 = eq;
+            b4.params.erase ("spectralMethod");
+
+            for (int s = 0; s < Eq::numSlots; ++s)
+            {
+                b4.params.erase (Eq::slotId (s, "Density"));
+                b4.params.erase (Eq::slotId (s, "SpecTilt"));
+            }
+
+            auto b4Show = makeDefaultShow ("B4");
+            b4Show.patches[0].mainLane().blocks.push_back (b4);
+            const auto b4Text = json::toJson (b4Show);
+            expect (! b4Text.contains ("Density"));
+            const auto b4Back = json::fromJson (b4Text, error);
+            expect (b4Back.has_value(), error);
+
+            if (b4Back)
+            {
+                Eq block;
+                applyParameters (b4Back->patches[0].mainLane().blocks.back(), block);
+                expectEquals (block.findParameter ("b01Density")->getValue(), 50.0f);
+                expectEquals (block.findParameter ("b01SpecTilt")->getValue(), 1.0f);
+                expectEquals (block.findParameter ("spectralMethod")->getValue(), 0.0f);
+            }
+
+            removeEqBand (eq, 0);
+            expectEquals (eq.params.at ("b01Density"), 50.0f);
+        }
+
         beginTest ("The sidechain's own frequency and Q (B4): saved and read back; a B3 show without them loads the defaults");
         {
             auto show = makeDefaultShow ("Side");
