@@ -1234,3 +1234,67 @@ tuned on the rig in U3.
   **Warm at High, stereo 0.93 %** (target 1.5 %; mono 0.52 %); 8 bands with 4
   dynamic, Mid/Side and Soft at Live, stereo, 0.93 %. B3's 8 static bands,
   stereo, 0.55 %.
+
+## 0069 — Studio EQ linear phase and spectral bands
+
+Stage B5 of the native modules (EQ-PLAN §2.2, §2.3, §2.6), the Studio EQ's
+last engine stage before its UI. Still **hidden** (schema 5) until U3;
+today's `eq` is unchanged. Natural phase is R1 and still plays Zero latency.
+
+- **New parameters**, after B4's (470 in all): `spectralMethod` (Sub-bands,
+  FFT; setup, as `phase`); per band `bNNDensity` (0–100 %, 50) and
+  `bNNSpecTilt` (Off, On; On), used in Mode Spectral, preset parameters.
+- **The linear-phase engine** (`dsp/LinearPhaseFilter`, shared): the bands'
+  zero-phase magnitude as a linear-phase FIR by uniformly partitioned
+  overlap-save (B = 64, N = 256 / 1024 / 4096 at 48 kHz, scaled with the
+  rate; Kaiser β 8). **Latency N/2 + B per stage**: 192 / 576 / 2112 samples
+  at 48 kHz (4 / 12 / 44 ms). Accurate to 0.07 dB for detail 10 bins or wider
+  (Low 1.9 kHz, Medium 470 Hz, High 117 Hz); finer, lower detail is smoothed.
+  The kernel follows the bands **frame by frame** (375 / 188 / 47 frames a
+  second at 48 kHz), crossfaded sample by sample; the design runs **in the
+  callback with a fixed budget per block** (no extra thread, no spike: more
+  work makes a frame longer, never a callback heavier). EQ-PLAN §2.3's "about
+  30 times a second" note no longer applies.
+- **Brickwall** in Linear phase: the ideal step on the bins, −1 to −60 dB in
+  3.2 bins (600 / 150 / 37.5 Hz), at most −74 dB beyond; in Zero latency
+  still 96 dB/oct.
+- **Placement, Pro-Q's way** (Adrian, 28 Nov): Stereo, Left and Right bands
+  in an L/R stage, Mid and Side bands in an M/S stage; with both kinds the
+  stages run in series and the latency doubles.
+- **Dynamic bands in Linear phase** (Adrian, 28 Nov): truly linear phase,
+  their movement in the kernel frame by frame, at every resolution; detected
+  on the undelayed input, so they act ahead of the sound.
+- **Changing path while playing** (mode, resolution, the M/S stage, the FFT
+  stage, a When CPU is tight step): the new path warms up on a copy of the
+  input on a second engine, then **a quick dip** (Adrian, 28 Nov, both ways:
+  a latency change can't be lined up): the old path out in 10 ms, the new in
+  over 10 ms; the new latency is reported at the dip's middle, so split
+  paths follow it.
+- **Spectral bands, both methods** (Adrian, 28 Nov):
+  - **Sub-bands** (default, zero latency): up to 16 narrow dynamic bells
+    across the band, spaced by Density (1/3, 1/6, 1/12 octave at 0, 50,
+    100 %), each detecting its own range. The detectors' levels are
+    **unmixed** (their leakage from neighbours solved away, a guard detector
+    beyond each edge), so a loud tone moves only its own region. With Own,
+    the sub-bands hear the sidechain through the Own band pass (Claude).
+  - **FFT** (per bin, as Pro-Q 4): an STFT of the band's sidechain
+    (`dsp/SpectralDetector`) at the kernel's bins, a spectrum every frame;
+    only bins over the threshold move; Density spreads a bin's movement to its
+    neighbours. A linear-phase process: in Zero latency one stage after the
+    IIR bands (its latency added); in Linear phase it joins the kernel
+    (added once).
+  - Tilt: +3 dB/oct on the detection, relative to the band's frequency.
+- **When CPU is tight** steps 1 and 2 are now real: Spectral as Dynamic (both
+  methods), Linear phase as Zero latency; Quality to Live as before.
+- **Shared pieces:** `dsp/Fft` (radix-2, also in steps), `dsp/LinearPhaseFilter`,
+  `dsp/SpectralDetector`.
+- **CPU** (Windows CI Release, 48 kHz / 64, average · worst callback): Linear
+  Medium, 8 bands, stereo 0.42 % · 1.9 % (target 3 %); with 2 dynamic 1.19 % ·
+  2.6 %; Low 0.27 %, High 1.01 %, L/R + M/S 0.73 %; one Spectral band over
+  the same band static: Sub-bands +0.41 %, FFT +1.15 % (target 2 %).
+- **Limit:** at 176.4 / 192 kHz, High one stage is 8448 samples, past the
+  Chain's 8192-sample alignment limit: a split shows "alignment limited".
+- **Threads:** every new processing function runs on the audio thread, sized
+  in `prepare` for High, both stages, stereo, 24 bands, 16 sub-bands each and
+  the FFT detectors (no allocation, no locks); the kernel design is plain
+  maths in the callback with a fixed budget per block.
