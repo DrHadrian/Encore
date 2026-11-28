@@ -12,7 +12,7 @@ namespace encore
 namespace
 {
     constexpr const char* slotSuffixes[] = { "Used", "On", "Shape", "Freq", "Gain", "Q", "Slope", "Place", "Mode", "Range",
-                                             "Thresh", "Attack", "Release", "Side", "SideFilter" };
+                                             "Thresh", "Attack", "Release", "Side", "SideFilter", "SideFreq", "SideQ" };
 
     /** A Studio EQ's default values (one made once, on the message thread). */
     float defaultOf (const juce::String& id)

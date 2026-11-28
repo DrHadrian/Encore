@@ -224,6 +224,58 @@ public:
             expect (! switchCompare (oldEq) && ! copyCompare (oldEq, true));
         }
 
+        beginTest ("The sidechain's own frequency and Q (B4): saved and read back; a B3 show without them loads the defaults");
+        {
+            auto show = makeDefaultShow ("Side");
+            auto eq = emptyEq();
+            juce::String error;
+            addEqBand (eq, bell (400.0, 3.0), error);
+            expectEquals (eq.params.at ("b01SideFreq"), 1000.0f, "a new band starts from the defaults");
+            eq.params["b01SideFreq"] = 2500.0f;
+            eq.params["b01SideQ"] = 3.0f;
+            show.patches[0].mainLane().blocks.push_back (eq);
+
+            const auto text = json::toJson (show);
+            expectEquals (show.requiredSchemaVersion(), 5);
+            const auto back = json::fromJson (text, error);
+            expect (back.has_value(), error);
+
+            if (back)
+            {
+                const auto& b = back->patches[0].mainLane().blocks.back();
+                expectEquals (b.params.at ("b01SideFreq"), 2500.0f);
+                expectEquals (b.params.at ("b01SideQ"), 3.0f);
+            }
+
+            // A show saved by B3: no SideFreq / SideQ at all.
+            auto b3 = eq;
+            for (int s = 0; s < Eq::numSlots; ++s)
+            {
+                b3.params.erase (Eq::slotId (s, "SideFreq"));
+                b3.params.erase (Eq::slotId (s, "SideQ"));
+            }
+
+            auto b3Show = makeDefaultShow ("B3");
+            b3Show.patches[0].mainLane().blocks.push_back (b3);
+            const auto b3Text = json::toJson (b3Show);
+            expect (! b3Text.contains ("SideFreq"));
+            const auto b3Back = json::fromJson (b3Text, error);
+            expect (b3Back.has_value(), error);
+
+            if (b3Back)
+            {
+                Eq block;
+                applyParameters (b3Back->patches[0].mainLane().blocks.back(), block);
+                expectEquals (block.findParameter ("b01SideFreq")->getValue(), 1000.0f);
+                expectEquals (block.findParameter ("b01SideQ")->getValue(), 1.0f);
+                expectEquals (block.findParameter ("b01Gain")->getValue(), 3.0f);
+            }
+
+            // Removing the band resets them too.
+            removeEqBand (eq, 0);
+            expectEquals (eq.params.at ("b01SideFreq"), 1000.0f);
+        }
+
         beginTest ("Today's EQ as a Studio EQ: its bands in order, pedals moved, close in sound (within 0.5 dB, 20 Hz - 16 kHz)");
         {
             BlockModel old;

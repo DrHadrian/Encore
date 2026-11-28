@@ -90,6 +90,17 @@ StudioEqBlock::StudioEqBlock()
         p.side       = &addParameter (choice (id ("Side"), label ("sidechain"), { "This band", "Dry guitar" }, 0, false));
         p.sideFilter = &addParameter (choice (id ("SideFilter"), label ("sidechain filter"), { "Follows the band", "Own" }, 0, false));
     }
+
+    // B4: the sidechain filter's own frequency and Q (SideFilter Own), after
+    // every B3 parameter so none of those moves.
+    for (int s = 0; s < numSlots; ++s)
+    {
+        auto& p = slots[(size_t) s].p;
+        const auto label = [s] (const char* what) { return "Band " + juce::String (s + 1) + " " + what; };
+        p.sideFreq = &addParameter (number (slotId (s, "SideFreq"), label ("sidechain frequency"), logRange (20.0f, 20000.0f),
+                                            defaultSideFrequency, "Hz", 0));
+        p.sideQ    = &addParameter (number (slotId (s, "SideQ"), label ("sidechain Q"), logRange (0.1f, 10.0f), defaultSideQ, {}, 2));
+    }
 }
 
 //==============================================================================

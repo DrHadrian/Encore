@@ -66,6 +66,8 @@ public:
     static constexpr std::array<int, 4> displayRanges { 3, 6, 12, 30 };
 
     static constexpr float defaultFrequency = 1000.0f;
+    static constexpr float defaultSideFrequency = 1000.0f;   // bNNSideFreq, 20 Hz .. 20 kHz (Proposed)
+    static constexpr float defaultSideQ = 1.0f;              // bNNSideQ, 0.1 .. 10 (Proposed)
     static constexpr float thresholdAutoBelowDb = -60.5f;   // the Thresh knob's bottom (-61) reads Auto
 
     /** "b07Gain": slot is 0-based, the id 1-based and two digits. */
@@ -100,6 +102,7 @@ public:
     {
         Parameter *used, *on, *shape, *freq, *gain, *q, *slope;
         Parameter *place, *mode, *range, *thresh, *attack, *release, *side, *sideFilter;   // B4
+        Parameter *sideFreq, *sideQ;   // B4: SideFilter Own's frequency and Q (registered after the rest)
     };
 
     const SlotParameters& getSlotParameters (int slot) const noexcept { return slots[(size_t) slot].p; }
