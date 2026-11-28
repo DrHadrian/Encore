@@ -10,6 +10,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <vector>
 
 namespace encore
@@ -135,6 +136,55 @@ public:
     /** The auto gain applied now, dB (0 when Off). Any thread. */
     float getAutoGainDb() const noexcept { return autoGainNow.load (std::memory_order_relaxed); }
 
+    //== Dynamic bands (EQ-PLAN §2.2; B4, values Proposed, tuned on the rig in U3)
+    // A band with a gain (Bell, the shelves, Tilt) in Mode Dynamic moves its
+    // gain from its own Gain towards Range while its sidechain is over the
+    // threshold: 1 dB for each dB over, up to |Range|, with a soft knee;
+    // Attack and Release smooth the movement in dB. Gain scale scales the
+    // movement as it scales the Gain (Adrian, 28 Nov). Spectral plays as
+    // Dynamic until B5 builds the real spectral bands.
+    //
+    // The sidechain: This band = the EQ's input (before any band, so bands
+    // don't steer each other); Dry guitar = ProcessContext::chainInput (This
+    // band when there's none). Filtered as the band (Follows: a Bell hears a
+    // band pass at its frequency and Q, a low shelf a 12 dB/oct low pass at
+    // its frequency, a high shelf a 12 dB/oct high pass, a Tilt everything)
+    // or by its own band pass (Own: SideFreq, SideQ).
+    static constexpr double detectorMs = 5.0;          // RMS of the filtered sidechain
+    static constexpr double kneeDb = 6.0;              // soft knee, centred on the threshold
+    static constexpr double autoWindowSeconds = 3.0;   // Auto threshold: a slow RMS of the sidechain ...
+    static constexpr double autoAboveDb = 3.0;         // ... plus this
+    static constexpr double playingDb = -50.0;         // Auto learns only while the source is above this (someone playing) ...
+    static constexpr double playingMs = 50.0;          // ... measured this fast, ...
+    static constexpr double playingChunkBelowDb = 30.0;  // ... and the 16 samples now not more than this below it
+    static constexpr double settledDb = 1.0e-4;        // a movement this close to its target has arrived
+
+    /** Bell, the shelves and Tilt can be dynamic; on the other shapes Mode is
+        ignored and the band stays static (U3 greys the controls). */
+    static bool canBeDynamic (Shape shape) noexcept;
+
+    /** The law's static curve: how far the band moves (dB, in Range's
+        direction, up to |Range|) for a sidechain this far over the threshold. */
+    static double movementDb (double overDb, double rangeDb) noexcept;
+
+    /** Mode as it plays: Spectral as Dynamic until B5 (B5 swaps its own path
+        in here, the parameters stay as they are). */
+    static Mode playedMode (Mode mode) noexcept { return mode == Mode::spectral ? Mode::dynamic : mode; }
+
+    /** The sidechain filter of a band (no sections = unfiltered). Any thread. */
+    static dsp::FilterSettings sidechainSettingsFor (const BandSettings& band, SideFilter filter, double ownFrequency,
+                                                     double ownQ, bool& filtered) noexcept;
+
+    /** For U3's moving curve: the gain band `slot` plays now, its movement
+        included, gain scale applied (dB); and the movement alone. Any thread,
+        lock-free (updated every buffer). */
+    float getLiveGainDb (int slot) const noexcept      { return liveGain[(size_t) slot].load (std::memory_order_relaxed); }
+    float getDynamicGainDb (int slot) const noexcept   { return liveMove[(size_t) slot].load (std::memory_order_relaxed); }
+
+    /** The threshold Auto has learned for `slot`, dB (-infinity before it has
+        heard anything). Any thread. */
+    float getAutoThresholdDb (int slot) const noexcept { return liveAuto[(size_t) slot].load (std::memory_order_relaxed); }
+
     static constexpr double toggleSeconds = 0.01;    // a band on, off, in or out of use glides to or from flat
     static constexpr int updateInterval = 16;        // samples between redesigns while a value moves
 
@@ -161,6 +211,18 @@ private:
         // ramp is linear: 30 Hz -> 30 kHz would jump octaves per chunk at first).
         juce::SmoothedValue<double, juce::ValueSmoothingTypes::Multiplicative> freqRamp, qRamp;
 
+        // Dynamics (B4), audio thread.
+        dsp::FilterBand<maxChannels> sideBand;        // the sidechain filter
+        dsp::FilterSettings sideSettings {};          // as last designed
+        bool sideFiltered = false, sideDesigned = false;
+        std::array<double, maxChannels> sideMs {};    // the detector (mean square) per detection channel
+        double autoMs = 0.0;                          // Auto threshold: the slow mean square, once learned
+        bool autoLearned = false;
+        double moveDb = 0.0;                          // the movement now (dB, before gain scale)
+        double designedMoveDb = 0.0;                  // ... as the band was last designed with
+        bool dynamic = false;                         // dynamics run this buffer
+        bool moveChanged = false;                     // the movement changes within this buffer
+
         bool valuesMoving() const noexcept { return freqRamp.isSmoothing() || qRamp.isSmoothing() || p.gain->isSmoothing(); }
         void snapValues() noexcept
         {
@@ -170,8 +232,16 @@ private:
         }
     };
 
-    /** The design of a slot at its parameters' current (ramped) values. Audio thread. */
-    dsp::FilterBandDesign designNow (const Slot& slot, double gainScale) const noexcept;
+    /** The design of a slot at its parameters' current (ramped) values, its
+        dynamic movement added to its gain. Audio thread. */
+    dsp::FilterBandDesign designNow (const Slot& slot, double gainScale, double moveDb = 0.0) const noexcept;
+
+    /** Dynamics: the sidechain of every dynamic band through its detector,
+        the movement per 16-sample chunk into `moves`. Audio thread. */
+    void detectDynamics (const float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
+    void detectSlot (Slot& slot, int index, const float* const* source, int numSource, int numSamples,
+                     const std::uint8_t* playing, bool tunerOpen) noexcept;
+    float* movesOf (int slot) noexcept { return moves.data() + (size_t) slot * (size_t) maxChunks; }
     static bool isScaled (int shape) noexcept;
 
     /** Picks up on/off, in/out of use, Shape and Slope. Audio thread. */
@@ -204,6 +274,14 @@ private:
 
     double sampleRate = 48000.0;
     int toggleSamples = 480;
+
+    // Dynamics, audio thread; sized in prepare.
+    juce::AudioBuffer<float> eqInput;              // the EQ's input this buffer (This band's sidechain, listen)
+    std::vector<float> moves;                      // per slot, the movement at the end of each chunk
+    std::vector<std::uint8_t> playingInput, playingDry;   // per chunk: someone is playing (Auto learns)
+    int maxChunks = 1;
+    double detectorCoefficient = 0.0, playingInputMs = 0.0, playingDryMs = 0.0;
+    std::array<std::atomic<float>, numSlots> liveGain {}, liveMove {}, liveAuto {};
 
     // Output tools, audio thread.
     std::array<double, curvePoints> pointCos {}, pointCos2 {};

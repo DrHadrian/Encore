@@ -6,6 +6,7 @@
 #include "engine/core/FactoryPresets.h"
 
 #include <cmath>
+#include <limits>
 
 namespace encore
 {
@@ -129,6 +130,49 @@ bool StudioEqBlock::isScaled (int shape) noexcept
            || shape == (int) Shape::tiltShelf;
 }
 
+bool StudioEqBlock::canBeDynamic (Shape shape) noexcept
+{
+    return isScaled ((int) shape);   // the shapes with a gain
+}
+
+double StudioEqBlock::movementDb (double overDb, double rangeDb) noexcept
+{
+    // 1 dB per dB over the threshold, with a soft knee of kneeDb centred on
+    // it (quadratic, so the slope goes 0 -> 1 without a corner), up to |Range|.
+    const auto half = 0.5 * kneeDb;
+    const auto over = overDb <= -half ? 0.0 : overDb >= half ? overDb : (overDb + half) * (overDb + half) / (2.0 * kneeDb);
+    const auto amount = std::min (over, std::abs (rangeDb));
+    return rangeDb < 0.0 ? -amount : amount;
+}
+
+dsp::FilterSettings StudioEqBlock::sidechainSettingsFor (const BandSettings& band, SideFilter filter, double ownFrequency,
+                                                         double ownQ, bool& filtered) noexcept
+{
+    dsp::FilterSettings s;
+    s.slopeDbPerOctave = 12;
+    filtered = true;
+
+    if (filter == SideFilter::own)
+    {
+        s.shape = dsp::FilterShape::bandPass;
+        s.frequency = ownFrequency;
+        s.q = ownQ;
+        return s;
+    }
+
+    s.frequency = band.frequency;
+
+    switch (band.shape)
+    {
+        case Shape::lowShelf:  s.shape = dsp::FilterShape::highCut; s.q = 0.7071; break;   // a 12 dB/oct low pass: the lows it acts on
+        case Shape::highShelf: s.shape = dsp::FilterShape::lowCut;  s.q = 0.7071; break;   // a 12 dB/oct high pass
+        case Shape::tiltShelf: filtered = false; break;                                    // the whole spectrum
+        default:               s.shape = dsp::FilterShape::bandPass; s.q = band.q; break;  // a Bell: its own frequency and Q
+    }
+
+    return s;
+}
+
 StudioEqBlock::BandSettings StudioEqBlock::getBand (int slot) const noexcept
 {
     const auto& p = slots[(size_t) slot].p;
@@ -184,6 +228,14 @@ void StudioEqBlock::prepareBlock (const ProcessSpec& spec)
     }
 
     curveIntervalSamples = juce::jmax (1, juce::roundToInt (curveIntervalSeconds * sampleRate));
+
+    // Dynamics: the EQ's input, the movement per chunk, per slot.
+    eqInput.setSize (maxChannels, juce::jmax (1, spec.maxBlockSize), false, true, false);
+    maxChunks = juce::jmax (1, (spec.maxBlockSize + updateInterval - 1) / updateInterval);
+    moves.assign ((size_t) numSlots * (size_t) maxChunks, 0.0f);
+    playingInput.assign ((size_t) maxChunks, 0);
+    playingDry.assign ((size_t) maxChunks, 0);
+    detectorCoefficient = std::exp (-1000.0 / (detectorMs * sampleRate));
     inputLoudness.prepare (sampleRate, smartWindowSeconds);
     bandsLoudness.prepare (sampleRate, smartWindowSeconds);
     autoGainDb.reset (sampleRate, autoGainRampSeconds);
@@ -220,6 +272,25 @@ void StudioEqBlock::resetBlock() noexcept
 
         slot.snapValues();
         slot.band.setDesign (slot.playing ? designNow (slot, scale) : dsp::FilterBandDesign {});
+
+        // Dynamics start at rest; Auto learns afresh.
+        slot.sideBand.reset();
+        slot.sideDesigned = false;
+        slot.sideMs.fill (0.0);
+        slot.autoMs = 0.0;
+        slot.autoLearned = false;
+        slot.moveDb = slot.designedMoveDb = 0.0;
+        slot.dynamic = slot.moveChanged = false;
+    }
+
+    playingInputMs = playingDryMs = 0.0;
+
+    for (int s = 0; s < numSlots; ++s)
+    {
+        liveMove[(size_t) s].store (0.0f, std::memory_order_relaxed);
+        liveAuto[(size_t) s].store (-std::numeric_limits<float>::infinity(), std::memory_order_relaxed);
+        liveGain[(size_t) s].store (isScaled (slots[(size_t) s].shape) ? slots[(size_t) s].p.gain->getValue() * (float) scale * 0.01f : 0.0f,
+                                    std::memory_order_relaxed);
     }
 
     gainScale.snapToTarget();
@@ -265,9 +336,15 @@ double StudioEqBlock::curveNow() const noexcept
     std::array<double, curvePoints> power;
     power.fill (1.0);
 
+    const auto scale = (double) gainScale.currentValue();
+
     for (const auto& slot : slots)
     {
-        const auto& design = slot.band.getDesign();
+        // Auto gain follows a band's set Gain, not its dynamic movement (Adrian,
+        // 28 Nov: it mustn't push the level back up each time a band acts).
+        const auto moved = slot.playing && slot.designedMoveDb != 0.0;
+        const auto staticDesign = moved ? designNow (slot, scale) : dsp::FilterBandDesign {};
+        const auto& design = moved ? staticDesign : slot.band.getDesign();
 
         for (int s = 0; s < design.numSections; ++s)
         {
@@ -368,12 +445,12 @@ void StudioEqBlock::processOutput (float* const* channels, int numChannels, int 
     }
 }
 
-dsp::FilterBandDesign StudioEqBlock::designNow (const Slot& slot, double scale) const noexcept
+dsp::FilterBandDesign StudioEqBlock::designNow (const Slot& slot, double scale, double moveDb) const noexcept
 {
     BandSettings b;
     b.shape = (Shape) slot.shape;
     b.frequency = slot.freqRamp.getCurrentValue();
-    b.gainDb = slot.p.gain->currentValue();
+    b.gainDb = slot.p.gain->currentValue() + moveDb;   // gain scale scales both (filterSettingsFor)
     b.q = slot.qRamp.getCurrentValue();
     b.slope = slot.slope;
     return dsp::FilterBandDesign::make (filterSettingsFor (b, scale), sampleRate);
@@ -396,7 +473,11 @@ void StudioEqBlock::applyChoices (Slot& slot, double scale) noexcept
             slot.snapValues();   // values set while it was off: start there
 
         slot.fade.reset();
-        slot.band.glideTo (playing ? designNow (slot, scale) : dsp::FilterBandDesign {}, toggleSamples);
+        if (! playing)
+            slot.moveDb = 0.0;   // a band coming back starts at rest
+
+        slot.designedMoveDb = slot.moveDb;
+        slot.band.glideTo (playing ? designNow (slot, scale, slot.moveDb) : dsp::FilterBandDesign {}, toggleSamples);
         slot.toggleRemaining = toggleSamples;
         return;
     }
@@ -409,7 +490,8 @@ void StudioEqBlock::applyChoices (Slot& slot, double scale) noexcept
         slot.shape = shape;
         slot.slope = slope;
         slot.band.reset();
-        slot.band.setDesign (designNow (slot, scale));
+        slot.designedMoveDb = slot.moveDb;
+        slot.band.setDesign (designNow (slot, scale, slot.moveDb));
         slot.fade.start();
     }
 }
@@ -436,7 +518,7 @@ void StudioEqBlock::processBlock (float* const* channels, int numChannels, int n
     processOutput (channels, numChannels, numSamples, context.tunerOpen);
 }
 
-void StudioEqBlock::processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext&) noexcept
+void StudioEqBlock::processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept
 {
     // Smart auto gain: the EQ's input, before the bands.
     const auto mode = (AutoGain) autoGain.getChoiceIndex();
@@ -485,13 +567,24 @@ void StudioEqBlock::processBands (float* const* channels, int numChannels, int n
             // values aren't ramped while they rest.
             slot.snapValues();
         }
+    }
+
+    // The dynamic bands' detectors, from the EQ's input (or the dry guitar),
+    // before any band plays: the movement for each chunk of this buffer.
+    detectDynamics (channels, numChannels, numSamples, context);
+
+    for (int s = 0; s < numSlots; ++s)
+    {
+        auto& slot = slots[(size_t) s];
+        const auto valuesMove = slot.playing && (slot.valuesMoving() || (scaleMoving && isScaled (slot.shape)));
 
         audible[(size_t) s] = slot.playing || slot.band.isGliding() || slot.fade.isActive();
-        moving[(size_t) s] = slot.playing && (slot.valuesMoving() || (scaleMoving && isScaled (slot.shape)));
+        moving[(size_t) s] = valuesMove || (slot.dynamic && slot.moveChanged);
         anyMoving = anyMoving || moving[(size_t) s];
 
-        // The Curve value follows anything that changes the bands.
-        if (moving[(size_t) s] || slot.toggleRemaining > 0 || slot.fade.isActive())
+        // The Curve value follows anything that changes the bands' settings
+        // (not a dynamic band's movement).
+        if (valuesMove || slot.toggleRemaining > 0 || slot.fade.isActive())
             curveDirty = true;
     }
 
@@ -508,42 +601,241 @@ void StudioEqBlock::processBands (float* const* channels, int numChannels, int n
 
         for (auto& slot : slots)
             slot.toggleRemaining = juce::jmax (0, slot.toggleRemaining - numSamples);
-
-        return;
     }
-
-    // Something moves: in chunks, redesigning what moves at the chunk's end
-    // and gliding there (no zipper noise: FilterBand::glideTo).
-    for (int start = 0; start < numSamples; start += updateInterval)
+    else
     {
-        const auto len = juce::jmin (updateInterval, numSamples - start);
-        float* chunk[maxChannels] = { channels[0] + start, channels[numChannels > 1 ? 1 : 0] + start };
-
-        if (scaleMoving)
-            scale = (double) gainScale.skip (len);
-
-        for (int s = 0; s < numSlots; ++s)
+        // Something moves: in chunks, redesigning what moves at the chunk's end
+        // and gliding there (no zipper noise: FilterBand::glideTo).
+        for (int start = 0, chunk = 0; start < numSamples; start += updateInterval, ++chunk)
         {
-            auto& slot = slots[(size_t) s];
+            const auto len = juce::jmin (updateInterval, numSamples - start);
+            float* part[maxChannels] = { channels[0] + start, channels[numChannels > 1 ? 1 : 0] + start };
 
-            if (moving[(size_t) s])
+            if (scaleMoving)
+                scale = (double) gainScale.skip (len);
+
+            for (int s = 0; s < numSlots; ++s)
             {
-                slot.freqRamp.skip (len);
-                slot.qRamp.skip (len);
-                slot.p.gain->skip (len);
+                auto& slot = slots[(size_t) s];
 
-                // During a glide to flat's opposite (coming in), land with it.
-                const auto glide = slot.toggleRemaining > len ? slot.toggleRemaining : len;
-                const auto design = designNow (slot, scale);
-                slot.band.glideTo (design, glide);   // the old setting of a crossfade keeps its design: it fades out
+                if (moving[(size_t) s])
+                {
+                    slot.freqRamp.skip (len);
+                    slot.qRamp.skip (len);
+                    slot.p.gain->skip (len);
+
+                    const auto move = slot.dynamic ? (double) movesOf (s)[chunk] : slot.moveDb;
+                    slot.designedMoveDb = move;
+
+                    // During a glide to flat's opposite (coming in), land with it.
+                    const auto glide = slot.toggleRemaining > len ? slot.toggleRemaining : len;
+                    slot.band.glideTo (designNow (slot, scale, move), glide);   // the old setting of a crossfade keeps its design: it fades out
+                }
+
+                if (audible[(size_t) s])
+                    processSlot (slot, part, numChannels, len);
+
+                slot.toggleRemaining = juce::jmax (0, slot.toggleRemaining - len);
             }
-
-            if (audible[(size_t) s])
-                processSlot (slot, chunk, numChannels, len);
-
-            slot.toggleRemaining = juce::jmax (0, slot.toggleRemaining - len);
         }
     }
+
+    // For U3's moving curve.
+    for (int s = 0; s < numSlots; ++s)
+    {
+        const auto& slot = slots[(size_t) s];
+        const auto scaled = slot.playing && isScaled (slot.shape);
+        const auto k = (float) scale * 0.01f;
+        liveGain[(size_t) s].store (scaled ? (slot.p.gain->currentValue() + (float) slot.moveDb) * k : 0.0f, std::memory_order_relaxed);
+        liveMove[(size_t) s].store (scaled ? (float) slot.moveDb * k : 0.0f, std::memory_order_relaxed);
+    }
+}
+
+void StudioEqBlock::detectDynamics (const float* const* channels, int numChannels, int numSamples,
+                                    const ProcessContext& context) noexcept
+{
+    // Which bands run their dynamics this buffer: a playing band with a gain
+    // in Dynamic (or Spectral) mode with a Range, or one still on its way
+    // back to rest. A band at rest with Range 0 costs nothing (bit-exact static).
+    auto any = false;
+
+    for (auto& slot : slots)
+    {
+        slot.moveChanged = false;
+        const auto wanted = slot.playing && canBeDynamic ((Shape) slot.shape)
+                            && playedMode ((Mode) slot.p.mode->getChoiceIndex()) == Mode::dynamic;
+        slot.dynamic = slot.playing && ((wanted && slot.p.range->getValue() != 0.0f) || slot.moveDb != 0.0);
+        any = any || slot.dynamic;
+
+        if (! slot.playing)
+            slot.moveDb = 0.0;
+    }
+
+    if (! any)
+        return;
+
+    // The EQ's input (This band's sidechain: the bands haven't played yet).
+    for (int ch = 0; ch < numChannels; ++ch)
+        eqInput.copyFrom (ch, 0, channels[ch], numSamples);
+
+    // Someone is playing, per chunk, on the input and on the dry guitar: Auto
+    // learns only then (and with the tuner closed).
+    const auto* dry = context.chainInput;
+    const auto playing = [this, numSamples] (const float* const* source, int numSource, double& ms, std::vector<std::uint8_t>& out)
+    {
+        for (int start = 0, c = 0; start < numSamples; start += updateInterval, ++c)
+        {
+            const auto len = juce::jmin (updateInterval, numSamples - start);
+            auto loudest = 0.0;
+
+            for (int k = 0; k < numSource; ++k)
+            {
+                auto sum = 0.0;
+
+                for (int i = 0; i < len; ++i)
+                    sum += (double) source[k][start + i] * (double) source[k][start + i];
+
+                loudest = std::max (loudest, sum / len);
+            }
+
+            // Playing: the last 50 ms above the gate, and this chunk not
+            // silent (so the first moments of silence don't count either).
+            ms += (loudest - ms) * (1.0 - std::exp (-1000.0 * len / (playingMs * sampleRate)));
+            out[(size_t) c] = 10.0 * std::log10 (ms + 1.0e-30) > playingDb
+                                  && 10.0 * std::log10 (loudest + 1.0e-30) > playingDb - playingChunkBelowDb ? 1 : 0;
+        }
+    };
+
+    const float* input[maxChannels] = { eqInput.getReadPointer (0), eqInput.getReadPointer (juce::jmin (1, numChannels - 1)) };
+    playing (input, numChannels, playingInputMs, playingInput);
+
+    if (dry != nullptr)
+        playing (&dry, 1, playingDryMs, playingDry);
+
+    for (int s = 0; s < numSlots; ++s)
+    {
+        auto& slot = slots[(size_t) s];
+
+        if (! slot.dynamic)
+            continue;
+
+        if (slot.p.side->getChoiceIndex() == (int) Side::dryGuitar && dry != nullptr)
+            detectSlot (slot, s, &dry, 1, numSamples, playingDry.data(), context.tunerOpen);
+        else
+            detectSlot (slot, s, input, numChannels, numSamples, playingInput.data(), context.tunerOpen);
+    }
+}
+
+void StudioEqBlock::detectSlot (Slot& slot, int index, const float* const* source, int numSource, int numSamples,
+                                const std::uint8_t* playing, bool tunerOpen) noexcept
+{
+    const auto wanted = canBeDynamic ((Shape) slot.shape) && playedMode ((Mode) slot.p.mode->getChoiceIndex()) == Mode::dynamic;
+    const auto range = wanted ? (double) slot.p.range->getValue() : 0.0;
+    slot.p.range->snapToTarget();
+    auto* out = movesOf (index);
+
+    // The sidechain filter, from the band's settings now (Follows) or its own.
+    if (range != 0.0)
+    {
+        auto band = getBand (index);
+        band.shape = (Shape) slot.shape;
+        auto filtered = false;
+        const auto settings = sidechainSettingsFor (band, (SideFilter) slot.p.sideFilter->getChoiceIndex(),
+                                                    slot.p.sideFreq->getValue(), slot.p.sideQ->getValue(), filtered);
+
+        if (! slot.sideDesigned || filtered != slot.sideFiltered || ! (settings == slot.sideSettings))
+        {
+            slot.sideBand.setDesign (filtered ? dsp::FilterBandDesign::make (settings, sampleRate) : dsp::FilterBandDesign {});
+            slot.sideSettings = settings;
+            slot.sideFiltered = filtered;
+            slot.sideDesigned = true;
+        }
+    }
+
+    const auto autoThreshold = slot.p.thresh->getValue() < thresholdAutoBelowDb;
+    const auto threshold = (double) slot.p.thresh->getValue();
+    const auto attackSamples = (double) slot.p.attack->getValue() * 0.001 * sampleRate;
+    const auto releaseSamples = (double) slot.p.release->getValue() * 0.001 * sampleRate;
+    const auto autoSamples = autoWindowSeconds * sampleRate;
+    numSource = juce::jlimit (1, maxChannels, numSource);
+
+    auto m = slot.moveDb;
+
+    for (int start = 0, c = 0; start < numSamples; start += updateInterval, ++c)
+    {
+        const auto len = juce::jmin (updateInterval, numSamples - start);
+        auto target = 0.0;
+
+        if (range != 0.0)
+        {
+            // RMS of the filtered sidechain; Stereo hears the louder channel.
+            auto level = 0.0, chunkMs = 0.0;
+
+            for (int k = 0; k < numSource; ++k)
+            {
+                auto ms = slot.sideMs[(size_t) k], sum = 0.0;
+                const auto* x = source[k] + start;
+
+                for (int i = 0; i < len; ++i)
+                {
+                    const auto y = (double) slot.sideBand.processSample (x[i], k);
+                    const auto y2 = y * y;
+                    ms = y2 + (ms - y2) * detectorCoefficient;
+                    sum += y2;
+                }
+
+                slot.sideMs[(size_t) k] = ms;
+                level = std::max (level, ms);
+                chunkMs = std::max (chunkMs, sum / len);
+            }
+
+            auto thresholdDb = threshold;
+
+            if (autoThreshold)
+            {
+                // A slow RMS of what comes in, only while someone plays and the
+                // tuner is closed; frozen otherwise. Before it has heard anything
+                // the band doesn't move.
+                if (playing[c] != 0 && ! tunerOpen)
+                {
+                    if (! slot.autoLearned)
+                    {
+                        slot.autoMs = std::max (level, chunkMs);
+                        slot.autoLearned = slot.autoMs > 0.0;
+                    }
+                    else
+                    {
+                        slot.autoMs += (chunkMs - slot.autoMs) * (1.0 - std::exp (-len / autoSamples));
+                    }
+                }
+
+                thresholdDb = slot.autoLearned ? 10.0 * std::log10 (slot.autoMs + 1.0e-30) + autoAboveDb
+                                               : std::numeric_limits<double>::infinity();
+            }
+
+            if (std::isfinite (thresholdDb))
+                target = movementDb (10.0 * std::log10 (level + 1.0e-30) - thresholdDb, range);
+        }
+
+        // Attack as the movement grows, Release as it goes back (in dB).
+        const auto samples = std::abs (target) > std::abs (m) ? attackSamples : releaseSamples;
+        m = target + (m - target) * std::exp (-len / std::max (1.0, samples));
+
+        if (std::abs (m - target) < settledDb)
+            m = target;
+
+        const auto before = c == 0 ? slot.designedMoveDb : (double) out[c - 1];
+        out[c] = (float) m;
+        m = (double) out[c];   // the value the band is designed with
+        slot.moveChanged = slot.moveChanged || m != before;
+    }
+
+    slot.moveDb = m;
+
+    if (autoThreshold)
+        liveAuto[(size_t) index].store (slot.autoLearned ? (float) (10.0 * std::log10 (slot.autoMs + 1.0e-30) + autoAboveDb)
+                                                         : -std::numeric_limits<float>::infinity(),
+                                        std::memory_order_relaxed);
 }
 
 //==============================================================================
