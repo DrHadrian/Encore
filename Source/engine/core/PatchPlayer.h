@@ -117,6 +117,7 @@ public:
         std::array<const float*, (size_t) routing::maxInputs> inputs {};   // null: silence
         std::array<float*, (size_t) routing::maxOutputs> left {}, right {}; // null: no such output
         bool tunerOpen = false;                                             // passed to every block (B2)
+        bool cpuTight = false;                                              // passed to every block (B4)
     };
 
     //== Audio thread ==========================================================

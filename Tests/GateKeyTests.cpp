@@ -57,7 +57,7 @@ namespace
         int tapChannels = 0;
         juce::String problem;
         int inputSlot = -1;
-        bool sawTuner = false;
+        bool sawTuner = false, sawCpuTight = false;
         int sawInputs = 0;
 
     private:
@@ -66,6 +66,7 @@ namespace
         void processBlock (float* const* ch, int n, int len, const ProcessContext& context) noexcept override
         {
             sawTuner = context.tunerOpen;
+            sawCpuTight = context.cpuTight;
             sawInputs = context.numInputs;
 
             for (int c = 0; c < n; ++c)
@@ -113,7 +114,7 @@ public:
 
     void runTest() override
     {
-        beginTest ("The context carries the interface's inputs and the tuner to every block");
+        beginTest ("The context carries the interface's inputs, the tuner and CPU tight (B4) to every block");
         {
             Chain chain;
             auto& probe = static_cast<KeyProbe&> (chain.addBlock (std::make_unique<KeyProbe>()));
@@ -125,10 +126,14 @@ public:
             float* ch[2] = { io.data(), right.data() };
             chain.process (ch, blockSize, { inputs, 8, true });
             expect (probe.sawTuner);
+            expect (! probe.sawCpuTight);
             expectEquals (probe.sawInputs, 8);
 
+            chain.process (ch, blockSize, { inputs, 8, false, true });
+            expect (probe.sawCpuTight);
+
             chain.process (ch, blockSize);
-            expect (! probe.sawTuner, "absent by default");
+            expect (! probe.sawTuner && ! probe.sawCpuTight, "absent by default");
         }
 
         beginTest ("Keying from a block equals keying from a copy of its output");

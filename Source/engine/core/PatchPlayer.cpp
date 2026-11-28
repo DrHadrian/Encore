@@ -362,7 +362,7 @@ void PatchPlayer::renderSlot (Slot& slot, const Io& io, int numSamples, bool isR
 
     if (! finished)
     {
-        const ChainInputs others { keyInputs.data(), routing::maxInputs, io.tunerOpen };
+        const ChainInputs others { keyInputs.data(), routing::maxInputs, io.tunerOpen, io.cpuTight };
         const auto numChannels = juce::jlimit (1, Block::maxChannels, slot.chain->processFrom (firstBlock, channels, numSamples, others));
         const float* left = channels[0];
         const float* right = channels[numChannels - 1];   // mono: the same on both sides
