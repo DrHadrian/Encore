@@ -112,6 +112,11 @@ public:
         fade: what it plays now is what its slots say. */
     bool isSettled() const noexcept;
 
+    /** Ready to be heard after a reset: fed long enough to play the whole
+        kernel, and the first kernel designed and faded in (bands that keep
+        moving keep redesigning it; that doesn't hold it back). */
+    bool isReady() const noexcept;
+
     Resolution getResolution() const noexcept           { return resolution; }
     Stages getStages() const noexcept                   { return stages; }
     int getKernelLength() const noexcept                { return n; }

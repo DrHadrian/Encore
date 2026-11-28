@@ -203,6 +203,14 @@ bool LinearPhaseFilter::isSettled() const noexcept
     return fed >= (long long) stageCount * (n + b) && dirty == 0 && phase == Phase::idle && ! fading;
 }
 
+bool LinearPhaseFilter::isReady() const noexcept
+{
+    const auto stageCount = stages == Stages::both ? 2 : 1;
+    const auto designed = (dirty == 0 && phase == Phase::idle && ! fading) || framesDesigned >= 2
+                          || (framesDesigned >= 1 && ! fading);
+    return fed >= (long long) stageCount * (n + b) && designed;
+}
+
 int LinearPhaseFilter::kernelFor (int stage, int ch) const noexcept
 {
     return stage == 0 ? ch : 2 + ch;
