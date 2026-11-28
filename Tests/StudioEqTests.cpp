@@ -138,11 +138,17 @@ public:
 
     void runTest() override
     {
-        beginTest ("Parameters: 24 slots of 17 and 13 block-wide, stable ids, the plan's defaults");
+        beginTest ("Parameters: 24 slots of 19 and 14 block-wide, stable ids, the plan's defaults");
         {
             Eq eq;
             expectEquals (eq.getTypeId(), juce::String ("studioEq"));
-            expectEquals ((int) eq.getParameters().size(), 24 * 17 + 13);
+            expectEquals ((int) eq.getParameters().size(), 24 * 19 + 14);
+
+            // B4's 421 keep their places; B5's spectral method, then Density and Tilt per band, come after them.
+            expectEquals (eq.getParameters()[420]->getSpec().id, juce::String ("b24SideQ"));
+            expectEquals (eq.getParameters()[421]->getSpec().id, juce::String ("spectralMethod"));
+            expectEquals (eq.getParameters()[422]->getSpec().id, juce::String ("b01Density"));
+            expectEquals (eq.getParameters()[423]->getSpec().id, juce::String ("b01SpecTilt"));
 
             // B3's 373 keep their places; B4's sidechain frequency and Q come after them.
             expectEquals (eq.getParameters()[373]->getSpec().id, juce::String ("b01SideFreq"));
@@ -150,7 +156,7 @@ public:
             expectEquals (eq.getParameters()[372]->getSpec().id, juce::String ("b24SideFilter"));
 
             const char* suffixes[] = { "Used", "On", "Shape", "Freq", "Gain", "Q", "Slope", "Place", "Mode", "Range", "Thresh",
-                                       "Attack", "Release", "Side", "SideFilter", "SideFreq", "SideQ" };
+                                       "Attack", "Release", "Side", "SideFilter", "SideFreq", "SideQ", "Density", "SpecTilt" };
 
             for (int s = 0; s < Eq::numSlots; ++s)
                 for (auto* suffix : suffixes)
@@ -173,6 +179,14 @@ public:
             expectEquals (value ("b05Thresh"), -61.0f);  // Auto
             expectEquals (value ("b05SideFreq"), 1000.0f);
             expectEquals (value ("b05SideQ"), 1.0f);
+            expectEquals (value ("b05Density"), 50.0f);
+            expectEquals (value ("b05SpecTilt"), 1.0f);   // On
+            expectEquals (value ("spectralMethod"), 0.0f); // Sub-bands
+            expect (eq.findParameter ("b05Density")->getSpec().expressionAllowed);
+            expect (! eq.findParameter ("b05SpecTilt")->getSpec().expressionAllowed);
+            expect (! eq.findParameter ("spectralMethod")->getSpec().expressionAllowed);
+            expect (eq.isPresetParameter (*eq.findParameter ("b05Density")) && eq.isPresetParameter (*eq.findParameter ("b05SpecTilt")));
+            expect (! eq.isPresetParameter (*eq.findParameter ("spectralMethod")), "setup, as phase");
             expect (eq.findParameter ("b05SideFreq")->getSpec().expressionAllowed && eq.findParameter ("b05SideQ")->getSpec().expressionAllowed);
             expect (eq.isPresetParameter (*eq.findParameter ("b05SideFreq")));
             expectEquals (eq.findParameter ("b05SideFreq")->getSpec().range.start, 20.0f);

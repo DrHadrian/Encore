@@ -310,7 +310,7 @@ public:
             expect (high < -90.0, "no zipper noise: " + juce::String (high, 1));
         }
 
-        beginTest ("Range 0 is bit-exact with the same band static; Mode on a cut is ignored; Spectral plays as Dynamic");
+        beginTest ("Range 0 is bit-exact with the same band static; Mode on a cut is ignored; Spectral isn't Dynamic");
         {
             const auto x = noise (0.5f, 48000, 5);
 
@@ -332,7 +332,7 @@ public:
 
             const auto dynamic = render (Eq::Shape::bell, Eq::Mode::dynamic, -8.0f);
             expect (dynamic != render (Eq::Shape::bell, Eq::Mode::staticBand, -8.0f), "dynamic moves");
-            expect (dynamic == render (Eq::Shape::bell, Eq::Mode::spectral, -8.0f), "Spectral = Dynamic, bit for bit (until B5)");
+            expect (dynamic != render (Eq::Shape::bell, Eq::Mode::spectral, -8.0f), "Spectral plays its own way since B5 (sub-bands)");
         }
 
         beginTest ("Gain scale scales the movement; auto gain follows the set Gain, not the movement");

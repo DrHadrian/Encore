@@ -6,9 +6,11 @@
 #include "engine/core/Block.h"
 #include "engine/dsp/Crossfade.h"
 #include "engine/dsp/FilterBand.h"
+#include "engine/dsp/LinearPhaseFilter.h"
 #include "engine/dsp/Loudness.h"
 #include "engine/dsp/Oversampler.h"
 #include "engine/dsp/Saturation.h"
+#include "engine/dsp/SpectralDetector.h"
 
 #include <array>
 #include <atomic>
@@ -66,11 +68,13 @@ public:
     enum class Quality { live, high, max };
     enum class AutoGain { off, curve, smart };
     enum class CpuTight { keepTheSound, makeItLighter };
+    enum class SpectralMethod { subBands, fft };   // B5: spectralMethod, block-wide
     static constexpr std::array<int, 4> displayRanges { 3, 6, 12, 30 };
 
     static constexpr float defaultFrequency = 1000.0f;
     static constexpr float defaultSideFrequency = 1000.0f;   // bNNSideFreq, 20 Hz .. 20 kHz (Proposed)
     static constexpr float defaultSideQ = 1.0f;              // bNNSideQ, 0.1 .. 10 (Proposed)
+    static constexpr float defaultDensity = 50.0f;           // bNNDensity, 0 .. 100 % (B5)
     static constexpr float thresholdAutoBelowDb = -60.5f;   // the Thresh knob's bottom (-61) reads Auto
 
     /** "b07Gain": slot is 0-based, the id 1-based and two digits. */
@@ -106,6 +110,7 @@ public:
         Parameter *used, *on, *shape, *freq, *gain, *q, *slope;
         Parameter *place, *mode, *range, *thresh, *attack, *release, *side, *sideFilter;   // B4
         Parameter *sideFreq, *sideQ;   // B4: SideFilter Own's frequency and Q (registered after the rest)
+        Parameter *density, *specTilt; // B5: spectral Density (0..100 %) and Tilt (Off, On), registered after B4's
     };
 
     const SlotParameters& getSlotParameters (int slot) const noexcept { return slots[(size_t) slot].p; }
@@ -171,7 +176,51 @@ public:
 
     /** Mode as it plays: Spectral as Dynamic until B5 (B5 swaps its own path
         in here, the parameters stay as they are). */
-    static Mode playedMode (Mode mode) noexcept { return mode == Mode::spectral ? Mode::dynamic : mode; }
+    static Mode playedMode (Mode mode) noexcept { return mode; }
+
+    //== Spectral bands, the sub-band method (EQ-PLAN §2.2; B5, Proposed) =======
+    // A Spectral band (Bell, shelves, Tilt) with spectralMethod Sub-bands is
+    // its static band plus up to 16 narrow dynamic bells across its range,
+    // each detecting only its own narrow range (a band pass of the same width)
+    // and moving only while that is over the threshold, with the band's Range,
+    // Threshold (Auto: the band's own learned level), Attack and Release.
+    // Density sets the spacing: 1/3 octave at 0 %, 1/6 at 50 %, 1/12 at 100 %
+    // (the bells as wide as their spacing); a band wider than 16 of them
+    // spreads its 16 out. Tilt adds +3 dB/oct to each one's level, relative to
+    // the band's frequency. Range: a Bell's bandwidth, a low shelf from 4
+    // octaves below its corner to half an octave above, a high shelf the
+    // mirror, a Tilt 4 octaves either side. Sidechain as a dynamic band's;
+    // with Own, the sub-bands hear the sidechain through the Own band pass.
+    // Zero latency; in Linear phase their movement goes into the kernel.
+    static constexpr int maxSubBands = 16;
+    static constexpr double subBandSpacingAt0 = 1.0 / 3.0;   // octaves; halves every 50 % of Density
+    static constexpr double spectralTiltDbPerOctave = 3.0;
+    static constexpr double subBandFloorShare = 0.01;   // an unmixed level never drops below 1 % of what was heard (-20 dB)
+
+    /** The mode a band plays: Mode as set; on a shape without a gain Static;
+        Spectral as Dynamic once When CPU is tight has taken that step. */
+    Mode modeOf (int slot) const noexcept;
+
+    /** For tests and U3: how many sub-bands a spectral band has now, and one's
+        frequency and movement (dB, gain scale applied). Audio thread values. */
+    //== Spectral bands, the FFT method (spectralMethod FFT; B5, Proposed) ======
+    // Per bin, as Pro-Q 4: within the band, only the bins over the threshold
+    // move, each with the band's Range, Attack and Release in dB. Detection
+    // is an STFT of the band's sidechain at linearQuality's resolution (the
+    // kernel's own bins), a new spectrum every frame; Density spreads a bin's
+    // movement to its neighbours (the same widths as the sub-bands), Tilt as
+    // for the sub-bands. It is a linear-phase process: in Zero latency every
+    // FFT spectral band plays in one linear-phase stage after the other
+    // bands, adding that stage's latency; in Linear phase it joins the
+    // kernel, and the latency isn't added twice.
+    static constexpr int numSpectralSources = 6;   // Stereo, Left, Right, Mid, Side placements, and the dry guitar
+
+    /** For tests and U3: an FFT spectral band's movement at a frequency now (dB, gain scale applied). */
+    float getSpectralGainDb (int slot, double frequency) const noexcept;
+
+    int getNumSubBands (int slot) const noexcept;
+    double getSubBandFrequency (int slot, int subBand) const noexcept;
+    float getSubBandGainDb (int slot, int subBand) const noexcept;
 
     /** The sidechain filter of a band (no sections = unfiltered). Any thread. */
     static dsp::FilterSettings sidechainSettingsFor (const BandSettings& band, SideFilter filter, double ownFrequency,
@@ -206,7 +255,26 @@ public:
 
     /** The character stage's oversampling latency while it's in the path,
         else 0. Any thread (an atomic: the Chain reads it every buffer). */
-    int getLatencySamples() const noexcept override { return juce::jmax (0, characterLatency.load (std::memory_order_relaxed)); }
+    int getLatencySamples() const noexcept override
+    {
+        return pathLatency.load (std::memory_order_relaxed) + juce::jmax (0, characterLatency.load (std::memory_order_relaxed));
+    }
+
+    //== Linear phase (EQ-PLAN §2.3; B5) ========================================
+    // phase Linear plays the bands through dsp::LinearPhaseFilter at
+    // linearQuality's resolution instead of the IIR bands; dynamic bands go
+    // in with their movement, detected on the undelayed input (so they act
+    // ahead of the sound by the latency). Natural plays Zero latency until R1.
+    // A change of path (mode, resolution, or the Mid/Side stage coming or
+    // going) warms the new path up on a copy of the input, then dips: the
+    // old path out in 10 ms, the new one in over 10 ms (Adrian, 28 Nov: a
+    // latency change can't be lined up either way), and the new latency is
+    // reported at the dip's middle, so split paths follow it.
+    static constexpr double pathDipSeconds = 0.01;
+
+    /** The mode playing (Linear only while the Linear path plays). Any thread. */
+    bool isLinearPlaying() const noexcept   { return linearPlaying.load (std::memory_order_relaxed); }
+    bool isPathChanging() const noexcept    { return pathChanging.load (std::memory_order_relaxed); }
 
     //== When CPU is tight (EQ-PLAN §2.6, decision 12; B4) ======================
     // With "Make it lighter", while ProcessContext::cpuTight holds, the block
@@ -220,7 +288,7 @@ public:
     // nothing. Each step crossfades as its setting does and reports its latency.
     static constexpr double lighterWaitSeconds = 1.0;
     enum LighterStep { spectralAsDynamic = 1, linearAsZeroLatency = 2, qualityLive = 4 };
-    static constexpr bool spectralBandsBuilt = false, linearPhaseBuilt = false;   // B5 builds them: until then those steps change nothing
+    static constexpr bool spectralBandsBuilt = true;
 
     /** The steps taken (LighterStep bits; 0 = at full), for U3's "Lighter: CPU
         was tight". Any thread. */
@@ -286,6 +354,9 @@ private:
         double moveDb = 0.0;                          // the movement now (dB, before gain scale)
         double designedMoveDb = 0.0;                  // ... as the band was last designed with
         bool dynamic = false;                         // dynamics run this buffer
+        bool spectral = false, subMoveChanged = false; // B5: the sub-bands run this buffer, and move
+        bool fftSpectral = false, fftChanged = false; // B5: an FFT spectral band this buffer, with new bin movements
+        double fftThresholdDb = 0.0;                  // its threshold now (Auto: learned; +infinity before)
         bool moveChanged = false;                     // the movement changes within this buffer
 
         bool valuesMoving() const noexcept { return freqRamp.isSmoothing() || qRamp.isSmoothing() || p.gain->isSmoothing(); }
@@ -307,6 +378,39 @@ private:
     void detectSlot (Slot& slot, int index, const float* const* source, int numSource, int numSamples,
                      const std::uint8_t* playing, bool tunerOpen) noexcept;
     float* movesOf (int slot) noexcept { return moves.data() + (size_t) slot * (size_t) maxChunks; }
+
+    /** B5: a spectral band's sub-bands. Audio thread. */
+    struct SubBand
+    {
+        dsp::FilterBand<maxChannels> detector, band;
+        std::array<double, maxChannels> ms {};
+        double frequency = 1000.0, q = 4.0, tiltDb = 0.0;
+        double moveDb = 0.0, designedMoveDb = 0.0;
+    };
+
+    struct SubBands
+    {
+        std::array<SubBand, maxSubBands> subs {};
+        int count = 0;
+        std::array<double, 5> layoutKey { -1.0 };   // shape, frequency, Q, Density, Own: the layout follows them
+
+        // A guard detector beyond each edge (hears, doesn't act), and the
+        // unmixing: each detector also hears its neighbours through its band
+        // pass's skirts, so the levels are solved for each one's own share
+        // (power: heard = leakage x own; own = unmix x heard).
+        std::array<dsp::FilterBand<maxChannels>, 2> guards;
+        std::array<std::array<double, maxChannels>, 2> guardMs {};
+        std::array<std::array<double, maxSubBands + 2>, maxSubBands + 2> unmix {};
+    };
+
+    void layOutSubBands (Slot& slot, int index) noexcept;
+    void detectSubBands (Slot& slot, int index, const float* const* source, int numSource, int numSamples,
+                         const std::uint8_t* playing, bool tunerOpen) noexcept;
+    float* subMovesOf (int slot, int subBand) noexcept
+    {
+        return subMoves.data() + ((size_t) slot * maxSubBands + (size_t) subBand) * (size_t) maxChunks;
+    }
+    dsp::FilterBandDesign subBandDesign (const SubBand& sub, double moveDb, double gainScale) const noexcept;
     static bool isScaled (int shape) noexcept;
 
     /** Picks up on/off, in/out of use, Shape and Slope. Audio thread. */
@@ -348,6 +452,29 @@ private:
     void processListen (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
     void copyEqInput (const float* const* channels, int numChannels, int numSamples) noexcept;
 
+    /** Linear phase: which path should play, the change between paths, and
+        the engine's slots kept in step with the bands. Audio thread. */
+    struct PathConfig
+    {
+        bool linear = false;
+        dsp::LinearPhaseFilter::Resolution resolution = dsp::LinearPhaseFilter::Resolution::medium;
+        dsp::LinearPhaseFilter::Stages stages = dsp::LinearPhaseFilter::Stages::lr;
+        bool spectralStage = false;   // Zero latency with FFT spectral bands: the IIR bands, then a linear-phase stage for them
+        bool operator== (const PathConfig&) const = default;
+    };
+
+    PathConfig wantedPath (int numChannels) const noexcept;
+    void startPath (const PathConfig& config, int numChannels, bool immediately) noexcept;
+    void syncEngine (dsp::LinearPhaseFilter& engine, int numChannels, bool stageOnly) noexcept;
+    void spectralRange (int index, double& low, double& high) const noexcept;
+    double bandThreshold (Slot& slot, int index, const float* const* source, int numSource, int numSamples,
+                          const std::uint8_t* playing, bool tunerOpen) noexcept;
+    void fftSpectralMoves (int index, const dsp::SpectralDetector& detector) noexcept;
+    bool isFftSpectral (int index) const noexcept;
+    float* binMovesOf (int slot) noexcept { return binMoves.data() + (size_t) slot * (size_t) maxBins; }
+    void processPaths (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
+    void warmIirBands() noexcept;
+
     /** When CPU is tight: takes a step if one is due. Audio thread. */
     void followCpu (bool cpuIsTight, int numSamples) noexcept;
     void processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
@@ -369,6 +496,7 @@ private:
     Parameter& invert;
     Parameter& cpuTight;
     Parameter& displayRange;
+    Parameter* spectralMethod = nullptr;   // B5, registered after B4's parameters
 
     double sampleRate = 48000.0;
     int toggleSamples = 480;
@@ -378,6 +506,13 @@ private:
     juce::AudioBuffer<float> eqInputMidSide;       // ... as M and S, for Mid and Side bands' sidechains
     bool stereoNow = false;                        // the block gets two channels: placement plays
     std::vector<float> moves;                      // per slot, the movement at the end of each chunk
+    std::vector<SubBands> subBands;                // per slot (B5; on the heap: large)
+    std::vector<float> subMoves;                   // per slot and sub-band, per chunk
+    std::array<dsp::SpectralDetector, numSpectralSources> spectralDetectors;   // B5: shared by the FFT bands with the same source
+    std::vector<float> binMoves;                   // per slot, per bin: an FFT spectral band's movement (dB, before gain scale)
+    std::vector<int> binMoveSize;                  // per slot: the bins binMoves holds now (0: at rest)
+    std::vector<float> binTarget;                  // maxBins: scratch
+    int maxBins = 2049;
     std::vector<std::uint8_t> playingInput, playingDry;   // per chunk: someone is playing (Auto learns)
     int maxChunks = 1;
     double detectorCoefficient = 0.0, playingInputMs = 0.0, playingDryMs = 0.0;
@@ -402,6 +537,18 @@ private:
     juce::SmoothedValue<float> listenAmount;
     juce::AudioBuffer<float> listenBuffer;
     bool eqInputCopied = false;                    // this buffer
+
+    // Linear phase, audio thread; sized in prepare.
+    std::array<dsp::LinearPhaseFilter, 2> engines;
+    int activeEngine = -1, targetEngine = -1;      // -1: the IIR bands
+    PathConfig activeConfig, targetConfig;
+    enum class PathState { steady, warming, dipOut, dipIn };
+    PathState pathState = PathState::steady;
+    int dipRemaining = 0, dipSamples = 480;
+    bool iirAudible = true;
+    juce::AudioBuffer<float> pathScratch;
+    std::atomic<int> pathLatency { 0 };
+    std::atomic<bool> linearPlaying { false }, pathChanging { false };
 
     // When CPU is tight: written on the audio thread; Back to full is a request.
     std::atomic<int> lighterSteps { 0 };
