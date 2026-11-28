@@ -239,6 +239,69 @@ public:
             expectLessThan (loud, -6.0);
             expectWithinAbsoluteError (low, 0.0, 0.5);
         }
+
+        beginTest ("FFT: a single loud bin dips, a quiet one beside it doesn't; the latency is the stage's in Zero latency");
+        {
+            Eq eq;
+            spectralBell (eq, 1500.0f, 0.7f, -9.0f, -30.0f, Eq::SpectralMethod::fft, 100.0f);
+            start (eq);
+            // A Medium bin is 46.875 Hz: tones on bins 32 (1500 Hz) and 36 (1687.5 Hz).
+            const auto x = tones ({ { 1500.0, -12.0 }, { 1687.5, -50.0 }, { 1218.75, -50.0 } }, 96000);
+            const auto y = play (eq, x);
+            const auto latency = eq.getLatencySamples();
+            expectEquals (latency, 576, "the stage's latency, in Zero latency mode");
+            const auto loud = gainAt (x, y, 1500.0, 48000, 90000, latency), above = gainAt (x, y, 1687.5, 48000, 90000, latency),
+                       below = gainAt (x, y, 1218.75, 48000, 90000, latency);
+            logMessage ("FFT, Density 100, a loud 1.5 kHz bin: " + juce::String (loud, 2) + " dB; 4 bins up " + juce::String (above, 2)
+                        + " dB, 6 bins down " + juce::String (below, 2) + " dB; the bell's movement at 1.5 kHz "
+                        + juce::String (eq.getSpectralGainDb (0, 1500.0), 2) + " dB");
+            expectLessThan (loud, -6.0);
+            expectWithinAbsoluteError (above, 0.0, 1.0);
+            expectWithinAbsoluteError (below, 0.0, 1.0);
+
+            Eq linear;
+            spectralBell (linear, 1500.0f, 0.7f, -9.0f, -30.0f, Eq::SpectralMethod::fft, 100.0f);
+            set (linear, "phase", (float) Eq::Phase::linear);
+            start (linear);
+            const auto z = play (linear, x);
+            expectEquals (linear.getLatencySamples(), 576, "in Linear phase it joins the kernel: once");
+            expectLessThan (gainAt (x, z, 1500.0, 48000, 90000, 576), -6.0);
+        }
+
+        beginTest ("FFT and Sub-bands agree in broad effect; FFT allocates nothing");
+        {
+            const auto measure = [] (Eq::SpectralMethod method)
+            {
+                Eq eq;
+                spectralBell (eq, 1000.0f, 0.7f, -9.0f, -30.0f, method);
+                start (eq);
+                auto x = tones ({ { 1000.0, -12.0 }, { 600.0, -45.0 }, { 1600.0, -45.0 } }, 96000);
+                auto y = x;
+                const auto before = realtimeAllocationCount();
+                {
+                    const rt::ScopedRealtimeSection realtime;
+
+                    for (int at = 0; at < 96000; at += 64)
+                    {
+                        float* ch[] = { y.data() + at };
+                        eq.process (ch, 1, 64, {});
+                    }
+                }
+                const auto allocations = realtimeAllocationCount() - before;
+                const auto latency = eq.getLatencySamples();
+                return std::array<double, 4> { gainAt (x, y, 1000.0, 48000, 90000, latency), gainAt (x, y, 600.0, 48000, 90000, latency),
+                                               gainAt (x, y, 1600.0, 48000, 90000, latency), (double) allocations };
+            };
+
+            const auto sub = measure (Eq::SpectralMethod::subBands), fft = measure (Eq::SpectralMethod::fft);
+            logMessage ("The same loud 1 kHz tone: Sub-bands " + juce::String (sub[0], 2) + " / " + juce::String (sub[1], 2) + " / "
+                        + juce::String (sub[2], 2) + " dB, FFT " + juce::String (fft[0], 2) + " / " + juce::String (fft[1], 2) + " / "
+                        + juce::String (fft[2], 2) + " dB (1 kHz / 600 Hz / 1.6 kHz)");
+            expectWithinAbsoluteError (fft[0], sub[0], 3.0, "the loud tone: within 3 dB");
+            expectWithinAbsoluteError (fft[1], sub[1], 0.5);
+            expectWithinAbsoluteError (fft[2], sub[2], 0.5);
+            expectEquals ((int) fft[3], 0);
+        }
     }
 };
 

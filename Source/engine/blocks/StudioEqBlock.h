@@ -10,6 +10,7 @@
 #include "engine/dsp/Loudness.h"
 #include "engine/dsp/Oversampler.h"
 #include "engine/dsp/Saturation.h"
+#include "engine/dsp/SpectralDetector.h"
 
 #include <array>
 #include <atomic>
@@ -202,6 +203,21 @@ public:
 
     /** For tests and U3: how many sub-bands a spectral band has now, and one's
         frequency and movement (dB, gain scale applied). Audio thread values. */
+    //== Spectral bands, the FFT method (spectralMethod FFT; B5, Proposed) ======
+    // Per bin, as Pro-Q 4: within the band, only the bins over the threshold
+    // move, each with the band's Range, Attack and Release in dB. Detection
+    // is an STFT of the band's sidechain at linearQuality's resolution (the
+    // kernel's own bins), a new spectrum every frame; Density spreads a bin's
+    // movement to its neighbours (the same widths as the sub-bands), Tilt as
+    // for the sub-bands. It is a linear-phase process: in Zero latency every
+    // FFT spectral band plays in one linear-phase stage after the other
+    // bands, adding that stage's latency; in Linear phase it joins the
+    // kernel, and the latency isn't added twice.
+    static constexpr int numSpectralSources = 6;   // Stereo, Left, Right, Mid, Side placements, and the dry guitar
+
+    /** For tests and U3: an FFT spectral band's movement at a frequency now (dB, gain scale applied). */
+    float getSpectralGainDb (int slot, double frequency) const noexcept;
+
     int getNumSubBands (int slot) const noexcept;
     double getSubBandFrequency (int slot, int subBand) const noexcept;
     float getSubBandGainDb (int slot, int subBand) const noexcept;
@@ -339,6 +355,8 @@ private:
         double designedMoveDb = 0.0;                  // ... as the band was last designed with
         bool dynamic = false;                         // dynamics run this buffer
         bool spectral = false, subMoveChanged = false; // B5: the sub-bands run this buffer, and move
+        bool fftSpectral = false, fftChanged = false; // B5: an FFT spectral band this buffer, with new bin movements
+        double fftThresholdDb = 0.0;                  // its threshold now (Auto: learned; +infinity before)
         bool moveChanged = false;                     // the movement changes within this buffer
 
         bool valuesMoving() const noexcept { return freqRamp.isSmoothing() || qRamp.isSmoothing() || p.gain->isSmoothing(); }
@@ -441,12 +459,19 @@ private:
         bool linear = false;
         dsp::LinearPhaseFilter::Resolution resolution = dsp::LinearPhaseFilter::Resolution::medium;
         dsp::LinearPhaseFilter::Stages stages = dsp::LinearPhaseFilter::Stages::lr;
+        bool spectralStage = false;   // Zero latency with FFT spectral bands: the IIR bands, then a linear-phase stage for them
         bool operator== (const PathConfig&) const = default;
     };
 
     PathConfig wantedPath (int numChannels) const noexcept;
     void startPath (const PathConfig& config, int numChannels, bool immediately) noexcept;
-    void syncEngine (dsp::LinearPhaseFilter& engine, int numChannels) noexcept;
+    void syncEngine (dsp::LinearPhaseFilter& engine, int numChannels, bool stageOnly) noexcept;
+    void spectralRange (int index, double& low, double& high) const noexcept;
+    double bandThreshold (Slot& slot, int index, const float* const* source, int numSource, int numSamples,
+                          const std::uint8_t* playing, bool tunerOpen) noexcept;
+    void fftSpectralMoves (int index, const dsp::SpectralDetector& detector) noexcept;
+    bool isFftSpectral (int index) const noexcept;
+    float* binMovesOf (int slot) noexcept { return binMoves.data() + (size_t) slot * (size_t) maxBins; }
     void processPaths (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
     void warmIirBands() noexcept;
 
@@ -483,6 +508,11 @@ private:
     std::vector<float> moves;                      // per slot, the movement at the end of each chunk
     std::vector<SubBands> subBands;                // per slot (B5; on the heap: large)
     std::vector<float> subMoves;                   // per slot and sub-band, per chunk
+    std::array<dsp::SpectralDetector, numSpectralSources> spectralDetectors;   // B5: shared by the FFT bands with the same source
+    std::vector<float> binMoves;                   // per slot, per bin: an FFT spectral band's movement (dB, before gain scale)
+    std::vector<int> binMoveSize;                  // per slot: the bins binMoves holds now (0: at rest)
+    std::vector<float> binTarget;                  // maxBins: scratch
+    int maxBins = 2049;
     std::vector<std::uint8_t> playingInput, playingDry;   // per chunk: someone is playing (Auto learns)
     int maxChunks = 1;
     double detectorCoefficient = 0.0, playingInputMs = 0.0, playingDryMs = 0.0;
