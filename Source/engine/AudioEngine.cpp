@@ -298,6 +298,8 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     currentSampleRate.store (sampleRate);
     currentBlockSize.store (blockSize);
     loadMeasurer.reset (sampleRate, blockSize);
+    cpuTightRule.reset();   // audio is stopped here
+    cpuTight.store (false, std::memory_order_relaxed);
 
     // The interface's channels: which exist, which are switched on, and where
     // each switched-on one sits in the callback's channel list.
@@ -347,6 +349,18 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     gain.setCurrentAndTargetValue (0.0f);
 }
 
+AudioEngine::CallbackTimer::~CallbackTimer()
+{
+    // AUDIO THREAD. One measurement for both: JUCE's load meter (it only
+    // tries its lock) and the rule.
+    const auto milliseconds = juce::Time::getMillisecondCounterHiRes() - start;
+    engine.loadMeasurer.registerRenderTime (milliseconds, numSamples);
+    const auto rate = engine.currentSampleRate.load (std::memory_order_relaxed);
+
+    if (rate > 0.0 && numSamples > 0)
+        engine.cpuTight.store (engine.cpuTightRule.update (milliseconds / (numSamples * 1000.0 / rate)), std::memory_order_relaxed);
+}
+
 void AudioEngine::audioDeviceStopped()
 {
     currentSampleRate.store (0.0);
@@ -365,7 +379,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputCha
     system::ensureAudioThreadIsProAudio();   // first call per thread only; then a flag check
     const rt::ScopedRealtimeSection realtime;
     const juce::ScopedNoDenormals noDenormals;
-    const juce::AudioProcessLoadMeasurer::ScopedTimer timer (loadMeasurer, numSamples);
+    const CallbackTimer timer (*this, numSamples);   // the load meter and the CPU-tight rule
 
     callbacks.fetch_add (1, std::memory_order_relaxed);   // heartbeat for the device watchdog
 
@@ -424,6 +438,7 @@ void AudioEngine::renderChunk (const float* const* inputs, int numInputs, float*
     const auto& table = *routingTable;
     PatchPlayer::Io io;
     io.tunerOpen = tuner.isActive();   // gates freeze their noise learning while tuning (B2)
+    io.cpuTight = cpuTight.load (std::memory_order_relaxed);   // as the last callbacks measured it (B4)
 
     // This computer's inputs, from the interface's channels (a channel that
     // isn't there gives silence).

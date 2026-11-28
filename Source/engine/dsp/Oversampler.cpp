@@ -11,15 +11,28 @@ void Oversampler::prepare (int maxChannels, int maxBlockSize, double sampleRate)
     baseRate = sampleRate;
     maxChannels = juce::jlimit (1, 8, maxChannels);
 
-    for (int q = 0; q < numQualities; ++q)
+    for (int set = 0; set < 2; ++set)
     {
-        // factor is the number of 2x stages: 1, 2, 3.
-        auto os = std::make_unique<juce::dsp::Oversampling<float>> ((size_t) maxChannels, (size_t) (q + 1),
-                                                                     juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
-                                                                     true, true);
-        os->initProcessing ((size_t) juce::jmax (1, maxBlockSize));
-        latencies[(size_t) q] = juce::roundToInt (os->getLatencyInSamples());
-        stages[(size_t) q] = std::move (os);
+        const auto channels = set == 0 ? maxChannels : 1;
+
+        if (set == 1 && maxChannels == 1)
+        {
+            for (auto& os : stages[1])
+                os.reset();
+
+            break;   // mono already: one set
+        }
+
+        for (int q = 0; q < numQualities; ++q)
+        {
+            // factor is the number of 2x stages: 1, 2, 3.
+            auto os = std::make_unique<juce::dsp::Oversampling<float>> ((size_t) channels, (size_t) (q + 1),
+                                                                         juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+                                                                         true, true);
+            os->initProcessing ((size_t) juce::jmax (1, maxBlockSize));
+            latencies[(size_t) q] = juce::roundToInt (os->getLatencyInSamples());
+            stages[(size_t) set][(size_t) q] = std::move (os);
+        }
     }
 
     fade.prepare (maxChannels, maxBlockSize, sampleRate);
@@ -30,9 +43,10 @@ void Oversampler::prepare (int maxChannels, int maxBlockSize, double sampleRate)
 
 void Oversampler::reset() noexcept
 {
-    for (auto& os : stages)
-        if (os != nullptr)
-            os->reset();
+    for (auto& set : stages)
+        for (auto& os : set)
+            if (os != nullptr)
+                os->reset();
 
     fade.reset();
 }

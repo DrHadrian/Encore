@@ -9,6 +9,7 @@
 
 #include "engine/PeakMeter.h"
 #include "engine/Tuner.h"
+#include "engine/core/CpuTight.h"
 #include "engine/core/OutputStrip.h"
 #include "engine/core/PatchPlayer.h"
 #include "engine/midi/MidiRouter.h"
@@ -157,6 +158,10 @@ public:
     /** Callbacks that took longer than their buffer: an audible dropout risk. */
     int getOverrunCount() const noexcept { return loadMeasurer.getXRunCount(); }
 
+    /** CPU is tight now (CpuTightRule, B4): what every block got in this
+        callback's ProcessContext. Any thread. */
+    bool isCpuTight() const noexcept { return cpuTight.load (std::memory_order_relaxed); }
+
     /** Deepest safety-limiter gain reduction since the last call, over every
         output (dB, 0 = idle). */
     float takeLimiterReductionDb() noexcept;
@@ -187,6 +192,19 @@ private:
                       int offset, int numSamples) noexcept;
     void handlePanicAndTunerRequests() noexcept;
     void advancePanic (int numSamples) noexcept;
+
+    /** Times one callback (once): hands the time to the load meter and to the
+        CPU-tight rule, whose answer the next callback passes to the blocks. */
+    struct CallbackTimer
+    {
+        CallbackTimer (AudioEngine& e, int samples) noexcept
+            : engine (e), numSamples (samples), start (juce::Time::getMillisecondCounterHiRes()) {}
+        ~CallbackTimer();
+
+        AudioEngine& engine;
+        int numSamples;
+        double start;
+    };
 
     std::atomic<float> masterGainDb { -12.0f };
     std::atomic<bool> muted { true };              // always start muted: safest on a stage
@@ -239,6 +257,8 @@ private:
     std::atomic<int> currentBlockSize { 0 };
     std::atomic<int> clipCount { 0 };
     std::atomic<juce::uint32> callbacks { 0 };
+    CpuTightRule cpuTightRule;                     // audio thread
+    std::atomic<bool> cpuTight { false };          // written and read on the audio thread; read by the UI
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)
 };

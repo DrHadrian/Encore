@@ -1144,3 +1144,93 @@ Quality are B4; linear phase and spectral bands B5; Natural phase R1.
   is an option for later).
 - **CPU** at 48 kHz / 64: 8 static bands, stereo, against the 1 % target; the
   CI benchmark reports it with Smart's share and 24 bands.
+
+## 0068 — Studio EQ dynamics: dynamic bands and sidechain, stereo placement, character, When CPU is tight
+
+Stage B4 of the native modules (EQ-PLAN §2.1, §2.2, §2.4, §2.6): the Studio
+EQ's parameters that B3 saved now play. It stays **hidden** (schema 5) until
+U3; today's `eq` is unchanged. Linear phase, Brickwall and real spectral
+bands are B5; Natural phase R1. Values marked Proposed are named constants,
+tuned on the rig in U3.
+
+- **Two new parameters per band, after B3's** (so no id moves; 421 in all):
+  `bNNSideFreq` (20 Hz–20 kHz, log, 1 kHz) and `bNNSideQ` (0.1–10, log, 1.0),
+  the sidechain filter's own frequency and Q when `SideFilter` is Own.
+  Expression allowed; preset parameters. A B3 show without them loads the
+  defaults.
+- **Dynamic bands:** a Bell, shelf or Tilt in Mode Dynamic moves its gain from
+  its Gain towards Range while its sidechain is over the threshold: 1 dB per
+  dB over, a 6 dB soft knee, up to |Range|; Attack and Release smooth the
+  movement in dB (time constants). On the other shapes Mode is ignored.
+  - **Sidechain:** This band = the EQ's input (before any band: bands don't
+    steer each other); Dry guitar = `ProcessContext::chainInput`, This band
+    when there's none. Filter: Follows the band (a Bell: band pass at its
+    frequency and Q; low shelf: 12 dB/oct low pass; high shelf: 12 dB/oct high
+    pass; Tilt: none) or Own (band pass at SideFreq, SideQ). RMS detector,
+    5 ms (Proposed).
+  - **Auto threshold:** a 3 s RMS of the filtered sidechain plus 3 dB, learning
+    only while someone plays (the source above −50 dBFS over 50 ms, and the
+    16 samples now not silent) and the tuner is closed; frozen otherwise; no
+    movement before it has heard anything (Proposed).
+  - **Gain scale scales the movement** as it scales the Gain (Adrian, 28 Nov).
+    **Auto gain's Curve follows the set Gain, not the movement** (Adrian,
+    28 Nov), so it doesn't push the level back up each time a band acts. Smart
+    measures the real output, so it sees a band's average dip, at most 1 dB/s.
+  - A moving band redesigns every 16 samples with `glideTo` (zipper noise
+    −94 dB above 6 kHz; −54 without the glide) and costs as a static band
+    while it rests; Range 0 at rest is bit-exact static.
+  - **Spectral plays as Dynamic**, bit for bit (`playedMode`), until B5 swaps
+    in its own path; the parameters stay.
+  - For U3, lock-free: `getLiveGainDb`, `getDynamicGainDb`, `getAutoThresholdDb`.
+- **Stereo placement** (decision 8): Left and Right filter one channel (the
+  other bit-exact); Mid and Side encode M = (L + R) / 2, S = (L − R) / 2 around
+  that band, filter one, decode (the other to float precision). A band that
+  changes nothing makes no M/S round trip. On mono, Place is ignored. A Place
+  change crossfades that band only. A dynamic band's detector follows its
+  placement (Stereo: the louder channel); from the dry guitar every placement
+  hears the guitar.
+- **Character** (decision 10), after the bands, before auto gain. Clean is not
+  in the path (bit-exact, no latency). Soft and Warm are new shared curves
+  (`dsp/Saturation.h`): Soft symmetric, odd-order only (linear to −12 dBFS,
+  1 dB down at 0 dBFS); Warm (1 − e^(−0.3x)) / 0.3 into an asymmetric SoftClip
+  inside a +3 dB, 150 Hz low emphasis and its exact inverse, so its second
+  harmonic leads up to a firm drive. Drive 0–24 dB in, the same off after
+  (a −30 dBFS sine within 0.5 dB at every Drive); a 1 Hz DC blocker. Quality
+  Live / High / Max oversamples 2× / 4× / 8× (latency 4 / 6 / 6 samples at
+  48 kHz, reported, so split paths follow it). In or out of the path, and Soft
+  ↔ Warm, crossfade 30 ms on a second path warmed up from the recent input; a
+  Quality change crossfades 10 ms. `Oversampler::resetTo` (shared) starts at
+  a saved Quality without a fade, and the Oversampler now keeps a mono set
+  of its own: JUCE's integer-latency delay line asserted on a mono block
+  through the stereo set, and in Debug the assertion allocated on the audio
+  thread (the Pedal EQ on mono did it too).
+- **When CPU is tight** (decision 12): the shared rule, in the engine
+  (`CpuTightRule`): the callback over 85 % of its time for 8 buffers in a
+  row, or an overrun. `AudioEngine` times each callback once, for the load
+  meter and the rule, and passes it to every block in the next one
+  (`ProcessContext::cpuTight`). With Make it lighter the Studio EQ takes one
+  step per tight stretch, then waits 1 s: Spectral as Dynamic, Linear phase
+  as Zero latency (both nothing until B5), Quality to Live. **Only a step that
+  changes something now is taken** (Adrian, 28 Nov): with nothing left, the
+  block isn't marked lighter. It stays lighter until `backToFull()`, isn't
+  saved, never switches the EQ off. Keep the sound changes nothing.
+- **Band listen, engine side:** `setListen` / `clearListen`, any thread; not a
+  parameter, not saved. The output becomes the EQ's input through a band pass
+  at the band's frequency and Q (shelves and cuts: the side they act on), on
+  every channel, crossfaded 20 ms; a dynamic band plays its sidechain as its
+  detector hears it.
+- **Presets** `tameFizz` and `pickAttack` (EQ-PLAN §4 values, Proposed).
+- **EncoreRender:** `--make-stereo`, `--make-eq-show`; ctest renders of both
+  presets, each placement on stereo, Soft and Warm at Drive 0 / 12 / 24 at
+  each Quality, and a dynamic bell after the NAM example amp keyed from the
+  dry guitar or its own band.
+- **Threads:** every new processing function runs on the audio thread
+  (no allocation, no locks: everything is sized in `prepare` for 24 dynamic
+  bands in stereo, the sidechain filters, the M/S buffers and every Quality).
+  The getters, `setListen`, `clearListen` and `backToFull` are any-thread
+  atomics; `CallbackTimer` runs at the end of the audio callback.
+- **CPU** (Windows CI, 48 kHz / 64, average): one dynamic bell (Auto, moving
+  all the time) adds **0.14 %** over the same bell static (target 0.3 %);
+  **Warm at High, stereo 0.93 %** (target 1.5 %; mono 0.52 %); 8 bands with 4
+  dynamic, Mid/Side and Soft at Live, stereo, 0.93 %. B3's 8 static bands,
+  stereo, 0.55 %.

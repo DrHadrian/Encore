@@ -7,9 +7,12 @@
 #include "engine/dsp/Crossfade.h"
 #include "engine/dsp/FilterBand.h"
 #include "engine/dsp/Loudness.h"
+#include "engine/dsp/Oversampler.h"
+#include "engine/dsp/Saturation.h"
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <vector>
 
 namespace encore
@@ -66,6 +69,8 @@ public:
     static constexpr std::array<int, 4> displayRanges { 3, 6, 12, 30 };
 
     static constexpr float defaultFrequency = 1000.0f;
+    static constexpr float defaultSideFrequency = 1000.0f;   // bNNSideFreq, 20 Hz .. 20 kHz (Proposed)
+    static constexpr float defaultSideQ = 1.0f;              // bNNSideQ, 0.1 .. 10 (Proposed)
     static constexpr float thresholdAutoBelowDb = -60.5f;   // the Thresh knob's bottom (-61) reads Auto
 
     /** "b07Gain": slot is 0-based, the id 1-based and two digits. */
@@ -100,6 +105,7 @@ public:
     {
         Parameter *used, *on, *shape, *freq, *gain, *q, *slope;
         Parameter *place, *mode, *range, *thresh, *attack, *release, *side, *sideFilter;   // B4
+        Parameter *sideFreq, *sideQ;   // B4: SideFilter Own's frequency and Q (registered after the rest)
     };
 
     const SlotParameters& getSlotParameters (int slot) const noexcept { return slots[(size_t) slot].p; }
@@ -132,6 +138,117 @@ public:
     /** The auto gain applied now, dB (0 when Off). Any thread. */
     float getAutoGainDb() const noexcept { return autoGainNow.load (std::memory_order_relaxed); }
 
+    //== Dynamic bands (EQ-PLAN §2.2; B4, values Proposed, tuned on the rig in U3)
+    // A band with a gain (Bell, the shelves, Tilt) in Mode Dynamic moves its
+    // gain from its own Gain towards Range while its sidechain is over the
+    // threshold: 1 dB for each dB over, up to |Range|, with a soft knee;
+    // Attack and Release smooth the movement in dB. Gain scale scales the
+    // movement as it scales the Gain (Adrian, 28 Nov). Spectral plays as
+    // Dynamic until B5 builds the real spectral bands.
+    //
+    // The sidechain: This band = the EQ's input (before any band, so bands
+    // don't steer each other); Dry guitar = ProcessContext::chainInput (This
+    // band when there's none). Filtered as the band (Follows: a Bell hears a
+    // band pass at its frequency and Q, a low shelf a 12 dB/oct low pass at
+    // its frequency, a high shelf a 12 dB/oct high pass, a Tilt everything)
+    // or by its own band pass (Own: SideFreq, SideQ).
+    static constexpr double detectorMs = 5.0;          // RMS of the filtered sidechain
+    static constexpr double kneeDb = 6.0;              // soft knee, centred on the threshold
+    static constexpr double autoWindowSeconds = 3.0;   // Auto threshold: a slow RMS of the sidechain ...
+    static constexpr double autoAboveDb = 3.0;         // ... plus this
+    static constexpr double playingDb = -50.0;         // Auto learns only while the source is above this (someone playing) ...
+    static constexpr double playingMs = 50.0;          // ... measured this fast, ...
+    static constexpr double playingChunkBelowDb = 30.0;  // ... and the 16 samples now not more than this below it
+    static constexpr double settledDb = 1.0e-4;        // a movement this close to its target has arrived
+
+    /** Bell, the shelves and Tilt can be dynamic; on the other shapes Mode is
+        ignored and the band stays static (U3 greys the controls). */
+    static bool canBeDynamic (Shape shape) noexcept;
+
+    /** The law's static curve: how far the band moves (dB, in Range's
+        direction, up to |Range|) for a sidechain this far over the threshold. */
+    static double movementDb (double overDb, double rangeDb) noexcept;
+
+    /** Mode as it plays: Spectral as Dynamic until B5 (B5 swaps its own path
+        in here, the parameters stay as they are). */
+    static Mode playedMode (Mode mode) noexcept { return mode == Mode::spectral ? Mode::dynamic : mode; }
+
+    /** The sidechain filter of a band (no sections = unfiltered). Any thread. */
+    static dsp::FilterSettings sidechainSettingsFor (const BandSettings& band, SideFilter filter, double ownFrequency,
+                                                     double ownQ, bool& filtered) noexcept;
+
+    /** For U3's moving curve: the gain band `slot` plays now, its movement
+        included, gain scale applied (dB); and the movement alone. Any thread,
+        lock-free (updated every buffer). */
+    float getLiveGainDb (int slot) const noexcept      { return liveGain[(size_t) slot].load (std::memory_order_relaxed); }
+    float getDynamicGainDb (int slot) const noexcept   { return liveMove[(size_t) slot].load (std::memory_order_relaxed); }
+
+    /** The threshold Auto has learned for `slot`, dB (-infinity before it has
+        heard anything). Any thread. */
+    float getAutoThresholdDb (int slot) const noexcept { return liveAuto[(size_t) slot].load (std::memory_order_relaxed); }
+
+    //== Character (EQ-PLAN §2.4; B4, values Proposed, tuned on the rig in U3)
+    // After the bands, before auto gain. Clean is not in the path (no
+    // oversampling, no latency, bit-exact). Soft and Warm are the shared
+    // dsp::Saturation curves, oversampled by Quality (Live 2x, High 4x,
+    // Max 8x), Drive (0..24 dB) into the curve and the same taken off after
+    // it, so a quiet signal keeps its level. Warm sits inside a +3 dB low
+    // emphasis at 150 Hz (and its exact inverse after), for a little low-end
+    // weight; a 1 Hz DC blocker follows. Coming into or out of the path, or
+    // Soft <-> Warm, crossfades 30 ms; a Quality change crossfades 10 ms (the
+    // Oversampler). The latency is reported, and split paths follow it.
+    static constexpr double characterFadeSeconds = 0.03;
+    static constexpr int characterWarmupSamples = 128;   // recent input run through a stage before it comes in
+    static constexpr double dcBlockerHz = 1.0;
+
+    /** The character stage is in the path now (its latency is reported). Any thread. */
+    bool isCharacterInPath() const noexcept { return characterLatency.load (std::memory_order_relaxed) >= 0; }
+
+    /** The character stage's oversampling latency while it's in the path,
+        else 0. Any thread (an atomic: the Chain reads it every buffer). */
+    int getLatencySamples() const noexcept override { return juce::jmax (0, characterLatency.load (std::memory_order_relaxed)); }
+
+    //== When CPU is tight (EQ-PLAN §2.6, decision 12; B4) ======================
+    // With "Make it lighter", while ProcessContext::cpuTight holds, the block
+    // takes one step down per tight stretch, then waits 1 s to see whether
+    // that was enough (Proposed), in this order: Spectral bands act as
+    // Dynamic; Linear phase becomes Zero latency; Quality becomes Live. Only a
+    // step that changes something now is taken (Adrian, 28 Nov: if none is
+    // left, the block isn't marked lighter); it never switches the EQ off.
+    // It stays lighter until Back to full (no automatic return mid-show), and
+    // isn't saved: a new block starts at full. "Keep the sound" changes
+    // nothing. Each step crossfades as its setting does and reports its latency.
+    static constexpr double lighterWaitSeconds = 1.0;
+    enum LighterStep { spectralAsDynamic = 1, linearAsZeroLatency = 2, qualityLive = 4 };
+    static constexpr bool spectralBandsBuilt = false, linearPhaseBuilt = false;   // B5 builds them: until then those steps change nothing
+
+    /** The steps taken (LighterStep bits; 0 = at full), for U3's "Lighter: CPU
+        was tight". Any thread. */
+    int getLighterSteps() const noexcept { return lighterSteps.load (std::memory_order_relaxed); }
+    bool isLighter() const noexcept      { return getLighterSteps() != 0; }
+
+    /** U3's Back to full: the block returns to its full settings (crossfaded).
+        Any thread (taken up at the next buffer). */
+    void backToFull() noexcept { backToFullRequested.store (true, std::memory_order_relaxed); }
+
+    //== Band listen (EQ-PLAN §2.1; B4 engine side; Edit only, not saved) =======
+    // While a band is listened to, the output is the EQ's input through a
+    // band pass at that band's frequency and Q (shelves and cuts: the side
+    // they act on, a 12 dB/oct low or high pass; a Tilt: everything), on
+    // every channel. A dynamic band plays its sidechain as its detector hears
+    // it (its source and filter, Own or Follows), so the sidechain can be set
+    // by ear. In and out (and from one band to another) crossfade 20 ms.
+    static constexpr double listenFadeSeconds = 0.02;
+
+    /** Listen to slot (0-based); clearListen() stops. Any thread (atomics,
+        taken up at the next buffer). A slot that isn't in use plays nothing. */
+    void setListen (int slot) noexcept  { listenRequest.store (juce::isPositiveAndBelow (slot, numSlots) ? slot : -1, std::memory_order_relaxed); }
+    void clearListen() noexcept         { listenRequest.store (-1, std::memory_order_relaxed); }
+    int getListen() const noexcept      { return listenRequest.load (std::memory_order_relaxed); }
+
+    /** The listen filter of a static band (no sections = unfiltered). Any thread. */
+    static dsp::FilterSettings listenSettingsFor (const BandSettings& band, bool& filtered) noexcept;
+
     static constexpr double toggleSeconds = 0.01;    // a band on, off, in or out of use glides to or from flat
     static constexpr int updateInterval = 16;        // samples between redesigns while a value moves
 
@@ -152,11 +269,24 @@ private:
         dsp::Crossfade fade;
         bool playing = false;                         // in use and on, as last applied
         int shape = -1, slope = -1;                   // as last applied
+        int place = 0, oldPlace = 0;                  // Place as it plays (Stereo on a mono signal), and the old one while it crossfades
         int toggleRemaining = 0;                      // samples left of a glide to or from flat
 
         // Freq and Q ramp in log steps, as a knob turns (the parameter's own
         // ramp is linear: 30 Hz -> 30 kHz would jump octaves per chunk at first).
         juce::SmoothedValue<double, juce::ValueSmoothingTypes::Multiplicative> freqRamp, qRamp;
+
+        // Dynamics (B4), audio thread.
+        dsp::FilterBand<maxChannels> sideBand;        // the sidechain filter
+        dsp::FilterSettings sideSettings {};          // as last designed
+        bool sideFiltered = false, sideDesigned = false;
+        std::array<double, maxChannels> sideMs {};    // the detector (mean square) per detection channel
+        double autoMs = 0.0;                          // Auto threshold: the slow mean square, once learned
+        bool autoLearned = false;
+        double moveDb = 0.0;                          // the movement now (dB, before gain scale)
+        double designedMoveDb = 0.0;                  // ... as the band was last designed with
+        bool dynamic = false;                         // dynamics run this buffer
+        bool moveChanged = false;                     // the movement changes within this buffer
 
         bool valuesMoving() const noexcept { return freqRamp.isSmoothing() || qRamp.isSmoothing() || p.gain->isSmoothing(); }
         void snapValues() noexcept
@@ -167,18 +297,59 @@ private:
         }
     };
 
-    /** The design of a slot at its parameters' current (ramped) values. Audio thread. */
-    dsp::FilterBandDesign designNow (const Slot& slot, double gainScale) const noexcept;
+    /** The design of a slot at its parameters' current (ramped) values, its
+        dynamic movement added to its gain. Audio thread. */
+    dsp::FilterBandDesign designNow (const Slot& slot, double gainScale, double moveDb = 0.0) const noexcept;
+
+    /** Dynamics: the sidechain of every dynamic band through its detector,
+        the movement per 16-sample chunk into `moves`. Audio thread. */
+    void detectDynamics (const float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
+    void detectSlot (Slot& slot, int index, const float* const* source, int numSource, int numSamples,
+                     const std::uint8_t* playing, bool tunerOpen) noexcept;
+    float* movesOf (int slot) noexcept { return moves.data() + (size_t) slot * (size_t) maxChunks; }
     static bool isScaled (int shape) noexcept;
 
     /** Picks up on/off, in/out of use, Shape and Slope. Audio thread. */
     void applyChoices (Slot& slot, double gainScale) noexcept;
     void processSlot (Slot& slot, float* const* channels, int numChannels, int numSamples) noexcept;
 
+    /** A band in its placement (EQ-PLAN §2.1): Stereo both channels, Left or
+        Right that channel alone, Mid or Side encoded to M/S around this band
+        (M = (L + R) / 2, S = (L - R) / 2), filtered, decoded. A band that
+        changes nothing touches nothing. Audio thread. */
+    static void processPlaced (dsp::FilterBand<maxChannels>& band, Place place, float* const* channels, int numChannels,
+                               int numSamples) noexcept;
+
     /** Audio thread: the Curve value from the bands' current designs (cheap:
         precomputed cosines, |H|^2 per section). */
     double curveNow() const noexcept;
     void processOutput (float* const* channels, int numChannels, int numSamples, bool tunerOpen) noexcept;
+
+    /** The character stage (Soft or Warm): one per path, two so Soft <-> Warm
+        can crossfade. Audio thread after prepare. */
+    struct CharacterPath
+    {
+        dsp::Oversampler oversampler;
+        dsp::LowEmphasis pre, post;          // Warm only
+        dsp::FilterBand<maxChannels> dcBlocker;
+        dsp::Saturation::Curve curve = dsp::Saturation::Curve::soft;
+
+        void reset() noexcept { oversampler.reset(); pre.reset(); post.reset(); dcBlocker.reset(); }
+    };
+
+    void processCharacter (float* const* channels, int numChannels, int numSamples) noexcept;
+    void runCharacter (CharacterPath& path, float* const* channels, int numChannels, int numSamples, float driveFrom,
+                       float driveTo) noexcept;
+    void rememberCharacterInput (const float* const* channels, int numChannels, int numSamples) noexcept;
+    void warmUpCharacter (CharacterPath& path, int numChannels) noexcept;
+    dsp::Quality qualityNow() const noexcept;
+
+    /** Band listen: replaces the output, crossfaded. Audio thread. */
+    void processListen (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
+    void copyEqInput (const float* const* channels, int numChannels, int numSamples) noexcept;
+
+    /** When CPU is tight: takes a step if one is due. Audio thread. */
+    void followCpu (bool cpuIsTight, int numSamples) noexcept;
     void processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
 
     // On the heap, made once in the constructor (each slot holds two filter
@@ -201,6 +372,41 @@ private:
 
     double sampleRate = 48000.0;
     int toggleSamples = 480;
+
+    // Dynamics, audio thread; sized in prepare.
+    juce::AudioBuffer<float> eqInput;              // the EQ's input this buffer (This band's sidechain, listen)
+    juce::AudioBuffer<float> eqInputMidSide;       // ... as M and S, for Mid and Side bands' sidechains
+    bool stereoNow = false;                        // the block gets two channels: placement plays
+    std::vector<float> moves;                      // per slot, the movement at the end of each chunk
+    std::vector<std::uint8_t> playingInput, playingDry;   // per chunk: someone is playing (Auto learns)
+    int maxChunks = 1;
+    double detectorCoefficient = 0.0, playingInputMs = 0.0, playingDryMs = 0.0;
+    std::array<std::atomic<float>, numSlots> liveGain {}, liveMove {}, liveAuto {};
+
+    // Character, audio thread; sized in prepare.
+    const dsp::Saturation saturation;
+    std::array<CharacterPath, 2> characterPaths;
+    int activePath = -1, fadingPath = -1;          // the path playing and the one fading out (-1: Clean, not in the path)
+    int activeCharacter = 0;                       // as last applied
+    dsp::Crossfade characterFade;
+    juce::AudioBuffer<float> characterHistory, characterWarmup;
+    int maxBlock = 512;
+    std::atomic<int> characterLatency { -1 };     // -1: not in the path
+
+    // Band listen: the request (any thread), what plays (audio thread).
+    std::atomic<int> listenRequest { -1 };
+    int listenSlot = -1;
+    dsp::FilterBand<maxChannels> listenBand;
+    dsp::FilterSettings listenSettings {};
+    bool listenFiltered = false;
+    juce::SmoothedValue<float> listenAmount;
+    juce::AudioBuffer<float> listenBuffer;
+    bool eqInputCopied = false;                    // this buffer
+
+    // When CPU is tight: written on the audio thread; Back to full is a request.
+    std::atomic<int> lighterSteps { 0 };
+    std::atomic<bool> backToFullRequested { false };
+    int lighterWait = 0, lighterWaitSamples = 48000;   // audio thread
 
     // Output tools, audio thread.
     std::array<double, curvePoints> pointCos {}, pointCos2 {};

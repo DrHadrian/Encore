@@ -468,6 +468,7 @@ int Chain::processFrom (int firstBlock, float* const* channels, int numSamples, 
     context.inputs = inputs.inputs;
     context.numInputs = inputs.numInputs;
     context.tunerOpen = inputs.tunerOpen;
+    context.cpuTight = inputs.cpuTight;
     context.callback = ++callbackCount;
 
     auto first = juce::jlimit (0, numMain, firstBlock);

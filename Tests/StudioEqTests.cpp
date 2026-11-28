@@ -138,14 +138,19 @@ public:
 
     void runTest() override
     {
-        beginTest ("Parameters: 24 slots of 15 and 13 block-wide, stable ids, the plan's defaults");
+        beginTest ("Parameters: 24 slots of 17 and 13 block-wide, stable ids, the plan's defaults");
         {
             Eq eq;
             expectEquals (eq.getTypeId(), juce::String ("studioEq"));
-            expectEquals ((int) eq.getParameters().size(), 24 * 15 + 13);
+            expectEquals ((int) eq.getParameters().size(), 24 * 17 + 13);
+
+            // B3's 373 keep their places; B4's sidechain frequency and Q come after them.
+            expectEquals (eq.getParameters()[373]->getSpec().id, juce::String ("b01SideFreq"));
+            expectEquals (eq.getParameters()[374]->getSpec().id, juce::String ("b01SideQ"));
+            expectEquals (eq.getParameters()[372]->getSpec().id, juce::String ("b24SideFilter"));
 
             const char* suffixes[] = { "Used", "On", "Shape", "Freq", "Gain", "Q", "Slope", "Place", "Mode", "Range", "Thresh",
-                                       "Attack", "Release", "Side", "SideFilter" };
+                                       "Attack", "Release", "Side", "SideFilter", "SideFreq", "SideQ" };
 
             for (int s = 0; s < Eq::numSlots; ++s)
                 for (auto* suffix : suffixes)
@@ -166,6 +171,14 @@ public:
             expectEquals (value ("b05Q"), 1.0f);
             expectEquals (value ("b05Slope"), 1.0f);   // 12 dB/oct
             expectEquals (value ("b05Thresh"), -61.0f);  // Auto
+            expectEquals (value ("b05SideFreq"), 1000.0f);
+            expectEquals (value ("b05SideQ"), 1.0f);
+            expect (eq.findParameter ("b05SideFreq")->getSpec().expressionAllowed && eq.findParameter ("b05SideQ")->getSpec().expressionAllowed);
+            expect (eq.isPresetParameter (*eq.findParameter ("b05SideFreq")));
+            expectEquals (eq.findParameter ("b05SideFreq")->getSpec().range.start, 20.0f);
+            expectEquals (eq.findParameter ("b05SideFreq")->getSpec().range.end, 20000.0f);
+            expectEquals (eq.findParameter ("b05SideQ")->getSpec().range.start, 0.1f);
+            expectEquals (eq.findParameter ("b05SideQ")->getSpec().range.end, 10.0f);
             expectEquals (value ("output"), 0.0f);
             expectEquals (value ("width"), 100.0f);
             expectEquals (value ("gainScale"), 100.0f);
@@ -608,12 +621,14 @@ public:
                 { "tightenLows", { band (Eq::Shape::lowCut, 90.0, 0.0, 1.0, 3), band (Eq::Shape::lowShelf, 150.0, -2.0, 0.7071, 1) } },
                 { "cutMud", { band (Eq::Shape::bell, 300.0, -3.0, 1.2, 1) } },
                 { "presence", { band (Eq::Shape::bell, 3000.0, 2.5, 0.9, 1) } },
+                { "tameFizz", { band (Eq::Shape::bell, 5500.0, 0.0, 2.0, 1), band (Eq::Shape::highCut, 8000.0, 0.0, 1.0, 1) } },
+                { "pickAttack", { band (Eq::Shape::bell, 2500.0, 0.0, 1.0, 1) } },
                 { "sitInMix", { band (Eq::Shape::lowCut, 100.0, 0.0, 1.0, 2), band (Eq::Shape::bell, 250.0, -2.0, 1.0, 1),
                                 band (Eq::Shape::bell, 2500.0, 2.0, 1.0, 1), band (Eq::Shape::highCut, 9000.0, 0.0, 1.0, 1) } },
             };
 
             Eq ids;
-            expectEquals (presets::listIds (ids), juce::String ("flat, tightenLows, cutMud, presence, sitInMix"));
+            expectEquals (presets::listIds (ids), juce::String ("flat, tightenLows, cutMud, presence, tameFizz, pickAttack, sitInMix"));
 
             for (const auto& e : expected)
             {

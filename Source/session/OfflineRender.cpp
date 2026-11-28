@@ -9,6 +9,7 @@
 #include "engine/blocks/GateBlock.h"
 #include "engine/blocks/NamAmpBlock.h"
 #include "engine/blocks/PedalEqBlock.h"
+#include "engine/blocks/StudioEqBlock.h"
 #include "engine/blocks/StudioGateBlock.h"
 #include "engine/core/Chain.h"
 #include "engine/core/FactoryPresets.h"
@@ -562,6 +563,28 @@ juce::AudioBuffer<float> makePlucks (double sampleRate)
     return b;
 }
 
+juce::AudioBuffer<float> makeStereoPlucks (double sampleRate)
+{
+    const Note right[] = {
+        { 0.60, 123.5, 0.45f, 2000.0, 8 },   // B, after the left's low E
+        { 1.80, 164.8, 0.40f, 1500.0, 6 },   // E an octave up
+        { 3.00, 146.8, 0.40f, 900.0, 6 },    // D
+        { 3.30, 440.0, 0.30f, 1500.0, 6 },   // high A with the left's high D
+        { 4.40, 146.8, 0.80f, 1800.0, 10 },  // an accent with the left's
+    };
+
+    const auto left = makePlucks (sampleRate);
+    auto r = synthesise (right, 6.5, sampleRate, -70.0f);
+
+    if (const auto top = r.getMagnitude (0, 0, r.getNumSamples()); top > 0.0f)
+        r.applyGain (juce::Decibels::decibelsToGain (-2.0f) / top);
+
+    juce::AudioBuffer<float> b (2, left.getNumSamples());
+    b.copyFrom (0, 0, left, 0, 0, left.getNumSamples());
+    b.copyFrom (1, 0, r, 0, 0, juce::jmin (r.getNumSamples(), left.getNumSamples()));
+    return b;
+}
+
 juce::AudioBuffer<float> makeGateTest (double sampleRate, float noiseFloorDb)
 {
     const Note notes[] = {
@@ -635,6 +658,46 @@ ShowModel makeGateShow (const juce::File& ampModel)
     StudioGateBlock x4;
     smart.mainLane().blocks.push_back (fromBlock (x4, "x4", "highGain"));
     show.patches.push_back (smart);
+
+    return show;
+}
+
+ShowModel makeEqShow (const juce::File& ampModel)
+{
+    auto show = makeDefaultShow ("Studio EQ dynamics");
+    show.patches.clear();
+
+    for (const auto side : { StudioEqBlock::Side::dryGuitar, StudioEqBlock::Side::thisBand })
+    {
+        auto patch = makeDefaultPatch (side == StudioEqBlock::Side::dryGuitar ? "Dynamic EQ, dry guitar" : "Dynamic EQ, this band");
+        patch.mainLane().blocks.clear();
+
+        BlockModel amp;
+        amp.id = "amp";
+        amp.type = NamAmpBlock::typeId;
+        amp.file = ampModel.getFullPathName();
+        patch.mainLane().blocks.push_back (amp);
+
+        StudioEqBlock eq;
+        BlockModel m;
+        m.id = "q24";
+        m.type = StudioEqBlock::typeId;
+
+        for (const auto& p : eq.getParameters())
+            m.params[p->getSpec().id] = p->getValue();
+
+        m.params["b01Used"] = 1.0f;
+        m.params["b01Freq"] = 2500.0f;
+        m.params["b01Q"] = 1.5f;
+        m.params["b01Mode"] = (float) StudioEqBlock::Mode::dynamic;
+        m.params["b01Range"] = -4.0f;
+        m.params["b01Thresh"] = -61.0f;
+        m.params["b01Attack"] = 2.0f;
+        m.params["b01Release"] = 80.0f;
+        m.params["b01Side"] = (float) side;
+        patch.mainLane().blocks.push_back (m);
+        show.patches.push_back (patch);
+    }
 
     return show;
 }

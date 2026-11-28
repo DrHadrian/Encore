@@ -25,6 +25,8 @@ namespace
   EncoreRender --make-plucks OUT.wav [--rate 48000]   (generated guitar-like notes)
   EncoreRender --make-gate-test OUT.wav [--rate 48000] [--noise-db -60]   (notes with gaps of noise)
   EncoreRender --make-gate-show FOLDER.encore [--amp MODEL.nam]        (a show for the gates)
+  EncoreRender --make-stereo OUT.wav [--rate 48000]   (stereo plucks: different notes left and right)
+  EncoreRender --make-eq-show FOLDER.encore [--amp MODEL.nam]          (a show for the Studio EQ's dynamic bands)
 
   --block TYPE     a block type id (hidden ones too), e.g. engineProbe, eq, gate
   --preset ID      a factory preset of the block (first; settings go on top)
@@ -169,6 +171,33 @@ int main (int argc, char* argv[])
             return fail ("Couldn't write " + folder.getChildFile ("show.json").getFullPathName());
 
         std::cout << "Wrote the gate show (patches: Gate pair, Ducking delay, Smart X4) to " << showOut << "\n";
+        return 0;
+    }
+
+    if (const auto stereoOut = value ("--make-stereo"); stereoOut.isNotEmpty())
+    {
+        const auto rate = value ("--rate").isNotEmpty() ? value ("--rate").getDoubleValue() : 48000.0;
+
+        if (rate < 8000.0)
+            return fail ("--rate must be at least 8000");
+
+        if (! encore::render::writeWav (file (stereoOut), encore::render::makeStereoPlucks (rate), rate, error))
+            return fail (error);
+
+        std::cout << "Wrote stereo plucks (6.5 s) at " << rate << " Hz to " << stereoOut << "\n";
+        return 0;
+    }
+
+    if (const auto showOut = value ("--make-eq-show"); showOut.isNotEmpty())
+    {
+        const auto folder = file (showOut);
+        folder.createDirectory();
+        const auto amp = value ("--amp").isNotEmpty() ? file (value ("--amp")) : juce::File();
+
+        if (! folder.getChildFile ("show.json").replaceWithText (encore::json::toJson (encore::render::makeEqShow (amp))))
+            return fail ("Couldn't write " + folder.getChildFile ("show.json").getFullPathName());
+
+        std::cout << "Wrote the Studio EQ show (patches: Dynamic EQ, dry guitar; Dynamic EQ, this band) to " << showOut << "\n";
         return 0;
     }
 

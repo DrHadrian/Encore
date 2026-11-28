@@ -46,6 +46,12 @@ struct ProcessContext
     /** The tuner is open (B2: noise learning freezes while tuning). */
     bool tunerOpen = false;
 
+    /** The computer is short of CPU (B4, EQ-PLAN §2.6): the audio callback
+        took over 85 % of its time for 8 buffers in a row, or overran, up to
+        the last buffer (AudioEngine, CpuTightRule). A block that offers "When
+        CPU is tight: Make it lighter" steps down; every other block ignores it. */
+    bool cpuTight = false;
+
     /** Which chain callback this is (counts from 1; 0 = outside a chain), so a
         linked follower can tell its leader ran in this one (B2). */
     std::uint64_t callback = 0;

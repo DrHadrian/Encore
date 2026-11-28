@@ -24,6 +24,7 @@ struct ChainInputs
     const float* const* inputs = nullptr;   // by input slot; null entries: absent
     int numInputs = 0;
     bool tunerOpen = false;
+    bool cpuTight = false;                    // B4: passed to every block (ProcessContext::cpuTight)
 };
 
 /** An ordered list of blocks that processes a buffer in place.

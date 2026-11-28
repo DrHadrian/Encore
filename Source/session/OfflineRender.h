@@ -123,4 +123,16 @@ juce::AudioBuffer<float> makeGateTest (double sampleRate, float noiseFloorDb = -
     - "Smart X4": a Studio Gate in Smart mode with its highGain preset. */
 ShowModel makeGateShow (const juce::File& ampModel);
 
+/** Stereo test material (B4: the Studio EQ's placements), deterministic,
+    6.5 s: the plucks on the left; on the right other notes, a fifth up and
+    later, so left, right, mid and side each carry something different. */
+juce::AudioBuffer<float> makeStereoPlucks (double sampleRate);
+
+/** A show for listening to the Studio EQ's dynamic bands (B4), with these
+    patches, each an amp (`ampModel`, a .nam file) then a Studio EQ:
+    - "Dynamic EQ, dry guitar": a dynamic bell at 2.5 kHz (Q 1.5, Range
+      -4 dB, Thresh Auto, Attack 2 ms, Release 80 ms) keyed from the dry guitar;
+    - "Dynamic EQ, this band": the same bell keyed from its own band. */
+ShowModel makeEqShow (const juce::File& ampModel);
+
 } // namespace encore::render
