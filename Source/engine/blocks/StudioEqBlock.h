@@ -7,6 +7,8 @@
 #include "engine/dsp/Crossfade.h"
 #include "engine/dsp/FilterBand.h"
 #include "engine/dsp/Loudness.h"
+#include "engine/dsp/Oversampler.h"
+#include "engine/dsp/Saturation.h"
 
 #include <array>
 #include <atomic>
@@ -185,6 +187,27 @@ public:
         heard anything). Any thread. */
     float getAutoThresholdDb (int slot) const noexcept { return liveAuto[(size_t) slot].load (std::memory_order_relaxed); }
 
+    //== Character (EQ-PLAN §2.4; B4, values Proposed, tuned on the rig in U3)
+    // After the bands, before auto gain. Clean is not in the path (no
+    // oversampling, no latency, bit-exact). Soft and Warm are the shared
+    // dsp::Saturation curves, oversampled by Quality (Live 2x, High 4x,
+    // Max 8x), Drive (0..24 dB) into the curve and the same taken off after
+    // it, so a quiet signal keeps its level. Warm sits inside a +3 dB low
+    // emphasis at 150 Hz (and its exact inverse after), for a little low-end
+    // weight; a 1 Hz DC blocker follows. Coming into or out of the path, or
+    // Soft <-> Warm, crossfades 30 ms; a Quality change crossfades 10 ms (the
+    // Oversampler). The latency is reported, and split paths follow it.
+    static constexpr double characterFadeSeconds = 0.03;
+    static constexpr int characterWarmupSamples = 128;   // recent input run through a stage before it comes in
+    static constexpr double dcBlockerHz = 1.0;
+
+    /** The character stage is in the path now (its latency is reported). Any thread. */
+    bool isCharacterInPath() const noexcept { return characterLatency.load (std::memory_order_relaxed) >= 0; }
+
+    /** The character stage's oversampling latency while it's in the path,
+        else 0. Any thread (an atomic: the Chain reads it every buffer). */
+    int getLatencySamples() const noexcept override { return juce::jmax (0, characterLatency.load (std::memory_order_relaxed)); }
+
     static constexpr double toggleSeconds = 0.01;    // a band on, off, in or out of use glides to or from flat
     static constexpr int updateInterval = 16;        // samples between redesigns while a value moves
 
@@ -260,6 +283,25 @@ private:
         precomputed cosines, |H|^2 per section). */
     double curveNow() const noexcept;
     void processOutput (float* const* channels, int numChannels, int numSamples, bool tunerOpen) noexcept;
+
+    /** The character stage (Soft or Warm): one per path, two so Soft <-> Warm
+        can crossfade. Audio thread after prepare. */
+    struct CharacterPath
+    {
+        dsp::Oversampler oversampler;
+        dsp::LowEmphasis pre, post;          // Warm only
+        dsp::FilterBand<maxChannels> dcBlocker;
+        dsp::Saturation::Curve curve = dsp::Saturation::Curve::soft;
+
+        void reset() noexcept { oversampler.reset(); pre.reset(); post.reset(); dcBlocker.reset(); }
+    };
+
+    void processCharacter (float* const* channels, int numChannels, int numSamples) noexcept;
+    void runCharacter (CharacterPath& path, float* const* channels, int numChannels, int numSamples, float driveFrom,
+                       float driveTo) noexcept;
+    void rememberCharacterInput (const float* const* channels, int numChannels, int numSamples) noexcept;
+    void warmUpCharacter (CharacterPath& path, int numChannels) noexcept;
+    dsp::Quality qualityNow() const noexcept;
     void processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
 
     // On the heap, made once in the constructor (each slot holds two filter
@@ -292,6 +334,16 @@ private:
     int maxChunks = 1;
     double detectorCoefficient = 0.0, playingInputMs = 0.0, playingDryMs = 0.0;
     std::array<std::atomic<float>, numSlots> liveGain {}, liveMove {}, liveAuto {};
+
+    // Character, audio thread; sized in prepare.
+    const dsp::Saturation saturation;
+    std::array<CharacterPath, 2> characterPaths;
+    int activePath = -1, fadingPath = -1;          // the path playing and the one fading out (-1: Clean, not in the path)
+    int activeCharacter = 0;                       // as last applied
+    dsp::Crossfade characterFade;
+    juce::AudioBuffer<float> characterHistory, characterWarmup;
+    int maxBlock = 512;
+    std::atomic<int> characterLatency { -1 };     // -1: not in the path
 
     // Output tools, audio thread.
     std::array<double, curvePoints> pointCos {}, pointCos2 {};

@@ -237,6 +237,21 @@ void StudioEqBlock::prepareBlock (const ProcessSpec& spec)
     playingInput.assign ((size_t) maxChunks, 0);
     playingDry.assign ((size_t) maxChunks, 0);
     detectorCoefficient = std::exp (-1000.0 / (detectorMs * sampleRate));
+
+    // Character: both paths ready for every Quality, so a change never allocates.
+    maxBlock = juce::jmax (1, spec.maxBlockSize);
+
+    for (auto& path : characterPaths)
+    {
+        path.oversampler.prepare (maxChannels, maxBlock, sampleRate);
+        path.pre.set (sampleRate);
+        path.post.set (sampleRate, dsp::LowEmphasis::defaultFrequency, dsp::LowEmphasis::defaultGainDb, true);
+        path.dcBlocker.setDesign (dsp::FilterBandDesign::make ({ dsp::FilterShape::lowCut, dcBlockerHz, 0.0, 0.7071, 6 }, sampleRate));
+    }
+
+    characterFade.prepare (maxChannels, maxBlock, sampleRate, characterFadeSeconds);
+    characterHistory.setSize (maxChannels, characterWarmupSamples);
+    characterWarmup.setSize (maxChannels, juce::jmin (characterWarmupSamples, maxBlock));
     inputLoudness.prepare (sampleRate, smartWindowSeconds);
     bandsLoudness.prepare (sampleRate, smartWindowSeconds);
     autoGainDb.reset (sampleRate, autoGainRampSeconds);
@@ -286,6 +301,26 @@ void StudioEqBlock::resetBlock() noexcept
     }
 
     playingInputMs = playingDryMs = 0.0;
+
+    // Character: in the path at once if it's on (no fade from a reset).
+    characterFade.reset();
+    characterHistory.clear();
+    drive.snapToTarget();
+    quality.snapToTarget();
+    activeCharacter = character.getChoiceIndex();
+    fadingPath = -1;
+    activePath = activeCharacter == (int) Character::clean ? -1 : 0;
+
+    for (auto& path : characterPaths)
+    {
+        path.reset();
+        path.oversampler.resetTo (qualityNow());
+    }
+
+    if (activePath >= 0)
+        characterPaths[0].curve = activeCharacter == (int) Character::warm ? dsp::Saturation::Curve::warm : dsp::Saturation::Curve::soft;
+
+    characterLatency.store (activePath >= 0 ? characterPaths[0].oversampler.getLatencySamples() : -1, std::memory_order_relaxed);
 
     for (int s = 0; s < numSlots; ++s)
     {
@@ -576,6 +611,7 @@ void StudioEqBlock::processBlock (float* const* channels, int numChannels, int n
     }
 
     processBands (channels, numChannels, numSamples, context);
+    processCharacter (channels, numChannels, numSamples);
     processOutput (channels, numChannels, numSamples, context.tunerOpen);
 }
 
@@ -709,6 +745,155 @@ void StudioEqBlock::processBands (float* const* channels, int numChannels, int n
         const auto k = (float) scale * 0.01f;
         liveGain[(size_t) s].store (scaled ? (slot.p.gain->currentValue() + (float) slot.moveDb) * k : 0.0f, std::memory_order_relaxed);
         liveMove[(size_t) s].store (scaled ? (float) slot.moveDb * k : 0.0f, std::memory_order_relaxed);
+    }
+}
+
+dsp::Quality StudioEqBlock::qualityNow() const noexcept
+{
+    return (dsp::Quality) juce::jlimit (0, 2, quality.getChoiceIndex());
+}
+
+void StudioEqBlock::processCharacter (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    const auto driveFrom = drive.currentValue();
+    const auto driveTo = drive.skip (numSamples);
+    const auto q = qualityNow();
+
+    for (auto& path : characterPaths)
+        path.oversampler.setQuality (q);   // a change crossfades 10 ms (the Oversampler)
+
+    const auto want = character.getChoiceIndex();
+
+    if (want != activeCharacter && ! characterFade.isActive())
+    {
+        // Into, out of the path, or Soft <-> Warm: the new setting comes in on
+        // the free path, settled from the recent input, and crossfades 30 ms.
+        fadingPath = activePath;
+        activeCharacter = want;
+        activePath = want == (int) Character::clean ? -1 : (fadingPath == 0 ? 1 : 0);
+
+        if (activePath >= 0)
+        {
+            auto& path = characterPaths[(size_t) activePath];
+            path.curve = want == (int) Character::warm ? dsp::Saturation::Curve::warm : dsp::Saturation::Curve::soft;
+            warmUpCharacter (path, numChannels);
+        }
+
+        characterFade.start();
+    }
+
+    const auto fading = characterFade.isActive();
+    rememberCharacterInput (channels, numChannels, numSamples);
+
+    if (! fading && activePath < 0)
+    {
+        characterLatency.store (-1, std::memory_order_relaxed);
+        return;   // Clean: not in the path, bit-exact
+    }
+
+    if (fading)
+    {
+        characterFade.copyInput (channels, numChannels, numSamples);
+
+        if (fadingPath >= 0)
+            runCharacter (characterPaths[(size_t) fadingPath], characterFade.oldChannels(), numChannels, numSamples, driveFrom, driveTo);
+    }
+
+    if (activePath >= 0)
+        runCharacter (characterPaths[(size_t) activePath], channels, numChannels, numSamples, driveFrom, driveTo);
+
+    if (fading)
+        characterFade.mix (channels, numChannels, numSamples);
+
+    // The latency now playing (a Quality change switches it as its fade starts).
+    characterLatency.store (activePath >= 0 ? characterPaths[(size_t) activePath].oversampler.getLatencySamples() : -1,
+                            std::memory_order_relaxed);
+}
+
+void StudioEqBlock::runCharacter (CharacterPath& path, float* const* channels, int numChannels, int numSamples, float driveFrom,
+                                  float driveTo) noexcept
+{
+    const auto warm = path.curve == dsp::Saturation::Curve::warm;
+
+    if (warm)
+        path.pre.process (channels, numChannels, numSamples);
+
+    // Drive into the curve, the same taken off after it; a moving Drive
+    // glides across the buffer.
+    const auto from = juce::Decibels::decibelsToGain (driveFrom), to = juce::Decibels::decibelsToGain (driveTo);
+    const auto curve = path.curve;
+
+    path.oversampler.process (channels, numChannels, numSamples, [this, from, to, curve]
+                              (float* const* up, int n, int length, double, int) noexcept
+    {
+        for (int ch = 0; ch < n; ++ch)
+        {
+            auto* x = up[ch];
+
+            if (from == to)
+            {
+                const auto inverse = 1.0f / from;
+
+                for (int i = 0; i < length; ++i)
+                    x[i] = saturation.process (curve, x[i] * from) * inverse;
+
+                continue;
+            }
+
+            for (int i = 0; i < length; ++i)
+            {
+                const auto g = from + (to - from) * (float) (i + 1) / (float) length;
+                x[i] = saturation.process (curve, x[i] * g) / g;
+            }
+        }
+    });
+
+    if (warm)
+        path.post.process (channels, numChannels, numSamples);
+
+    path.dcBlocker.process (channels, numChannels, numSamples);
+}
+
+void StudioEqBlock::rememberCharacterInput (const float* const* channels, int numChannels, int numSamples) noexcept
+{
+    const auto keep = characterHistory.getNumSamples();
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        auto* h = characterHistory.getWritePointer (ch);
+
+        if (numSamples >= keep)
+        {
+            std::copy (channels[ch] + numSamples - keep, channels[ch] + numSamples, h);
+        }
+        else
+        {
+            std::copy (h + numSamples, h + keep, h);
+            std::copy (channels[ch], channels[ch] + numSamples, h + keep - numSamples);
+        }
+    }
+}
+
+void StudioEqBlock::warmUpCharacter (CharacterPath& path, int numChannels) noexcept
+{
+    // The stage comes in settled from the recent input, not from silence
+    // (which would click as it fades in).
+    path.reset();
+    const auto d = drive.currentValue();
+    const auto chunk = characterWarmup.getNumSamples();
+
+    for (int start = 0; start < characterWarmupSamples; start += chunk)
+    {
+        const auto length = juce::jmin (chunk, characterWarmupSamples - start);
+        float* part[maxChannels] {};
+
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            characterWarmup.copyFrom (ch, 0, characterHistory, ch, start, length);
+            part[ch] = characterWarmup.getWritePointer (ch);
+        }
+
+        runCharacter (path, part, numChannels, length, d, d);
     }
 }
 

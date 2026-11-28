@@ -222,6 +222,7 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/dsp/SafetyLimiter.cpp
     Source/engine/dsp/SafetyLimiter.h
     Source/engine/dsp/StreamResampler.cpp
+    Source/engine/dsp/Saturation.h
     Source/engine/dsp/SoftClip.h
     Source/engine/dsp/StreamResampler.h
     Source/engine/dsp/Svf.h
@@ -606,6 +607,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/EqShapeTests.cpp
         Tests/StudioEqTests.cpp
         Tests/StudioEqDynamicsTests.cpp
+        Tests/StudioEqCharacterTests.cpp
         Tests/StudioEqModelTests.cpp
         Tests/StudioEqSessionTests.cpp
         Tests/ModuleTypeTests.cpp
