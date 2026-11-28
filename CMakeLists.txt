@@ -787,7 +787,7 @@ if(ENCORE_BUILD_TESTS)
     endforeach()
     # The Studio EQ (B3): every preset, 24 bands at extremes, a band swept as
     # a pedal would, and Curve and Smart auto gain, on the generated plucks.
-    foreach(preset flat tightenLows cutMud presence sitInMix)
+    foreach(preset flat tightenLows cutMud presence tameFizz pickAttack sitInMix)
         add_test(NAME EncoreRender.studioEq.${preset}
                  COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
                          --out "${encore_render_dir}/studioEq-${preset}.wav" --block studioEq --preset ${preset}
@@ -822,6 +822,49 @@ if(ENCORE_BUILD_TESTS)
                          --report "${encore_render_dir}/show-${patch_file}.txt")
         set_tests_properties(EncoreRender.show.${patch_file} PROPERTIES
                              FIXTURES_REQUIRED "encore_render_gatetest;encore_render_gateshow")
+    endforeach()
+
+    # The Studio EQ (B4): each placement on stereo plucks; Soft and Warm at
+    # Drive 0, 12 and 24 at each Quality; and a show with a dynamic bell after
+    # the NAM example amp, keyed from the dry guitar or from its own band.
+    add_test(NAME EncoreRender.stereo
+             COMMAND EncoreRender --make-stereo "${encore_render_dir}/stereo.wav")
+    set_tests_properties(EncoreRender.stereo PROPERTIES FIXTURES_SETUP encore_render_stereo)
+    foreach(place Stereo Left Right Mid Side)
+        add_test(NAME EncoreRender.studioEq.place${place}
+                 COMMAND EncoreRender --in "${encore_render_dir}/stereo.wav"
+                         --out "${encore_render_dir}/studioEq-place${place}.wav" --block studioEq
+                         --set b01Used=1 --set b01Freq=2500 --set b01Gain=9 --set b01Q=0.8 --set b01Place=${place}
+                         --report "${encore_render_dir}/studioEq-place${place}.txt")
+        set_tests_properties(EncoreRender.studioEq.place${place} PROPERTIES FIXTURES_REQUIRED encore_render_stereo)
+    endforeach()
+    foreach(character Soft Warm)
+        foreach(drive 0 12 24)
+            foreach(quality Live High Max)
+                add_test(NAME EncoreRender.studioEq.${character}${drive}${quality}
+                         COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                                 --out "${encore_render_dir}/studioEq-${character}-drive${drive}-${quality}.wav" --block studioEq
+                                 --set character=${character} --set drive=${drive} --set quality=${quality}
+                                 --report "${encore_render_dir}/studioEq-${character}-drive${drive}-${quality}.txt")
+                set_tests_properties(EncoreRender.studioEq.${character}${drive}${quality} PROPERTIES
+                                     FIXTURES_REQUIRED encore_render_plucks)
+            endforeach()
+        endforeach()
+    endforeach()
+    add_test(NAME EncoreRender.eqShow
+             COMMAND EncoreRender --make-eq-show "${encore_render_dir}/EqDynamics.encore"
+                     --amp "${nam_SOURCE_DIR}/example_models/wavenet_a1_standard.nam")
+    set_tests_properties(EncoreRender.eqShow PROPERTIES FIXTURES_SETUP encore_render_eqshow)
+    foreach(patch "Dynamic EQ, dry guitar" "Dynamic EQ, this band")
+        string(REPLACE " " "-" patch_file "${patch}")
+        string(REPLACE "," "" patch_file "${patch_file}")
+        add_test(NAME EncoreRender.eqShow.${patch_file}
+                 COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                         --out "${encore_render_dir}/show-${patch_file}.wav"
+                         --show "${encore_render_dir}/EqDynamics.encore" --patch "${patch}"
+                         --report "${encore_render_dir}/show-${patch_file}.txt")
+        set_tests_properties(EncoreRender.eqShow.${patch_file} PROPERTIES
+                             FIXTURES_REQUIRED "encore_render_plucks;encore_render_eqshow")
     endforeach()
 endif()
 
