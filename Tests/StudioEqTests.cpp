@@ -621,12 +621,14 @@ public:
                 { "tightenLows", { band (Eq::Shape::lowCut, 90.0, 0.0, 1.0, 3), band (Eq::Shape::lowShelf, 150.0, -2.0, 0.7071, 1) } },
                 { "cutMud", { band (Eq::Shape::bell, 300.0, -3.0, 1.2, 1) } },
                 { "presence", { band (Eq::Shape::bell, 3000.0, 2.5, 0.9, 1) } },
+                { "tameFizz", { band (Eq::Shape::bell, 5500.0, 0.0, 2.0, 1), band (Eq::Shape::highCut, 8000.0, 0.0, 1.0, 1) } },
+                { "pickAttack", { band (Eq::Shape::bell, 2500.0, 0.0, 1.0, 1) } },
                 { "sitInMix", { band (Eq::Shape::lowCut, 100.0, 0.0, 1.0, 2), band (Eq::Shape::bell, 250.0, -2.0, 1.0, 1),
                                 band (Eq::Shape::bell, 2500.0, 2.0, 1.0, 1), band (Eq::Shape::highCut, 9000.0, 0.0, 1.0, 1) } },
             };
 
             Eq ids;
-            expectEquals (presets::listIds (ids), juce::String ("flat, tightenLows, cutMud, presence, sitInMix"));
+            expectEquals (presets::listIds (ids), juce::String ("flat, tightenLows, cutMud, presence, tameFizz, pickAttack, sitInMix"));
 
             for (const auto& e : expected)
             {

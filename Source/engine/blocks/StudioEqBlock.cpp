@@ -1304,11 +1304,12 @@ namespace
     // Factory presets (EQ-PLAN §4, values Proposed, tuned by ear on the rig;
     // ids stable once merged). The bands go into slots 01, 02 ... A preset is
     // the whole sound: every other preset parameter goes to its default, so
-    // slots it doesn't use are freed. "Tame fizz" and "Pick attack" need
-    // dynamic bands and come with B4.
+    // slots it doesn't use are freed. "Tame fizz" and "Pick attack" (B4) are
+    // dynamic bells with Thresh Auto.
     constexpr float lowCut = (float) StudioEqBlock::Shape::lowCut, highCut = (float) StudioEqBlock::Shape::highCut;
     constexpr float lowShelf = (float) StudioEqBlock::Shape::lowShelf, bell = (float) StudioEqBlock::Shape::bell;
     constexpr float slope12 = 1.0f, slope18 = 2.0f, slope24 = 3.0f;
+    constexpr float dynamic = (float) StudioEqBlock::Mode::dynamic, autoThreshold = -61.0f;
 
     constexpr PresetValue tightenLows[] {
         { "b01Used", 1.0f }, { "b01Shape", lowCut }, { "b01Freq", 90.0f }, { "b01Slope", slope24 },
@@ -1319,6 +1320,15 @@ namespace
     };
     constexpr PresetValue presence[] {
         { "b01Used", 1.0f }, { "b01Shape", bell }, { "b01Freq", 3000.0f }, { "b01Gain", 2.5f }, { "b01Q", 0.9f },
+    };
+    constexpr PresetValue tameFizz[] {
+        { "b01Used", 1.0f }, { "b01Shape", bell }, { "b01Freq", 5500.0f }, { "b01Q", 2.0f }, { "b01Gain", 0.0f },
+        { "b01Mode", dynamic }, { "b01Range", -4.0f }, { "b01Thresh", autoThreshold }, { "b01Attack", 5.0f }, { "b01Release", 80.0f },
+        { "b02Used", 1.0f }, { "b02Shape", highCut }, { "b02Freq", 8000.0f }, { "b02Slope", slope12 },
+    };
+    constexpr PresetValue pickAttack[] {
+        { "b01Used", 1.0f }, { "b01Shape", bell }, { "b01Freq", 2500.0f }, { "b01Q", 1.0f }, { "b01Gain", 0.0f },
+        { "b01Mode", dynamic }, { "b01Range", -3.0f }, { "b01Thresh", autoThreshold }, { "b01Attack", 1.0f }, { "b01Release", 60.0f },
     };
     constexpr PresetValue sitInMix[] {
         { "b01Used", 1.0f }, { "b01Shape", lowCut }, { "b01Freq", 100.0f }, { "b01Slope", slope18 },
@@ -1332,6 +1342,8 @@ namespace
         { "tightenLows", "Tighten the low end", tightenLows },
         { "cutMud", "Cut the mud", cutMud },
         { "presence", "Presence", presence },
+        { "tameFizz", "Tame fizz", tameFizz },
+        { "pickAttack", "Pick attack", pickAttack },
         { "sitInMix", "Sit in the mix", sitInMix },
     };
 }

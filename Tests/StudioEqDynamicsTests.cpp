@@ -8,6 +8,7 @@
 #include "TestSignals.h"
 
 #include "engine/blocks/StudioEqBlock.h"
+#include "engine/core/FactoryPresets.h"
 #include "engine/core/Realtime.h"
 
 #include <complex>
@@ -613,6 +614,47 @@ public:
             expectWithinAbsoluteError (toneDb (5000.0), 20.0 * std::log10 (0.2), 0.3, "the Own band pass's centre");
             expectLessThan (toneDb (300.0), toneDb (5000.0) - 30.0, "300 Hz filtered out");
             expectLessThan (toneDb (1000.0), -100.0, "not the EQ's input");
+        }
+
+        beginTest ("Presets Tame fizz and Pick attack: the bell dips on a pluck's attack and comes back");
+        {
+            for (auto* id : { "tameFizz", "pickAttack" })
+            {
+                Eq eq;
+                presets::apply (eq, *presets::find (eq, id));
+                expectEquals (eq.findParameter ("b01Mode")->getChoiceIndex(), (int) Eq::Mode::dynamic, id);
+                expect (eq.findParameter ("b01Thresh")->getValue() < Eq::thresholdAutoBelowDb, "Thresh Auto");
+                const auto range = (double) eq.findParameter ("b01Range")->getValue();
+                start (eq);
+
+                // Bright plucks (a 900 Hz fundamental and its harmonics) every half second.
+                std::vector<float> x;
+
+                for (int k = 0; k < 16; ++k)
+                {
+                    const auto note = pluck (24000, 0, 0.4f, 400.0, -80.0f, 900.0, 8, k + 1);
+                    x.insert (x.end(), note.signal.begin(), note.signal.end());
+                }
+
+                std::vector<float> lowest (16, 0.0f), last (16, 0.0f);
+                play (eq, x, blockSize, nullptr, [&] (int end)
+                {
+                    const auto note = (size_t) ((end - 1) / 24000);
+                    lowest[note] = juce::jmin (lowest[note], eq.getDynamicGainDb (0));
+                    last[note] = eq.getDynamicGainDb (0);
+                });
+
+                logMessage (juce::String (id) + ": the bell's deepest dip per note, after Auto has learned: "
+                            + juce::String (lowest[10], 2) + " / " + juce::String (lowest[15], 2) + " dB (Range " + juce::String (range, 0)
+                            + "), at each note's end " + juce::String (last[15], 2) + " dB");
+
+                for (size_t n = 8; n < 16; ++n)
+                {
+                    expectLessThan ((double) lowest[n], -1.0, juce::String (id) + ": dips on the attack");
+                    expectGreaterOrEqual ((double) lowest[n], range - 1.0e-4, "never past Range");
+                    expectGreaterThan ((double) last[n], -0.5, "comes back");
+                }
+            }
         }
 
         beginTest ("24 dynamic bands moving, stereo: no allocation, no NaN");
