@@ -1229,3 +1229,8 @@ tuned on the rig in U3.
   bands in stereo, the sidechain filters, the M/S buffers and every Quality).
   The getters, `setListen`, `clearListen` and `backToFull` are any-thread
   atomics; `CallbackTimer` runs at the end of the audio callback.
+- **CPU** (Windows CI, 48 kHz / 64, average): one dynamic bell (Auto, moving
+  all the time) adds **0.14 %** over the same bell static (target 0.3 %);
+  **Warm at High, stereo 0.93 %** (target 1.5 %; mono 0.52 %); 8 bands with 4
+  dynamic, Mid/Side and Soft at Live, stereo, 0.93 %. B3's 8 static bands,
+  stereo, 0.55 %.
