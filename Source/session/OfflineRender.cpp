@@ -585,6 +585,30 @@ juce::AudioBuffer<float> makeStereoPlucks (double sampleRate)
     return b;
 }
 
+juce::AudioBuffer<float> makeResonance (double sampleRate)
+{
+    auto b = makePlucks (sampleRate);
+    const double onsets[] = { 0.0, 0.6, 1.2, 1.8, 2.4, 3.0, 3.3, 3.6, 4.4, 5.2 };
+    auto* x = b.getWritePointer (0);
+
+    for (auto onset : onsets)
+    {
+        const auto start = (int) (onset * sampleRate);
+
+        for (int i = 0; start + i < b.getNumSamples() && i < (int) (0.8 * sampleRate); ++i)
+        {
+            const auto t = i / sampleRate;
+            const auto envelope = (1.0 - std::exp (-t / 0.01)) * std::exp (-t / 0.3);
+            x[start + i] += (float) (0.2 * envelope * std::sin (2.0 * juce::MathConstants<double>::pi * 2800.0 * t));
+        }
+    }
+
+    if (const auto top = b.getMagnitude (0, 0, b.getNumSamples()); top > 0.0f)
+        b.applyGain (juce::Decibels::decibelsToGain (-2.0f) / top);
+
+    return b;
+}
+
 juce::AudioBuffer<float> makeGateTest (double sampleRate, float noiseFloorDb)
 {
     const Note notes[] = {

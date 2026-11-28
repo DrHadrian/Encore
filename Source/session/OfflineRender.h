@@ -128,6 +128,10 @@ ShowModel makeGateShow (const juce::File& ampModel);
     later, so left, right, mid and side each carry something different. */
 juce::AudioBuffer<float> makeStereoPlucks (double sampleRate);
 
+/** The plucks with a resonance (B5: spectral bands): a narrow ring at 2.8 kHz
+    that swells with each note and dies away, as a boxy cab does. Mono, 6.5 s. */
+juce::AudioBuffer<float> makeResonance (double sampleRate);
+
 /** A show for listening to the Studio EQ's dynamic bands (B4), with these
     patches, each an amp (`ampModel`, a .nam file) then a Studio EQ:
     - "Dynamic EQ, dry guitar": a dynamic bell at 2.5 kHz (Q 1.5, Range

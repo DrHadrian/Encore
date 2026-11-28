@@ -26,6 +26,7 @@ namespace
   EncoreRender --make-gate-test OUT.wav [--rate 48000] [--noise-db -60]   (notes with gaps of noise)
   EncoreRender --make-gate-show FOLDER.encore [--amp MODEL.nam]        (a show for the gates)
   EncoreRender --make-stereo OUT.wav [--rate 48000]   (stereo plucks: different notes left and right)
+  EncoreRender --make-resonance OUT.wav [--rate 48000]   (plucks with a ringing 2.8 kHz resonance)
   EncoreRender --make-eq-show FOLDER.encore [--amp MODEL.nam]          (a show for the Studio EQ's dynamic bands)
 
   --block TYPE     a block type id (hidden ones too), e.g. engineProbe, eq, gate
@@ -185,6 +186,20 @@ int main (int argc, char* argv[])
             return fail (error);
 
         std::cout << "Wrote stereo plucks (6.5 s) at " << rate << " Hz to " << stereoOut << "\n";
+        return 0;
+    }
+
+    if (const auto resonanceOut = value ("--make-resonance"); resonanceOut.isNotEmpty())
+    {
+        const auto rate = value ("--rate").isNotEmpty() ? value ("--rate").getDoubleValue() : 48000.0;
+
+        if (rate < 8000.0)
+            return fail ("--rate must be at least 8000");
+
+        if (! encore::render::writeWav (file (resonanceOut), encore::render::makeResonance (rate), rate, error))
+            return fail (error);
+
+        std::cout << "Wrote plucks with a 2.8 kHz resonance (6.5 s) at " << rate << " Hz to " << resonanceOut << "\n";
         return 0;
     }
 

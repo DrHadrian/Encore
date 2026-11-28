@@ -860,6 +860,58 @@ if(ENCORE_BUILD_TESTS)
             endforeach()
         endforeach()
     endforeach()
+    # B5: Linear phase at each resolution against Zero latency, a Brickwall
+    # cut, a dynamic band in Linear phase, a Spectral band of each method on a
+    # resonance, and a phase-mode change mid-signal.
+    foreach(mode Zero Low Medium High)
+        if(mode STREQUAL "Zero")
+            set(eq_phase "phase=Zero latency")
+            set(eq_quality "Medium")
+        else()
+            set(eq_phase "phase=Linear phase")
+            set(eq_quality "${mode}")
+        endif()
+        add_test(NAME EncoreRender.studioEq.phase${mode}
+                 COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                         --out "${encore_render_dir}/studioEq-phase-${mode}.wav" --block studioEq
+                         --set "${eq_phase}" --set "linearQuality=${eq_quality}"
+                         --set b01Used=1 --set b01Freq=2500 --set b01Gain=6 --set b01Q=1
+                         --set b02Used=1 --set "b02Shape=Low cut" --set b02Freq=100 --set "b02Slope=24 dB/oct"
+                         --report "${encore_render_dir}/studioEq-phase-${mode}.txt")
+        set_tests_properties(EncoreRender.studioEq.phase${mode} PROPERTIES FIXTURES_REQUIRED encore_render_plucks)
+    endforeach()
+    add_test(NAME EncoreRender.studioEq.brickwall
+             COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                     --out "${encore_render_dir}/studioEq-brickwall.wav" --block studioEq
+                     --set "phase=Linear phase" --set "linearQuality=High"
+                     --set b01Used=1 --set "b01Shape=Low cut" --set b01Freq=200 --set "b01Slope=Brickwall"
+                     --report "${encore_render_dir}/studioEq-brickwall.txt")
+    add_test(NAME EncoreRender.studioEq.dynamicLinear
+             COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                     --out "${encore_render_dir}/studioEq-dynamic-linear.wav" --block studioEq
+                     --set "phase=Linear phase" --set b01Used=1 --set b01Freq=2500 --set b01Q=1
+                     --set b01Mode=Dynamic --set b01Range=-6 --set b01Thresh=-61 --set b01Attack=2 --set b01Release=80
+                     --report "${encore_render_dir}/studioEq-dynamic-linear.txt")
+    add_test(NAME EncoreRender.studioEq.phaseChange
+             COMMAND EncoreRender --in "${encore_render_dir}/plucks.wav"
+                     --out "${encore_render_dir}/studioEq-phase-change.wav" --block studioEq
+                     --set b01Used=1 --set b01Freq=2500 --set b01Gain=6 --sweep phase=0:2
+                     --report "${encore_render_dir}/studioEq-phase-change.txt")
+    set_tests_properties(EncoreRender.studioEq.brickwall EncoreRender.studioEq.dynamicLinear EncoreRender.studioEq.phaseChange
+                         PROPERTIES FIXTURES_REQUIRED encore_render_plucks)
+    add_test(NAME EncoreRender.resonance
+             COMMAND EncoreRender --make-resonance "${encore_render_dir}/resonance.wav")
+    set_tests_properties(EncoreRender.resonance PROPERTIES FIXTURES_SETUP encore_render_resonance)
+    foreach(method Sub-bands FFT)
+        add_test(NAME EncoreRender.studioEq.spectral${method}
+                 COMMAND EncoreRender --in "${encore_render_dir}/resonance.wav"
+                         --out "${encore_render_dir}/studioEq-spectral-${method}.wav" --block studioEq
+                         --set "spectralMethod=${method}" --set b01Used=1 --set b01Freq=2800 --set b01Q=0.7
+                         --set b01Mode=Spectral --set b01Range=-9 --set b01Thresh=-61 --set b01Attack=5 --set b01Release=80
+                         --report "${encore_render_dir}/studioEq-spectral-${method}.txt")
+        set_tests_properties(EncoreRender.studioEq.spectral${method} PROPERTIES FIXTURES_REQUIRED encore_render_resonance)
+    endforeach()
+
     add_test(NAME EncoreRender.eqShow
              COMMAND EncoreRender --make-eq-show "${encore_render_dir}/EqDynamics.encore"
                      --amp "${nam_SOURCE_DIR}/example_models/wavenet_a1_standard.nam")
