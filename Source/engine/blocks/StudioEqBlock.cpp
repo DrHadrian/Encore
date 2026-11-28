@@ -238,6 +238,10 @@ void StudioEqBlock::prepareBlock (const ProcessSpec& spec)
     playingDry.assign ((size_t) maxChunks, 0);
     detectorCoefficient = std::exp (-1000.0 / (detectorMs * sampleRate));
 
+    // When CPU is tight: a new block starts at full; a new preparation (a
+    // device restart mid-show) keeps what was taken.
+    lighterWaitSamples = juce::roundToInt (lighterWaitSeconds * sampleRate);
+
     // Character: both paths ready for every Quality, so a change never allocates.
     maxBlock = juce::jmax (1, spec.maxBlockSize);
 
@@ -599,6 +603,7 @@ void StudioEqBlock::processBlock (float* const* channels, int numChannels, int n
 {
     numChannels = juce::jlimit (1, maxChannels, numChannels);
     const juce::ScopedNoDenormals noDenormals;
+    followCpu (context.cpuTight, numSamples);
 
     if ((numChannels > 1) != stereoNow)
     {
@@ -750,7 +755,47 @@ void StudioEqBlock::processBands (float* const* channels, int numChannels, int n
 
 dsp::Quality StudioEqBlock::qualityNow() const noexcept
 {
+    if ((getLighterSteps() & qualityLive) != 0)
+        return dsp::Quality::live;   // When CPU is tight: lighter
+
     return (dsp::Quality) juce::jlimit (0, 2, quality.getChoiceIndex());
+}
+
+void StudioEqBlock::followCpu (bool cpuIsTight, int numSamples) noexcept
+{
+    if (backToFullRequested.exchange (false, std::memory_order_relaxed))
+    {
+        lighterSteps.store (0, std::memory_order_relaxed);   // each setting crossfades back as it plays
+        lighterWait = 0;
+    }
+
+    lighterWait = juce::jmax (0, lighterWait - numSamples);
+
+    if (! cpuIsTight || lighterWait > 0 || cpuTight.getChoiceIndex() != (int) CpuTight::makeItLighter)
+        return;
+
+    // The next step that changes something now.
+    const auto taken = getLighterSteps();
+    auto spectralInUse = false;
+
+    for (const auto& slot : slots)
+        spectralInUse = spectralInUse || (slot.playing && slot.p.mode->getChoiceIndex() == (int) Mode::spectral);
+
+    auto step = 0;
+
+    if ((taken & spectralAsDynamic) == 0 && spectralBandsBuilt && spectralInUse)
+        step = spectralAsDynamic;
+    else if ((taken & linearAsZeroLatency) == 0 && linearPhaseBuilt && phase.getChoiceIndex() == (int) Phase::linear)
+        step = linearAsZeroLatency;
+    else if ((taken & qualityLive) == 0 && character.getChoiceIndex() != (int) Character::clean
+             && quality.getChoiceIndex() != (int) Quality::live)
+        step = qualityLive;
+
+    if (step == 0)
+        return;   // nothing left to lighten: not marked
+
+    lighterSteps.store (taken | step, std::memory_order_relaxed);
+    lighterWait = lighterWaitSamples;   // a second to see whether that was enough
 }
 
 void StudioEqBlock::processCharacter (float* const* channels, int numChannels, int numSamples) noexcept

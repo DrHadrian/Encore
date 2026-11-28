@@ -188,6 +188,7 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/core/Block.h
     Source/engine/core/Chain.cpp
     Source/engine/core/Chain.h
+    Source/engine/core/CpuTight.h
     Source/engine/core/LockFreeFifo.h
     Source/engine/core/FactoryPresets.cpp
     Source/engine/core/FactoryPresets.h
@@ -608,6 +609,7 @@ if(ENCORE_BUILD_TESTS)
         Tests/StudioEqTests.cpp
         Tests/StudioEqDynamicsTests.cpp
         Tests/StudioEqCharacterTests.cpp
+        Tests/CpuTightTests.cpp
         Tests/StudioEqModelTests.cpp
         Tests/StudioEqSessionTests.cpp
         Tests/ModuleTypeTests.cpp

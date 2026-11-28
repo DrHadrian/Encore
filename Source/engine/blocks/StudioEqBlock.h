@@ -208,6 +208,29 @@ public:
         else 0. Any thread (an atomic: the Chain reads it every buffer). */
     int getLatencySamples() const noexcept override { return juce::jmax (0, characterLatency.load (std::memory_order_relaxed)); }
 
+    //== When CPU is tight (EQ-PLAN §2.6, decision 12; B4) ======================
+    // With "Make it lighter", while ProcessContext::cpuTight holds, the block
+    // takes one step down per tight stretch, then waits 1 s to see whether
+    // that was enough (Proposed), in this order: Spectral bands act as
+    // Dynamic; Linear phase becomes Zero latency; Quality becomes Live. Only a
+    // step that changes something now is taken (Adrian, 28 Nov: if none is
+    // left, the block isn't marked lighter); it never switches the EQ off.
+    // It stays lighter until Back to full (no automatic return mid-show), and
+    // isn't saved: a new block starts at full. "Keep the sound" changes
+    // nothing. Each step crossfades as its setting does and reports its latency.
+    static constexpr double lighterWaitSeconds = 1.0;
+    enum LighterStep { spectralAsDynamic = 1, linearAsZeroLatency = 2, qualityLive = 4 };
+    static constexpr bool spectralBandsBuilt = false, linearPhaseBuilt = false;   // B5 builds them: until then those steps change nothing
+
+    /** The steps taken (LighterStep bits; 0 = at full), for U3's "Lighter: CPU
+        was tight". Any thread. */
+    int getLighterSteps() const noexcept { return lighterSteps.load (std::memory_order_relaxed); }
+    bool isLighter() const noexcept      { return getLighterSteps() != 0; }
+
+    /** U3's Back to full: the block returns to its full settings (crossfaded).
+        Any thread (taken up at the next buffer). */
+    void backToFull() noexcept { backToFullRequested.store (true, std::memory_order_relaxed); }
+
     static constexpr double toggleSeconds = 0.01;    // a band on, off, in or out of use glides to or from flat
     static constexpr int updateInterval = 16;        // samples between redesigns while a value moves
 
@@ -302,6 +325,9 @@ private:
     void rememberCharacterInput (const float* const* channels, int numChannels, int numSamples) noexcept;
     void warmUpCharacter (CharacterPath& path, int numChannels) noexcept;
     dsp::Quality qualityNow() const noexcept;
+
+    /** When CPU is tight: takes a step if one is due. Audio thread. */
+    void followCpu (bool cpuIsTight, int numSamples) noexcept;
     void processBands (float* const* channels, int numChannels, int numSamples, const ProcessContext& context) noexcept;
 
     // On the heap, made once in the constructor (each slot holds two filter
@@ -344,6 +370,11 @@ private:
     juce::AudioBuffer<float> characterHistory, characterWarmup;
     int maxBlock = 512;
     std::atomic<int> characterLatency { -1 };     // -1: not in the path
+
+    // When CPU is tight: written on the audio thread; Back to full is a request.
+    std::atomic<int> lighterSteps { 0 };
+    std::atomic<bool> backToFullRequested { false };
+    int lighterWait = 0, lighterWaitSamples = 48000;   // audio thread
 
     // Output tools, audio thread.
     std::array<double, curvePoints> pointCos {}, pointCos2 {};
