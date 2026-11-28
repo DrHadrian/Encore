@@ -57,6 +57,16 @@ public:
         during a fade waits for it to end. */
     void setQuality (Quality q) noexcept { requested = q; }
 
+    /** Plays q from now on, with no fade (a reset: nothing is playing yet,
+        e.g. a module that starts at its saved Quality). Audio thread, or
+        before playing. */
+    void resetTo (Quality q) noexcept
+    {
+        requested = current = previous = q;
+        latency.store (latencies[(size_t) q], std::memory_order_relaxed);
+        reset();
+    }
+
     Quality getQuality() const noexcept { return current; }
     int getFactor() const noexcept      { return factorFor (current); }
 
