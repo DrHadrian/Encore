@@ -229,6 +229,8 @@ target_sources(EncoreEngine PRIVATE
     Source/engine/dsp/StreamResampler.cpp
     Source/engine/dsp/Saturation.h
     Source/engine/dsp/SoftClip.h
+    Source/engine/dsp/SpectralDetector.cpp
+    Source/engine/dsp/SpectralDetector.h
     Source/engine/dsp/StreamResampler.h
     Source/engine/dsp/Svf.h
     Source/engine/nam/NamModel.cpp
