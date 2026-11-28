@@ -65,6 +65,16 @@ public:
     static constexpr const char* studioEqWarmHigh = R"({ "character": "Warm", "drive": 6, "quality": "High" })";
     static constexpr double studioEqDynamicTargetPercent = 0.3, studioEqWarmTargetPercent = 1.5;
 
+    // B5's targets (EQ-PLAN §2.10, Proposed): Linear phase Medium, 8 bands,
+    // stereo <= 3 % (also with 2 dynamic bands moving); each Spectral band
+    // <= 2 % over the same band static, both methods.
+    static constexpr const char* studioEqSpectralStatic = R"({ "b01Used": 1, "b01Freq": 2500, "b01Q": 0.7, "b01Gain": -2 })";
+    static constexpr const char* studioEqSpectralSub = R"({ "b01Used": 1, "b01Freq": 2500, "b01Q": 0.7, "b01Gain": -2,
+        "b01Mode": "Spectral", "b01Range": -4, "b01Thresh": -61, "b01Attack": 5, "b01Release": 80 })";
+    static constexpr const char* studioEqSpectralFft = R"({ "b01Used": 1, "b01Freq": 2500, "b01Q": 0.7, "b01Gain": -2,
+        "b01Mode": "Spectral", "b01Range": -4, "b01Thresh": -61, "b01Attack": 5, "b01Release": 80, "spectralMethod": "FFT" })";
+    static constexpr double studioEqLinearTargetPercent = 3.0, studioEqSpectralTargetPercent = 2.0;
+
     struct Line
     {
         juce::String name;
@@ -145,6 +155,19 @@ public:
 
         mixedText << R"(, "b03Place": "Mid", "b04Place": "Side", "b05Place": "Mid", "b07Place": "Side", "character": "Soft", "quality": "Live" })";
         const auto* studioEqMixed = mixedText.toRawUTF8();
+
+        // B5: Linear phase.
+        const auto eq8With = [] (const char* extra) { return juce::String (studioEq8).upToLastOccurrenceOf ("}", false, false) + ", " + extra + " }"; };
+        const auto linearLowText = eq8With (R"("phase": "Linear phase", "linearQuality": "Low")");
+        const auto linearMediumText = eq8With (R"("phase": "Linear phase", "linearQuality": "Medium")");
+        const auto linearHighText = eq8With (R"("phase": "Linear phase", "linearQuality": "High")");
+        const auto linearDynamicText = eq8With (R"("phase": "Linear phase", "linearQuality": "Medium", "b03Mode": "Dynamic", "b03Range": -4, "b03Thresh": -61, "b05Mode": "Dynamic", "b05Range": -4, "b05Thresh": -61)");
+        const auto linearTwoStageText = eq8With (R"("phase": "Linear phase", "linearQuality": "Medium", "b03Place": "Mid", "b05Place": "Side")");
+        const auto* linearLow = linearLowText.toRawUTF8();
+        const auto* linearMedium = linearMediumText.toRawUTF8();
+        const auto* linearHigh = linearHighText.toRawUTF8();
+        const auto* linearDynamic = linearDynamicText.toRawUTF8();
+        const auto* linearTwoStage = linearTwoStageText.toRawUTF8();
         const auto* smartEq8 = smartText.toRawUTF8();
         const auto* studioEq24 = bands24.toRawUTF8();
         const auto* studioEq24Steep = bands24Steep.toRawUTF8();
@@ -183,6 +206,14 @@ public:
             { "studioEq: Warm, High, stereo",               "studioEq",    studioEqWarmHigh, true, studioEqWarmTargetPercent },
             { "studioEq: Warm, High, mono",                 "studioEq",    studioEqWarmHigh, false },
             { "studioEq: 8 bands (4 dynamic, M/S), Soft, Live, stereo", "studioEq", studioEqMixed, true },
+            { "studioEq: Linear Low, 8 bands, stereo",      "studioEq",    linearLow, true },
+            { "studioEq: Linear Medium, 8 bands, stereo",   "studioEq",    linearMedium, true, studioEqLinearTargetPercent },
+            { "studioEq: Linear Medium, 8 bands, 2 dynamic, stereo", "studioEq", linearDynamic, true, studioEqLinearTargetPercent },
+            { "studioEq: Linear High, 8 bands, stereo",     "studioEq",    linearHigh, true },
+            { "studioEq: Linear Medium, L/R + M/S stages, stereo", "studioEq", linearTwoStage, true },
+            { "studioEq: one static bell (spectral's), stereo", "studioEq", studioEqSpectralStatic, true },
+            { "studioEq: one Spectral bell, Sub-bands, stereo", "studioEq", studioEqSpectralSub, true },
+            { "studioEq: one Spectral bell, FFT, stereo",   "studioEq",    studioEqSpectralFft, true },
             { "eq (today's EQ, for comparison)",            "eq",          R"({ "bass": 3, "mid": -3, "treble": 2 })", false },
             { "gate (today's gate, for comparison)",        "gate",        "{}", false },
             { "delay (today's delay, for comparison)",      "delay",       "{}", false },
@@ -204,7 +235,8 @@ public:
                 // The plans' targets (EQ-PLAN, GATE-PLAN §7; Proposed).
                 if (c.target > 0.0)
                     targets << "Target: " << c.label << " <= " << juce::String (c.target, 1) << " % of the buffer: "
-                            << juce::String (r.cpu[0].averagePercent, 2) << " % average, "
+                            << juce::String (r.cpu[0].averagePercent, 2) << " % average (worst callback "
+                            << juce::String (r.cpu[0].worstPercent, 1) << " %), "
                             << (r.cpu[0].averagePercent <= c.target ? "within the target" : "OVER THE TARGET") << "\n";
             }
         }
@@ -221,6 +253,19 @@ public:
         targets << "Target: studioEq: one dynamic band <= " << juce::String (studioEqDynamicTargetPercent, 1)
                 << " % over the same band static (stereo): " << juce::String (dynamicShare, 2) << " % average, "
                 << (dynamicShare <= studioEqDynamicTargetPercent ? "within the target" : "OVER THE TARGET") << "\n";
+        // B5: each Spectral band over the same band static; the other Linear lines (report).
+        for (auto* method : { "Sub-bands", "FFT" })
+        {
+            const auto share = percentOf[juce::String ("studioEq: one Spectral bell, ") + method + ", stereo"]
+                               - percentOf["studioEq: one static bell (spectral's), stereo"];
+            targets << "Target: studioEq: one Spectral band (" << method << ") <= " << juce::String (studioEqSpectralTargetPercent, 1)
+                    << " % over the same band static (stereo): " << juce::String (share, 2) << " % average, "
+                    << (share <= studioEqSpectralTargetPercent ? "within the target" : "OVER THE TARGET") << "\n";
+        }
+
+        targets << "Studio EQ, Linear phase, 8 bands, stereo: Low " << juce::String (percentOf["studioEq: Linear Low, 8 bands, stereo"], 2)
+                << " %, High " << juce::String (percentOf["studioEq: Linear High, 8 bands, stereo"], 2) << " %, L/R + M/S stages (Medium) "
+                << juce::String (percentOf["studioEq: Linear Medium, L/R + M/S stages, stereo"], 2) << " % (report only)\n";
         targets << "Studio EQ: 8 bands with 4 dynamic, Mid/Side, Soft at Live, stereo: "
                 << juce::String (percentOf["studioEq: 8 bands (4 dynamic, M/S), Soft, Live, stereo"], 2) << " % (report only)\n";
 
