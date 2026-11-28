@@ -56,6 +56,15 @@ public:
         "b08Used": 1, "b08Shape": "High cut", "b08Freq": 11000, "b08Slope": "12 dB/oct" })";
     static constexpr double studioEqTargetPercent = 1.0;
 
+    // B4's targets (EQ-PLAN §2.10, Proposed): one dynamic band <= 0.3 % over
+    // the same band static (moving all the time: Auto threshold on pink
+    // noise); Character Warm at High <= 1.5 %.
+    static constexpr const char* studioEqOneStatic = R"({ "b01Used": 1, "b01Freq": 5500, "b01Q": 2, "b01Gain": -2 })";
+    static constexpr const char* studioEqOneDynamic = R"({ "b01Used": 1, "b01Freq": 5500, "b01Q": 2, "b01Gain": -2,
+        "b01Mode": "Dynamic", "b01Range": -4, "b01Thresh": -61, "b01Attack": 5, "b01Release": 80 })";
+    static constexpr const char* studioEqWarmHigh = R"({ "character": "Warm", "drive": 6, "quality": "High" })";
+    static constexpr double studioEqDynamicTargetPercent = 0.3, studioEqWarmTargetPercent = 1.5;
+
     struct Line
     {
         juce::String name;
@@ -127,6 +136,15 @@ public:
             return t + " }";
         };
         const auto bands24 = bandsText (false), bands24Steep = bandsText (true);
+
+        // 8 bands, 4 of them dynamic, Mid/Side placements, Soft at Live (a report).
+        auto mixedText = juce::String (studioEq8).upToLastOccurrenceOf ("}", false, false);
+
+        for (auto* id : { "b03", "b04", "b05", "b07" })
+            mixedText << ", \"" << id << "Mode\": \"Dynamic\", \"" << id << "Range\": -4, \"" << id << "Thresh\": -61";
+
+        mixedText << R"(, "b03Place": "Mid", "b04Place": "Side", "b05Place": "Mid", "b07Place": "Side", "character": "Soft", "quality": "Live" })";
+        const auto* studioEqMixed = mixedText.toRawUTF8();
         const auto* smartEq8 = smartText.toRawUTF8();
         const auto* studioEq24 = bands24.toRawUTF8();
         const auto* studioEq24Steep = bands24Steep.toRawUTF8();
@@ -159,6 +177,12 @@ public:
             { "studioEq: 8 bands, Smart auto gain, stereo", "studioEq",    smartEq8, true },
             { "studioEq: 24 bands in use, stereo",          "studioEq",    studioEq24, true },
             { "studioEq: 24 bands, 48-96 dB/oct, stereo",   "studioEq",    studioEq24Steep, true },
+            { "studioEq: one static bell, stereo",          "studioEq",    studioEqOneStatic, true },
+            { "studioEq: one dynamic bell (Auto), stereo",  "studioEq",    studioEqOneDynamic, true },
+            { "studioEq: one dynamic bell (Auto), mono",    "studioEq",    studioEqOneDynamic, false },
+            { "studioEq: Warm, High, stereo",               "studioEq",    studioEqWarmHigh, true, studioEqWarmTargetPercent },
+            { "studioEq: Warm, High, mono",                 "studioEq",    studioEqWarmHigh, false },
+            { "studioEq: 8 bands (4 dynamic, M/S), Soft, Live, stereo", "studioEq", studioEqMixed, true },
             { "eq (today's EQ, for comparison)",            "eq",          R"({ "bass": 3, "mid": -3, "treble": 2 })", false },
             { "gate (today's gate, for comparison)",        "gate",        "{}", false },
             { "delay (today's delay, for comparison)",      "delay",       "{}", false },
@@ -191,6 +215,14 @@ public:
                 << " % (8 bands, stereo); 24 bands " << juce::String (percentOf["studioEq: 24 bands in use, stereo"], 2)
                 << " %, 24 steep bands " << juce::String (percentOf["studioEq: 24 bands, 48-96 dB/oct, stereo"], 2)
                 << " %; no band in use " << juce::String (percentOf["studioEq: no band in use"], 3) << " % (report only)\n";
+
+        // B4: a dynamic band over the same band static; the mixed patch (report only).
+        const auto dynamicShare = percentOf["studioEq: one dynamic bell (Auto), stereo"] - percentOf["studioEq: one static bell, stereo"];
+        targets << "Target: studioEq: one dynamic band <= " << juce::String (studioEqDynamicTargetPercent, 1)
+                << " % over the same band static (stereo): " << juce::String (dynamicShare, 2) << " % average, "
+                << (dynamicShare <= studioEqDynamicTargetPercent ? "within the target" : "OVER THE TARGET") << "\n";
+        targets << "Studio EQ: 8 bands with 4 dynamic, Mid/Side, Soft at Live, stereo: "
+                << juce::String (percentOf["studioEq: 8 bands (4 dynamic, M/S), Soft, Live, stereo"], 2) << " % (report only)\n";
 
         //== The shared DSP pieces on their own ================================
         std::vector<float> work ((size_t) buffer);
